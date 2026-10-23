@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use EBaMl in your work, cite it with the metadata in this file."
+title: "EBaMl: BAML for Explainable Boosting Machines"
+abstract: "EBaMl lets a large language model describe and explain Explainable Boosting Machines. It is a port and extension of TalkToEBM."
+type: software
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/johnny-godoy/EBaMl"
+url: "https://johnny-godoy.github.io/EBaMl/"
+authors:
+  - family-names: Godoy
+    given-names: Johnny
+    email: johnny.godoy@ing.uchile.cl
+keywords:
+  - baml
+  - llm
+  - explainable-ai
+  - explainable-boosting-machine
+  - interpretml
+references:
+  - type: article
+    title: "LLMs Understand Glass-Box Models, Discover Surprises, and Suggest Repairs"
+    authors:
+      - family-names: Lengerich
+        given-names: Benjamin J.
+      - family-names: Bordt
+        given-names: Sebastian
+      - family-names: Nori
+        given-names: Harsha
+      - family-names: Nunnally
+        given-names: Mark E.
+      - family-names: Aphinyanaphongs
+        given-names: Yin
+      - family-names: Kellis
+        given-names: Manolis
+      - family-names: Caruana
+        given-names: Rich
+    year: 2023
+    notes: "The paper behind TalkToEBM, which EBaMl ports."
+    url: "https://arxiv.org/abs/2308.01157"
