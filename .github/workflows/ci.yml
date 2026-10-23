@@ -25,7 +25,7 @@ env:
 # Fail-fast order: cheap static gates first, in parallel; slower dynamic gates only run once those pass.
 #   stage 1: prek, trufflehog, semgrep, trivy
 #   stage 2: baml, pytest (needs stage 1)
-#   stage 3: mutation (needs stage 2; slowest)
+#   stage 3: mutation (needs stage 2; slowest). Only modules changed against the base run; mutation-weekly.yml runs all.
 #   report:  always runs, posts one sticky PR comment saying what failed and how to fix it
 #
 # Every gate tees its output to $CI_LOGS. A failed gate then runs `ci_report.py snippet <gate>`, which turns the logs
@@ -161,17 +161,25 @@ jobs:
           gate: pytest
 
   mutation:
-    name: mutation (100% score)
+    name: mutation (changed modules, 100% score)
     needs: [baml, pytest]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0 # the changed-module filter needs the merge base with the base revision
       - uses: ./.github/actions/setup
-      - name: Run cosmic-ray, fail on any surviving mutant
+      - name: Run cosmic-ray on changed modules, fail on any surviving mutant
+        env:
+          # A PR compares with its base branch; a push to main compares with the previous head of main.
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
         run: |
           mkdir -p "$CI_LOGS"
-          uv run python scripts/mutation.py "$(nproc)" 2>&1 | tee "$CI_LOGS/mutation.log"
+          # A new branch or a forced push has an all-zero or unknown BASE; mutate every module then.
+          args=()
+          if git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null; then args=(--base "$BASE"); fi
+          uv run python scripts/mutation.py "$(nproc)" "${args[@]}" 2>&1 | tee "$CI_LOGS/mutation.log"
       - name: List surviving mutants with diffs
         if: failure()
         run: |

@@ -6,7 +6,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | --- | --- |
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
-| `mutation.py` | Runs cosmic-ray mutation testing in parallel shards and fails if any mutant survives. |
+| `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
 | `docs_hooks.py` | MkDocs hook: runs the marimo notebook and exports its output into the built docs (`mkdocs.yml`). |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
@@ -52,14 +52,19 @@ cosmic-ray mutates the source tree in place, so each shard works on its own copy
 and `cosmic-ray.toml`. The script:
 
 1. creates a session in `.mutation/session.sqlite` and drops mutants on `# pragma: no mutate` lines,
-2. runs the test baseline and stops if it fails,
-3. splits the work items over the shards and runs them concurrently,
-4. merges the results back and prints the report and survival rate.
+2. if you give `--base`, drops the mutants of all modules that did not change since that revision,
+3. runs the test baseline and stops if it fails,
+4. splits the work items over the shards and runs them concurrently,
+5. merges the results back and prints the report and survival rate.
 
 ```bash
 uv run python scripts/mutation.py      # one shard per CPU
 uv run python scripts/mutation.py 4    # four shards
+uv run python scripts/mutation.py --base origin/main   # only modules changed since main
 ```
+
+If no module changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. The workflow
+`mutation-weekly.yml` runs all modules each Monday, and only if code changed in the last 7 days.
 
 Exits non-zero if any mutant survives. CI requires a 100% mutation score. Settings (module path, timeout, test command)
 are in `cosmic-ray.toml`.

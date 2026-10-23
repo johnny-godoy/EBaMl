@@ -1,0 +1,77 @@
+name: Mutation (weekly)
+
+# Full mutation run over every module. The PR run in ci.yml covers only changed modules, so this run catches a mutant
+# that a change elsewhere lets survive. It skips the work when no code changed in the last 7 days, because the project
+# can lie idle for longer than a week.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Run even when no code changed in the last 7 days
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  OPENROUTER_API_KEY: unused # offline tests run on a scripted client; the key is only read when a request is sent
+
+jobs:
+  mutation:
+    name: mutation (all modules, 100% score)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Check for code changes in the last 7 days
+        id: changes
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          changed=$(git log --since="7 days ago" --oneline -- src tests baml_src cosmic-ray.toml pyproject.toml | wc -l)
+          if [ "$changed" -gt 0 ] || [ "$FORCE" = "true" ]; then run=true; else run=false; fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Commits touching code in the last 7 days: $changed (run=$run)"
+      - uses: ./.github/actions/setup
+        if: steps.changes.outputs.run == 'true'
+      - name: Run cosmic-ray on all modules, fail on any surviving mutant
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          mkdir -p /tmp/ci-logs
+          uv run python scripts/mutation.py "$(nproc)" 2>&1 | tee /tmp/ci-logs/mutation.log
+      - name: List surviving mutants with diffs
+        if: failure()
+        run: |
+          uv run python -m cosmic_ray.tools.report .mutation/session.sqlite --surviving-only --show-diff \
+            > /tmp/ci-logs/mutation-survivors.txt || true
+      - name: Open an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "The weekly full mutation run found surviving mutants or failed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo
+            echo '```diff'
+            head -c 50000 /tmp/ci-logs/mutation-survivors.txt || true
+            echo '```'
+          } > /tmp/issue.md
+          gh issue create --title "Weekly mutation run failed ($(date -u +%F))" --body-file /tmp/issue.md
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always() && steps.changes.outputs.run == 'true'
+        with:
+          name: mutation-session
+          path: .mutation/
+          if-no-files-found: ignore
