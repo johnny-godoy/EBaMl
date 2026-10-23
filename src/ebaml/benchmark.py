@@ -8,6 +8,7 @@ compared them by eye; here the comparison is automatic.
 """
 
 import enum
+import os
 import re
 from collections.abc import Callable, Sequence
 from itertools import starmap
@@ -203,14 +204,14 @@ class TaskResult:
         return self.correct / len(self.outcomes)
 
 
-def load_questions(task: Task, data_dir: Path) -> list[Question]:
+def load_questions(task: Task, data_dir: str | os.PathLike[str]) -> list[Question]:
     """Load the questions of a task.
 
     Parameters
     ----------
     task: Task
         The task.
-    data_dir: Path
+    data_dir: str | os.PathLike[str]
         The directory with the data files of the benchmark.
 
     Returns
@@ -219,7 +220,7 @@ def load_questions(task: Task, data_dir: Path) -> list[Question]:
         The questions, in the order of the file.
 
     """
-    records = orjson.loads((data_dir / f"{task}.json").read_bytes())
+    records = orjson.loads((Path(data_dir) / f"{task}.json").read_bytes())
     return list(starmap(Question, records))
 
 
@@ -277,7 +278,7 @@ def run_task(task: Task, data_dir: Path, limit: int | None = None) -> TaskResult
     ----------
     task: Task
         The task.
-    data_dir: Path
+    data_dir: str | os.PathLike[str]
         The directory with the data files of the benchmark.
     limit: int, optional
         Only ask the first ``limit`` questions. By default, ask all of them.

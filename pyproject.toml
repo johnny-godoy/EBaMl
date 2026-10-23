@@ -1,6 +1,6 @@
 [project]
 name = "ebaml"
-version = "0.0.1"
+version = "0.0.2"
 description = "BAML for Explainable Boosting Machines: talk to your EBM."
 readme = "README.md"
 license = "MIT"
@@ -21,6 +21,7 @@ requires-python = ">=3.13"
 dependencies = [
     "attrs>=26.1.0",
     "baml-bridge>=0.22.2",
+    "beartype>=0.23.1",
     "interpret>=0.7.8",
     "orjson>=3.13.0",
     "structlog>=26.1.0",
@@ -143,6 +144,8 @@ ignore_names = ["pytestmark"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 addopts = "--cov=ebaml --cov-report=term-missing"
+# reason: beartype skips a function it cannot decorate and only warns, so the warning must fail the tests.
+filterwarnings = ["error::beartype.roar.BeartypeClawDecorWarning"]
 
 [tool.coverage.run]
 branch = true

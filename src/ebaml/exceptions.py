@@ -1,20 +1,21 @@
 """Exceptions for EBM models."""
 
 import enum
+from collections.abc import Collection
 from typing import Self
 
 
 class InvalidOptionError(ValueError):
     """Exception raised for invalid options."""
 
-    def __init__(self, option: str, valid_options: list[str]) -> None:
+    def __init__(self, option: str, valid_options: Collection[str]) -> None:
         """Build the error message from the invalid option and the valid ones.
 
         Parameters
         ----------
         option : str
             The invalid option provided.
-        valid_options : list[str]
+        valid_options : Collection[str]
             The options that are valid.
 
         """

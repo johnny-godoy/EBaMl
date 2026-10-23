@@ -1,6 +1,8 @@
 """Types for EBM models, and the coercion of options to them."""
 
 import enum
+from collections.abc import Iterable
+from collections.abc import Set as AbstractSet
 
 from interpret.glassbox import (
     ExplainableBoostingClassifier,
@@ -89,16 +91,16 @@ def coerce_enum[E: enum.Enum](enum_class: type[E], value: object) -> E:
 
 
 def normalize_feature_types(
-    feature_types: list[str],
-    reject_set: set[FeatureType] | None = None,
+    feature_types: Iterable[str],
+    reject_set: AbstractSet[FeatureType] | None = None,
 ) -> list[FeatureType]:
     """Normalize a list of feature types to the FeatureType enum.
 
     Parameters
     ----------
-    feature_types: list[str]
-        List of feature types.
-    reject_set: set[FeatureType], optional
+    feature_types: Iterable[str]
+        The feature types.
+    reject_set: AbstractSet[FeatureType], optional
         Set of feature types to reject.
         If a feature is in this set, we raise a ValueError.
 
