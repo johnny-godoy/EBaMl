@@ -30,6 +30,8 @@ references:
         given-names: Rich
     collection-title: "XAI4Sci Workshop at AAAI-24"
     year: 2024
+    month: 2
+    url: "https://arxiv.org/abs/2402.14474"
     notes: "The paper behind TalkToEBM, which EBaMl ports."
   - type: article
     title: "LLMs Understand Glass-Box Models, Discover Surprises, and Suggest Repairs"
@@ -49,5 +51,6 @@ references:
       - family-names: Caruana
         given-names: Rich
     year: 2023
+    month: 8
     notes: "The TalkToEBM README also asks users to cite this paper."
     url: "https://arxiv.org/abs/2308.01157"
