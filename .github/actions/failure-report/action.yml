@@ -9,8 +9,10 @@ runs:
   steps:
     - name: Build failure snippet
       shell: bash
-      run: python3 .github/scripts/ci_report.py snippet "${{ inputs.gate }}"
-    - uses: actions/upload-artifact@v4
+      env:
+        GATE: ${{ inputs.gate }}
+      run: python3 .github/scripts/ci_report.py snippet "$GATE"
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: report-${{ inputs.gate }}
         path: /tmp/ci-report/${{ inputs.gate }}.md
