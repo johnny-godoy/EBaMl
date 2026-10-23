@@ -449,9 +449,18 @@ def api(method: str, path: str, payload: Mapping[str, object] | None = None) -> 
     Any
         The decoded JSON of the response.
 
+    Raises
+    ------
+    ValueError
+        If ``GITHUB_API_URL`` is not an http or https URL.
+
     """
-    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage] -- the URL comes from GITHUB_API_URL, which the runner sets
-        f"{os.environ.get('GITHUB_API_URL', 'https://api.github.com')}{path}",
+    base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    if not base.startswith(("https://", "http://")):  # urllib also opens file: URLs, so allow only web schemes
+        msg = f"GITHUB_API_URL must be an http(s) URL: {base}"
+        raise ValueError(msg)
+    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage] -- the scheme of the URL is checked above
+        f"{base}{path}",
         data=None if payload is None else json.dumps(payload).encode(),
         method=method,
         headers={
@@ -460,7 +469,9 @@ def api(method: str, path: str, payload: Mapping[str, object] | None = None) -> 
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage] -- the URL comes from GITHUB_API_URL, which the runner sets
+    # The scheme of the URL is checked above, and the host comes from the runner.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+    with urllib.request.urlopen(request, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage] -- the scheme of the URL is checked above
         return json.load(response)
 
 
