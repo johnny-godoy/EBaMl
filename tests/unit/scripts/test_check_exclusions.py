@@ -2,11 +2,12 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from scripts import check_exclusions
 
-NOW = datetime(2026, 10, 23, tzinfo=UTC)
+NOW: datetime = datetime(2026, 10, 23, tzinfo=UTC)
 LOCK = """version = 1
 
 [[package]]
@@ -28,7 +29,7 @@ version = "1.0"
 """
 
 
-def pyproject(exempt: dict[str, bool], span: str = "7 days") -> dict:
+def pyproject(exempt: dict[str, bool], span: str = "7 days") -> dict[str, Any]:
     return {"tool": {"uv": {"exclude-newer": span, "exclude-newer-package": exempt}}}
 
 

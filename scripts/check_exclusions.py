@@ -12,11 +12,12 @@ import sys
 import tomllib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 UNIT_DAYS = {"day": 1, "days": 1, "week": 7, "weeks": 7}
-SPAN = re.compile(r"(?P<count>\d+) (?P<unit>days?|weeks?)")
-UPLOAD_TIME = re.compile(r'upload-time = "(?P<time>[^"]+)"')
+SPAN: re.Pattern[str] = re.compile(r"(?P<count>\d+) (?P<unit>days?|weeks?)")
+UPLOAD_TIME: re.Pattern[str] = re.compile(r'upload-time = "(?P<time>[^"]+)"')
 
 
 def _normalize(name: str) -> str:
@@ -85,12 +86,12 @@ def newest_upload(lock_text: str) -> dict[str, datetime]:
     return uploads
 
 
-def stale_exemptions(pyproject: dict, lock_text: str, now: datetime) -> list[str]:
+def stale_exemptions(pyproject: dict[str, Any], lock_text: str, now: datetime) -> list[str]:
     """List the exemptions that uv no longer needs.
 
     Parameters
     ----------
-    pyproject: dict
+    pyproject: dict[str, Any]
         The parsed ``pyproject.toml``.
     lock_text: str
         The content of ``uv.lock``.
