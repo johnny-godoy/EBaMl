@@ -1,9 +1,8 @@
 """Tests for the LLM descriptors."""
 
-from types import SimpleNamespace
-
 import pytest
 from baml_bridge.errors import BamlError
+from interpret.glassbox import ExplainableBoostingClassifier
 from structlog.testing import capture_logs
 
 import baml_sdk
@@ -11,6 +10,9 @@ from ebaml import descriptors, local
 from ebaml.custom_types import Audience
 from ebaml.exceptions import EBMGraphSimplificationError, InvalidOptionError
 from ebaml.graphs import EBMGraph
+from tests.unit.ebaml.conftest import fake_model
+
+FAKE_EBM: ExplainableBoostingClassifier = fake_model()
 
 DEFAULTS = {
     "expert_description": "expert",
@@ -28,8 +30,8 @@ def counted() -> baml_sdk.Counted:
 
 
 @pytest.fixture
-def fake_ebm() -> SimpleNamespace:
-    return SimpleNamespace(feature_names_in_=["f0", "f1"], term_importances=lambda: [1.0, 2.0])
+def fake_ebm() -> ExplainableBoostingClassifier:
+    return fake_model(feature_names_in_=["f0", "f1"], term_importances=lambda: [1.0, 2.0])
 
 
 @pytest.fixture
@@ -55,14 +57,19 @@ def test_graph_text_filters_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
             seen["to_text"] = include_description
             return "text"
 
-    def from_ebm(ebm: str, feature_index: int, *, use_feature_bounds: bool = True) -> FakeGraph:
+    def from_ebm(
+        ebm: ExplainableBoostingClassifier,
+        feature_index: int,
+        *,
+        use_feature_bounds: bool = True,
+    ) -> FakeGraph:
         seen["from_ebm"] = (ebm, feature_index, use_feature_bounds)
         return FakeGraph()
 
     monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(from_ebm))
     kwargs = {"use_feature_bounds": False, "include_description": False, "task_description": "x"}
-    assert descriptors._graph_text("ebm", 4, kwargs) == "text"
-    assert seen == {"from_ebm": ("ebm", 4, False), "to_text": False}
+    assert descriptors._graph_text(FAKE_EBM, 4, kwargs) == "text"
+    assert seen == {"from_ebm": (FAKE_EBM, 4, False), "to_text": False}
 
 
 def test_log_usage(counted: baml_sdk.Counted) -> None:
@@ -71,7 +78,11 @@ def test_log_usage(counted: baml_sdk.Counted) -> None:
     assert [(log["what"], log["input_tokens"], log["output_tokens"]) for log in logs] == [("what", 3, 5)]
 
 
-def test_describe_graph(monkeypatch: pytest.MonkeyPatch, fake_ebm: SimpleNamespace, counted: baml_sdk.Counted) -> None:
+def test_describe_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, kwargs: f"graph{idx}:{sorted(kwargs)}")
     calls = {}
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: calls.update(kw) or counted)
@@ -81,7 +92,11 @@ def test_describe_graph(monkeypatch: pytest.MonkeyPatch, fake_ebm: SimpleNamespa
     assert calls["opts"].task_description == "T"
 
 
-def test_describe_ebm(monkeypatch: pytest.MonkeyPatch, fake_ebm: SimpleNamespace, counted: baml_sdk.Counted) -> None:
+def test_describe_ebm(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, _kwargs: f"graph{idx}")
     graph_calls = []
     summary_calls = {}
@@ -98,7 +113,7 @@ def test_describe_ebm(monkeypatch: pytest.MonkeyPatch, fake_ebm: SimpleNamespace
 
 def test_describe_ebm_sums_usage(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
@@ -112,7 +127,7 @@ def test_describe_ebm_sums_usage(
 
 def test_describe_ebm_retries_a_truncated_graph(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, _idx, kwargs: "short" if kwargs else "x" * 300)
@@ -133,7 +148,7 @@ def test_describe_ebm_retries_a_truncated_graph(
 
 def test_describe_graph_defaults(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
@@ -145,7 +160,7 @@ def test_describe_graph_defaults(
 
 def test_describe_ebm_defaults(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
@@ -164,7 +179,7 @@ def test_accepted_kwargs() -> None:
 
 
 def test_feature_importances_to_text() -> None:
-    ebm = SimpleNamespace(feature_names_in_=["a", "b"], term_importances=lambda: [1.234, 0.5])
+    ebm = fake_model(feature_names_in_=["a", "b"], term_importances=lambda: [1.234, 0.5])
     assert descriptors._feature_importances_to_text(ebm) == "a: 1.23\nb: 0.50"
 
 
@@ -201,7 +216,7 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(baml_sdk, "explain_local", lambda **kw: calls.update(kw) or text)
     with capture_logs() as logs:
         result = descriptors.explain_instance(
-            "ebm",
+            FAKE_EBM,
             {"a": 1},
             "GLOBAL",
             audience="data_scientist",
@@ -209,7 +224,7 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
             expert_description="E",
         )
     assert (result.counterfactual, result.sufficient_reason, result.completions) == ("cf", "sr", "cc")
-    assert seen["compute"] == ("ebm", {"a": 1}, local.LocalOptions(confidence_level=0.9))
+    assert seen["compute"] == (FAKE_EBM, {"a": 1}, local.LocalOptions(confidence_level=0.9))
     assert calls["audience"] == "data_scientist"
     assert calls["global_explanation"] == "GLOBAL"
     assert calls["facts"].counterfactual == "c-data_scientist"
@@ -237,14 +252,14 @@ def test_explain_instance_defaults_to_layperson(monkeypatch: pytest.MonkeyPatch)
     )
     calls = {}
     monkeypatch.setattr(baml_sdk, "explain_local", lambda **kw: calls.update(kw) or text)
-    descriptors.explain_instance("ebm", {}, "G")
+    descriptors.explain_instance(FAKE_EBM, {}, "G")
     assert calls["audience"] == "layperson"
     assert audiences == [Audience.LAYPERSON]
 
 
 def test_explain_instance_rejects_unknown_audience() -> None:
     with pytest.raises(InvalidOptionError):
-        descriptors.explain_instance("ebm", {}, "G", audience="child")
+        descriptors.explain_instance(FAKE_EBM, {}, "G", audience="child")
 
 
 def _finish_error(reason: str) -> BamlError:
@@ -254,7 +269,7 @@ def _finish_error(reason: str) -> BamlError:
 
 def test_describe_graph_simplifies_after_truncated_reply(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
     texts = []
@@ -278,7 +293,10 @@ def test_describe_graph_simplifies_after_truncated_reply(
     assert texts == [{}, {"max_tokens": 225, "overbudget_percent": 0}]
 
 
-def test_describe_graph_does_not_retry_other_errors(monkeypatch: pytest.MonkeyPatch, fake_ebm: SimpleNamespace) -> None:
+def test_describe_graph_does_not_retry_other_errors(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
     def cot(**_kw: object) -> baml_sdk.Counted:
         error = _finish_error("Refused")
         raise error
@@ -291,7 +309,7 @@ def test_describe_graph_does_not_retry_other_errors(monkeypatch: pytest.MonkeyPa
 
 def test_describe_graph_reraises_when_graph_cannot_shrink(
     monkeypatch: pytest.MonkeyPatch,
-    fake_ebm: SimpleNamespace,
+    fake_ebm: ExplainableBoostingClassifier,
 ) -> None:
     def graph_text(_ebm: object, _idx: int, kwargs: dict) -> str:
         if kwargs:

@@ -1,14 +1,14 @@
 """Tests for the EBM graphs."""
 
-from types import SimpleNamespace
-
 import numpy as np
 import pytest
+from interpret.glassbox import ExplainableBoostingClassifier
 
 import baml_sdk
 from ebaml.custom_types import FeatureType, Normalization
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
 from ebaml.graphs import EBMGraph
+from tests.unit.ebaml.conftest import fake_model
 
 INF = float("inf")
 
@@ -22,8 +22,8 @@ def ok_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("ok"))
 
 
-def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> SimpleNamespace:
-    return SimpleNamespace(
+def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> ExplainableBoostingClassifier:
+    return fake_model(
         feature_names_in_=["age"],
         feature_types_in_=["continuous"],
         term_scores_=[np.array(scores)],
@@ -34,8 +34,8 @@ def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> Sim
     )
 
 
-def nominal_ebm() -> SimpleNamespace:
-    return SimpleNamespace(
+def nominal_ebm() -> ExplainableBoostingClassifier:
+    return fake_model(
         feature_names_in_=["color"],
         feature_types_in_=["nominal"],
         term_scores_=[np.array([9.0, 1.0, 3.0, 5.0, 7.0, 9.0])],
