@@ -8,6 +8,7 @@ dependencies; do not add the replaced modules back.
 | Logging | `structlog` | `logging` (and `print` for diagnostics) |
 | JSON | `orjson` | `json` |
 | Data classes | `attrs` | `dataclasses` |
+| Runtime type checks | `beartype` | `typeguard`, manual `isinstance` checks of hints |
 
 ## Logging (`structlog`)
 
@@ -26,6 +27,15 @@ dependencies; do not add the replaced modules back.
 
 - Use `@attrs.define` (or `@attrs.frozen` for immutable values) rather than `@dataclass`; use `attrs.field` and
   `attrs.asdict`.
+
+## Runtime type checks (`beartype`)
+
+- `src/ebaml/__init__.py` calls `beartype_this_package()` before it imports any submodule, so every function in `ebaml`
+  checks its hints. Keep that call first. A module imported earlier stays unchecked.
+- Do not add `@beartype` to a function in `ebaml`. The hook already covers it.
+- A hint that is wrong fails at run time. Fix the hint (see `types.md`), and do not remove the check.
+- Pytest turns `BeartypeClawDecorWarning` into an error, because beartype skips a function that it cannot decorate.
+- Checks of annotated variables are off (`claw_is_pep526=False`): structlog's lazy logger proxy fails its own hint.
 
 ## Exception
 
