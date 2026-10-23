@@ -1,0 +1,25 @@
+name: Setup
+description: Install uv, the BAML toolchain, the project environment, and generate the BAML SDK
+inputs:
+  generate:
+    description: Run `baml generate` (src/baml_sdk is gitignored, so anything importing ebaml needs it)
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: true
+        cache-dependency-glob: uv.lock
+    - name: Install BAML toolchain
+      shell: bash
+      run: |
+        curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s
+        echo "$HOME/.baml/bin" >> "$GITHUB_PATH"
+    - name: Sync environment
+      shell: bash
+      run: uv sync --frozen
+    - name: Generate BAML SDK
+      if: inputs.generate == 'true'
+      shell: bash
+      run: baml generate

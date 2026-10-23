@@ -1,0 +1,220 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash # -eo pipefail, so `tool | tee log` still fails when the tool does
+
+env:
+  # Offline BAML tests run on a scripted client; the key is only read when a request is sent.
+  OPENROUTER_API_KEY: unused
+  CI_LOGS: /tmp/ci-logs
+  CI_REPORT: /tmp/ci-report
+
+# Fail-fast order: cheap static gates first, in parallel; slower dynamic gates only run once those pass.
+#   stage 1: prek, trufflehog, semgrep, trivy
+#   stage 2: baml, pytest (needs stage 1)
+#   stage 3: mutation (needs stage 2; slowest)
+#   report:  always runs, posts one sticky PR comment saying what failed and how to fix it
+#
+# Every gate tees its output to $CI_LOGS. A failed gate then runs `ci_report.py snippet <gate>`, which turns the logs
+# into a short "what failed / how to fix" section and uploads it for the report job.
+jobs:
+  prek:
+    name: prek
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup # pyrefly resolves baml_sdk, so it must be generated
+      - name: Run all hooks
+        run: |
+          mkdir -p "$CI_LOGS"
+          uvx prek run --all-files --show-diff-on-failure --color never 2>&1 | tee "$CI_LOGS/prek.log"
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: prek
+
+  trufflehog:
+    name: trufflehog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install trufflehog
+        run: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.90.8/scripts/install.sh | sudo sh -s -- -b /usr/local/bin v3.90.8
+      - name: Scan git history
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mkdir -p "$CI_LOGS"
+          args=(git "file://$PWD" --no-update --results=verified,unknown --fail --json --branch HEAD)
+          # PRs scan only the commits they add; a new branch has an all-zero BASE and is scanned whole.
+          if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then args+=(--since-commit "$BASE"); fi
+          trufflehog "${args[@]}" > "$CI_LOGS/trufflehog.json" 2> "$CI_LOGS/trufflehog.err" || {
+            status=$?
+            echo "trufflehog exited $status"; tail -n 20 "$CI_LOGS/trufflehog.err"; exit "$status"
+          }
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: trufflehog
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Scan with base rules
+        run: |
+          mkdir -p "$CI_LOGS"
+          uvx --from semgrep==1.131.0 semgrep scan --config p/default --error --metrics=off \
+            --json-output="$CI_LOGS/semgrep.json" 2>&1 | tee "$CI_LOGS/semgrep.log"
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: semgrep
+
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: mkdir -p "$CI_LOGS"
+      - uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: json
+          output: /tmp/ci-logs/trivy.json
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: trivy
+
+  baml:
+    name: baml check + test
+    needs: [prek, trufflehog, semgrep, trivy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+        with:
+          generate: "false"
+      - name: Format, check, test (all three always run so the report is complete)
+        run: |
+          mkdir -p "$CI_LOGS"
+          : > "$CI_LOGS/baml.failed"
+          step() { # step <name> <command...>
+            local name=$1; shift
+            echo "::group::baml $name"
+            "$@" 2>&1 | tee "$CI_LOGS/baml-$name.log" || echo "$name" >> "$CI_LOGS/baml.failed"
+            echo "::endgroup::"
+          }
+          fmt() { baml fmt && git diff --exit-code -- baml_src; }
+          step fmt fmt
+          step check baml check
+          step test baml test -x root::Live
+          test ! -s "$CI_LOGS/baml.failed"
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: baml
+
+  pytest:
+    name: pytest (100% coverage)
+    needs: [prek, trufflehog, semgrep, trivy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run tests
+        # pyproject addopts adds --cov; branch coverage with fail_under = 100 fails the run below 100%
+        run: |
+          mkdir -p "$CI_LOGS"
+          uv run pytest --color=no 2>&1 | tee "$CI_LOGS/pytest.log"
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: pytest
+
+  mutation:
+    name: mutation (100% score)
+    needs: [baml, pytest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Run cosmic-ray, fail on any surviving mutant
+        run: |
+          mkdir -p "$CI_LOGS"
+          uv run python scripts/mutation.py "$(nproc)" 2>&1 | tee "$CI_LOGS/mutation.log"
+      - name: List surviving mutants with diffs
+        if: failure()
+        run: |
+          uv run python -m cosmic_ray.tools.report .mutation/session.sqlite --surviving-only --show-diff \
+            > "$CI_LOGS/mutation-survivors.txt" || true
+      - uses: ./.github/actions/failure-report
+        if: failure()
+        with:
+          gate: mutation
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-session
+          path: .mutation/
+          if-no-files-found: ignore
+
+  report:
+    name: report
+    if: always()
+    needs: [prek, trufflehog, semgrep, trivy, baml, pytest, mutation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          path: /tmp/ci-report
+          merge-multiple: true
+      - name: Build report
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 .github/scripts/ci_report.py assemble
+      - name: Post sticky comment
+        # Fork PRs get a read-only token, so commenting is best effort; the report is still in the run summary.
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ci-report
+          path: /tmp/ci-report/comment.md

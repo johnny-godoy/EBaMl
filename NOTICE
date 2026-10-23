@@ -1,0 +1,3 @@
+EBaMl started as a port of TalkToEBM (https://github.com/interpretml/TalkToEBM), used under its license, and has since
+grown its own features. The prompts, the graph-to-text conversion and the benchmark questions in benchmark/data/ derive
+from that project.

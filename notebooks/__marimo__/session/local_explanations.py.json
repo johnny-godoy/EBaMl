@@ -1,0 +1,341 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.25.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "e68d4a16bb05127f42baef247a6a61e8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "a244b579e72e74163c90b31bdc8f27a9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"explain-one-prediction-of-an-ebm\">Explain one prediction of an EBM</h1>\n<span class=\"paragraph\">The global explanation of an Explainable Boosting Machine (EBM) says how the model works <em>in general</em>: see\n<code>titanic.py</code> for how to ask an LLM for it. This notebook is about the <em>local</em> question: <strong>why did the model predict\nthis for this passenger?</strong></span>\n<span class=\"paragraph\">The answer has two parts, and the split is the point of the design:</span>\n<ol>\n<li><strong>The facts are computed, not generated.</strong> Python reads the scores and the confidence intervals of the EBM and\n   works out three things exactly. No LLM is involved, so they cannot be hallucinated and they are reproducible.</li>\n<li><strong>The LLM only puts the facts in words.</strong> It gets the global explanation of the model, the facts, and an\n   <em>audience</em>, and writes the explanation.</li>\n</ol>\n<span class=\"paragraph\">The three kinds of fact are the explainability queries of\n<a href=\"https://arxiv.org/abs/2010.12265\" rel=\"noopener noreferrer\" target=\"_blank\">Barcel\u00f3 et al., <em>Model Interpretability through the Lens of Computational Complexity</em></a>:</span>\n<table>\n<thead>\n<tr>\n<th>Query</th>\n<th>Question it answers</th>\n<th>Explanation</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>Minimum change required</td>\n<td>Fewest inputs to change so that the prediction flips?</td>\n<td>Counterfactual</td>\n</tr>\n<tr>\n<td>Minimum sufficient reason</td>\n<td>Fewest inputs that settle it, whatever the others are?</td>\n<td>Sufficient reason</td>\n</tr>\n<tr>\n<td>Count completions</td>\n<td>With only some inputs known, what share of completions get this prediction?</td>\n<td>Completions</td>\n</tr>\n</tbody>\n</table>\n<span class=\"paragraph\">The first two are exact for an EBM without interactions, because the model is a sum of one effect per feature. The\nthird is estimated by sampling. See the documentation page \"Local explanations\" for the details and the limits.</span>\n<span class=\"paragraph\">The cells that call the LLM only run when you press their button and need <code>OPENROUTER_API_KEY</code> in the environment\nthat started the notebook (see the README). Everything before them works without a key.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "2087238c7d5d5d7af97d8ee8ceb3f5f7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"load-the-data-and-train-an-ebm\">Load the data and train an EBM</h2>\n<span class=\"paragraph\">The same Titanic model as in <code>titanic.py</code>. Local explanations need <em>every</em> input of the passenger, so the passengers\nto explain are the ones with no missing value. The EBM itself is trained on all the rows. It has to be a binary\nclassifier without pairwise interactions (<code>interactions=0</code>).</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "c6d4e358a9ab68e51547e9ea7c3a5435",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/Users/johnny_replai/Projects/EBaMl/.venv/lib/python3.13/site-packages/interpret/glassbox/_ebm/_ebm.py:871: UserWarning: Missing values detected. Our visualizations do not currently display missing values. To retain the glassbox nature of the model you need to either set the missing values to an extreme value like -1000 that will be visible on the graphs, or manually examine the missing value score in ebm.term_scores_[term_index][0]\n  warn(\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "af4a834c327998bc683cac7e881c9d58",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Test accuracy: <strong>0.779</strong>. <strong>205</strong> of the 262 test passengers have\nno missing value and can be explained.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "b4437ab5a876f9666d7652adff49ff7d",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"pick-a-passenger\">Pick a passenger</h2>\n<span class=\"paragraph\">Any passenger works. Passenger 0 is a good start; then look for one the model is unsure about, and compare.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "92161789c082790206b833416d8e6043",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='Xref-0' random-id='77b20c82-525b-ab7d-e34e-776d80175c1e'><marimo-slider data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003ePassenger&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-start='0' data-stop='204' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='true' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "79a6dd2d0a92fc95952522d274c2265e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Passenger <strong>pclass</strong> = 3, <strong>sex</strong> = male, <strong>age</strong> = 35.0, <strong>sibsp</strong> = 0, <strong>parch</strong> = 0, <strong>fare</strong> = 7.125, <strong>embarked</strong> = S.</span>\n<span class=\"paragraph\">The EBM gives a survival probability of <strong>0.11</strong>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "f4d75c9d27fde94f228bc9bbf73789ed",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"the-facts-without-any-llm\">The facts, without any LLM</h2>\n<span class=\"paragraph\"><code>compute_local_facts</code> computes the prediction and the three explanations. Its options (a <code>LocalOptions</code>) are:</span>\n<ul>\n<li><code>confidence_level</code>: how sure a claim has to be. Every score is moved by that many standard deviations <em>against</em>\n  the claim, so a counterfactual still flips the prediction, and a sufficient reason still holds, when the model's\n  effects sit at the unfavourable edge of their confidence interval. <code>0</code> ignores the uncertainty.</li>\n<li><code>min_support</code>: the share of the training data a value needs to be offered as an alternative. It keeps freak\n  values (a 500-year-old passenger) out of the counterfactual.</li>\n</ul>\n<span class=\"paragraph\">Move the slider and watch the explanations get harder to prove: more changes are needed to flip the prediction,\nand more inputs are needed to settle it.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "b754ed89027864cae73d058520c0e938",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='RGSE-0' random-id='300aab9d-6842-40f1-f42a-392f6610bd9b'><marimo-slider data-initial-value='0.95' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eConfidence level&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-start='0.0' data-stop='0.99' data-step='0.01' data-steps='[]' data-debounce='false' data-disabled='false' data-orientation='&quot;horizontal&quot;' data-show-value='true' data-include-input='false' data-full-width='false'></marimo-slider></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "f8b614e05bef19e1dbe0cbfbcb49f45b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "8a518423430151c2d431a832670eaaf5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"prediction-and-contributions\">Prediction and contributions</h3>\n<span class=\"paragraph\">The model predicts class <strong>0</strong> with probability <strong>0.89</strong>, and a\n95% confidence interval of <strong>[0.83, 0.93]</strong>. The\ninterval comes from adding the variances of the effects of the features, which assumes they are independent.</span>\n<span class=\"paragraph\">The contributions are in log-odds: a positive score pushes towards class 1 (survived). Largest first:</span></span><marimo-ui-element object-id='emfo-0' random-id='146c59f3-9a54-f0c5-8150-cecac4d3f7c1'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;feature&#92;&quot;:&#92;&quot;sex&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;male&#92;&quot;,&#92;&quot;score&#92;&quot;:-0.8610835336370659,&#92;&quot;std&#92;&quot;:0.05125424551733012},{&#92;&quot;feature&#92;&quot;:&#92;&quot;pclass&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;3&#92;&quot;,&#92;&quot;score&#92;&quot;:-0.4096744634423863,&#92;&quot;std&#92;&quot;:0.09957661869635741},{&#92;&quot;feature&#92;&quot;:&#92;&quot;embarked&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;S&#92;&quot;,&#92;&quot;score&#92;&quot;:-0.11666971723194836,&#92;&quot;std&#92;&quot;:0.01697528622473148},{&#92;&quot;feature&#92;&quot;:&#92;&quot;sibsp&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;0&#92;&quot;,&#92;&quot;score&#92;&quot;:0.09398651070625541,&#92;&quot;std&#92;&quot;:0.05238216571698833},{&#92;&quot;feature&#92;&quot;:&#92;&quot;fare&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;7.125&#92;&quot;,&#92;&quot;score&#92;&quot;:-0.03098371192213914,&#92;&quot;std&#92;&quot;:0.22633711644465862},{&#92;&quot;feature&#92;&quot;:&#92;&quot;age&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;35&#92;&quot;,&#92;&quot;score&#92;&quot;:-0.003801671662040286,&#92;&quot;std&#92;&quot;:0.0688697475265662},{&#92;&quot;feature&#92;&quot;:&#92;&quot;parch&#92;&quot;,&#92;&quot;value&#92;&quot;:&#92;&quot;0&#92;&quot;,&#92;&quot;score&#92;&quot;:0.001815978072039771,&#92;&quot;std&#92;&quot;:0.009717103568847859}]&quot;' data-total-rows='7' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-show-filters='false' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "966ae6a51e06d35d3c33ae928dde5282",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"counterfactual-minimum-change-required\">Counterfactual (minimum change required)</h3>\n<span class=\"paragraph\"><strong>1</strong> change(s) are enough to flip the prediction, and <strong>no smaller set of\nchanges does</strong>. After them the other class has probability <strong>0.59</strong>.</span></span><marimo-ui-element object-id='Hstk-0' random-id='f942eb5f-b201-e0be-a266-731c562aeef6'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;feature&#92;&quot;:&#92;&quot;sex&#92;&quot;,&#92;&quot;from_value&#92;&quot;:&#92;&quot;male&#92;&quot;,&#92;&quot;to_value&#92;&quot;:&#92;&quot;female&#92;&quot;,&#92;&quot;score_change&#92;&quot;:2.4366336749135353}]&quot;' data-total-rows='1' data-total-columns='4' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-show-filters='false' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='false' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "66ad34801d9b729afbe8bf9cd4420dd0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"sufficient-reason-minimum-sufficient-reason\">Sufficient reason (minimum sufficient reason)</h3>\n<span class=\"paragraph\">Once <strong>age, sex, fare, pclass</strong> are known, the prediction is settled: it cannot change whatever the\nother inputs are, and <strong>no smaller set of inputs</strong> does this. The guaranteed margin, in log-odds, is\n<strong>0.23</strong>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "6e9b0f33b5e7d83fb22ef1396bf709ae",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"completions-count-completions\">Completions (count completions)</h3>\n<span class=\"paragraph\">Reveal the inputs one by one, in the order of how much each guarantees, and count how many of the possible\ncompletions of the unknown inputs get the same prediction. The unknown inputs are sampled from the training data\n(10,000 samples, fixed seed), so these shares are estimates, not guarantees.</span></span><marimo-ui-element object-id='iLit-0' random-id='d7d6973d-bffc-aca5-3d33-82314492ca96'><marimo-table data-initial-value='[]' data-label='null' data-data='&quot;[{&#92;&quot;fixed&#92;&quot;:[],&#92;&quot;share&#92;&quot;:0.6717},{&#92;&quot;fixed&#92;&quot;:[&#92;&quot;age&#92;&quot;],&#92;&quot;share&#92;&quot;:0.6781},{&#92;&quot;fixed&#92;&quot;:[&#92;&quot;age&#92;&quot;,&#92;&quot;sex&#92;&quot;],&#92;&quot;share&#92;&quot;:0.991},{&#92;&quot;fixed&#92;&quot;:[&#92;&quot;age&#92;&quot;,&#92;&quot;sex&#92;&quot;,&#92;&quot;fare&#92;&quot;],&#92;&quot;share&#92;&quot;:1.0},{&#92;&quot;fixed&#92;&quot;:[&#92;&quot;age&#92;&quot;,&#92;&quot;sex&#92;&quot;,&#92;&quot;fare&#92;&quot;,&#92;&quot;pclass&#92;&quot;],&#92;&quot;share&#92;&quot;:1.0},{&#92;&quot;fixed&#92;&quot;:[&#92;&quot;age&#92;&quot;,&#92;&quot;sex&#92;&quot;,&#92;&quot;fare&#92;&quot;,&#92;&quot;pclass&#92;&quot;,&#92;&quot;embarked&#92;&quot;],&#92;&quot;share&#92;&quot;:1.0}]&quot;' data-total-rows='6' data-total-columns='2' data-max-columns='50' data-banner-text='&quot;&quot;' data-pagination='false' data-page-size='10' data-show-filters='false' data-show-download='true' data-show-search='true' data-show-column-summaries='false' data-show-data-types='true' data-show-page-size-selector='true' data-show-column-explorer='true' data-show-chart-builder='true' data-row-headers='[]' data-hidden-columns='[]' data-has-stable-row-id='false' data-lazy='false' data-preload='false'></marimo-table></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "eab239e8bda603adeb5548886db0a30e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"check-the-guarantees\">Check the guarantees</h2>\n<span class=\"paragraph\">The first two explanations are claims about <em>every</em> possible input, so they can be tested. Take the sufficient\nreason, keep the passenger's values for those features, and fill all the other features with the values of\nrandomly chosen other passengers. The prediction must not change, ever. (This uses <code>confidence_level=0</code> and\n<code>min_support=0</code>, so that the claim covers every value, even rare ones.)</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "7b82bcbf0a93eb5aee027af12f220c0c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">With <strong>sex, age, fare</strong> fixed, <strong>500</strong> of <strong>500</strong> random completions kept the prediction (0). It should be all of them.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "821580e5b8fba60b40d83ee7ab0adce8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"what-the-llm-reads\">What the LLM reads</h2>\n<span class=\"paragraph\"><code>facts_to_texts</code> turns the facts into one JSON text per explanation. This is the <em>audience</em> at work, and it happens\nbefore the LLM sees anything:</span>\n<ul>\n<li>A <strong>layperson</strong> (the default) knows no numbers. Scores, probabilities, log-odds and intervals are replaced by\n  words (<code>strongly</code>, <code>very likely</code>), so the LLM has no model number to repeat. The prompt also forbids numbers and\n  jargon.</li>\n<li>A <strong>data scientist</strong> gets the scores, the probabilities, the confidence interval and the confidence level, and is\n  told to quote them.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "c03d5b3d72e572714acb36314b4c65f7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='TqIu-0' random-id='490b1898-8539-19d0-01ad-85d9bb6598ab'><marimo-tabs data-initial-value='&quot;&quot;' data-label='null' data-tabs='[&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eprediction&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;,&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003ecounterfactual&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;,&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003esufficient_reason&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;,&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003ecompletions&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;]' data-orientation='&quot;horizontal&quot;'><div data-kind='tab'><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>layperson</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"predicted_class\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">0</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"contributions_largest_first\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"male\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"strongly towards this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"pclass\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"3\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"moderately towards this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"embarked\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"S\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"slightly towards this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sibsp\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"0\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"slightly against this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"7.125\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"slightly towards this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"35\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"slightly towards this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"parch\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"0\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"effect\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"slightly against this prediction\"</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"likelihood\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"very likely\"</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>data_scientist</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"predicted_class\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">0</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"contributions_largest_first\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"male\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-0.861</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.051</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"pclass\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"3\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-0.41</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.1</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"embarked\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"S\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-0.117</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.017</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sibsp\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"0\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.094</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.052</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"7.125\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-0.031</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.226</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"35\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-0.004</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.069</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"parch\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"value\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"0\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.002</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"std\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.01</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"probability\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.889</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"confidence_interval\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"mf\">0.825</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"mf\">0.931</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"confidence_level\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.95</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"logit\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">-2.078</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span></div></div><div data-kind='tab'><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>layperson</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"flip_possible\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"kc\">true</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"changes\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"from\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"male\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"to\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"female\"</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"minimum_number_of_changes\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">1</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"flip_holds_even_if_the_model_is_somewhat_off\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"kc\">true</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"likelihood_of_new_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"about as likely as not\"</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>data_scientist</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"flip_possible\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"kc\">true</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"changes\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"feature\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"from\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"male\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"to\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"female\"</span><span class=\"p\">,</span>\n<span class=\"w\">      </span><span class=\"nt\">\"score_change\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">2.437</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"minimum_number_of_changes\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mi\">1</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"flip_holds_at_confidence\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.95</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"probability_of_new_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.589</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span></div></div><div data-kind='tab'><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>layperson</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"exists\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"kc\">true</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"pclass\"</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"features_not_needed\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"s2\">\"embarked\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"sibsp\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"parch\"</span>\n<span class=\"w\">  </span><span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>data_scientist</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"exists\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"kc\">true</span><span class=\"p\">,</span>\n<span class=\"w\">  </span><span class=\"nt\">\"features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"pclass\"</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"features_not_needed\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"s2\">\"embarked\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"sibsp\"</span><span class=\"p\">,</span>\n<span class=\"w\">    </span><span class=\"s2\">\"parch\"</span>\n<span class=\"w\">  </span><span class=\"p\">],</span>\n<span class=\"w\">  </span><span class=\"nt\">\"guaranteed_margin_logit\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.228</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span></div></div><div data-kind='tab'><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: flex-start;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>layperson</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"steps\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"likely\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"likely\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"almost certain\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"almost certain\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"pclass\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"almost certain\"</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"pclass\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"embarked\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"s2\">\"almost certain\"</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><strong>data_scientist</strong>\n<div class=\"language-json codehilite\"><pre><span></span><code><span class=\"p\">{</span>\n<span class=\"w\">  </span><span class=\"nt\">\"steps\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.672</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.678</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">0.991</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">1.0</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"pclass\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">1.0</span>\n<span class=\"w\">    </span><span class=\"p\">},</span>\n<span class=\"w\">    </span><span class=\"p\">{</span>\n<span class=\"w\">      </span><span class=\"nt\">\"known_features\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"p\">[</span>\n<span class=\"w\">        </span><span class=\"s2\">\"age\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"sex\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"fare\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"pclass\"</span><span class=\"p\">,</span>\n<span class=\"w\">        </span><span class=\"s2\">\"embarked\"</span>\n<span class=\"w\">      </span><span class=\"p\">],</span>\n<span class=\"w\">      </span><span class=\"nt\">\"share_with_same_prediction\"</span><span class=\"p\">:</span><span class=\"w\"> </span><span class=\"mf\">1.0</span>\n<span class=\"w\">    </span><span class=\"p\">}</span>\n<span class=\"w\">  </span><span class=\"p\">]</span>\n<span class=\"p\">}</span>\n</code></pre></div></span></span></div></div></marimo-tabs></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "ceb48114dddefebc9e324bde4f37665e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"put-it-in-words\">Put it in words</h2>\n<span class=\"paragraph\"><code>explain_instance</code> needs the <strong>global explanation</strong> of the model, computed once and prepended to every prompt, so\nthe LLM knows what the features mean and which effects are surprising. Get it with <code>describe_ebm</code> (this is the slow\nstep: one chain per feature, then a summary).</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "78b4c5532134b2e9aed685e50f1ff8b9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-ui-element object-id='DnEU-0' random-id='75672904-3e89-d838-d589-177efa8b354d'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe the model&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "2785801e23a51d85b2477559fcdfa29a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to describe the model first.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "67c08b875dd058d8fe5a7e7a0166afe4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='ecfG-0' random-id='88d303e4-7a51-2661-08c0-f4891e8fb63a'><marimo-dropdown data-initial-value='[&quot;layperson&quot;]' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eAudience&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-options='[&quot;layperson&quot;,&quot;data_scientist&quot;]' data-allow-select-none='false' data-searchable='false' data-full-width='false' data-disabled='false'></marimo-dropdown></marimo-ui-element><marimo-ui-element object-id='ecfG-1' random-id='2cfcb2de-d108-b095-58fd-70b1a49cf7c4'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eExplain this prediction&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "2b0ce438704dc2951462831bfbeebc81",
+      "outputs": [
+        {
+          "type": "error",
+          "ename": "ancestor-stopped",
+          "evalue": "This cell wasn't run because an ancestor was stopped with `mo.stop`: ",
+          "traceback": []
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "35097f7be1d09a57b2641a129b2f1932",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Run it again with the other audience and compare. The facts are the same; the words are not. Because the facts are\ncomputed and not generated, <code>explanation.facts</code> holds the numbers behind the text, so any sentence can be checked.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

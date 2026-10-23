@@ -1,0 +1,572 @@
+"""Tests for the EBM graphs."""
+
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+
+import baml_sdk
+from ebaml.custom_types import FeatureType, Normalization
+from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
+from ebaml.graphs import EBMGraph
+
+INF = float("inf")
+
+
+def budget(status: str, tokens: int = 10) -> baml_sdk.TokenBudget:
+    return baml_sdk.TokenBudget(estimated_tokens=tokens, status=status)
+
+
+@pytest.fixture
+def ok_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("ok"))
+
+
+def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> SimpleNamespace:
+    return SimpleNamespace(
+        feature_names_in_=["age"],
+        feature_types_in_=["continuous"],
+        term_scores_=[np.array(scores)],
+        standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.3, 0.0])],
+        # the second resolution level is a decoy: only the first one describes the graph
+        bins_=[[np.array([1.0, 2.0]), np.array([5.0, 6.0, 7.0, 8.0])]],
+        feature_bounds_=[(0.0, 3.0)],
+    )
+
+
+def nominal_ebm() -> SimpleNamespace:
+    return SimpleNamespace(
+        feature_names_in_=["color"],
+        feature_types_in_=["nominal"],
+        term_scores_=[np.array([9.0, 1.0, 3.0, 5.0, 7.0, 9.0])],
+        standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.0])],
+        # unordered on purpose, with the decoy second resolution level
+        bins_=[[{"pink": 4, "red": 1, "green": 3, "blue": 2}, {"x": 1}]],
+    )
+
+
+def cont_graph(scores: tuple[float, ...] = (1.0, 1.0, 5.0), stds: tuple[float, ...] = (0.1, 0.2, 0.3)) -> EBMGraph:
+    return EBMGraph("age", "continuous", [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)], list(scores), list(stds))
+
+
+def cat_graph() -> EBMGraph:
+    return EBMGraph("color", "nominal", ["red", "blue"], [1.0, 3.0], [0.1, 0.2])
+
+
+# from_ebm
+
+
+def test_from_ebm_continuous_with_bounds() -> None:
+    g = EBMGraph.from_ebm(continuous_ebm(), 0)
+    assert g.x_vals == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
+    assert list(g.scores) == [1.0, 2.0, 4.0]
+    assert list(g.stds) == [0.1, 0.2, 0.3]
+    assert (g.feature_name, g.feature_type) == ("age", "continuous")
+
+
+def test_from_ebm_continuous_without_bounds() -> None:
+    g = EBMGraph.from_ebm(continuous_ebm(), 0, use_feature_bounds=False)
+    assert g.x_vals == [(-INF, 1.0), (1.0, 2.0), (2.0, INF)]
+
+
+def test_from_ebm_nominal() -> None:
+    g = EBMGraph.from_ebm(nominal_ebm(), 0)
+    assert g.x_vals == ["red", "blue", "green", "pink"]
+    assert list(g.scores) == [1.0, 3.0, 5.0, 7.0]
+
+
+def test_from_ebm_z_score() -> None:
+    g = EBMGraph.from_ebm(continuous_ebm(), 0, Normalization.Z_SCORE)
+    assert list(g.scores) == pytest.approx([-4 / 3, -1 / 3, 5 / 3])
+
+
+def test_from_ebm_min_max() -> None:
+    g = EBMGraph.from_ebm(continuous_ebm(), 0, Normalization.MIN_MAX)
+    assert list(g.scores) == [0.0, 1.0, 3.0]
+
+
+@pytest.mark.parametrize("normalization", [Normalization.Z_SCORE, Normalization.MIN_MAX])
+def test_from_ebm_does_not_modify_the_ebm(normalization: Normalization) -> None:
+    ebm = continuous_ebm()
+    before = ebm.term_scores_[0].copy()
+    EBMGraph.from_ebm(ebm, 0, normalization)
+    assert list(ebm.term_scores_[0]) == list(before)
+
+
+def test_from_ebm_invalid_normalization() -> None:
+    with pytest.raises(InvalidOptionError):
+        EBMGraph.from_ebm(continuous_ebm(), 0, "bogus")
+
+
+def test_from_ebm_unsupported_feature_type() -> None:
+    ebm = continuous_ebm()
+    ebm.feature_types_in_ = ["interaction"]
+    with pytest.raises(InvalidOptionError, match="interaction"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+def test_from_ebm_bin_score_mismatch() -> None:
+    ebm = continuous_ebm(scores=(9.0, 1.0, 2.0, 9.0))
+    with pytest.raises(ValueError, match="does not match"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+# simplify
+
+
+def test_simplify_rejects_non_continuous() -> None:
+    with pytest.raises(InvalidOptionError):
+        cat_graph().simplify()
+
+
+@pytest.mark.parametrize("bad", [-0.1, 1.1])
+def test_simplify_rejects_bad_variation(bad: float) -> None:
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        cont_graph().simplify(bad)
+
+
+def test_simplify_zero_merges_only_equal_bins() -> None:
+    g = cont_graph().simplify()
+    assert g.x_vals == [(0.0, 2.0), (2.0, 3.0)]
+    assert g.scores == [1.0, 5.0]
+    assert g.stds == [0.2, 0.3]  # max of merged stds
+
+
+def test_simplify_keeps_distinct_bins() -> None:
+    g = cont_graph(scores=(1.0, 2.0, 5.0)).simplify()
+    assert g.x_vals == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
+
+
+def test_simplify_merges_within_threshold() -> None:
+    g = cont_graph(scores=(1.0, 2.0, 5.0)).simplify(0.3)  # 0.3 * 4 = 1.2 >= |1-2|
+    assert g.x_vals == [(0.0, 2.0), (2.0, 3.0)]
+
+
+# to_text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_continuous() -> None:
+    text = cont_graph().to_text()
+    assert text.startswith("This graph represents a continuous-valued feature.")
+    assert "Feature Name: age\nFeature Type: continuous\n" in text
+    assert "Means: " in text
+    assert "Lower Bounds (95%-Confidence Interval):" in text
+    assert "Upper Bounds (95%-Confidence Interval):" in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_no_description_no_bounds_explicit_precisions() -> None:
+    text = cont_graph().to_text(
+        include_description=False,
+        confidence_bounds=False,
+        x_axis_precision=1,
+        y_axis_precision=2,
+    )
+    assert text == 'Feature Name: age\nFeature Type: continuous\nMeans: {"(0.0, 2.0)": 1.0, "(2.0, 3.0)": 5.0}\n'
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_y_precision_large_variation_skips_auto_loop() -> None:
+    text = cont_graph(scores=(0.0, 0.0, 500.0)).to_text(y_axis_precision="auto", confidence_bounds=False)
+    assert '"(2.0, 3.0)": 500.0' in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_categorical() -> None:
+    text = cat_graph().to_text(feature_format=FeatureType.CATEGORICAL)
+    assert text.startswith("This graph represents categorical feature.")
+    assert '"red": 1.0' in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_boolean_autodetect() -> None:
+    g = EBMGraph("flag", "nominal", ["False", "True"], [0.0, 2.0], [0.1, 0.1])
+    text = g.to_text()
+    assert text.startswith("This graph represents a boolean feature.")
+    assert "Feature Type: boolean" in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_nominal_defaults_to_categorical() -> None:
+    # regression: nominal features used to raise unless feature_format was passed explicitly
+    text = cat_graph().to_text()
+    assert text.startswith("This graph represents categorical feature.")
+    assert "Feature Type: categorical" in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_flat_graph_terminates() -> None:
+    # regression: zero variation made the y-axis precision loop run forever
+    g = cont_graph(scores=(2.0, 2.0, 2.0))
+    assert '"(0.0, 3.0)": 2.0' in g.to_text(confidence_bounds=False)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_flat_categorical_graph_terminates() -> None:
+    g = EBMGraph("color", "nominal", ["red", "blue"], [1.0, 1.0], [0.1, 0.1])
+    assert '"blue": 1.0' in g.to_text()
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_boolean_wrong_number_of_values() -> None:
+    g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
+    with pytest.raises(ValueError, match="boolean format"):
+        g.to_text(feature_format=FeatureType.BOOLEAN)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_unsupported_format() -> None:
+    with pytest.raises(InvalidOptionError):
+        cat_graph().to_text(feature_format=FeatureType.ORDINAL)
+
+
+def test_to_text_warn_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("warn", 4000))
+    with pytest.warns(UserWarning, match="estimated at 4000 tokens"):
+        text = cont_graph().to_text()
+    assert "Feature Name: age" in text
+
+
+def test_to_text_simplifies_when_over_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    statuses = iter(["over", "over", "ok"])
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget(next(statuses)))
+    assert "Feature Name: age" in cont_graph().to_text()
+
+
+def test_to_text_continuous_cannot_be_simplified(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over", 99999))
+    with pytest.raises(EBMGraphSimplificationError, match="99999"):
+        cont_graph().to_text()
+
+
+def test_to_text_categorical_over_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over", 99999))
+    with pytest.raises(EBMGraphTokenLimitError, match="exceeds the token budget"):
+        cat_graph().to_text(feature_format=FeatureType.CATEGORICAL)
+
+
+# mutation-testing regressions: from_ebm
+
+
+@pytest.mark.parametrize("name", ["z_score", "min_max", "none"])
+def test_from_ebm_accepts_plain_string_normalization(name: str) -> None:
+    assert list(EBMGraph.from_ebm(continuous_ebm(), 0, name).scores) == list(
+        EBMGraph.from_ebm(continuous_ebm(), 0, Normalization(name)).scores,
+    )
+
+
+@pytest.mark.parametrize("bad", ["", "!", "zzz", "min", "z_scorf"])
+def test_from_ebm_rejects_every_unknown_normalization(bad: str) -> None:
+    with pytest.raises(InvalidOptionError):
+        EBMGraph.from_ebm(continuous_ebm(), 0, bad)
+
+
+@pytest.mark.parametrize("bad", ["", "a", "zzz", "continuou", "nomina", "interaction"])
+def test_from_ebm_rejects_every_unknown_feature_type(bad: str) -> None:
+    ebm = continuous_ebm()
+    ebm.feature_types_in_ = [bad]
+    with pytest.raises(InvalidOptionError):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+def test_from_ebm_use_feature_bounds_is_keyword_only() -> None:
+    with pytest.raises(TypeError):
+        EBMGraph.from_ebm(continuous_ebm(), 0, *(Normalization.NONE, False))
+
+
+def test_from_ebm_large_graph() -> None:
+    n = 300
+    ebm = continuous_ebm()
+    ebm.term_scores_ = [np.arange(n + 2, dtype=float)]
+    ebm.standard_deviations_ = [np.zeros(n + 2)]
+    ebm.bins_ = [[np.arange(n - 1, dtype=float)]]
+    graph = EBMGraph.from_ebm(ebm, 0)
+    assert len(graph.x_vals) == len(graph.scores) == n
+
+
+@pytest.mark.parametrize("n_scores", [4, 6])
+def test_from_ebm_mismatch_in_both_directions(n_scores: int) -> None:
+    ebm = continuous_ebm()
+    ebm.term_scores_ = [np.zeros(n_scores)]
+    ebm.standard_deviations_ = [np.zeros(n_scores)]
+    with pytest.raises(ValueError, match="does not match"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+# mutation-testing regressions: simplify
+
+
+def test_simplify_upper_bound_of_variation_is_inclusive() -> None:
+    g = cont_graph(scores=(1.0, 2.0, 5.0)).simplify(1.0)
+    assert g.x_vals == [(0.0, 3.0)]
+
+
+def test_simplify_threshold_scales_with_total_variation() -> None:
+    # total variation is 3, threshold 0.9 * 3 = 2.7: the 2.5 step merges, the 3.0 step against the first bin does not
+    g = cont_graph(scores=(2.0, 4.5, 5.0)).simplify(0.9)
+    assert g.x_vals == [(0.0, 2.0), (2.0, 3.0)]
+    assert g.scores == [2.0, 5.0]
+
+
+def test_simplify_merges_into_the_last_bin_only() -> None:
+    g = cont_graph(scores=(1.0, 5.0, 5.2), stds=(0.5, 0.9, 0.2)).simplify(0.1)
+    assert g.x_vals == [(0.0, 1.0), (1.0, 3.0)]
+    assert g.scores == [1.0, 5.0]
+    assert g.stds == [0.5, 0.9]
+
+
+def test_simplify_single_bin() -> None:
+    g = EBMGraph("age", "continuous", [(0.0, 1.0)], [1.0], [0.1]).simplify(0.5)
+    assert g.x_vals == [(0.0, 1.0)]
+
+
+# mutation-testing regressions: to_text
+
+
+def to_text_precision(variation: float) -> tuple[str, float]:
+    mid = variation * 0.123456789
+    graph = cont_graph(scores=(0.0, mid, variation))
+    return graph.to_text(confidence_bounds=False), mid
+
+
+@pytest.mark.parametrize(
+    ("variation", "precision"),
+    [(1000, 1), (100.5, 1), (100, 1), (99.5, 2), (99, 2), (9.11, 3), (0.5, 4), (0.3, 4), (0.12, 4)],
+)
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_auto_y_precision(variation: float, precision: int) -> None:
+    text, mid = to_text_precision(variation)
+    assert f'"(1.0, 2.0)": {round(mid, precision)},' in text
+    assert f'"(2.0, 3.0)": {round(variation, precision)}' in text
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_auto_keyword_equals_default() -> None:
+    g = cont_graph(scores=(0.0, 0.0123456, 0.3))
+    assert g.to_text(y_axis_precision="auto") == g.to_text()
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_confidence_bounds_values() -> None:
+    g = cont_graph(scores=(1.0, 2.0, 5.0), stds=(0.5, 0.25, 1.0))
+    text = g.to_text(include_description=False, y_axis_precision=3)
+    assert text.splitlines()[3:] == [
+        'Lower Bounds (95%-Confidence Interval): {"(0.0, 1.0)": 0.02, "(1.0, 2.0)": 1.51, "(2.0, 3.0)": 3.04}',
+        'Upper Bounds (95%-Confidence Interval): {"(0.0, 1.0)": 1.98, "(1.0, 2.0)": 2.49, "(2.0, 3.0)": 6.96}',
+    ]
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_confidence_level_changes_bounds() -> None:
+    g = cont_graph(scores=(1.0, 2.0, 5.0), stds=(1.0, 1.0, 1.0))
+    text = g.to_text(include_description=False, y_axis_precision=2, confidence_level=0.9)
+    assert 'Lower Bounds (90%-Confidence Interval): {"(0.0, 1.0)": -0.64,' in text
+
+
+def test_to_text_default_budget_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = {}
+
+    def check(**kw: object) -> baml_sdk.TokenBudget:
+        seen.update(kw)
+        return budget("ok")
+
+    monkeypatch.setattr(baml_sdk, "check_token_budget", check)
+    cont_graph().to_text()
+    assert (seen["max_tokens"], seen["overbudget_percent"]) == (3000, 50)
+    cont_graph().to_text(max_tokens=7, overbudget_percent=9)
+    assert (seen["max_tokens"], seen["overbudget_percent"]) == (7, 9)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_options_are_keyword_only() -> None:
+    with pytest.raises(TypeError):
+        cont_graph().to_text(*(True,))
+
+
+def test_to_text_warning_points_at_the_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("warn"))
+    with pytest.warns(UserWarning, match="estimated at") as record:
+        cont_graph().to_text()
+    assert record[0].filename == __file__
+
+
+def test_to_text_tries_every_simplification_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **kw: calls.append(kw) or budget("over", 5))
+    with pytest.raises(EBMGraphSimplificationError, match="10%"):
+        cont_graph().to_text()
+    assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
+
+
+@pytest.mark.parametrize(
+    "x_vals",
+    [["a", "b"], ["no", "yes"], ["True", "False"], ["False", "True", "x"], ["x", "False"]],
+)
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_not_boolean(x_vals: list[str]) -> None:
+    g = EBMGraph("flag", "nominal", x_vals, [0.0] * len(x_vals), [0.1] * len(x_vals))
+    assert "Feature Type: categorical" in g.to_text()
+
+
+@pytest.mark.parametrize("x_vals", [["false", "true"], ["FALSE", "TRUE"], ["False", "True"]])
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_boolean_case_insensitive(x_vals: list[str]) -> None:
+    g = EBMGraph("flag", "nominal", x_vals, [0.0, 2.0], [0.1, 0.1])
+    assert "Feature Type: boolean" in g.to_text()
+    assert '"False": 0.0, "True": 2.0' in g.to_text(y_axis_precision=1)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_boolean_with_one_value() -> None:
+    g = EBMGraph("flag", "nominal", ["a"], [0.0], [0.1])
+    with pytest.raises(ValueError, match="boolean format"):
+        g.to_text(feature_format=FeatureType.BOOLEAN)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_plain_string_feature_format() -> None:
+    assert "Feature Type: categorical" in cat_graph().to_text(feature_format="categorical")
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_unknown_feature_format() -> None:
+    with pytest.raises(InvalidOptionError):
+        cat_graph().to_text(feature_format="bogus")
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_continuous_is_simplified() -> None:
+    assert '"(0.0, 2.0)"' in cont_graph().to_text(confidence_bounds=False)  # first two bins are equal and merged
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_categorical_is_not_simplified() -> None:
+    g = EBMGraph("color", "nominal", ["a", "b"], [1.0, 1.0], [0.1, 0.1])
+    assert '"a": 1.0, "b": 1.0' in g.to_text()
+
+
+def test_simplify_rejects_non_continuous_string_variants() -> None:
+    g = EBMGraph("x", "boolean", [(0.0, 1.0)], [1.0], [0.1])
+    with pytest.raises(InvalidOptionError):
+        g.simplify()
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_to_text_auto_y_precision_depends_on_range_not_offset() -> None:
+    # a score range of 0.5 around 1000 needs 4 decimals, whatever the offset
+    g = cont_graph(scores=(1000.0, 1000.123456, 1000.5))
+    assert '"(1.0, 2.0)": 1000.1235' in g.to_text(confidence_bounds=False)
+
+
+def test_to_text_simplification_levels_grow_by_a_tenth_of_a_percent(monkeypatch: pytest.MonkeyPatch) -> None:
+    levels = []
+    simplify = EBMGraph.simplify
+
+    def spy(self: EBMGraph, min_variation_per_cent: float = 0.0) -> EBMGraph:
+        levels.append(min_variation_per_cent)
+        return simplify(self, min_variation_per_cent)
+
+    monkeypatch.setattr(EBMGraph, "simplify", spy)
+    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over"))
+    with pytest.raises(EBMGraphSimplificationError):
+        cont_graph().to_text()
+    assert levels == pytest.approx([step * 0.001 for step in range(102)])
+
+
+def round_trip_graph() -> EBMGraph:
+    return EBMGraph(
+        "age",
+        "continuous",
+        [(0.0, 1.0), (1.0, 2.5), (2.5, 5.0)],
+        [0.5, -0.25, 1.0],
+        [0.1, 0.2, 0.3],
+    )
+
+
+@pytest.mark.usefixtures("ok_budget")
+@pytest.mark.parametrize("confidence_level", [0.95, 0.9, 0.99])
+def test_from_text_inverts_to_text(confidence_level: float) -> None:
+    graph = round_trip_graph()
+    text = graph.to_text(y_axis_precision=6, confidence_level=confidence_level)
+    parsed = EBMGraph.from_text(text)
+    assert parsed.feature_name == "age"
+    assert parsed.feature_type == "continuous"
+    assert parsed.x_vals == graph.x_vals
+    assert parsed.scores == pytest.approx(graph.scores)
+    assert parsed.stds == pytest.approx(graph.stds, abs=1e-5)
+
+
+@pytest.mark.usefixtures("ok_budget")
+def test_from_text_reads_a_graph_inside_a_prompt() -> None:
+    graph_text = round_trip_graph().to_text(y_axis_precision=6)
+    indented = "\n".join(f"    {line}" for line in graph_text.splitlines())
+    parsed = EBMGraph.from_text(f"Look at this graph:\n\n{indented}\n\nWhat is the largest jump?")
+    assert parsed.feature_name == "age"
+    assert parsed.x_vals == round_trip_graph().x_vals
+    assert parsed.stds == pytest.approx(round_trip_graph().stds, abs=1e-5)
+
+
+@pytest.mark.usefixtures("ok_budget")
+@pytest.mark.parametrize("label", ["Feature Name", "Feature Type", "Means", "Lower Bounds", "Upper Bounds"])
+def test_from_text_requires_every_line(label: str) -> None:
+    lines = round_trip_graph().to_text(y_axis_precision=6).splitlines()
+    text = "\n".join(line for line in lines if not line.startswith(label))
+    with pytest.raises(ValueError, match=f"no '{label}' line"):
+        EBMGraph.from_text(text)
+
+
+@pytest.mark.usefixtures("ok_budget")
+@pytest.mark.parametrize("feature_type", ["nominal", "boolean", "bogus"])
+def test_from_text_rejects_other_feature_types(feature_type: str) -> None:
+    text = (
+        round_trip_graph()
+        .to_text(y_axis_precision=6)
+        .replace("Feature Type: continuous", f"Feature Type: {feature_type}")
+    )
+    with pytest.raises(InvalidOptionError, match=feature_type):
+        EBMGraph.from_text(text)
+
+
+FIRST: str = "(0.0, 1.0)"
+SECOND: str = "(1.0, 2.0)"
+
+
+def graph_text_with_intervals(means: list[str], lower: list[str], upper: list[str]) -> str:
+    def line(label: str, intervals: list[str]) -> str:
+        return f"{label}: {{" + ", ".join(f'"{interval}": 0.5' for interval in intervals) + "}\n"
+
+    return (
+        "Feature Name: age\nFeature Type: continuous\n"
+        + line("Means", means)
+        + line("Lower Bounds (95%-Confidence Interval)", lower)
+        + line("Upper Bounds (95%-Confidence Interval)", upper)
+    )
+
+
+@pytest.mark.parametrize(
+    ("means", "lower", "upper"),
+    [
+        ([FIRST], [SECOND], [FIRST]),
+        ([FIRST], [FIRST, SECOND], [FIRST, SECOND]),
+        ([FIRST, SECOND], [FIRST], [FIRST]),
+        ([FIRST], [FIRST], [FIRST, SECOND]),
+        ([FIRST, SECOND], [FIRST, SECOND], [FIRST]),
+        ([FIRST], [FIRST], [SECOND]),
+    ],
+)
+def test_from_text_rejects_bounds_with_other_intervals(means: list[str], lower: list[str], upper: list[str]) -> None:
+    with pytest.raises(ValueError, match="same intervals"):
+        EBMGraph.from_text(graph_text_with_intervals(means, lower, upper))
+
+
+def test_from_text_accepts_bounds_with_the_same_intervals_in_any_order() -> None:
+    parsed = EBMGraph.from_text(graph_text_with_intervals([FIRST, SECOND], [SECOND, FIRST], [FIRST, SECOND]))
+    assert parsed.x_vals == [(0.0, 1.0), (1.0, 2.0)]
+
+
+def test_to_text_rejects_more_stds_than_scores() -> None:
+    # more stds than scores: only the pairing of the bounds notices (the means have as many scores as bins)
+    graph = EBMGraph("color", "nominal", ["a", "b"], [0.1, 0.2], [0.1, 0.1, 0.1])
+    with pytest.raises(ValueError, match="longer"):
+        graph.to_text()

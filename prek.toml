@@ -1,0 +1,116 @@
+exclude = '''(?x)^(
+  src/baml_sdk/|
+  (.*/)?\.venv/|
+  (.*/)?__pycache__/
+)'''
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [
+  # reason: uv.lock is generated and grows with the dependency tree, so the 500 KB limit cannot apply to it.
+  { id = "check-added-large-files", exclude = '^uv\.lock$', priority = 0 },
+  { id = "check-ast", priority = 0 },
+  { id = "check-case-conflict", priority = 0 },
+  { id = "check-executables-have-shebangs", priority = 0 },
+  { id = "check-illegal-windows-names", priority = 0 },
+  { id = "check-merge-conflict", args = ["--assume-in-merge"], priority = 0 },
+  { id = "check-symlinks", priority = 0 },
+  { id = "check-toml", priority = 0 },
+  { id = "check-yaml", priority = 0 },
+  { id = "destroyed-symlinks", priority = 0 },
+  { id = "name-tests-test", args = ["--pytest-test-first"], priority = 0 },
+  { id = "detect-private-key", priority = 0 },
+  { id = "fix-byte-order-marker", priority = 10 },
+  { id = "mixed-line-ending", priority = 11 },
+  { id = "trailing-whitespace", priority = 12 },
+  { id = "end-of-file-fixer", priority = 13 },
+]
+
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-json5", priority = 0 },
+]
+
+[[repos]]
+repo = "https://github.com/rhysd/actionlint"
+rev = "v1.7.7"
+hooks = [
+  { id = "actionlint", args = ["-shellcheck="], files = "^\\.github/workflows/.*\\.ya?ml$", priority = 40 },
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "ruff-format",
+    name = "ruff format",
+    language = "system",
+    entry = "uv run ruff format",
+    types_or = ["python", "pyi"],
+    priority = 40,
+  },
+  {
+    id = "ruff-check",
+    name = "ruff check",
+    language = "system",
+    entry = "uv run ruff check --fix --no-unsafe-fixes",
+    types_or = ["python", "pyi"],
+    priority = 41,
+  },
+  {
+    id = "vulture",
+    name = "vulture",
+    language = "system",
+    entry = "uv run vulture src/ebaml tests scripts .github/scripts",
+    types = ["python"],
+    pass_filenames = false,
+    priority = 42,
+  },
+  {
+    id = "pyrefly",
+    name = "pyrefly",
+    language = "system",
+    entry = "uv run pyrefly check src/ebaml tests scripts .github/scripts",
+    types = ["python"],
+    pass_filenames = false,
+    priority = 70,
+  },
+  {
+    id = "pyrefly-coverage",
+    name = "pyrefly type coverage is 100%",
+    language = "system",
+    entry = "uv run pyrefly coverage check src/ebaml tests scripts .github/scripts",
+    types = ["python"],
+    pass_filenames = false,
+    priority = 71,
+  },
+  {
+    id = "check-ignores",
+    name = "workarounds carry a written reason",
+    language = "system",
+    entry = "uv run python -m scripts.check_ignores",
+    files = "\\.(py|toml)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
+    id = "baml-fmt",
+    name = "baml fmt",
+    language = "system",
+    entry = "sh -c 'PATH=\"$HOME/.baml/bin:$PATH\" baml fmt'", # the installer's PATH line is not in every shell, e.g. git GUIs
+    files = "^baml_src/.*\\.baml$",
+    pass_filenames = false,
+    priority = 40,
+  },
+  {
+    id = "uv-lock-check",
+    name = "uv lock --check",
+    language = "system",
+    entry = "uv lock --check",
+    files = "^(pyproject\\.toml|uv\\.lock)$",
+    pass_filenames = false,
+    priority = 0,
+  },
+]

@@ -1,0 +1,64 @@
+name: Prompt tests
+
+# Live prompt tests (baml_src/prompt_tests.baml) send real requests to OpenRouter, so they are slow, rate limited and
+# not deterministic. They live in their own workflow: a failure here never blocks or reddens the CI workflow, and
+# nothing in CI depends on this workflow. Do not make it a required status check.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["baml_src/**", ".github/workflows/prompt-tests.yml"]
+  pull_request:
+    paths: ["baml_src/**", ".github/workflows/prompt-tests.yml"]
+
+concurrency:
+  group: prompt-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  live:
+    name: live prompt tests
+    # Fork PRs get no secrets, so skip them instead of failing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      HAS_KEY: ${{ secrets.OPENROUTER_API_KEY != '' }}
+    steps:
+      - name: Check for the secret
+        if: env.HAS_KEY != 'true'
+        run: echo "::notice::OPENROUTER_API_KEY secret is not set; skipping the live prompt tests."
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - uses: ./.github/actions/setup
+        if: env.HAS_KEY == 'true'
+        with:
+          generate: "false"
+      - name: Run live prompt tests
+        if: env.HAS_KEY == 'true'
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        # The model is not deterministic, so one failed attempt is retried once. A low concurrency keeps the free
+        # router below its rate limit.
+        run: |
+          mkdir -p logs
+          for attempt in 1 2; do
+            if baml test -i root::Live --max-concurrency 2 2>&1 | tee "logs/prompt-tests-$attempt.log"; then
+              exit 0
+            fi
+            echo "::warning::live prompt tests failed on attempt $attempt"
+          done
+          exit 1
+      - uses: actions/upload-artifact@v4
+        if: always() && env.HAS_KEY == 'true'
+        with:
+          name: prompt-test-logs
+          path: logs/
+          if-no-files-found: ignore
