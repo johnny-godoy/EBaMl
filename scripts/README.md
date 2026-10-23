@@ -46,6 +46,19 @@ uv run python -m scripts.compile_ignores -o ignores-report.md   # report to a fi
 `check_ignores` also runs as the `check-ignores` hook in `prek.toml`. Do not edit the scripts or the hook to make a
 violation pass. The finder shared by both is `ignore_sites.py`.
 
+## `check_exclusions.py`
+
+`exclude-newer-package` in `pyproject.toml` lets one package skip the 7-day cutoff of uv, for example to take a security
+fix at once. Such an entry is temporary. `check_exclusions` reads `uv.lock` and fails when the locked version of an
+exempt package is older than the cutoff, or when the package is not locked. If it fails, delete the entry and run
+`uv lock`.
+
+```bash
+uv run python -m scripts.check_exclusions   # fails if an exemption is no longer needed
+```
+
+It also runs as the `check-exclusions` hook in `prek.toml`.
+
 ## `mutation.py`
 
 cosmic-ray mutates the source tree in place, so each shard works on its own copy of `src`, `tests`, `pyproject.toml`
