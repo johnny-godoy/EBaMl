@@ -84,7 +84,7 @@ jobs:
       - name: Scan with base rules
         run: |
           mkdir -p "$CI_LOGS"
-          uvx --from semgrep==1.131.0 semgrep scan --config p/default --error --metrics=off \
+          uvx --from semgrep==1.131.0 --with 'setuptools<81' semgrep scan --config p/default --error --metrics=off \
             --json-output="$CI_LOGS/semgrep.json" 2>&1 | tee "$CI_LOGS/semgrep.log"
       - uses: ./.github/actions/failure-report
         if: failure()
@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: mkdir -p "$CI_LOGS"
-      - uses: aquasecurity/trivy-action@0.33.1
+      - uses: aquasecurity/trivy-action@v0.33.1
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig

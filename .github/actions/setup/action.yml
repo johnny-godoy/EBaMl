@@ -16,10 +16,11 @@ runs:
       run: |
         curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s
         echo "$HOME/.baml/bin" >> "$GITHUB_PATH"
-    - name: Sync environment
-      shell: bash
-      run: uv sync --frozen
+    # The project build needs src/baml_sdk, so generate before the sync. Without generation, skip installing the project.
     - name: Generate BAML SDK
       if: inputs.generate == 'true'
       shell: bash
       run: baml generate
+    - name: Sync environment
+      shell: bash
+      run: uv sync --frozen ${{ inputs.generate == 'true' && ' ' || '--no-install-project' }}
