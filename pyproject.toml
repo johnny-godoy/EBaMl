@@ -37,7 +37,7 @@ Changelog = "https://github.com/johnny-godoy/EBaMl/blob/main/CHANGELOG.md"
 exclude-newer = "7 days"
 # reason: security fixes must not wait for the 7-day cooldown. pillow 12.3.0 has 35 known CVEs fixed in 13.0.0, and
 # certifi 2026.7.22 has 1 fixed in 2026.10.19, so Trivy fails on the older versions. Remove each entry once its fixed
-# release is more than 7 days old.
+# release is more than 7 days old. The check-exclusions hook fails when an entry is no longer needed.
 exclude-newer-package = { pillow = false, certifi = false }
 
 [tool.uv.build-backend]

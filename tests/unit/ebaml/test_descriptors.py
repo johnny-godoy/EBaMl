@@ -2,11 +2,11 @@
 
 from types import SimpleNamespace
 
+import baml_sdk
 import pytest
 from baml_bridge.errors import BamlError
 from structlog.testing import capture_logs
 
-import baml_sdk
 from ebaml import descriptors, local
 from ebaml.custom_types import Audience
 from ebaml.exceptions import EBMGraphSimplificationError, InvalidOptionError

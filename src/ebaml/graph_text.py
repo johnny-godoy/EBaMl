@@ -4,11 +4,11 @@ import re
 import warnings
 from typing import TYPE_CHECKING
 
+import baml_sdk
 import numpy as np
 import orjson
 import scipy
 
-import baml_sdk
 from ebaml.custom_types import FeatureType, coerce_enum, normalize_feature_type
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
 

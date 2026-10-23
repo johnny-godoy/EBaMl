@@ -10,10 +10,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import attrs
+import baml_sdk
 import structlog
 from baml_bridge.errors import BamlError
 
-import baml_sdk
 from ebaml.custom_types import Audience, ExplainableBoostingModel, coerce_enum
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
 from ebaml.graphs import EBMGraph

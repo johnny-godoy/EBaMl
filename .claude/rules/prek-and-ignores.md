@@ -8,6 +8,12 @@
 - Never bypass hooks (`--no-verify`, `SKIP=...`, or removing/editing a hook to make it pass) unless the user explicitly asks.
 - Do not report "done" with prek failing. If a failure is unrelated or cannot be fixed, say so with the output.
 
+## Cooldown exemptions expire
+
+`exclude-newer-package` in `pyproject.toml` skips the 7-day uv cutoff for one package, for example to take a security
+fix. Use it only for a security fix, and write the `reason:` block above it. The `check-exclusions` hook fails when the
+locked version is older than the cutoff. Then delete the entry and run `uv lock`. Do not edit the hook to keep an entry.
+
 ## Workarounds need a written reason next to them
 
 A workaround silences a tool instead of fixing the code: `# noqa`, `# type: ignore`, `# pyrefly: ignore`, `# fmt: off`,

@@ -2,10 +2,10 @@
 
 from types import SimpleNamespace
 
+import baml_sdk
 import numpy as np
 import pytest
 
-import baml_sdk
 from ebaml.custom_types import FeatureType, Normalization
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
 from ebaml.graphs import EBMGraph
