@@ -470,7 +470,7 @@ def api(method: str, path: str, payload: Mapping[str, object] | None = None) -> 
         },
     )
     # The scheme of the URL is checked above, and the host comes from the runner.
-    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  # ruff: ignore[commented-out-code] -- semgrep marker, not code
     with urllib.request.urlopen(request, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage] -- the scheme of the URL is checked above
         return json.load(response)
 
