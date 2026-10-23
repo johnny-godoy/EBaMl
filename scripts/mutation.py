@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -206,12 +207,12 @@ def exec_shard(shard: Shard, fits: Path) -> None:
     logger.info("shard done", module=shard.module, shard=shard.path.name, seconds=round(time.monotonic() - started))
 
 
-def count_results(sessions: list[Path], seen: dict[Path, tuple[int, int]]) -> tuple[int, int]:
+def count_results(sessions: Sequence[Path], seen: dict[Path, tuple[int, int]]) -> tuple[int, int]:
     """Count the finished and the surviving mutants of the sessions of the shards.
 
     Parameters
     ----------
-    sessions: list[Path]
+    sessions: Sequence[Path]
         The sessions of the shards.
     seen: dict[Path, tuple[int, int]]
         The last count of each session. A session that is locked for writing keeps its last count.
@@ -232,12 +233,12 @@ def count_results(sessions: list[Path], seen: dict[Path, tuple[int, int]]) -> tu
     return sum(done for done, _ in seen.values()), sum(survived for _, survived in seen.values())
 
 
-def report_progress(sessions: list[Path], total: int, stop: threading.Event) -> None:
+def report_progress(sessions: Sequence[Path], total: int, stop: threading.Event) -> None:
     """Log the progress of the shards every ``POLL_SECONDS`` seconds, until the event is set.
 
     Parameters
     ----------
-    sessions: list[Path]
+    sessions: Sequence[Path]
         The sessions of the shards.
     total: int
         The number of mutants that the shards run.
@@ -246,7 +247,7 @@ def report_progress(sessions: list[Path], total: int, stop: threading.Event) -> 
 
     """
     started = time.monotonic()
-    seen: dict[Path, tuple[int, int]] = {}
+    seen: dict[Path, tuple[int, int]] = {}  # a dict, because count_results writes to it
     while not stop.wait(POLL_SECONDS):
         done, survived = count_results(sessions, seen)
         elapsed = time.monotonic() - started
@@ -254,12 +255,12 @@ def report_progress(sessions: list[Path], total: int, stop: threading.Event) -> 
         logger.info("progress", done=done, total=total, survived=survived, elapsed_s=round(elapsed), eta_s=eta)
 
 
-def merge_results(sessions: list[Path]) -> None:
+def merge_results(sessions: Sequence[Path]) -> None:
     """Copy the results of the shards into the main session.
 
     Parameters
     ----------
-    sessions: list[Path]
+    sessions: Sequence[Path]
         The sessions of the shards.
 
     """

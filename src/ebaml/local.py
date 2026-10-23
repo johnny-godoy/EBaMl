@@ -20,7 +20,7 @@ keeps it, even if the scores sit at the edge of their confidence interval.
 import math
 import operator
 import statistics
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import attrs
@@ -322,12 +322,12 @@ def _robust_scores(feature: _Feature, sign: int, z: float, *, towards_outcome: b
     return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
 
 
-def _counterfactual(features: list[_Feature], intercept: float, sign: int, z: float) -> Counterfactual | None:
+def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z: float) -> Counterfactual | None:
     """Minimum change required: the features with the largest possible drop in favour of the outcome, until it flips.
 
     Parameters
     ----------
-    features : list[_Feature]
+    features : Sequence[_Feature]
         The features.
     intercept : float
         The intercept of the model.
@@ -369,12 +369,12 @@ def _counterfactual(features: list[_Feature], intercept: float, sign: int, z: fl
     )
 
 
-def _fixing_order(features: list[_Feature], sign: int, z: float) -> list[tuple[float, _Feature]]:
+def _fixing_order(features: Sequence[_Feature], sign: int, z: float) -> list[tuple[float, _Feature]]:
     """Features by how much knowing their value guarantees, largest first.
 
     Parameters
     ----------
-    features : list[_Feature]
+    features : Sequence[_Feature]
         The features.
     sign : int
         ``1`` if the outcome is the positive class, ``-1`` otherwise.
@@ -394,12 +394,12 @@ def _fixing_order(features: list[_Feature], sign: int, z: float) -> list[tuple[f
     return sorted(gains, key=operator.itemgetter(0), reverse=True)
 
 
-def _sufficient_reason(features: list[_Feature], intercept: float, sign: int, z: float) -> SufficientReason | None:
+def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int, z: float) -> SufficientReason | None:
     """Minimum sufficient reason: fix the features that guarantee the most until no completion can flip the outcome.
 
     Parameters
     ----------
-    features : list[_Feature]
+    features : Sequence[_Feature]
         The features.
     intercept : float
         The intercept of the model.
@@ -427,8 +427,8 @@ def _sufficient_reason(features: list[_Feature], intercept: float, sign: int, z:
 
 
 def _completions(
-    features: list[_Feature],
-    order: list[_Feature],
+    features: Sequence[_Feature],
+    order: Sequence[_Feature],
     intercept: float,
     sign: int,
     options: LocalOptions,
@@ -437,9 +437,9 @@ def _completions(
 
     Parameters
     ----------
-    features : list[_Feature]
+    features : Sequence[_Feature]
         The features.
-    order : list[_Feature]
+    order : Sequence[_Feature]
         The features in the order they are revealed.
     intercept : float
         The intercept of the model.
@@ -544,7 +544,7 @@ def _strength(score: float) -> str:
     return "slightly"
 
 
-def _dump(data: dict[str, Any]) -> str:
+def _dump(data: Mapping[str, Any]) -> str:
     return orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
 
 

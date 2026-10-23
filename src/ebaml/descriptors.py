@@ -29,14 +29,14 @@ _MAX_TRUNCATION_RETRIES = 4
 _GRAPH_SENTENCES = 7
 
 
-def _accepted_kwargs(func: Callable[..., Any], kwargs: dict[str, Any]) -> dict:
+def _accepted_kwargs(func: Callable[..., Any], kwargs: Mapping[str, Any]) -> dict:
     """Select the entries of ``kwargs`` that are parameters of ``func``.
 
     Parameters
     ----------
     func: Callable[..., Any]
         The function to inspect.
-    kwargs: dict[str, Any]
+    kwargs: Mapping[str, Any]
         The keyword arguments to filter.
 
     Returns
@@ -68,12 +68,12 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
     )
 
 
-def _prompt_options(kwargs: dict) -> baml_sdk.GraphPromptOptions:
+def _prompt_options(kwargs: Mapping[str, Any]) -> baml_sdk.GraphPromptOptions:
     """Build the BAML prompt options from the keyword arguments, falling back to the BAML defaults.
 
     Parameters
     ----------
-    kwargs: dict
+    kwargs: Mapping[str, Any]
         The keyword arguments to filter.
 
     Returns
@@ -87,7 +87,7 @@ def _prompt_options(kwargs: dict) -> baml_sdk.GraphPromptOptions:
     return baml_sdk.GraphPromptOptions(**{**options.model_dump(), **overrides})
 
 
-def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: dict) -> str:
+def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: Mapping[str, Any]) -> str:
     """Convert an EBM graph to text.
 
     Parameters
@@ -96,7 +96,7 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: dict)
         The EBM model.
     feature_index: int
         The index of the feature to convert to text.
-    kwargs: dict
+    kwargs: Mapping[str, Any]
         Additional keyword arguments to pass to ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
 
     Returns
@@ -153,7 +153,7 @@ def _describe_graph_counted(
     feature_index: int,
     graph: str,
     num_sentences: int,
-    kwargs: dict,
+    kwargs: Mapping[str, Any],
 ) -> baml_sdk.Counted:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
@@ -167,7 +167,7 @@ def _describe_graph_counted(
         The text of the graph, as made by ``_graph_text``.
     num_sentences: int
         The desired number of sentences for the description.
-    kwargs: dict
+    kwargs: Mapping[str, Any]
         Passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompt options.
 
     Returns
