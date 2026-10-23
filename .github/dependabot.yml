@@ -7,6 +7,8 @@ updates:
     groups:
       python-dependencies:
         patterns: ["*"]
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: deps
   # The workflows and the composite actions pin each action to a commit SHA, so Dependabot must update both places.
@@ -19,5 +21,7 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: ci
