@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A separate `Prompt tests` workflow runs the live prompt tests with the `OPENROUTER_API_KEY` repository secret. It is slow, so the CI workflow does not wait for it.
 - The offline BAML tests now run with `baml test -x root::Live`.
 
-## [0.1.0] - 2024-06-19
+## [0.0.1] - 2024-06-19
 
 ### Added
 
