@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Turn raw CI tool output into short, actionable failure reports.
 
-Two subcommands, both stdlib only:
+Four subcommands, all stdlib only:
 
 ``snippet <gate>``
     Run inside a failed job. Reads that gate's logs from ``$CI_LOGS`` and writes ``$CI_REPORT/<gate>.md`` holding
@@ -9,7 +9,16 @@ Two subcommands, both stdlib only:
 
 ``assemble``
     Run in the final job. Combines every snippet with the job results in ``$NEEDS`` (``toJSON(needs)``) into one
-    markdown report: written to ``$CI_REPORT/comment.md`` and the step summary, for the sticky PR comment.
+    markdown report: written to ``$CI_REPORT/comment.md`` and the step summary.
+
+``watch``
+    Run in the ``progress`` job, next to the gates. Every ``POLL_SECONDS`` seconds it reads the state of the gate jobs
+    from the GitHub API and updates the PR comment ("CI in progress"), until all gates have finished.
+
+``post <file>``
+    Create the PR comment from a file, or replace it if it exists. The ``report`` job uses it for the final report.
+    ``watch`` and ``post`` find the comment by ``MARKER``, so one comment changes during the whole run. Without write
+    access (a fork PR) they do nothing.
 """
 
 import json
@@ -17,7 +26,12 @@ import os
 import re
 import sys
 import tempfile
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 LOGS: Path = Path(os.environ.get("CI_LOGS", Path(tempfile.gettempdir()) / "ci-logs"))
 REPORT: Path = Path(os.environ.get("CI_REPORT", Path(tempfile.gettempdir()) / "ci-report"))
@@ -25,6 +39,13 @@ MAX_CHARS = 6000
 MAX_LOG_TAIL = 3000
 PERCENT = 100
 SNIPPET_ARGC = 3
+POST_ARGC = 3
+POLL_SECONDS = 20
+WATCH_LIMIT_SECONDS = 70 * 60
+PAGE_SIZE = 100
+FORBIDDEN = (401, 403)
+MARKER = "<!-- ci-report -->"
+FINISHED = frozenset({"success", "failure", "cancelled", "skipped"})
 
 # (job id, title) in fail-fast order.
 GATES = [
@@ -398,11 +419,228 @@ def snippet(gate: str) -> None:
     (REPORT / f"{gate}.md").write_text(BUILDERS[gate]() + "\n")
 
 
+def run_url() -> str:
+    """Build the URL of the workflow run.
+
+    Returns
+    -------
+    str
+        The URL of the run, from the variables of the runner.
+
+    """
+    server, repository, run_id = (os.environ[k] for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
+    return f"{server}/{repository}/actions/runs/{run_id}"
+
+
+def api(method: str, path: str, payload: Mapping[str, object] | None = None) -> Any:  # ruff: ignore[any-type] -- the GitHub API returns JSON of many shapes
+    """Call the GitHub REST API with the token of the job.
+
+    Parameters
+    ----------
+    method: str
+        The HTTP method.
+    path: str
+        The path of the endpoint, with its query.
+    payload: Mapping[str, object], optional
+        The JSON body.
+
+    Returns
+    -------
+    Any
+        The decoded JSON of the response.
+
+    Raises
+    ------
+    ValueError
+        If ``GITHUB_API_URL`` is not an http or https URL.
+
+    """
+    base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    if not base.startswith(("https://", "http://")):  # urllib also opens file: URLs, so allow only web schemes
+        msg = f"GITHUB_API_URL must be an http(s) URL: {base}"
+        raise ValueError(msg)
+    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage] -- the scheme of the URL is checked above
+        f"{base}{path}",
+        data=None if payload is None else json.dumps(payload).encode(),
+        method=method,
+        headers={
+            "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    # The scheme of the URL is checked above, and the host comes from the runner.
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  # ruff: ignore[commented-out-code] -- semgrep marker, not code
+    with urllib.request.urlopen(request, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage] -- the scheme of the URL is checked above
+        return json.load(response)
+
+
+def pull_request_number() -> int:
+    """Read the number of the pull request from the event of the run.
+
+    Returns
+    -------
+    int
+        The number of the pull request.
+
+    """
+    return json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))["pull_request"]["number"]
+
+
+def upsert_comment(text: str) -> None:
+    """Create the PR comment, or replace the text of the comment that has ``MARKER``.
+
+    Parameters
+    ----------
+    text: str
+        The markdown of the comment, without the marker.
+
+    """
+    repository = os.environ["GITHUB_REPOSITORY"]
+    number = pull_request_number()
+    body = f"{MARKER}\n{text}"
+    page = 1
+    while True:
+        comments = api("GET", f"/repos/{repository}/issues/{number}/comments?per_page={PAGE_SIZE}&page={page}")
+        for comment in comments:
+            if MARKER in comment["body"]:
+                api("PATCH", f"/repos/{repository}/issues/comments/{comment['id']}", {"body": body})
+                return
+        if len(comments) < PAGE_SIZE:
+            break
+        page += 1
+    api("POST", f"/repos/{repository}/issues/{number}/comments", {"body": body})
+
+
+def gate_states(jobs: Sequence[Mapping[str, str | None]]) -> dict[str, str]:
+    """Find the state of each gate in the jobs of the run.
+
+    Parameters
+    ----------
+    jobs: Sequence[Mapping[str, str | None]]
+        The jobs of the run, as the GitHub API returns them.
+
+    Returns
+    -------
+    dict[str, str]
+        The state of each gate: ``waiting``, ``running``, or the conclusion of the job.
+
+    """
+    states = {gate: "waiting" for gate, _ in GATES}
+    for job in jobs:
+        name = job["name"] or ""
+        for gate, _ in GATES:
+            if name == gate or name.startswith(f"{gate} "):
+                if job["status"] == "completed":
+                    states[gate] = job["conclusion"] or "cancelled"
+                elif job["status"] == "in_progress":
+                    states[gate] = "running"
+    return states
+
+
+def render_progress(states: Mapping[str, str]) -> str:
+    """Write the comment for a run that has not finished.
+
+    Parameters
+    ----------
+    states: Mapping[str, str]
+        The state of each gate, from ``gate_states``.
+
+    Returns
+    -------
+    str
+        The markdown of the comment.
+
+    """
+    icons = {
+        "waiting": "⏳ waiting",
+        "running": "🔄 running",
+        "success": "✅ passed",
+        "failure": "❌ **failed**, details follow when the run ends",
+        "cancelled": "🚫 cancelled",
+        "skipped": "⏭️ skipped (blocked by an earlier gate)",
+    }
+    finished = sum(state in FINISHED for state in states.values())
+    failed = sum(state == "failure" for state in states.values())
+    heading = f"## 🔄 CI in progress: {finished} of {len(GATES)} gates finished"
+    if failed:
+        heading += f", {failed} failed"
+    lines = [heading, "", "This comment updates by itself when a gate changes. The final report replaces it.", ""]
+    lines += ["| Gate | State |", "|---|---|"]
+    lines += [f"| {title} | {icons.get(states[gate], states[gate])} |" for gate, title in GATES]
+    sha = os.environ.get("GITHUB_SHA", "")[:7]
+    lines += ["", f"<sub>Commit `{sha}` · [live run logs]({run_url()})</sub>", ""]
+    return "\n".join(lines)
+
+
+def update_progress(posted: str) -> tuple[bool, str]:
+    """Read the state of the gates and update the PR comment if the state changed.
+
+    Parameters
+    ----------
+    posted: str
+        The text that the last update wrote.
+
+    Returns
+    -------
+    tuple[bool, str]
+        Whether all gates have finished, and the text that the PR comment now holds.
+
+    """
+    repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
+    states = gate_states(api("GET", f"/repos/{repository}/actions/runs/{run_id}/jobs?per_page={PAGE_SIZE}")["jobs"])
+    if all(state in FINISHED for state in states.values()):
+        return True, posted
+    text = render_progress(states)
+    if text != posted:
+        upsert_comment(text)
+    return False, text
+
+
+def watch() -> None:
+    """Update the PR comment with the state of the gates until all gates have finished."""
+    deadline = time.monotonic() + WATCH_LIMIT_SECONDS
+    posted = ""
+    while time.monotonic() < deadline:
+        try:
+            done, posted = update_progress(posted)
+        except urllib.error.HTTPError as error:
+            if error.code in FORBIDDEN:  # a fork PR has a read-only token, so there is nothing to update
+                return
+            sys.stderr.write(f"progress update failed: {error}\n")
+        except urllib.error.URLError as error:
+            sys.stderr.write(f"progress update failed: {error}\n")
+        else:
+            if done:
+                return
+        time.sleep(POLL_SECONDS)
+
+
+def post(path: str) -> None:
+    """Create the PR comment from a file, or replace the existing comment.
+
+    Parameters
+    ----------
+    path: str
+        The markdown file.
+
+    Raises
+    ------
+    urllib.error.HTTPError
+        If the API refuses the request for a reason other than missing write access.
+
+    """
+    try:
+        upsert_comment(Path(path).read_text(encoding="utf-8"))
+    except urllib.error.HTTPError as error:
+        if error.code not in FORBIDDEN:
+            raise
+        sys.stderr.write("no write access to the PR (a fork PR?); the report stays in the run summary\n")
+
+
 def assemble() -> None:
     """Combine the snippets and the job results into the PR comment and the step summary."""
     needs = json.loads(os.environ["NEEDS"])
-    server, repository, run_id = (os.environ[k] for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
-    run_url = f"{server}/{repository}/actions/runs/{run_id}"
     sha = os.environ.get("GITHUB_SHA", "")[:7]
     icons = {
         "success": "✅ passed",
@@ -428,7 +666,7 @@ def assemble() -> None:
             read(path) or "The job failed before the tool produced a report (setup or runner error). Open the job log."
         )
         lines += [f"### ❌ {title}", "", body.strip(), ""]
-    lines.append(f"<sub>Commit `{sha}` · [full run logs]({run_url})</sub>")
+    lines.append(f"<sub>Commit `{sha}` · [full run logs]({run_url()})</sub>")
     text = "\n".join(lines) + "\n"
     REPORT.mkdir(parents=True, exist_ok=True)
     (REPORT / "comment.md").write_text(text)
@@ -451,6 +689,10 @@ def main() -> int:
         snippet(sys.argv[2])
     elif command == "assemble":
         assemble()
+    elif command == "watch":
+        watch()
+    elif command == "post" and len(sys.argv) == POST_ARGC:
+        post(sys.argv[2])
     else:
         return 2
     return 0
