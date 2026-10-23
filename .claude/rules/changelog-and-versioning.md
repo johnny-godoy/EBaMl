@@ -17,5 +17,6 @@
 - Every user-visible change (feature, fix, behavior change, deprecation, removal, security fix, dependency change that affects users) needs an entry in the same change, under `## [Unreleased]`.
 - Group entries under: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. Omit empty groups.
 - Write entries for users, not for the diff: say what changed and why it matters, one line each. Skip pure internal churn (formatting, test-only edits, CI tweaks).
+- The changelog is for people who use the package: public API changes, BAML function signatures, prompt behavior, bug fixes and dependency changes that affect them. Leave out repository metadata and developer tooling (`CITATION.cff`, `dependabot.yml`, issue and PR templates, CI workflows, test suites, prek hooks, contributor docs), even when the change is new.
 - On release: rename `[Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty `## [Unreleased]` above it, and update the compare links at the bottom of the file.
 - Keep the changelog and `pyproject.toml` version consistent: the newest released heading must match `version`.
