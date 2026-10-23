@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-import baml_sdk
 import orjson
 import pytest
 from structlog.testing import capture_logs
 
+import baml_sdk
 from ebaml.benchmark import (
     Outcome,
     Question,

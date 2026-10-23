@@ -14,9 +14,10 @@ from itertools import starmap
 from pathlib import Path
 
 import attrs
-import baml_sdk
 import orjson
 import structlog
+
+import baml_sdk
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
