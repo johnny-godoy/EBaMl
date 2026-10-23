@@ -96,6 +96,15 @@ hooks = [
     priority = 50,
   },
   {
+    id = "check-exclusions",
+    name = "uv cooldown exemptions are still needed",
+    language = "system",
+    entry = "uv run python -m scripts.check_exclusions",
+    files = "(^|/)(pyproject\\.toml|uv\\.lock)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "baml-fmt",
     name = "baml fmt",
     language = "system",
