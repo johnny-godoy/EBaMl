@@ -2,7 +2,7 @@
 
 import itertools
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import numpy as np
 import pandas as pd
@@ -18,22 +18,26 @@ NAMES = ["f0", "f1", "f2"]
 
 
 @pytest.fixture(scope="module")
-def categorical_ebm() -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+def categorical_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
     rng = np.random.default_rng(1)
     data = pd.DataFrame({name: rng.choice(CATEGORIES, 900) for name in NAMES})
     effect = data["f0"].map({"p": 1.5, "q": 0.0, "r": -1.5}) + data["f1"].map({"p": 0.5, "q": 0.0, "r": -0.5})
     effect += data["f2"].map({"p": 0.2, "q": 0.0, "r": -0.2}) + rng.normal(size=900) * 0.3
     target = (effect > 0).astype(int)
-    return ExplainableBoostingClassifier(interactions=0, random_state=0).fit(data, target), data
+    return fit_ebm(data, target, interactions=0, random_state=0), data
 
 
 @pytest.fixture(scope="module")
-def continuous_ebm() -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+def continuous_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
     rng = np.random.default_rng(2)
     data = pd.DataFrame({"a": rng.normal(size=600), "b": rng.normal(size=600), "c": rng.choice(["x", "y"], 600)})
     noise = rng.normal(size=600)
     target = ((2 * data["a"] + 0.3 * data["b"] + (data["c"] == "x") + noise) > 0).astype(int)
-    return ExplainableBoostingClassifier(interactions=0, random_state=0).fit(data, target), data
+    return fit_ebm(data, target, interactions=0, random_state=0), data
 
 
 def _scores(ebm: ExplainableBoostingClassifier, combo: tuple[str, ...]) -> float:
@@ -151,16 +155,13 @@ def test_bad_instances(continuous_ebm: tuple, instance: dict, message: str) -> N
         local.compute_local_facts(continuous_ebm[0], instance)
 
 
-def test_rejects_interactions_and_bad_confidence(continuous_ebm: tuple) -> None:
+def test_rejects_interactions_and_bad_confidence(continuous_ebm: tuple, fit_ebm: Callable) -> None:
     ebm, data = continuous_ebm
     with pytest.raises(ValueError, match="confidence_level"):
         local.compute_local_facts(ebm, data.iloc[0].to_dict(), local.LocalOptions(confidence_level=1))
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 3)), columns=list("abc"))
-    with_interactions = ExplainableBoostingClassifier(interactions=1, random_state=0).fit(
-        frame,
-        (frame["a"] * frame["b"] > 0).astype(int),
-    )
+    with_interactions = fit_ebm(frame, (frame["a"] * frame["b"] > 0).astype(int), interactions=1, random_state=0)
     with pytest.raises(ValueError, match="interactions"):
         local.compute_local_facts(with_interactions, frame.iloc[0].to_dict())
 
@@ -239,9 +240,9 @@ def test_texts_without_counterfactual_or_sufficient_reason() -> None:
     assert json.loads(texts["sufficient_reason"]) == {"exists": False}
 
 
-def test_rejects_multiclass() -> None:
+def test_rejects_multiclass(fit_ebm: Callable) -> None:
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
-    ebm = ExplainableBoostingClassifier(interactions=0, random_state=0).fit(frame, rng.integers(0, 3, 300))
+    ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
     with pytest.raises(ValueError, match="binary"):
         local.compute_local_facts(ebm, frame.iloc[0].to_dict())

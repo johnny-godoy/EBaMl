@@ -65,19 +65,27 @@ cosmic-ray mutates the source tree in place, so each shard works on its own copy
 and `cosmic-ray.toml`. The script:
 
 1. creates a session in `.mutation/session.sqlite` and drops mutants on `# pragma: no mutate` lines,
-2. if you give `--base`, drops the mutants of all modules that did not change since that revision,
+2. if you give `--base` or `--module`, drops the mutants of all other modules,
 3. runs the test baseline and stops if it fails,
-4. splits the work items over the shards and runs them concurrently,
-5. merges the results back and prints the report and survival rate.
+4. splits the work items of each module over the shards and runs them concurrently,
+5. prints a progress line every minute, with the finished, surviving and remaining mutants,
+6. merges the results back and prints the survival rate.
+
+Two measures keep each mutant fast. Each shard runs the tests of the mutated module first, because they kill most of
+its mutants (`tests/unit/conftest.py` reads `MUTATION_FIRST`). All shards share one cache of fitted EBMs, which the
+baseline fills (`tests/unit/ebaml/conftest.py` reads `EBAML_FIT_CACHE`). Without these variables, the tests run in
+the normal order and fit every model.
 
 ```bash
 uv run python scripts/mutation.py      # one shard per CPU
 uv run python scripts/mutation.py 4    # four shards
 uv run python scripts/mutation.py --base origin/main   # only modules changed since main
+uv run python scripts/mutation.py --module src/ebaml/local.py   # only one module
 ```
 
 If no module changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. The workflow
-`mutation-weekly.yml` runs all modules each Monday, and only if code changed in the last 7 days.
+`mutation-weekly.yml` runs all modules each Monday, and only if code changed in the last 7 days. It starts one job for
+each module with `--module`, and opens one issue that lists the surviving mutants of all jobs.
 
 Exits non-zero if any mutant survives. CI requires a 100% mutation score. Settings (module path, timeout, test command)
 are in `cosmic-ray.toml`.

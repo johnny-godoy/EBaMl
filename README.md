@@ -316,12 +316,13 @@ uv run pytest     # Python unit tests, fails under 100% coverage
 prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
 uv run python scripts/mutation.py          # mutation testing of all modules, fails if any mutant survives
 uv run python scripts/mutation.py --base origin/main   # the same, but only for modules changed since main
+uv run python scripts/mutation.py --module src/ebaml/local.py   # the same, but only for one module
 uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
 uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
 uv run --group docs mkdocs serve          # preview the docs (runs the notebook, so the first build is slow)
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and
-`baml test`, pytest with 100% coverage, and mutation testing of the changed modules with a 100% score. A weekly run tests all modules. Lint and type workarounds
+`baml test`, pytest with 100% coverage, and mutation testing of the changed modules with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
 (`# noqa`, `# type: ignore`, skipped tests, ...) must carry a written reason next to them.
 <!-- --8<-- [end:development] -->
