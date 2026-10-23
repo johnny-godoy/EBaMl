@@ -4,9 +4,11 @@ cosmic-ray mutates the source tree in place, so every shard works on its own cop
 the main session are split over the shards, executed concurrently, and the results are merged back into the main
 session for reporting.
 
-Usage: ``uv run python scripts/mutation.py [shards]``. Exits non-zero if any mutant survives.
+Usage: ``uv run python scripts/mutation.py [shards] [--base REF]``. With ``--base``, only the modules that changed since
+``REF`` are mutated. Exits non-zero if any mutant survives.
 """
 
+import argparse
 import os
 import shutil
 import sqlite3
@@ -16,6 +18,9 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import structlog
+
+logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "cosmic-ray.toml"
 SESSION = ROOT / ".mutation" / "session.sqlite"
@@ -49,6 +54,46 @@ def run(*args: str, cwd: Path = ROOT, env: dict | None = None) -> str:
         check=False,
     )
     return result.stdout + result.stderr
+
+
+def changed_modules(base: str) -> set[str]:
+    """List the source modules that changed between a base revision and HEAD.
+
+    Parameters
+    ----------
+    base: str
+        The base revision, for example ``origin/main``. The comparison starts at the merge base.
+
+    Returns
+    -------
+    set[str]
+        The paths of the changed modules, relative to the project root.
+
+    """
+    paths = run("git", "diff", "--name-only", f"{base}...HEAD", "--", "src/ebaml").split()
+    return {path for path in paths if path.endswith(".py") and (ROOT / path).exists()}
+
+
+def keep_modules(session: Path, modules: set[str]) -> None:
+    """Drop the work items of all modules except the given ones.
+
+    Parameters
+    ----------
+    session: Path
+        The cosmic-ray session.
+    modules: set[str]
+        The paths of the modules to keep.
+
+    """
+    with sqlite3.connect(session) as db:
+        paths = {row[0] for row in db.execute("SELECT DISTINCT module_path FROM mutation_specs")}
+        dropped = [(path,) for path in paths - modules]
+        db.executemany(
+            "DELETE FROM work_items WHERE job_id IN (SELECT job_id FROM mutation_specs WHERE module_path = ?)",
+            dropped,
+        )
+        db.executemany("DELETE FROM mutation_specs WHERE module_path = ?", dropped)
+        db.commit()
 
 
 def make_shard(workdir: Path, index: int, shards: int) -> Path:
@@ -117,12 +162,22 @@ def main() -> int:
         The exit code: non-zero if the baseline fails or any mutant survives.
 
     """
-    shards = int(sys.argv[1]) if len(sys.argv) > 1 else os.cpu_count() or 1
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("shards", nargs="?", type=int, default=os.cpu_count() or 1)
+    parser.add_argument("--base", help="mutate only the modules that changed since this revision")
+    args = parser.parse_args()
+    shards = args.shards
     SESSION.parent.mkdir(exist_ok=True)
     SESSION.unlink(missing_ok=True)
     run(sys.executable, "-m", "cosmic_ray.cli", "init", str(CONFIG), str(SESSION))
     # lines marked ``# pragma: no mutate`` hold mutants that are equivalent to the original code
     run(sys.executable, "-m", "cosmic_ray.tools.filters.pragma_no_mutate", str(SESSION))
+    if args.base:
+        modules = changed_modules(args.base)
+        keep_modules(SESSION, modules)
+        logger.info("incremental run", modules=sorted(modules), base=args.base)
+        if not modules:
+            return 0
     baseline = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
         [sys.executable, "-m", "cosmic_ray.cli", "baseline", str(CONFIG)],
         cwd=ROOT,

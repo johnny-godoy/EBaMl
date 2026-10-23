@@ -21,14 +21,14 @@ baml test -i root::Live            # live prompt tests (baml_src/prompt_tests.ba
 uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 prek run --all-files               # all hooks: ruff, vulture, pyrefly, baml fmt, check-ignores, uv lock --check
-uv run python scripts/mutation.py  # cosmic-ray; CI requires zero surviving mutants
+uv run python scripts/mutation.py [--base origin/main]  # cosmic-ray; --base mutates only changed modules; CI requires zero survivors
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
 uv run --group docs mkdocs serve   # preview the docs; the first build runs the notebook and is slow
 ```
 
 `ModuleNotFoundError: baml_sdk` means `baml generate` has not run. CI runs prek and the secret scans first, then
-`baml` and pytest, then mutation testing.
+`baml` and pytest, then mutation testing of the changed modules. A weekly workflow runs all modules when code changed that week.
 </commands>
 
 <architecture>
