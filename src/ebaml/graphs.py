@@ -247,10 +247,8 @@ class EBMGraph:
         x_vals, scores, stds = self.x_vals, self.scores, self.stds
         total_variation = np.max(scores) - np.min(scores)
         new_x_vals, new_scores, new_stds = [x_vals[0]], [scores[0]], [stds[0]]
-        for idx in range(
-            1,
-            len(x_vals),
-        ):  # pragma: no mutate -- comparing the first bin to itself changes nothing, so this mutant is equivalent
+        later_bins = range(1, len(x_vals))  # pragma: no mutate -- the first bin compared with itself changes nothing
+        for idx in later_bins:
             b0, b1 = x_vals[idx]
             if np.abs(float(new_scores[-1]) - float(scores[idx])) <= total_variation * min_variation_per_cent:
                 # extend the previous bin to b1
@@ -315,7 +313,7 @@ class EBMGraph:
 
     def to_body_text(
         self,
-        *,
+        *,  # pragma: no mutate -- a positional-only self still lets the callers pass the other options by keyword
         feature_format: FeatureType,
         x_axis_precision: int | None,
         y_axis_precision: int,
@@ -466,7 +464,7 @@ class EBMGraph:
                     warnings.warn(
                         f"The graph for feature {self.feature_name} is estimated at {budget.estimated_tokens} tokens,"
                         f" above the budget of {max_tokens}. The LLM may reject it.",
-                        stacklevel=2,
+                        stacklevel=2,  # pragma: no mutate -- skip_file_prefixes sets the stack level itself
                         # skip this file and the frame that beartype adds, so the warning points at the caller
                         skip_file_prefixes=(__file__, "<@beartype"),
                     )

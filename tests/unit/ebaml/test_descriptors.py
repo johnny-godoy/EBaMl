@@ -325,3 +325,101 @@ def test_describe_graph_reraises_when_graph_cannot_shrink(
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
     with pytest.raises(BamlError):
         descriptors.describe_graph(fake_ebm, 0)
+
+
+def _finish_error_of(class_name: str, reason: str) -> BamlError:
+    value = baml_sdk.ai.errors.FinishReasonError(provider="p", finish_reason=reason, raw_output="")
+    return BamlError(value, class_name=class_name)
+
+
+FINISH_CLASS = "ai.errors.FinishReasonError"
+MAX_TOKENS = "MaxTokens"
+
+
+@pytest.mark.parametrize(
+    ("class_name", "reason", "expected"),
+    [
+        (FINISH_CLASS, MAX_TOKENS, True),
+        (FINISH_CLASS, "Refused", False),
+        (FINISH_CLASS, "Complete", False),  # sorts before the reason
+        (FINISH_CLASS, "ToolUse", False),  # sorts after the reason
+        ("ai.errors.A", MAX_TOKENS, False),  # sorts before the class name
+        ("ai.errors.Z", MAX_TOKENS, False),  # sorts after the class name
+    ],
+)
+def test_is_truncated(class_name: str, reason: str, *, expected: bool) -> None:
+    assert descriptors._is_truncated(_finish_error_of(class_name, reason)) is expected
+
+
+def test_describe_graph_stops_after_four_retries(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    graphs = iter(f"graph{index}" for index in range(10))
+    calls = []
+
+    def cot(*, graph: str, **_kw: object) -> baml_sdk.Counted:
+        calls.append(graph)
+        error = _finish_error("MaxTokens")
+        raise error
+
+    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: next(graphs))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
+    with capture_logs() as logs, pytest.raises(BamlError):
+        descriptors.describe_graph(fake_ebm, 0)
+    # the first call and four retries, each on a new graph
+    assert calls == [f"graph{index}" for index in range(5)]
+    assert [log["retry"] for log in logs if log["event"] == "truncated_reply"] == [1, 2, 3, 4]
+
+
+def test_describe_graph_asks_once_when_the_error_is_not_a_truncation(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    calls = []
+
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        calls.append(1)
+        error = _finish_error("Refused")
+        raise error
+
+    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
+    with pytest.raises(BamlError):
+        descriptors.describe_graph(fake_ebm, 0)
+    assert calls == [1]
+
+
+def test_describe_ebm_adds_the_usage_of_every_call(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    # The numbers share bits, so a bitwise or / xor in place of the sum gives another total.
+    graph = baml_sdk.Counted(text="g", usage=baml_sdk.TokenUsage(input_tokens=6, output_tokens=7))
+    summary = baml_sdk.Counted(text="s", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5))
+    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: graph)
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: summary)
+    with capture_logs() as logs:
+        descriptors.describe_ebm(fake_ebm)
+    assert (logs[-1]["input_tokens"], logs[-1]["output_tokens"]) == (3 + 6 * 2, 5 + 7 * 2)
+
+
+def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    workers = []
+
+    class RecordingPool(descriptors.ThreadPoolExecutor):
+        def __init__(self, max_workers: int) -> None:
+            workers.append(max_workers)
+            super().__init__(max_workers=max_workers)
+
+    monkeypatch.setattr(descriptors, "ThreadPoolExecutor", RecordingPool)
+    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: counted)
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
+    descriptors.describe_ebm(fake_ebm)
+    assert workers == [8]

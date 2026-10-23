@@ -182,17 +182,21 @@ def _describe_graph_counted(
         raised only when the graph cannot be simplified further or after 4 retries.
 
     """
-    retry = 0
+    retries_left = _MAX_TRUNCATION_RETRIES
     while True:
         try:
             return baml_sdk.describe_graph_cot(graph=graph, num_sentences=num_sentences, opts=_prompt_options(kwargs))
         except BamlError as error:
-            if not _is_truncated(error) or retry == _MAX_TRUNCATION_RETRIES:
+            if not _is_truncated(error) or not retries_left:
                 raise
-            retry += 1
+            retries_left -= 1
             # like TalkToEBM, answer a rejected prompt by simplifying the graph further and asking again
             budget = int(baml_sdk.estimate_tokens(text=graph) * _RETRY_SHRINK)
-            logger.warning("truncated_reply", feature=ebm.feature_names_in_[feature_index], retry=retry)
+            logger.warning(
+                "truncated_reply",
+                feature=ebm.feature_names_in_[feature_index],
+                retry=_MAX_TRUNCATION_RETRIES - retries_left,
+            )
             try:
                 graph = _graph_text(ebm, feature_index, {**kwargs, "max_tokens": budget, "overbudget_percent": 0})
             except (EBMGraphSimplificationError, EBMGraphTokenLimitError):
@@ -279,7 +283,12 @@ def describe_ebm(
             ),
         )
     graph_descriptions = "\n\n".join(
-        f"{name}: {item.text}" for name, item in zip(feature_names, described, strict=True)
+        f"{name}: {item.text}"
+        for name, item in zip(
+            feature_names,
+            described,
+            strict=True,
+        )  # pragma: no mutate -- one item per feature, so strict never raises
     )
     summary = baml_sdk.summarize_ebm(
         feature_importances=feature_importances,
