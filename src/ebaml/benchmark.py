@@ -198,9 +198,11 @@ class TaskResult:
         Returns
         -------
         float
-            The accuracy, between 0 and 1.
+            The accuracy, between 0 and 1. A task with no outcomes has the accuracy 0.
 
         """
+        if not self.outcomes:
+            return 0.0
         return self.correct / len(self.outcomes)
 
 
@@ -268,7 +270,7 @@ def is_correct(task: Task, response: str, solution: str) -> bool:
     return answer is not None and answer == parse_answer(task, solution)
 
 
-def run_task(task: Task, data_dir: Path, limit: int | None = None) -> TaskResult:
+def run_task(task: Task, data_dir: str | os.PathLike[str], limit: int | None = None) -> TaskResult:
     """Ask the LLM the questions of a task, one at a time, and score its answers.
 
     The LLM client is configured in ``baml_src/talk_to_ebm.baml``. The questions are asked sequentially, because the
@@ -286,7 +288,7 @@ def run_task(task: Task, data_dir: Path, limit: int | None = None) -> TaskResult
     Returns
     -------
     TaskResult
-        The outcomes and the token usage. Its ``accuracy`` is undefined if ``limit`` is not positive.
+        The outcomes and the token usage. If ``limit`` is 0, there are no outcomes and the accuracy is 0.
 
     """
     questions = load_questions(task, data_dir)[:limit]
