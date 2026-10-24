@@ -15,18 +15,15 @@ from baml_bridge.errors import BamlError
 
 import baml_sdk
 from ebaml.custom_types import Audience, ExplainableBoostingModel, coerce_enum
-from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
 from ebaml.graphs import EBMGraph
 from ebaml.local import LocalFacts, LocalOptions, compute_local_facts
 from ebaml.local_text import facts_to_texts
+from ebaml.retry import call_with_shrinking_graph
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 _LOCAL_OPTION_NAMES = frozenset(attrs.fields_dict(LocalOptions))
 _PROMPT_OPTION_NAMES = ("expert_description", "graph_description", "dataset_description", "task_description")
-# each retry after a truncated reply shrinks the graph text to this share of its previous estimated size
-_RETRY_SHRINK = 0.75
-_MAX_TRUNCATION_RETRIES = 4
 _GRAPH_SENTENCES = 7
 
 
@@ -158,6 +155,9 @@ def _describe_graph_counted(
 ) -> baml_sdk.Counted:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
+    The function raises the ``BamlError`` of the LLM call if the call fails. A reply cut off by ``max_tokens`` is
+    retried first, as ``ebaml.retry.call_with_shrinking_graph`` says.
+
     Parameters
     ----------
     ebm: ExplainableBoostingModel
@@ -176,32 +176,21 @@ def _describe_graph_counted(
     baml_sdk.Counted
         The description with its token usage.
 
-    Raises
-    ------
-    BamlError
-        If the LLM call fails. A reply cut off by ``max_tokens`` is retried with a simplified graph first, and
-        raised only when the graph cannot be simplified further or after 4 retries.
-
     """
-    retries_left = _MAX_TRUNCATION_RETRIES
-    while True:
-        try:
-            return baml_sdk.describe_graph_cot(graph=graph, num_sentences=num_sentences, opts=_prompt_options(kwargs))
-        except BamlError as error:
-            if not _is_truncated(error) or not retries_left:
-                raise
-            retries_left -= 1
-            # like TalkToEBM, answer a rejected prompt by simplifying the graph further and asking again
-            budget = int(baml_sdk.estimate_tokens(text=graph) * _RETRY_SHRINK)
-            logger.warning(
-                "truncated_reply",
-                feature=ebm.feature_names_in_[feature_index],
-                retry=_MAX_TRUNCATION_RETRIES - retries_left,
-            )
-            try:
-                graph = _graph_text(ebm, feature_index, {**kwargs, "max_tokens": budget, "overbudget_percent": 0})
-            except (EBMGraphSimplificationError, EBMGraphTokenLimitError):
-                raise error from None
+    opts = _prompt_options(kwargs)
+    return call_with_shrinking_graph(
+        lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts),
+        graph,
+        error_type=BamlError,
+        is_truncated=_is_truncated,
+        estimate_tokens=lambda text: baml_sdk.estimate_tokens(text=text),
+        rebuild=lambda budget: _graph_text(
+            ebm,
+            feature_index,
+            {**kwargs, "max_tokens": budget, "overbudget_percent": 0},
+        ),
+        label=ebm.feature_names_in_[feature_index],
+    )
 
 
 def describe_graph(
