@@ -1,5 +1,7 @@
 """Tests for the truncation retry policy."""
 
+from typing import Any
+
 import pytest
 from structlog.testing import capture_logs
 
@@ -145,3 +147,9 @@ def test_does_not_hide_other_errors_of_the_rebuild() -> None:
 
     with pytest.raises(KeyError):
         _run(call, "g0", rebuild)
+
+
+def test_takes_the_dependencies_by_keyword_only() -> None:
+    untyped: Any = retry.call_with_shrinking_graph
+    with pytest.raises(TypeError):
+        untyped(str, "g0", CutOffError, _is_cut_off, len, str, "f0")
