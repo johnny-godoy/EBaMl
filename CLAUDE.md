@@ -20,7 +20,7 @@ OPENROUTER_API_KEY=unused baml test -x root::Live   # offline BAML tests on a sc
 baml test -i root::Live            # live prompt tests (baml_src/prompt_tests.baml); send real requests, need a real key
 uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
-prek run --all-files               # all hooks: ruff, vulture, pyrefly, baml fmt, check-ignores, uv lock --check
+prek run --all-files               # all hooks: ruff, vulture, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
@@ -50,6 +50,13 @@ The boundary between the two languages is the generated `baml_sdk` package.
 - `baml_src/talk_to_ebm_test.baml` holds the offline BAML tests. `notebooks/` uses marimo. `docs/` uses MkDocs and
   includes README sections through `--8<--` markers, so keep the markers intact.
 </architecture>
+
+<layout>
+`src/ebaml/` has four layers: `core`, `graphs`, `local` and `llm`, with `benchmark.py` alone. A layer imports only the
+layers below it, and only `llm/descriptors.py` imports `baml_sdk`. Read `.claude/rules/architecture.md` before you add a
+module. import-linter, `scripts/check_layout.py` and the semgrep rules in `semgrep/` enforce it. Each fails
+`prek run --all-files`.
+</layout>
 
 <conventions>
 Rules in `.claude/rules/` load automatically. Follow them, and keep these points in mind:
