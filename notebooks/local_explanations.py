@@ -22,11 +22,13 @@ def _():
     from ebaml.descriptors import describe_ebm, explain_instance
     from ebaml.local import LocalOptions, compute_local_facts
     from ebaml.local_text import facts_to_texts
+    from ebaml.options import PromptOptions
 
     return (
         Audience,
         ExplainableBoostingClassifier,
         LocalOptions,
+        PromptOptions,
         attrs,
         compute_local_facts,
         describe_ebm,
@@ -349,7 +351,7 @@ def _(mo):
 
 
 @app.cell
-def _(describe_button, describe_ebm, ebm, has_api_key, mo):
+def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
     mo.stop(not describe_button.value, mo.md("Press the button to describe the model first."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
     dataset_description = (
@@ -359,7 +361,11 @@ def _(describe_button, describe_ebm, ebm, has_api_key, mo):
         "The graphs show contributions in log-odds towards survival."
     )
     with mo.status.spinner("Describing the model..."):
-        global_explanation = describe_ebm(ebm, max_concurrency=2, dataset_description=dataset_description)
+        global_explanation = describe_ebm(
+            ebm,
+            max_concurrency=2,
+            prompt=PromptOptions(dataset_description=dataset_description),
+        )
     mo.md(global_explanation)
     return dataset_description, global_explanation
 
@@ -378,6 +384,8 @@ def _(Audience, mo):
 
 @app.cell
 def _(
+    LocalOptions,
+    PromptOptions,
     audience,
     confidence,
     dataset_description,
@@ -395,8 +403,8 @@ def _(
             instance,
             global_explanation,
             audience=audience.value,
-            confidence_level=confidence.value,
-            dataset_description=dataset_description,
+            local=LocalOptions(confidence_level=confidence.value),
+            prompt=PromptOptions(dataset_description=dataset_description),
         )
     mo.md(f"""
     ### What would have to change

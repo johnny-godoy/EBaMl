@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `describe_graph`, `describe_ebm` and `explain_instance` no longer take `**kwargs`. Three option classes
+  replace them, as keyword-only arguments. `graph=GraphOptions(...)` (module `ebaml.options`) holds the options of
+  `EBMGraph.from_ebm` and `EBMGraph.to_text`. `prompt=PromptOptions(...)` (module `ebaml.options`) holds
+  `expert_description`, `graph_description`, `dataset_description` and `task_description`. `local=LocalOptions(...)`
+  (module `ebaml.local`, only for `explain_instance`) holds the options of the local facts. A misspelled option was
+  silently ignored before. It now raises a `TypeError`. For example, change `describe_ebm(ebm, dataset_description="x")`
+  to `describe_ebm(ebm, prompt=PromptOptions(dataset_description="x"))`.
 - **BREAKING:** `ebaml.graphs` no longer imports `baml_sdk`. `EBMGraph.to_text` takes a new keyword argument,
   `check_budget`, a function that compares the estimated tokens of the text with `max_tokens` and
   `overbudget_percent`. `baml_sdk.check_token_budget` is such a function. If you call `EBMGraph.to_text` yourself and

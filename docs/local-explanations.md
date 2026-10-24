@@ -7,9 +7,10 @@ model predict this for this one input?**
 from interpret.glassbox import ExplainableBoostingClassifier
 
 from ebaml.descriptors import describe_ebm, explain_instance
+from ebaml.options import PromptOptions
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
-global_explanation = describe_ebm(ebm, dataset_description="...")  # once per model
+global_explanation = describe_ebm(ebm, prompt=PromptOptions(dataset_description="..."))  # once per model
 
 explanation = explain_instance(
     ebm,
@@ -149,18 +150,20 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 
 ## Options
 
-`explain_instance(ebm, instance, global_explanation, audience, num_sentences, **kwargs)`:
+The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, local, prompt)`.
+The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions` from `ebaml.local`. `prompt` is a
+`PromptOptions` from `ebaml.options`. The table shows where each setting goes:
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
 | `audience` | `"layperson"` | `"layperson"` or `"data_scientist"` (or an `Audience`). |
 | `num_sentences` | `5` | The most sentences in each of the three explanations. |
-| `confidence_level` | `0.95` | See [Confidence](#confidence). In `[0, 1)`. |
-| `min_support` | `0.01` | Share of the training data a value needs to be offered as an alternative. A category needs this share; for a continuous feature the lowest and highest `min_support` of the data are trimmed. It keeps freak values with extreme scores out of the counterfactual and out of the worst case of the sufficient reason. `0` allows every value. |
-| `max_steps` | `5` | The most features revealed one by one in `completions`. |
-| `n_samples` | `10000` | Samples used for `completions`. |
-| `seed` | `0` | Seed of the sampling, so that the facts are reproducible. |
-| `expert_description`, `dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
+| `local.confidence_level` | `0.95` | See [Confidence](#confidence). In `[0, 1)`. |
+| `local.min_support` | `0.01` | Share of the training data a value needs to be offered as an alternative. A category needs this share; for a continuous feature the lowest and highest `min_support` of the data are trimmed. It keeps freak values with extreme scores out of the counterfactual and out of the worst case of the sufficient reason. `0` allows every value. |
+| `local.max_steps` | `5` | The most features revealed one by one in `completions`. |
+| `local.n_samples` | `10000` | Samples used for `completions`. |
+| `local.seed` | `0` | Seed of the sampling, so that the facts are reproducible. |
+| `prompt.expert_description`, `prompt.dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
 
 The LLM client is the `Router` in `baml_src/talk_to_ebm.baml`, shared with the global explanation: see
 [Changing the LLM provider](providers.md). Token usage of the three calls is logged at `INFO` on the

@@ -118,19 +118,21 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 from interpret.glassbox import ExplainableBoostingClassifier
 
 from ebaml.descriptors import describe_ebm, describe_graph
+from ebaml.options import PromptOptions
 
 ebm = ExplainableBoostingClassifier().fit(X, y)
 
 print(describe_graph(ebm, feature_index=0))
-print(describe_ebm(ebm, num_sentences=30, dataset_description="..."))
+print(describe_ebm(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="...")))
 ```
 
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
 
-Extra keyword arguments go to `EBMGraph.from_ebm`, `EBMGraph.to_text` and the prompts (`expert_description`,
-`graph_description`, `dataset_description`, `task_description`). Token usage reported by the provider is logged at
-`INFO` on the `ebaml.descriptors` logger.
+Two keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
+`EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
+(`expert_description`, `graph_description`, `dataset_description` and `task_description`). Both classes are in
+`ebaml.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.descriptors` logger.
 
 ### Explaining one prediction
 
@@ -158,7 +160,7 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
 | Where | What |
 | --- | --- |
-| `src/ebaml/graphs.py`, `graph_text.py`, `descriptors.py` | Graph extraction and simplification (numpy, `interpret`), the text the LLM reads, then calls into BAML. |
+| `src/ebaml/graphs.py`, `graph_text.py`, `options.py`, `retry.py`, `descriptors.py` | Graph extraction and simplification (numpy, `interpret`), the text the LLM reads, then calls into BAML. |
 | `src/ebaml/custom_types.py`, `exceptions.py`, `model_properties.py`, `utils.py` | Shared types, errors and helpers. |
 | `baml_src/talk_to_ebm.baml` | Prompts, LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
 | `src/ebaml/local.py`, `src/ebaml/local_text.py`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |

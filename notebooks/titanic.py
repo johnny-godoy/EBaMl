@@ -19,10 +19,12 @@ def _():
     from baml_sdk import check_token_budget
     from ebaml.descriptors import describe_ebm, describe_graph
     from ebaml.graphs import EBMGraph
+    from ebaml.options import PromptOptions
 
     return (
         EBMGraph,
         ExplainableBoostingClassifier,
+        PromptOptions,
         check_token_budget,
         describe_ebm,
         describe_graph,
@@ -151,6 +153,7 @@ def _():
 
 @app.cell
 def _(
+    PromptOptions,
     dataset_description,
     describe_graph,
     describe_graph_button,
@@ -163,9 +166,9 @@ def _(
 ) -> None:
     mo.stop(not describe_graph_button.value, mo.md("Press the button to ask the LLM."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
-    context = {"dataset_description": dataset_description, "graph_description": graph_description}
+    context = PromptOptions(dataset_description=dataset_description, graph_description=graph_description)
     with mo.status.spinner("Asking the LLM (three turns)..."):
-        description = describe_graph(ebm, feature.value, **(context if with_context.value else {}))
+        description = describe_graph(ebm, feature.value, prompt=context if with_context.value else PromptOptions())
     mo.md(description)
 
 
@@ -188,6 +191,7 @@ def _(mo):
 
 @app.cell
 def _(
+    PromptOptions,
     dataset_description,
     describe_ebm,
     describe_ebm_button,
@@ -202,8 +206,7 @@ def _(
         summary = describe_ebm(
             ebm,
             max_concurrency=2,
-            dataset_description=dataset_description,
-            graph_description=graph_description,
+            prompt=PromptOptions(dataset_description=dataset_description, graph_description=graph_description),
         )
     mo.md(summary)
 
