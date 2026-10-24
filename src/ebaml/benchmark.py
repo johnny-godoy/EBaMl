@@ -174,25 +174,25 @@ class Task(enum.StrEnum):
             The description of the answer format of the task.
 
         """
-        return _ANSWER_FORMATS[self]
+        return _SPECS[self].answer_format
 
 
-_ANSWER_FORMATS = {
-    Task.FUNCTION_RECOGNITION: "the letter of the function, for example 'a)'",
-    Task.FUNCTION_RECOGNITION_HARD: "the letter of the function, for example 'a)'",
-    Task.JUMPS: "the x-axis position of the largest jump, as a single number",
-    Task.MONOTONICITY: "'Increasing', 'Decreasing' or 'Not monotone'",
-    Task.READ_VALUE: "the mean value of the graph, as a single number",
-    Task.WIDE_CONFIDENCE: "the interval, in the form '(lower, upper)'",
-}
+@attrs.frozen
+class _TaskSpec:
+    """What a task needs besides its name: the answer format that the LLM is asked for, and the parser of an answer."""
 
-_PARSERS: dict[Task, Callable[[str], Answer | None]] = {
-    Task.FUNCTION_RECOGNITION: _parse_choice,
-    Task.FUNCTION_RECOGNITION_HARD: _parse_choice,
-    Task.JUMPS: _parse_number,
-    Task.MONOTONICITY: _parse_monotonicity,
-    Task.READ_VALUE: _parse_number,
-    Task.WIDE_CONFIDENCE: _parse_interval,
+    answer_format: str
+    parser: Callable[[str], Answer | None]
+
+
+# a new task adds a member to Task and a row here
+_SPECS = {
+    Task.FUNCTION_RECOGNITION: _TaskSpec("the letter of the function, for example 'a)'", _parse_choice),
+    Task.FUNCTION_RECOGNITION_HARD: _TaskSpec("the letter of the function, for example 'a)'", _parse_choice),
+    Task.JUMPS: _TaskSpec("the x-axis position of the largest jump, as a single number", _parse_number),
+    Task.MONOTONICITY: _TaskSpec("'Increasing', 'Decreasing' or 'Not monotone'", _parse_monotonicity),
+    Task.READ_VALUE: _TaskSpec("the mean value of the graph, as a single number", _parse_number),
+    Task.WIDE_CONFIDENCE: _TaskSpec("the interval, in the form '(lower, upper)'", _parse_interval),
 }
 
 
@@ -285,7 +285,7 @@ def parse_answer(task: Task, text: str) -> Answer | None:
         The parsed answer, or None if the text does not hold an answer in the format of the task.
 
     """
-    return _PARSERS[task](text)
+    return _SPECS[task].parser(text)
 
 
 def is_correct(task: Task, response: str, solution: str) -> bool:
