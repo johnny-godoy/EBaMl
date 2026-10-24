@@ -16,7 +16,6 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 certifi = false
-pillow = false
 
 [[package]]
 name = "aiohappyeyeballs"

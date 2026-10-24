@@ -2,8 +2,10 @@
 
 import itertools
 import json
+import math
 from collections.abc import Callable, Iterator
 
+import attrs
 import numpy as np
 import pandas as pd
 import pytest
@@ -12,6 +14,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 from ebaml import local
 from ebaml.custom_types import Audience
 from ebaml.graphs import EBMGraph
+from tests.unit.ebaml.conftest import fake_model
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
@@ -246,3 +249,473 @@ def test_rejects_multiclass(fit_ebm: Callable) -> None:
     ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
     with pytest.raises(ValueError, match="binary"):
         local.compute_local_facts(ebm, frame.iloc[0].to_dict())
+
+
+# The tests below use hand-built features and hand-computed numbers, so each expected value is checked by arithmetic
+# and not by the code under test.
+
+
+def _sig(x: float) -> float:
+    return 1 / (1 + math.exp(-x))
+
+
+# build a feature with categories name0, name1, ... and the instance in bin ``bin_index``
+def _hand(  # ruff: ignore[too-many-arguments] -- keyword-only options of a test helper, each one set by few tests
+    name: str,
+    scores: list[float],
+    bin_index: int = 0,
+    *,
+    stds: list[float] | None = None,
+    weights: list[float] | None = None,
+    plausible: list[bool] | None = None,
+) -> local._Feature:
+    x_vals = [f"{name}{i}" for i in range(len(scores))]
+    graph = EBMGraph(name, "nominal", x_vals, scores, stds or [0.0] * len(scores))
+    return local._Feature(
+        name,
+        graph,
+        np.array(weights or [1.0] * len(scores)),
+        bin_index,
+        x_vals[bin_index],
+        np.array(plausible or [True] * len(scores)),
+    )
+
+
+def test_local_options_defaults() -> None:
+    options = local.LocalOptions()
+    assert (options.confidence_level, options.max_steps, options.n_samples, options.seed, options.min_support) == (
+        0.95,
+        5,
+        10_000,
+        0,
+        0.01,
+    )
+
+
+def test_bin_label() -> None:
+    assert local._bin_label((1.5, 2.5)) == "[1.5, 2.5)"
+    assert local._bin_label("red") == "red"
+
+
+@pytest.mark.parametrize(
+    ("logit", "probability"),
+    [(0.0, 0.5), (2.0, 0.8807970779778823), (-2.0, 0.11920292202211755)],
+)
+def test_sigmoid(logit: float, probability: float) -> None:
+    assert local._sigmoid(logit) == pytest.approx(probability)
+
+
+def test_bin_index_of_a_category_is_its_position() -> None:
+    graph = EBMGraph("f", "categorical", ["a", "b", "c"], [0.0] * 3, [0.0] * 3)
+    assert local._bin_index(fake_model(), 0, graph, "b") == 1
+
+
+def test_bin_index_of_a_number_uses_the_first_cuts_and_the_right_side() -> None:
+    graph = EBMGraph("f", "continuous", [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)], [0.0] * 3, [0.0] * 3)
+    # the second array stands for a finer resolution that the function must not use
+    ebm = fake_model(bins_=[[np.array([1.0, 2.0]), np.array([5.0])]])
+    assert local._bin_index(ebm, 0, graph, 1.5) == 1
+    assert local._bin_index(ebm, 0, graph, 2.0) == 2  # a value on a cut belongs to the bin on its right
+
+
+def test_plausible_categories_need_the_support() -> None:
+    weights = np.array([1.0, 6.0, 1.0])  # the shares are 0.125, 0.75 and 0.125
+    plausible = local._plausible_bins(weights, continuous=False, min_support=0.2)
+    assert plausible.tolist() == [False, True, False]
+    # a share equal to the minimum is enough
+    assert local._plausible_bins(weights, continuous=False, min_support=0.125).tolist() == [True, True, True]
+
+
+def test_plausible_bins_of_a_continuous_feature_trim_the_tails() -> None:
+    weights = np.array([1.0, 6.0, 1.0])
+    # the bins cover 0 to 0.125, 0.125 to 0.875 and 0.875 to 1 of the data
+    assert local._plausible_bins(weights, continuous=True, min_support=0.2).tolist() == [False, True, False]
+    # a bin that ends exactly at the minimum, or starts exactly at 1 minus the minimum, is out
+    assert local._plausible_bins(weights, continuous=True, min_support=0.125).tolist() == [False, True, False]
+
+
+def _model_features(*, term_features: list[tuple[int, ...]], classes: list[str]) -> ExplainableBoostingClassifier:
+    return fake_model(feature_names_in_=["a", "b"], term_features_=term_features, classes_=np.array(classes))
+
+
+@pytest.mark.parametrize(
+    "term_features",
+    [[(0,)], [(0,), (1,), (0, 1)], [(0, 1), (1,)], [(), (0,)]],
+    ids=["missing term", "extra term", "interaction", "empty term"],
+)
+def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> None:
+    with pytest.raises(ValueError, match="interactions"):
+        local._features(_model_features(term_features=term_features, classes=["n", "y"]), {}, 0.01)
+
+
+@pytest.mark.parametrize("classes", [["only"], ["a", "b", "c"]])
+def test_features_reject_other_than_two_classes(classes: list[str]) -> None:
+    with pytest.raises(ValueError, match="binary"):
+        local._features(_model_features(term_features=[(0,), (1,)], classes=classes), {}, 0.01)
+
+
+@pytest.mark.parametrize(
+    ("feature_type", "expected"),
+    [
+        ("categorical", [False, False, True]),  # sorts before "continuous"
+        ("nominal", [False, False, True]),  # sorts after "continuous"
+        ("continuous", [False, True, True]),
+    ],
+)
+def test_features_trim_by_the_type_of_the_feature(
+    monkeypatch: pytest.MonkeyPatch,
+    feature_type: str,
+    expected: list[bool],
+) -> None:
+    # the shares are 0.25, 0.25 and 0.5: with a support of 0.3 a category needs 0.3 and the first bin of a number is cut
+    graph = EBMGraph("a", feature_type, [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)], [0.0] * 3, [0.0] * 3)
+    if feature_type != "continuous":
+        graph = EBMGraph("a", feature_type, ["p", "q", "r"], [0.0] * 3, [0.0] * 3)
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(lambda _ebm, _index: graph))
+    ebm = fake_model(
+        feature_names_in_=["a"],
+        term_features_=[(0,)],
+        classes_=np.array(["n", "y"]),
+        bins_=[[np.array([1.0, 2.0])]],
+        bin_weights_=[np.array([0.0, 2.0, 2.0, 4.0, 0.0])],
+    )
+    value = "r" if feature_type != "continuous" else 2.5
+    (feature,) = local._features(ebm, {"a": value}, 0.3)
+    assert feature.plausible.tolist() == expected
+    assert feature.bin_index == 2
+
+
+def test_robust_scores_move_by_z_standard_deviations() -> None:
+    feature = _hand("f", [1.0, -1.0, 4.0], stds=[0.5, 0.25, 1.0], plausible=[True, True, False])
+    # z is 2, so the scores move by 1, 0.5 and 2; the unplausible bin is inf
+    lowered = local._robust_scores(feature, 1, 2.0, towards_outcome=True)
+    raised = local._robust_scores(feature, 1, 2.0, towards_outcome=False)
+    assert lowered.tolist() == [0.0, -1.5, np.inf]
+    assert raised.tolist() == [2.0, -0.5, np.inf]
+    # for the negative class the scores are turned around first
+    assert local._robust_scores(feature, -1, 2.0, towards_outcome=True).tolist() == [-2.0, 0.5, np.inf]
+
+
+def test_counterfactual_changes_the_biggest_drop_first() -> None:
+    features = [_hand("f1", [1.0, -2.0]), _hand("f2", [0.5, -0.25])]
+    # the margin is 0.5 + 1 + 0.5 = 2; f1 can drop by 3, f2 by 0.75
+    counterfactual = local._counterfactual(features, intercept=0.5, sign=1, z=0.0)
+    assert counterfactual is not None
+    assert counterfactual.changes == [local.Change("f1", "f10", "f11", -3.0)]
+    # the new logit is 0.5 + 1.5 - 3 = -1, so the new class (negative) has the probability sigmoid(1)
+    assert counterfactual.new_probability == pytest.approx(_sig(1.0))
+
+
+def test_counterfactual_of_the_negative_class() -> None:
+    features = [_hand("f1", [-1.0, 2.0]), _hand("f2", [-0.5, 0.25])]
+    counterfactual = local._counterfactual(features, intercept=-0.5, sign=-1, z=0.0)
+    assert counterfactual is not None
+    assert counterfactual.changes == [local.Change("f1", "f10", "f11", 3.0)]
+    assert counterfactual.new_probability == pytest.approx(_sig(1.0))  # the new logit is +1
+
+
+def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
+    features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, 0.0]), _hand("f3", [0.5, -1.0])]
+    # the margin is 2.5 and the drops are 1, 1 and 1.5: the margin is 1 and then 0 (a tie, not a flip) and then -1
+    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0)
+    assert counterfactual is not None
+    assert [change.feature for change in counterfactual.changes] == ["f3", "f1", "f2"]
+
+
+def test_counterfactual_with_two_changes() -> None:
+    features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, -0.5]), _hand("f3", [1.0, 0.5])]
+    # the margin is 3 and the drops are 1, 1.5 and 0.5: after the two largest drops it is 0.5, so it is not yet flipped
+    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0) is None
+    features[0] = _hand("f1", [1.0, -3.0])
+    # the drops are now 4, 1.5 and 0.5, and the margin 3 flips after the first; with a margin of 4.5 it takes two
+    counterfactual = local._counterfactual(features, intercept=1.5, sign=1, z=0.0)
+    assert counterfactual is not None
+    assert [change.feature for change in counterfactual.changes] == ["f1", "f2"]
+
+
+def test_counterfactual_probability_of_the_new_class() -> None:
+    # the margin is 2.5 and the drop is 4, so the new logit is -1.5 and the new (negative) class has sigmoid(1.5)
+    counterfactual = local._counterfactual([_hand("f", [1.0, -3.0])], intercept=1.5, sign=1, z=0.0)
+    assert counterfactual is not None
+    assert counterfactual.new_probability == pytest.approx(_sig(1.5))
+
+
+def test_counterfactual_is_none_for_a_tie() -> None:
+    assert local._counterfactual([_hand("f", [1.0, 0.0])], intercept=0.0, sign=1, z=0.0) is None
+    # the margin counts the score of the feature itself, not just its sign
+    assert local._counterfactual([_hand("f", [2.0, 0.0])], intercept=0.0, sign=1, z=0.0) is None
+
+
+def test_counterfactual_asks_for_the_worst_case_of_the_other_class() -> None:
+    feature = _hand("f", [1.0, -2.0], stds=[0.5, 0.5])
+    # with z = 1 the scores are raised by 0.5, so the drop is 1 + 1.5 = 2.5, and the margin 2.8 is not enough
+    assert local._counterfactual([feature], intercept=1.8, sign=1, z=1.0) is None
+
+
+def test_fixing_order_counts_what_a_known_value_guarantees() -> None:
+    first = _hand("f1", [2.0, -1.0], stds=[1.0, 0.0])
+    second = _hand("f2", [1.5, 0.0])
+    # at z = 1 the guaranteed scores of f1 are 1 and -1, so knowing its value gains 2; f2 gains 1.5
+    order = local._fixing_order([second, first], sign=1, z=1.0)
+    assert [(gain, feature.name) for gain, feature in order] == [(2.0, "f1"), (1.5, "f2")]
+
+
+def test_sufficient_reason_fixes_the_largest_gains_first() -> None:
+    features = [_hand("f3", [0.5, 0.0]), _hand("f1", [2.0, -1.0]), _hand("f2", [1.0, -0.5])]
+    # the worst case is -1.5 (-1, -0.5 and 0); the gains are 3 (f1), 1.5 (f2) and 0.5 (f3)
+    reason = local._sufficient_reason(features, intercept=0.0, sign=1, z=0.0)
+    assert reason == local.SufficientReason(["f1"], 1.5)
+
+
+def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> None:
+    # even the lowest score keeps the margin above 0, so no input has to be fixed
+    assert local._sufficient_reason([_hand("f", [1.0, 2.0])], 0.0, 1, 0.0) == local.SufficientReason([], 1.0)
+
+
+def test_sufficient_reason_needs_a_margin_above_zero() -> None:
+    # the worst case is exactly 0: knowing the value gains 1, and the margin is 0 before and 1 after
+    assert local._sufficient_reason([_hand("f", [0.0, 1.0], 1)], 0.0, 1, 0.0) == local.SufficientReason(["f"], 1.0)
+    # when the margin stays at 0, the outcome is not certain
+    assert local._sufficient_reason([_hand("f", [0.0, 0.0])], 0.0, 1, 0.0) is None
+
+
+# the share of completions with the same prediction, without and with the value of the one feature known
+def _completion_shares(cur: float, sampled: float, *, intercept: float = 0.0, sign: int = 1) -> list[float]:
+    feature = _hand("f", [cur, sampled], weights=[0.0, 1.0])  # the sample always falls in the second bin
+    options = local.LocalOptions(n_samples=5, max_steps=1)
+    return [step.share for step in local._completions([feature], [feature], intercept, sign, options)]
+
+
+@pytest.mark.parametrize(
+    ("cur", "sampled", "sign", "expected"),
+    [
+        (0.5, -0.5, 1, [0.0, 1.0]),
+        (0.5, -0.5, -1, [1.0, 0.0]),
+        (-0.5, 0.5, 1, [1.0, 0.0]),
+        (0.0, 0.0, 1, [0.0, 0.0]),
+        (0.0, 0.0, -1, [0.0, 0.0]),
+    ],
+)
+def test_completions_share_the_samples_with_the_same_sign(
+    cur: float,
+    sampled: float,
+    sign: int,
+    expected: list[float],
+) -> None:
+    assert _completion_shares(cur, sampled, sign=sign) == expected
+
+
+def test_completions_add_the_intercept() -> None:
+    # the logits are 2 - 3 = -1 and 2 - 1 = +1
+    assert _completion_shares(-1.0, -3.0, intercept=2.0) == [0.0, 1.0]
+
+
+@pytest.mark.parametrize("max_steps", [1, 3])
+def test_completions_reveal_max_steps_features(max_steps: int) -> None:
+    features = [_hand(f"f{i}", [1.0, 1.0]) for i in range(4)]
+    options = local.LocalOptions(n_samples=5, max_steps=max_steps)
+    steps = local._completions(features, features, 0.0, 1, options)
+    assert [len(step.fixed) for step in steps] == list(range(max_steps + 1))
+
+
+def _patch_features(monkeypatch: pytest.MonkeyPatch, features: list[local._Feature]) -> None:
+    monkeypatch.setattr(local, "_features", lambda _ebm, _instance, _support: features)
+
+
+def _hand_model(intercept: float = 0.25) -> ExplainableBoostingClassifier:
+    return fake_model(intercept_=np.array([intercept, 9.0]), classes_=np.array(["no", "yes"]))
+
+
+Z95 = 1.959963984540054
+
+
+def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None:
+    features = [_hand("b", [-0.5, 0.5], stds=[0.4, 0.3]), _hand("a", [1.0, -1.0], stds=[0.3, 0.4])]
+    _patch_features(monkeypatch, features)
+    facts = local.compute_local_facts(_hand_model(), {})
+    prediction = facts.prediction
+    logit, std = 0.25 - 0.5 + 1.0, 0.5  # the standard deviation is sqrt(0.4**2 + 0.3**2)
+    assert prediction.label == "yes"
+    assert prediction.logit == pytest.approx(logit)
+    assert prediction.logit_std == pytest.approx(std)
+    assert prediction.probability == pytest.approx(_sig(logit))
+    assert prediction.lower == pytest.approx(_sig(logit - Z95 * std))
+    assert prediction.upper == pytest.approx(_sig(logit + Z95 * std))
+    assert facts.confidence_level == pytest.approx(0.95)
+    # the largest effect first
+    assert facts.contributions == [local.Contribution("a", "a0", 1.0, 0.3), local.Contribution("b", "b0", -0.5, 0.4)]
+    assert facts.counterfactual == local._counterfactual(features, 0.25, 1, Z95)
+    assert facts.sufficient_reason == local._sufficient_reason(features, 0.25, 1, Z95)
+
+
+def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None:
+    features = [_hand("a", [-1.0, 1.0], stds=[0.3, 0.4]), _hand("b", [0.5, -0.5], stds=[0.4, 0.3], bin_index=1)]
+    _patch_features(monkeypatch, features)
+    facts = local.compute_local_facts(_hand_model(-0.25), {}, local.LocalOptions(confidence_level=0.9, seed=3))
+    prediction = facts.prediction
+    logit, std, z = -0.25 - 1.0 - 0.5, math.hypot(0.3, 0.3), 1.6448536269514722
+    assert prediction.label == "no"
+    assert prediction.probability == pytest.approx(1 - _sig(logit))
+    assert prediction.lower == pytest.approx(1 - _sig(logit + z * std))
+    assert prediction.upper == pytest.approx(1 - _sig(logit - z * std))
+    assert facts.counterfactual == local._counterfactual(features, -0.25, -1, z)
+
+
+def test_facts_of_a_prediction_on_the_edge(monkeypatch: pytest.MonkeyPatch) -> None:
+    # a logit of exactly 0 belongs to the negative class
+    _patch_features(monkeypatch, [_hand("a", [1.0, -1.0]), _hand("b", [-1.0, 1.0])])
+    facts = local.compute_local_facts(_hand_model(0.0), {}, local.LocalOptions(confidence_level=0))
+    assert (facts.prediction.label, facts.prediction.probability) == ("no", 0.5)
+    # the negative class is the prediction, so only b can still move the logit up, and a cannot
+    assert facts.counterfactual is not None
+    assert [change.feature for change in facts.counterfactual.changes] == ["b"]
+
+
+def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_features(monkeypatch, [_hand("a", [1.0, -1.0], stds=[1.0, 1.0])])
+    prediction = local.compute_local_facts(_hand_model(), {}, local.LocalOptions(confidence_level=0.5)).prediction
+    z = 0.6744897501960817  # the 75th percentile of the normal distribution
+    assert prediction.lower == pytest.approx(_sig(1.25 - z))
+    assert prediction.upper == pytest.approx(_sig(1.25 + z))
+
+
+@pytest.mark.parametrize("confidence_level", [-0.5, 1.5])
+def test_facts_reject_a_confidence_level_out_of_range(confidence_level: float) -> None:
+    with pytest.raises(ValueError, match="confidence_level"):
+        local.compute_local_facts(_hand_model(), {}, local.LocalOptions(confidence_level=confidence_level))
+
+
+@pytest.mark.parametrize(
+    ("probability", "word"),
+    [
+        (0.95, "almost certain"),
+        (0.8, "very likely"),
+        (0.6, "likely"),
+        (0.4, "about as likely as not"),
+        (0.2, "unlikely"),
+        (0.05, "very unlikely"),
+    ],
+)
+def test_likelihood_words_start_at_their_threshold(probability: float, word: str) -> None:
+    assert local._likelihood(probability) == word
+
+
+@pytest.mark.parametrize(
+    ("score", "word"),
+    [(0.5, "strongly"), (-0.5, "strongly"), (0.2, "moderately"), (-0.2, "moderately")],
+)
+def test_strength_words_start_at_their_threshold(score: float, word: str) -> None:
+    assert local._strength(score) == word
+
+
+def test_round_keeps_three_decimals() -> None:
+    assert local._round(0.12351) == pytest.approx(0.124, abs=1e-12)
+    assert local._round(0.12349) == pytest.approx(0.123, abs=1e-12)
+
+
+def _text_facts(logit: float, scores: list[float], confidence_level: float = 0.95) -> local.LocalFacts:
+    contributions = [local.Contribution(f"f{i}", i, score, 0.1) for i, score in enumerate(scores)]
+    prediction = local.Prediction(label="y", probability=0.7, lower=0.6, upper=0.8, logit=logit, logit_std=0.1)
+    return local.LocalFacts(prediction, contributions, None, None, [], confidence_level)
+
+
+@pytest.mark.parametrize(
+    ("logit", "scores", "effects"),
+    [
+        (1.4, [0.6, -0.3, 0.0], ["strongly towards", "moderately against", "slightly against"]),
+        (-0.8, [-0.6, 0.3, 0.0], ["strongly towards", "moderately against", "slightly against"]),
+        (0.0, [-0.3], ["moderately towards"]),  # a logit of 0 belongs to the negative class
+        (0.5, [0.3, -0.3], ["moderately towards", "moderately against"]),
+    ],
+)
+def test_layperson_effects_point_towards_or_against_the_prediction(
+    logit: float,
+    scores: list[float],
+    effects: list[str],
+) -> None:
+    texts = local.facts_to_texts(_text_facts(logit, scores))
+    found = [entry["effect"] for entry in json.loads(texts["prediction"])["contributions_largest_first"]]
+    assert found == [f"{effect} this prediction" for effect in effects]
+
+
+def test_layperson_text_of_a_prediction() -> None:
+    texts = local.facts_to_texts(_text_facts(1.4, [0.6]))
+    assert json.loads(texts["prediction"]) == {
+        "predicted_class": "y",
+        "contributions_largest_first": [{"feature": "f0", "value": 0, "effect": "strongly towards this prediction"}],
+        "likelihood": "likely",
+    }
+
+
+def test_data_scientist_text_of_a_prediction() -> None:
+    texts = local.facts_to_texts(_text_facts(1.4, [0.6123]), Audience.DATA_SCIENTIST)
+    assert json.loads(texts["prediction"]) == {
+        "predicted_class": "y",
+        "contributions_largest_first": [{"feature": "f0", "value": 0, "score": 0.612, "std": 0.1}],
+        "probability": 0.7,
+        "confidence_interval": [0.6, 0.8],
+        "confidence_level": 0.95,
+        "logit": 1.4,
+    }
+
+
+def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
+    change = local.Change("f0", 1.0, "[2, 3)", -0.1234)
+    steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
+    return attrs.evolve(
+        _text_facts(1.4, [0.6, 0.1], confidence_level),
+        counterfactual=local.Counterfactual([change], 0.3),
+        sufficient_reason=local.SufficientReason(["f0"], 0.9876),
+        completions=steps,
+    )
+
+
+def test_layperson_text_of_the_explanations() -> None:
+    texts = local.facts_to_texts(_text_facts_with_everything(0.95))
+    assert json.loads(texts["counterfactual"]) == {
+        "flip_possible": True,
+        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)"}],
+        "minimum_number_of_changes": 1,
+        "flip_holds_even_if_the_model_is_somewhat_off": True,
+        "likelihood_of_new_prediction": "unlikely",
+    }
+    assert json.loads(texts["sufficient_reason"]) == {
+        "exists": True,
+        "features": ["f0"],
+        "features_not_needed": ["f1"],
+    }
+    assert json.loads(texts["completions"]) == {
+        "steps": [
+            {"known_features": [], "share_with_same_prediction": "about as likely as not"},
+            {"known_features": ["f0"], "share_with_same_prediction": "very unlikely"},
+        ],
+    }
+
+
+def test_data_scientist_text_of_the_explanations() -> None:
+    texts = local.facts_to_texts(_text_facts_with_everything(0.95), Audience.DATA_SCIENTIST)
+    assert json.loads(texts["counterfactual"]) == {
+        "flip_possible": True,
+        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)", "score_change": -0.123}],
+        "minimum_number_of_changes": 1,
+        "flip_holds_at_confidence": 0.95,
+        "probability_of_new_prediction": 0.3,
+    }
+    assert json.loads(texts["sufficient_reason"]) == {
+        "exists": True,
+        "features": ["f0"],
+        "features_not_needed": ["f1"],
+        "guaranteed_margin_logit": 0.988,
+    }
+    assert json.loads(texts["completions"]) == {
+        "steps": [
+            {"known_features": [], "share_with_same_prediction": 0.5},
+            {"known_features": ["f0"], "share_with_same_prediction": 0.124},
+        ],
+    }
+
+
+@pytest.mark.parametrize(("confidence_level", "holds"), [(-0.5, False), (0.0, False), (0.5, True), (2.0, True)])
+def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
+    texts = local.facts_to_texts(_text_facts_with_everything(confidence_level))
+    assert json.loads(texts["counterfactual"])["flip_holds_even_if_the_model_is_somewhat_off"] is holds

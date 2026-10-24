@@ -40,6 +40,8 @@ _LIKELIHOOD_WORDS = (
 )
 _N_CLASSES = 2
 _STRENGTH_WORDS = ((0.5, "strongly"), (0.2, "moderately"))
+# whether the fact texts hold the model numbers, by audience
+_SHOWS_NUMBERS = {Audience.LAYPERSON: False, Audience.DATA_SCIENTIST: True}
 
 
 @attrs.frozen
@@ -221,7 +223,12 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
     return graph.x_vals.index(value)
 
 
-def _plausible_bins(weights: np.ndarray, *, continuous: bool, min_support: float) -> np.ndarray:
+def _plausible_bins(
+    weights: np.ndarray,
+    *,  # pragma: no mutate -- a positional-only weights still lets the callers pass the other options by keyword
+    continuous: bool,
+    min_support: float,
+) -> np.ndarray:
     """Bins with enough training support to be offered as alternatives.
 
     A category needs ``min_support`` of the training data. The bins of a continuous feature are thin slices, so instead
@@ -247,7 +254,7 @@ def _plausible_bins(weights: np.ndarray, *, continuous: bool, min_support: float
         return share >= min_support
     upper_edge = np.cumsum(share)
     lower_edge = upper_edge - share
-    return (upper_edge > min_support) & (lower_edge < 1 - min_support)
+    return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
 def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_support: float) -> list[_Feature]:
@@ -273,10 +280,11 @@ def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_su
         If the model is not a binary classifier without interactions, or the instance is incomplete.
 
     """
-    if len(ebm.term_features_) != len(ebm.feature_names_in_) or any(len(t) != 1 for t in ebm.term_features_):
+    # one term of one feature per feature; comparing the lists also rejects a missing term and an interaction term
+    if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
         raise ValueError(msg)
-    if len(ebm.classes_) != _N_CLASSES:
+    if np.shape(ebm.classes_) != (_N_CLASSES,):
         msg = "Local explanations need a binary classifier."
         raise ValueError(msg)
     features = []
@@ -293,7 +301,13 @@ def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_su
     return features
 
 
-def _robust_scores(feature: _Feature, sign: int, z: float, *, towards_outcome: bool) -> np.ndarray:
+def _robust_scores(
+    feature: _Feature,
+    sign: int,
+    z: float,
+    *,  # pragma: no mutate -- a positional-only z still lets the callers pass towards_outcome by keyword
+    towards_outcome: bool,
+) -> np.ndarray:
     """Scores of every bin in the direction of the outcome (``sign``), moved by ``z`` standard deviations.
 
     With ``towards_outcome`` the scores are lowered, so they are what is guaranteed in favour of the outcome; without
@@ -348,24 +362,21 @@ def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z
         pessimistic = _robust_scores(feature, sign, z, towards_outcome=False)
         best = int(np.argmin(pessimistic))
         drops.append((sign * feature.current - float(pessimistic[best]), best, feature))
-    changes = []
-    for drop, best, feature in sorted(drops, key=operator.itemgetter(0), reverse=True):
-        if margin < 0 or drop <= 0:
-            break
-        margin -= drop
-        changes.append((feature, best, drop))
-    if margin >= 0:
+    ranked = sorted(drops, key=operator.itemgetter(0), reverse=True)
+    # the margin left after the first 1, 2, ... changes; the prediction flips at the first one below zero
+    flips = np.flatnonzero(margin - np.cumsum([drop for drop, _, _ in ranked]) < 0)
+    if not flips.size:
         return None
+    changes = ranked[: flips[0] + 1]
     new_logit = intercept + sum(f.current for f in features)
-    for feature, best, _ in changes:
+    for _, best, feature in changes:
         new_logit += float(feature.graph.scores[best]) - feature.current
-    new_probability = _sigmoid(new_logit) if sign < 0 else 1 - _sigmoid(new_logit)
     return Counterfactual(
         changes=[
             Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.graph.scores[best]) - f.current)
-            for f, best, _ in changes
+            for _, best, f in changes
         ],
-        new_probability=new_probability,
+        new_probability=_sigmoid(-sign * new_logit),  # the class that the prediction flips to is the opposite one
     )
 
 
@@ -415,15 +426,17 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
 
     """
     worst = sign * intercept + sum(float(_robust_scores(f, sign, z, towards_outcome=True).min()) for f in features)
-    chosen = []
-    for gain, feature in _fixing_order(features, sign, z):
-        if worst > 0:
-            break
-        worst += gain
-        chosen.append(feature.name)
-    if worst <= 0:
+    order = _fixing_order(features, sign, z)
+    # the guaranteed margin after fixing the first 0, 1, 2, ... features; the outcome is certain at the first above zero
+    margins = worst + np.concatenate(([0.0], np.cumsum([gain for gain, _ in order])))
+    enough = np.flatnonzero(margins > 0)
+    if not enough.size:
         return None
-    return SufficientReason(features=chosen, guaranteed_margin=worst)
+    count = int(enough[0])
+    return SufficientReason(
+        features=[feature.name for _, feature in order[:count]],
+        guaranteed_margin=float(margins[count]),
+    )
 
 
 def _completions(
@@ -505,13 +518,13 @@ def compute_local_facts(
     logit = intercept + sum(f.current for f in features)
     logit_std = math.sqrt(sum(float(f.graph.stds[f.bin_index]) ** 2 for f in features))
     sign = 1 if logit > 0 else -1
-    probability = _sigmoid(logit)
-    interval = sorted((_sigmoid(logit - z * logit_std), _sigmoid(logit + z * logit_std)))
+    # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
+    lower, upper = sorted((_sigmoid(sign * (logit - z * logit_std)), _sigmoid(sign * (logit + z * logit_std))))
     prediction = Prediction(
-        label=ebm.classes_[1 if sign > 0 else 0].item(),
-        probability=probability if sign > 0 else 1 - probability,
-        lower=interval[0] if sign > 0 else 1 - interval[1],
-        upper=interval[1] if sign > 0 else 1 - interval[0],
+        label=ebm.classes_[int(logit > 0)].item(),
+        probability=_sigmoid(sign * logit),
+        lower=lower,
+        upper=upper,
         logit=logit,
         logit_std=logit_std,
     )
@@ -571,7 +584,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
         The keys ``prediction``, ``counterfactual``, ``sufficient_reason`` and ``completions``.
 
     """
-    expert = audience == Audience.DATA_SCIENTIST
+    expert = _SHOWS_NUMBERS[audience]
     p = facts.prediction
     prediction: dict[str, Any] = {"predicted_class": p.label}
     contributions: list[dict[str, Any]] = []
@@ -580,7 +593,8 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
         if expert:
             entry |= {"score": _round(c.score), "std": _round(c.std)}
         else:
-            direction = "towards" if c.score * (1 if p.logit > 0 else -1) > 0 else "against"
+            # a score points towards the prediction if it has the sign of the logit; a logit of 0 is the negative class
+            direction = "towards" if (c.score if p.logit > 0 else -c.score) > 0 else "against"
             entry["effect"] = f"{_strength(c.score)} {direction} this prediction"
         contributions.append(entry)
     prediction["contributions_largest_first"] = contributions
