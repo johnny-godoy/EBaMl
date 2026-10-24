@@ -5,6 +5,7 @@
 - After changing any file, run `prek run --all-files` and fix every failure before reporting the task done or committing.
 - Files not yet tracked by git are skipped by `--all-files`; run `prek run --files <paths>` for those.
 - Hooks may rewrite files (ruff fixes, formatters). Re-run until it passes cleanly, and re-read files you plan to edit again.
+- `.claude/settings.json` runs `prek run --files <file>` after each `Edit`, `Write` or `NotebookEdit`. If it reports a failure, fix it before the next edit. It checks one file, so the full `prek run --all-files` is still needed before you finish.
 - Never bypass hooks (`--no-verify`, `SKIP=...`, or removing/editing a hook to make it pass) unless the user explicitly asks.
 - Do not report "done" with prek failing. If a failure is unrelated or cannot be fixed, say so with the output.
 
