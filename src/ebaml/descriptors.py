@@ -287,8 +287,8 @@ def describe_ebm(
         for name, item in zip(
             feature_names,
             described,
-            strict=True,
-        )  # pragma: no mutate -- one item per feature, so strict never raises
+            strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
+        )
     )
     summary = baml_sdk.summarize_ebm(
         feature_importances=feature_importances,
