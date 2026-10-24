@@ -25,9 +25,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup # the notebook imports baml_sdk, so it must be generated
+      - name: Cache the Titanic data
+        # OpenML sometimes answers HTTP 503. The dataset never changes, so a fixed key is enough.
+        # Bump the version in the key to force a new download.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/scikit_learn_data
+          key: openml-titanic-v1
       - name: Build the docs
         # --strict: a broken link or a docstring that does not render fails the build.
         # The build runs the notebook (it downloads the Titanic data from OpenML) and exports its output.
+        env:
+          # scikit-learn stores the OpenML download here, which is the cached folder.
+          SCIKIT_LEARN_DATA: ${{ runner.temp }}/scikit_learn_data
         run: uv run --frozen --group docs mkdocs build --strict
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
