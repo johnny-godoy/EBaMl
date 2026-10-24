@@ -53,8 +53,8 @@ def test_graph_text_filters_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class FakeGraph:
         @staticmethod
-        def to_text(*, include_description: bool = True) -> str:
-            seen["to_text"] = include_description
+        def to_text(*, include_description: bool = True, check_budget: object = None) -> str:
+            seen["to_text"] = (include_description, check_budget)
             return "text"
 
     def from_ebm(
@@ -69,7 +69,24 @@ def test_graph_text_filters_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(from_ebm))
     kwargs = {"use_feature_bounds": False, "include_description": False, "task_description": "x"}
     assert descriptors._graph_text(FAKE_EBM, 4, kwargs) == "text"
-    assert seen == {"from_ebm": (FAKE_EBM, 4, False), "to_text": False}
+    assert seen == {
+        "from_ebm": (FAKE_EBM, 4, False),
+        "to_text": (False, baml_sdk.check_token_budget),
+    }
+
+
+def test_graph_text_lets_the_caller_replace_the_budget_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+
+    class FakeGraph:
+        @staticmethod
+        def to_text(*, check_budget: object) -> str:
+            seen.append(check_budget)
+            return "text"
+
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(lambda *_args, **_kwargs: FakeGraph()))
+    assert descriptors._graph_text(FAKE_EBM, 0, {"check_budget": "mine"}) == "text"
+    assert seen == ["mine"]
 
 
 def test_log_usage(counted: baml_sdk.Counted) -> None:

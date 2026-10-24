@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `ebaml.graphs` no longer imports `baml_sdk`. `EBMGraph.to_text` takes a new keyword argument,
+  `check_budget`, a function that compares the estimated tokens of the text with `max_tokens` and
+  `overbudget_percent`. `baml_sdk.check_token_budget` is such a function. If you call `EBMGraph.to_text` yourself and
+  pass no `check_budget`, the function checks nothing: it writes the text once, and does not warn or simplify. Pass
+  `check_budget=baml_sdk.check_token_budget` to get the old behavior. `describe_graph` and `describe_ebm` pass it for you.
 - **BREAKING:** `facts_to_texts` moved from `ebaml.local` to the new module `ebaml.local_text`. `ebaml.local` now computes
   the facts only, and `ebaml.local_text` renders them. Change `from ebaml.local import facts_to_texts` to
   `from ebaml.local_text import facts_to_texts`.

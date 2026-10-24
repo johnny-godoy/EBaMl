@@ -16,12 +16,14 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
+    from baml_sdk import check_token_budget
     from ebaml.descriptors import describe_ebm, describe_graph
     from ebaml.graphs import EBMGraph
 
     return (
         EBMGraph,
         ExplainableBoostingClassifier,
+        check_token_budget,
         describe_ebm,
         describe_graph,
         fetch_openml,
@@ -234,14 +236,15 @@ def _(EBMGraph, ebm, mo):
 def _(mo) -> None:
     mo.md(r"""
     `to_text` writes the graph as the LLM reads it. There is no tokenizer before the call, so the size is only
-    estimated. `to_text` simplifies the graph until the estimate is within `overbudget_percent` (50% by default) of
-    `max_tokens`, and warns if it is still above `max_tokens`. The provider's own error is the real limit.
+    estimated by the `check_budget` function, here the BAML one. `to_text` simplifies the graph until the estimate is
+    within `overbudget_percent` (50% by default) of `max_tokens`, and warns if it is still above `max_tokens`. The
+    provider's own error is the real limit.
     """)
 
 
 @app.cell
-def _(graph, mo) -> None:
-    mo.md(f"```\n{graph.to_text(max_tokens=500)}\n```")
+def _(check_token_budget, graph, mo) -> None:
+    mo.md(f"```\n{graph.to_text(max_tokens=500, check_budget=check_token_budget)}\n```")
 
 
 @app.cell

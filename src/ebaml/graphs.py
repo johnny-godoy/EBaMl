@@ -2,7 +2,7 @@
 
 import warnings
 from collections.abc import Sequence
-from typing import Literal, Self
+from typing import Literal, Protocol, Self, runtime_checkable
 
 import attrs
 import numpy as np
@@ -10,7 +10,6 @@ import numpy.typing as npt
 import scipy
 from interpret.glassbox._ebm._utils import convert_to_intervals  # ruff: ignore[import-private-name] -- interpret has no public convert_to_intervals
 
-import baml_sdk
 from ebaml.custom_types import ExplainableBoostingModel, FeatureType, Normalization, coerce_enum, normalize_feature_type
 from ebaml.exceptions import (
     EBMGraphSimplificationError,
@@ -40,6 +39,34 @@ _DESCRIPTIONS = {
         " the two possible values of the feature.\n\n"
     ),
 }
+
+
+@runtime_checkable
+class TokenBudget(Protocol):
+    """The result of a token budget check."""
+
+    @property
+    def estimated_tokens(self) -> int:
+        """The estimated number of tokens of the text."""
+        ...
+
+    @property
+    def status(self) -> Literal["ok", "warn", "over"]:
+        """``"ok"`` within ``max_tokens``, ``"warn"`` above it, and ``"over"`` beyond ``overbudget_percent``."""
+        ...
+
+
+@runtime_checkable
+class BudgetCheck(Protocol):
+    """A function that estimates the tokens of a text and compares them with a budget.
+
+    ``baml_sdk.check_token_budget`` is such a function.
+    """
+
+    def __call__(self, *, text: str, max_tokens: int, overbudget_percent: int) -> TokenBudget:
+        """Compare the estimated tokens of ``text`` with ``max_tokens``, and with the tolerance above it."""
+        ...
+
 
 # the formats whose graphs are simplified until they fit into the token budget
 _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
@@ -382,6 +409,7 @@ class EBMGraph:
         confidence_level: float = 0.95,
         max_tokens: int = 3000,
         overbudget_percent: int = 50,
+        check_budget: BudgetCheck | None = None,
     ) -> str:
         """Convert the graph to text. This is the text that we then pass to the LLM.
 
@@ -413,6 +441,10 @@ class EBMGraph:
             How far above max_tokens (in percent) the estimate may go before the graph is considered obviously
             too large. Beyond that bound the function simplifies the graph, or raises if it cannot.
             The LLM provider's own error remains the real limit.
+        check_budget: BudgetCheck, optional
+            Estimates the tokens of a text and compares them with ``max_tokens`` and ``overbudget_percent``, for
+            example ``baml_sdk.check_token_budget``. If not provided, the text is not checked: the function writes it
+            once, at the first simplification level, and ``max_tokens`` and ``overbudget_percent`` have no effect.
 
         Returns
         -------
@@ -451,8 +483,11 @@ class EBMGraph:
             if include_description:
                 prompt = description_text + prompt
 
-            # estimate the number of tokens (in BAML); the provider error is the real limit
-            budget = baml_sdk.check_token_budget(
+            if check_budget is None:
+                return prompt
+
+            # estimate the number of tokens; the provider error is the real limit
+            budget = check_budget(
                 text=prompt,
                 max_tokens=max_tokens,
                 overbudget_percent=overbudget_percent,
