@@ -11,7 +11,8 @@ from pathlib import Path
 import attrs
 import orjson
 
-from ebaml.benchmark import Task, format_results, run_task
+import baml_sdk
+from ebaml.benchmark import Task, format_results, load_questions, run_task
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -62,7 +63,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, help="write every question, response and verdict to this JSON file")
     args = parser.parse_args(argv)
 
-    results = [run_task(task, DATA_DIR, args.limit) for task in args.task or list(Task)]
+    results = [
+        run_task(task, load_questions(task, DATA_DIR)[: args.limit], baml_sdk.answer_benchmark_question)
+        for task in args.task or list(Task)
+    ]
     sys.stdout.write(format_results(results) + "\n")
     if args.output:
         args.output.write_bytes(orjson.dumps([attrs.asdict(result) for result in results], option=orjson.OPT_INDENT_2))

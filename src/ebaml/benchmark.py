@@ -4,7 +4,8 @@ Port of the ``benchmark/`` of TalkToEBM. The questions are stored in ``benchmark
 ``[prompt, solution]`` pairs. Each question is answered in two LLM turns (see ``answer_benchmark_question`` in
 ``baml_src/talk_to_ebm.baml``): the model reasons step by step, then states its final answer in a format that this
 module parses and compares with the solution. TalkToEBM's notebooks printed the answers next to the solutions and
-compared them by eye; here the comparison is automatic.
+compared them by eye; here the comparison is automatic. The module imports no LLM client: the caller passes the
+function that asks the question, so the parsing and the scoring run without the generated ``baml_sdk``.
 """
 
 import enum
@@ -13,14 +14,56 @@ import re
 from collections.abc import Callable, Sequence
 from itertools import starmap
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 import attrs
 import orjson
 import structlog
 
-import baml_sdk
-
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
+
+
+@runtime_checkable
+class Usage(Protocol):
+    """The tokens that the provider reported for a reply."""
+
+    @property
+    def input_tokens(self) -> int:
+        """The tokens of the prompt."""
+        ...
+
+    @property
+    def output_tokens(self) -> int:
+        """The tokens of the reply."""
+        ...
+
+
+@runtime_checkable
+class Reply(Protocol):
+    """The reply of the LLM to a question, with the tokens that it used."""
+
+    @property
+    def text(self) -> str:
+        """The final answer of the LLM."""
+        ...
+
+    @property
+    def usage(self) -> Usage:
+        """The tokens that the provider reported."""
+        ...
+
+
+@runtime_checkable
+class AskQuestion(Protocol):
+    """A function that asks the LLM a question of the benchmark.
+
+    ``baml_sdk.answer_benchmark_question`` is such a function.
+    """
+
+    def __call__(self, *, question: str, answer_format: str) -> Reply:
+        """Ask the question and ask for the final answer in the format of ``answer_format``."""
+        ...
+
 
 # a parsed answer: a label, or the numbers of a value (one) or an interval (two)
 Answer = str | tuple[float, ...]
@@ -270,32 +313,31 @@ def is_correct(task: Task, response: str, solution: str) -> bool:
     return answer is not None and answer == parse_answer(task, solution)
 
 
-def run_task(task: Task, data_dir: str | os.PathLike[str], limit: int | None = None) -> TaskResult:
+def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion) -> TaskResult:
     """Ask the LLM the questions of a task, one at a time, and score its answers.
 
-    The LLM client is configured in ``baml_src/talk_to_ebm.baml``. The questions are asked sequentially, because the
-    free models are rate limited.
+    The questions are asked sequentially, because the free models are rate limited.
 
     Parameters
     ----------
     task: Task
-        The task.
-    data_dir: str | os.PathLike[str]
-        The directory with the data files of the benchmark.
-    limit: int, optional
-        Only ask the first ``limit`` questions. By default, ask all of them.
+        The task, which sets the answer format and the scoring.
+    questions: Sequence[Question]
+        The questions to ask, for example from ``load_questions``.
+    ask: AskQuestion
+        Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question``. The LLM client is configured
+        in ``baml_src/talk_to_ebm.baml``.
 
     Returns
     -------
     TaskResult
-        The outcomes and the token usage. If ``limit`` is 0, there are no outcomes and the accuracy is 0.
+        The outcomes and the token usage. If there are no questions, there are no outcomes and the accuracy is 0.
 
     """
-    questions = load_questions(task, data_dir)[:limit]
     outcomes = []
     input_tokens = output_tokens = 0
     for index, question in enumerate(questions, start=1):
-        counted = baml_sdk.answer_benchmark_question(question=question.prompt, answer_format=task.answer_format)
+        counted = ask(question=question.prompt, answer_format=task.answer_format)
         input_tokens += counted.usage.input_tokens
         output_tokens += counted.usage.output_tokens
         outcome = Outcome(question, counted.text, is_correct(task, counted.text, question.solution))

@@ -9,13 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `ebaml.benchmark.run_task` accepts a `str` or any path for `data_dir`. Its type hint allowed only a `Path`, so a
-  `str` raised a `BeartypeCallHintViolation`.
-- `TaskResult.accuracy` is `0.0` for a task with no outcomes (`limit=0`). It raised a `ZeroDivisionError` before, and
-  so did `format_results`.
+- `TaskResult.accuracy` is `0.0` for a task with no outcomes. It raised a `ZeroDivisionError` before, and so did
+  `format_results`.
 
 ### Changed
 
+- **BREAKING:** `ebaml.benchmark` no longer imports `baml_sdk`. `run_task(task, data_dir, limit)` is now
+  `run_task(task, questions, ask)`. Load the questions with `load_questions` and cut them with a slice for a limit. Pass
+  `baml_sdk.answer_benchmark_question` as `ask`, or any function with the same keyword arguments that returns an object
+  with `text` and `usage`. `benchmark/run.py` does this for you.
 - **BREAKING:** `describe_graph`, `describe_ebm` and `explain_instance` no longer take `**kwargs`. Three option classes
   replace them, as keyword-only arguments. `graph=GraphOptions(...)` (module `ebaml.options`) holds the options of
   `EBMGraph.from_ebm` and `EBMGraph.to_text`. `prompt=PromptOptions(...)` (module `ebaml.options`) holds
