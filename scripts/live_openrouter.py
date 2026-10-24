@@ -12,6 +12,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 from structlog.testing import capture_logs
 
 from ebaml.descriptors import describe_ebm, describe_graph
+from ebaml.options import PromptOptions
 
 
 def _fit_small_ebm() -> ExplainableBoostingClassifier:
@@ -62,7 +63,7 @@ def main() -> int:
             ebm,
             0,
             num_sentences=3,
-            dataset_description="Synthetic data, label is mostly x0 > 0.",
+            prompt=PromptOptions(dataset_description="Synthetic data, label is mostly x0 > 0."),
         )
         _check(description.strip(), "empty description")
 

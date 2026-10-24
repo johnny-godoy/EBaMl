@@ -4,8 +4,7 @@ The prompts and the chat conversations live in ``baml_src/talk_to_ebm.baml``; th
 EBM, converts them to text, and calls the generated ``baml_sdk`` functions.
 """
 
-import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -18,33 +17,16 @@ from ebaml.custom_types import Audience, ExplainableBoostingModel, coerce_enum
 from ebaml.graphs import EBMGraph
 from ebaml.local import LocalFacts, LocalOptions, compute_local_facts
 from ebaml.local_text import facts_to_texts
+from ebaml.options import GraphOptions, PromptOptions
 from ebaml.retry import call_with_shrinking_graph
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
-_LOCAL_OPTION_NAMES = frozenset(attrs.fields_dict(LocalOptions))
-_PROMPT_OPTION_NAMES = ("expert_description", "graph_description", "dataset_description", "task_description")
 _GRAPH_SENTENCES = 7
-
-
-def _accepted_kwargs(func: Callable[..., Any], kwargs: Mapping[str, Any]) -> dict:
-    """Select the entries of ``kwargs`` that are parameters of ``func``.
-
-    Parameters
-    ----------
-    func: Callable[..., Any]
-        The function to inspect.
-    kwargs: Mapping[str, Any]
-        The keyword arguments to filter.
-
-    Returns
-    -------
-    dict:
-        A dictionary containing only the entries of ``kwargs`` that are parameters of ``func``.
-
-    """
-    names = inspect.signature(func).parameters
-    return {k: v for k, v in kwargs.items() if k in names}
+# the defaults of the option arguments, as module-level values that nothing changes: the option classes are frozen
+_DEFAULT_GRAPH_OPTIONS = GraphOptions()
+_DEFAULT_LOCAL_OPTIONS = LocalOptions()
+_DEFAULT_PROMPT_OPTIONS = PromptOptions()
 
 
 def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
@@ -66,13 +48,13 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
     )
 
 
-def _prompt_options(kwargs: Mapping[str, Any]) -> baml_sdk.GraphPromptOptions:
-    """Build the BAML prompt options from the keyword arguments, falling back to the BAML defaults.
+def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
+    """Build the BAML prompt options from the prompt options, falling back to the BAML defaults.
 
     Parameters
     ----------
-    kwargs: Mapping[str, Any]
-        The keyword arguments to filter.
+    prompt: PromptOptions
+        The descriptions to use. A description that is ``None`` keeps the BAML default.
 
     Returns
     -------
@@ -81,12 +63,18 @@ def _prompt_options(kwargs: Mapping[str, Any]) -> baml_sdk.GraphPromptOptions:
 
     """
     options = baml_sdk.default_graph_options()
-    overrides = {k: kwargs[k] for k in _PROMPT_OPTION_NAMES if kwargs.get(k) is not None}
+    descriptions = {
+        "expert_description": prompt.expert_description,
+        "graph_description": prompt.graph_description,
+        "dataset_description": prompt.dataset_description,
+        "task_description": prompt.task_description,
+    }
+    overrides = {name: value for name, value in descriptions.items() if value is not None}
     return baml_sdk.GraphPromptOptions(**{**options.model_dump(), **overrides})
 
 
-def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: Mapping[str, Any]) -> str:
-    """Convert an EBM graph to text.
+def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: GraphOptions) -> str:
+    """Convert an EBM graph to text, with the BAML token budget check.
 
     Parameters
     ----------
@@ -94,8 +82,8 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: Mappi
         The EBM model.
     feature_index: int
         The index of the feature to convert to text.
-    kwargs: Mapping[str, Any]
-        Additional keyword arguments to pass to ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+    options: GraphOptions
+        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
 
     Returns
     -------
@@ -103,9 +91,23 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: Mappi
         The textual representation of the EBM graph.
 
     """
-    graph = EBMGraph.from_ebm(ebm, feature_index, **_accepted_kwargs(EBMGraph.from_ebm, kwargs))
-    # the BAML check is the default, and a caller can replace it
-    return graph.to_text(**{"check_budget": baml_sdk.check_token_budget, **_accepted_kwargs(EBMGraph.to_text, kwargs)})
+    graph = EBMGraph.from_ebm(
+        ebm,
+        feature_index,
+        options.normalization,
+        use_feature_bounds=options.use_feature_bounds,
+    )
+    return graph.to_text(
+        include_description=options.include_description,
+        feature_format=options.feature_format,
+        x_axis_precision=options.x_axis_precision,
+        y_axis_precision=options.y_axis_precision,
+        confidence_bounds=options.confidence_bounds,
+        confidence_level=options.confidence_level,
+        max_tokens=options.max_tokens,
+        overbudget_percent=options.overbudget_percent,
+        check_budget=baml_sdk.check_token_budget,
+    )
 
 
 def _is_truncated(error: BamlError) -> bool:
@@ -147,12 +149,13 @@ def _log_usage(what: str, counted: baml_sdk.Counted) -> str:
     return counted.text
 
 
-def _describe_graph_counted(
+def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- the retry needs the EBM, the feature, the first text, and the two option sets
     ebm: ExplainableBoostingModel,
     feature_index: int,
     graph: str,
     num_sentences: int,
-    kwargs: Mapping[str, Any],
+    graph_options: GraphOptions,
+    prompt: PromptOptions,
 ) -> baml_sdk.Counted:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
@@ -169,8 +172,10 @@ def _describe_graph_counted(
         The text of the graph, as made by ``_graph_text``.
     num_sentences: int
         The desired number of sentences for the description.
-    kwargs: Mapping[str, Any]
-        Passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompt options.
+    graph_options: GraphOptions
+        The options of the graph text. A retry changes ``max_tokens`` and ``overbudget_percent``.
+    prompt: PromptOptions
+        The descriptions that the prompt uses.
 
     Returns
     -------
@@ -178,7 +183,7 @@ def _describe_graph_counted(
         The description with its token usage.
 
     """
-    opts = _prompt_options(kwargs)
+    opts = _prompt_options(prompt)
     return call_with_shrinking_graph(
         lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts),
         graph,
@@ -188,7 +193,7 @@ def _describe_graph_counted(
         rebuild=lambda budget: _graph_text(
             ebm,
             feature_index,
-            {**kwargs, "max_tokens": budget, "overbudget_percent": 0},
+            attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
         ),
         label=ebm.feature_names_in_[feature_index],
     )
@@ -198,14 +203,14 @@ def describe_graph(
     ebm: ExplainableBoostingModel,
     feature_index: int,
     num_sentences: int = 7,
-    **kwargs: object,
+    *,
+    graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
+    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
 ) -> str:
     """Ask the LLM to describe a graph. Uses chain-of-thought reasoning.
 
-    The LLM client is configured in ``baml_src/talk_to_ebm.baml``. The function accepts additional keyword arguments
-    that are passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompt (``expert_description``,
-    ``graph_description``, ``dataset_description``, ``task_description``). A reply cut off by ``max_tokens`` is retried
-    with a simplified graph, up to 4 times.
+    The LLM client is configured in ``baml_src/talk_to_ebm.baml``. A reply cut off by ``max_tokens`` is retried with a
+    simplified graph, up to 4 times.
 
     Parameters
     ----------
@@ -215,8 +220,10 @@ def describe_graph(
         The index of the feature to describe.
     num_sentences: int, default=7
         The desired number of sentences for the description.
-    **kwargs: object
-        Passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompt options.
+    graph: GraphOptions, default=GraphOptions()
+        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+    prompt: PromptOptions, default=PromptOptions()
+        The descriptions that the prompts use.
 
     Returns
     -------
@@ -224,8 +231,8 @@ def describe_graph(
         The description of the graph.
 
     """
-    graph = _graph_text(ebm, feature_index, kwargs)
-    counted = _describe_graph_counted(ebm, feature_index, graph, num_sentences, kwargs)
+    graph_text = _graph_text(ebm, feature_index, graph)
+    counted = _describe_graph_counted(ebm, feature_index, graph_text, num_sentences, graph, prompt)
     return _log_usage(f"describe_graph({ebm.feature_names_in_[feature_index]})", counted)
 
 
@@ -233,15 +240,15 @@ def describe_ebm(
     ebm: ExplainableBoostingModel,
     num_sentences: int = 30,
     max_concurrency: int = 8,
-    **kwargs: object,
+    *,
+    graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
+    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
 ) -> str:
     """Ask the LLM to describe an EBM.
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
-    descriptions. The LLM client is configured in ``baml_src/talk_to_ebm.baml``. The function accepts additional
-    keyword arguments that are passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompts
-    (``expert_description``, ``dataset_description``, ``graph_description``, ``task_description``).
+    descriptions. The LLM client is configured in ``baml_src/talk_to_ebm.baml``.
 
     Parameters
     ----------
@@ -251,8 +258,10 @@ def describe_ebm(
         The desired number of sentences for the description.
     max_concurrency: int, default=8
         The maximum number of features described at the same time.
-    **kwargs: object
-        Passed to ``EBMGraph.from_ebm``, ``EBMGraph.to_text``, and the prompt options.
+    graph: GraphOptions, default=GraphOptions()
+        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+    prompt: PromptOptions, default=PromptOptions()
+        The descriptions that the prompts use.
 
     Returns
     -------
@@ -264,13 +273,13 @@ def describe_ebm(
     # graphs surface before any LLM call is paid for.
     feature_importances = _feature_importances_to_text(ebm)
     feature_names = list(ebm.feature_names_in_)
-    graphs = [_graph_text(ebm, feature_index, kwargs) for feature_index in range(len(feature_names))]
+    graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
         described = list(
             pool.map(
-                lambda item: _describe_graph_counted(ebm, item[0], item[1], _GRAPH_SENTENCES, kwargs),
-                enumerate(graphs),
+                lambda item: _describe_graph_counted(ebm, item[0], item[1], _GRAPH_SENTENCES, graph, prompt),
+                enumerate(graph_texts),
             ),
         )
     graph_descriptions = "\n\n".join(
@@ -285,7 +294,7 @@ def describe_ebm(
         feature_importances=feature_importances,
         graph_descriptions=graph_descriptions,
         num_sentences=num_sentences,
-        opts=_prompt_options(kwargs),
+        opts=_prompt_options(prompt),
     )
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.usage.input_tokens for item in described),
@@ -304,13 +313,15 @@ class LocalExplanation:
     facts: LocalFacts
 
 
-def explain_instance(
+def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the instance, three settings of the explanation, and two option sets
     ebm: ExplainableBoostingModel,
     instance: Mapping[str, Any],
     global_explanation: str,
     audience: Audience | str = Audience.LAYPERSON,
     num_sentences: int = 5,
-    **kwargs: object,
+    *,
+    local: LocalOptions = _DEFAULT_LOCAL_OPTIONS,
+    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
 ) -> LocalExplanation:
     """Explain one prediction of an EBM with three explanations, computed exactly and put in words by the LLM.
 
@@ -333,10 +344,11 @@ def explain_instance(
         confidence intervals.
     num_sentences: int, default=5
         The most sentences of each explanation.
-    **kwargs: object
-        The fields of ``LocalOptions`` (``confidence_level``, ``max_steps``, ``n_samples``, ``seed``,
-        ``min_support``) go to ``compute_local_facts``; the prompt options (``expert_description``,
-        ``dataset_description``) go to the prompts.
+    local: LocalOptions, default=LocalOptions()
+        The options of ``compute_local_facts``.
+    prompt: PromptOptions, default=PromptOptions()
+        The descriptions that the prompts use. The local prompts read ``expert_description`` and
+        ``dataset_description``.
 
     Returns
     -------
@@ -345,18 +357,14 @@ def explain_instance(
 
     """
     audience = coerce_enum(Audience, audience)
-    facts = compute_local_facts(
-        ebm,
-        instance,
-        LocalOptions(**{k: v for k, v in kwargs.items() if k in _LOCAL_OPTION_NAMES}),
-    )
+    facts = compute_local_facts(ebm, instance, local)
     texts = facts_to_texts(facts, audience)
     result = baml_sdk.explain_local(
         global_explanation=global_explanation,
         facts=baml_sdk.LocalFactTexts(**texts),
         audience=audience.value,
         num_sentences=num_sentences,
-        opts=_prompt_options(kwargs),
+        opts=_prompt_options(prompt),
     )
     logger.info(
         "usage",

@@ -4,6 +4,14 @@
 
 ::: ebaml.descriptors
 
+## Options
+
+::: ebaml.options
+
+## Retry after a cut-off reply
+
+::: ebaml.retry
+
 ## Local explanations
 
 ::: ebaml.local

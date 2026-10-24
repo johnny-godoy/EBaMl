@@ -1,5 +1,7 @@
 """Tests for the LLM descriptors."""
 
+import inspect
+
 import pytest
 from baml_bridge.errors import BamlError
 from interpret.glassbox import ExplainableBoostingClassifier
@@ -7,9 +9,10 @@ from structlog.testing import capture_logs
 
 import baml_sdk
 from ebaml import descriptors, local
-from ebaml.custom_types import Audience
+from ebaml.custom_types import Audience, FeatureType, Normalization
 from ebaml.exceptions import EBMGraphSimplificationError, InvalidOptionError
 from ebaml.graphs import EBMGraph
+from ebaml.options import GraphOptions, PromptOptions
 from tests.unit.ebaml.conftest import fake_model
 
 FAKE_EBM: ExplainableBoostingClassifier = fake_model()
@@ -40,53 +43,76 @@ def default_options(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_prompt_options_defaults() -> None:
-    assert descriptors._prompt_options({}).model_dump() == DEFAULTS
+    assert descriptors._prompt_options(PromptOptions()).model_dump() == DEFAULTS
 
 
 def test_prompt_options_overrides_and_ignores_none() -> None:
-    opts = descriptors._prompt_options({"task_description": "new", "graph_description": None, "other": 1})
+    opts = descriptors._prompt_options(PromptOptions(task_description="new", graph_description=None))
     assert opts.model_dump() == {**DEFAULTS, "task_description": "new"}
 
 
-def test_graph_text_filters_kwargs(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_prompt_options_override_every_description() -> None:
+    options = PromptOptions(
+        expert_description="e",
+        graph_description="g2",
+        dataset_description="d2",
+        task_description="t2",
+    )
+    assert descriptors._prompt_options(options).model_dump() == {
+        "expert_description": "e",
+        "graph_description": "g2",
+        "dataset_description": "d2",
+        "task_description": "t2",
+    }
+
+
+def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> None:
     seen = {}
 
     class FakeGraph:
         @staticmethod
-        def to_text(*, include_description: bool = True, check_budget: object = None) -> str:
-            seen["to_text"] = (include_description, check_budget)
+        def to_text(**kwargs: object) -> str:
+            seen["to_text"] = kwargs
             return "text"
 
     def from_ebm(
         ebm: ExplainableBoostingClassifier,
         feature_index: int,
+        normalization: Normalization,
         *,
-        use_feature_bounds: bool = True,
+        use_feature_bounds: bool,
     ) -> FakeGraph:
-        seen["from_ebm"] = (ebm, feature_index, use_feature_bounds)
+        seen["from_ebm"] = (ebm, feature_index, normalization, use_feature_bounds)
         return FakeGraph()
 
     monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(from_ebm))
-    kwargs = {"use_feature_bounds": False, "include_description": False, "task_description": "x"}
-    assert descriptors._graph_text(FAKE_EBM, 4, kwargs) == "text"
+    options = GraphOptions(
+        normalization=Normalization.Z_SCORE,
+        use_feature_bounds=False,
+        include_description=False,
+        feature_format=FeatureType.BOOLEAN,
+        x_axis_precision=2,
+        y_axis_precision=3,
+        confidence_bounds=False,
+        confidence_level=0.8,
+        max_tokens=11,
+        overbudget_percent=7,
+    )
+    assert descriptors._graph_text(FAKE_EBM, 4, options) == "text"
     assert seen == {
-        "from_ebm": (FAKE_EBM, 4, False),
-        "to_text": (False, baml_sdk.check_token_budget),
+        "from_ebm": (FAKE_EBM, 4, Normalization.Z_SCORE, False),
+        "to_text": {
+            "include_description": False,
+            "feature_format": FeatureType.BOOLEAN,
+            "x_axis_precision": 2,
+            "y_axis_precision": 3,
+            "confidence_bounds": False,
+            "confidence_level": 0.8,
+            "max_tokens": 11,
+            "overbudget_percent": 7,
+            "check_budget": baml_sdk.check_token_budget,
+        },
     }
-
-
-def test_graph_text_lets_the_caller_replace_the_budget_check(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen = []
-
-    class FakeGraph:
-        @staticmethod
-        def to_text(*, check_budget: object) -> str:
-            seen.append(check_budget)
-            return "text"
-
-    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(lambda *_args, **_kwargs: FakeGraph()))
-    assert descriptors._graph_text(FAKE_EBM, 0, {"check_budget": "mine"}) == "text"
-    assert seen == ["mine"]
 
 
 def test_log_usage(counted: baml_sdk.Counted) -> None:
@@ -100,11 +126,18 @@ def test_describe_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, kwargs: f"graph{idx}:{sorted(kwargs)}")
+    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, options: f"graph{idx}:{options.max_tokens}")
     calls = {}
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: calls.update(kw) or counted)
-    assert descriptors.describe_graph(fake_ebm, 1, num_sentences=2, task_description="T") == "answer"
-    assert calls["graph"] == "graph1:['task_description']"
+    result = descriptors.describe_graph(
+        fake_ebm,
+        1,
+        num_sentences=2,
+        graph=GraphOptions(max_tokens=5),
+        prompt=PromptOptions(task_description="T"),
+    )
+    assert result == "answer"
+    assert calls["graph"] == "graph1:5"
     assert calls["num_sentences"] == 2
     assert calls["opts"].task_description == "T"
 
@@ -147,7 +180,11 @@ def test_describe_ebm_retries_a_truncated_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, _idx, kwargs: "short" if kwargs else "x" * 300)
+    monkeypatch.setattr(
+        descriptors,
+        "_graph_text",
+        lambda _ebm, _idx, options: "x" * 300 if options == GraphOptions() else "short",
+    )
     seen = []
 
     def cot(*, graph: str, **_kw: object) -> baml_sdk.Counted:
@@ -186,13 +223,6 @@ def test_describe_ebm_defaults(
     monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **kw: calls.update(kw) or counted)
     descriptors.describe_ebm(fake_ebm)
     assert calls["num_sentences"] == 30
-
-
-def test_accepted_kwargs() -> None:
-    def func(a: int, b: int) -> int:
-        return a * b + 1
-
-    assert descriptors._accepted_kwargs(func, {"a": 1, "c": 3}) == {"a": 1}
 
 
 def test_feature_importances_to_text() -> None:
@@ -237,8 +267,8 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
             {"a": 1},
             "GLOBAL",
             audience="data_scientist",
-            confidence_level=0.9,
-            expert_description="E",
+            local=local.LocalOptions(confidence_level=0.9),
+            prompt=PromptOptions(expert_description="E"),
         )
     assert (result.counterfactual, result.sufficient_reason, result.completions) == ("cf", "sr", "cc")
     assert seen["compute"] == (FAKE_EBM, {"a": 1}, local.LocalOptions(confidence_level=0.9))
@@ -291,9 +321,9 @@ def test_describe_graph_simplifies_after_truncated_reply(
 ) -> None:
     texts = []
 
-    def graph_text(_ebm: object, _idx: int, kwargs: dict) -> str:
-        texts.append(kwargs)
-        return "x" * (900 if not kwargs else 300)
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+        texts.append(options)
+        return "x" * (900 if options == GraphOptions() else 300)
 
     replies = [_finish_error("MaxTokens"), counted]
 
@@ -307,7 +337,7 @@ def test_describe_graph_simplifies_after_truncated_reply(
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
     assert descriptors.describe_graph(fake_ebm, 0) == "answer"
     # estimate is 300 tokens, so the retry asks for 75% of it with no tolerance
-    assert texts == [{}, {"max_tokens": 225, "overbudget_percent": 0}]
+    assert texts == [GraphOptions(), GraphOptions(max_tokens=225, overbudget_percent=0)]
 
 
 def test_describe_graph_does_not_retry_other_errors(
@@ -328,8 +358,8 @@ def test_describe_graph_reraises_when_graph_cannot_shrink(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
 ) -> None:
-    def graph_text(_ebm: object, _idx: int, kwargs: dict) -> str:
-        if kwargs:
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+        if options != GraphOptions():
             msg = "too complex"
             raise EBMGraphSimplificationError(msg)
         return "g"
@@ -440,3 +470,54 @@ def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
     monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
     descriptors.describe_ebm(fake_ebm)
     assert workers == [8]
+
+
+def test_describe_ebm_passes_the_options_to_every_graph_and_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    graph_options = []
+    graph_calls = []
+    summary_calls = {}
+    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, _idx, options: graph_options.append(options) or "g")
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: graph_calls.append(kw) or counted)
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **kw: summary_calls.update(kw) or counted)
+    options = GraphOptions(max_tokens=9)
+    descriptors.describe_ebm(fake_ebm, graph=options, prompt=PromptOptions(dataset_description="D"))
+    assert graph_options == [options, options]
+    assert [call["opts"].dataset_description for call in graph_calls] == ["D", "D"]
+    assert summary_calls["opts"].dataset_description == "D"
+
+
+def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+    monkeypatch.setattr(
+        descriptors,
+        "compute_local_facts",
+        lambda _ebm, _instance, options: seen.append(options) or _facts(),
+    )
+    monkeypatch.setattr(
+        descriptors,
+        "facts_to_texts",
+        lambda *_a: dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x"),
+    )
+    text = baml_sdk.LocalExplanationText(
+        counterfactual="",
+        sufficient_reason="",
+        completions="",
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+    )
+    monkeypatch.setattr(baml_sdk, "explain_local", lambda **_kw: text)
+    descriptors.explain_instance(FAKE_EBM, {}, "G")
+    assert seen == [local.LocalOptions()]
+
+
+def test_option_arguments_are_keyword_only() -> None:
+    for function in (descriptors.describe_graph, descriptors.describe_ebm, descriptors.explain_instance):
+        kinds = {
+            name: parameter.kind
+            for name, parameter in inspect.signature(function).parameters.items()
+            if name in {"graph", "prompt", "local"}
+        }
+        assert set(kinds.values()) == {inspect.Parameter.KEYWORD_ONLY}
