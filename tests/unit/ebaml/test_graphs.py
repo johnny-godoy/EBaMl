@@ -1,5 +1,6 @@
 """Tests for the EBM graphs."""
 
+import inspect
 import itertools
 import warnings
 from collections.abc import Callable
@@ -11,7 +12,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 import baml_sdk
 from ebaml.custom_types import FeatureType, Normalization
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
-from ebaml.graphs import EBMGraph
+from ebaml.graphs import BudgetCheck, EBMGraph, TokenBudget
 from tests.unit.ebaml.conftest import fake_model
 
 INF = float("inf")
@@ -560,3 +561,23 @@ def test_to_text_rejects_more_stds_than_scores() -> None:
     graph = EBMGraph("color", "nominal", ["a", "b"], [0.1, 0.2], [0.1, 0.1, 0.1])
     with pytest.raises(ValueError, match="longer"):
         graph.to_text()
+
+
+def test_baml_check_satisfies_the_budget_check_protocol() -> None:
+    assert isinstance(baml_sdk.check_token_budget, BudgetCheck)
+    assert isinstance(budget("ok"), TokenBudget)
+
+
+def test_budget_check_protocol_takes_keyword_arguments_only() -> None:
+    kinds = {name: parameter.kind for name, parameter in inspect.signature(BudgetCheck.__call__).parameters.items()}
+    assert kinds == {
+        "self": inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        "text": inspect.Parameter.KEYWORD_ONLY,
+        "max_tokens": inspect.Parameter.KEYWORD_ONLY,
+        "overbudget_percent": inspect.Parameter.KEYWORD_ONLY,
+    }
+
+
+def test_token_budget_protocol_members_are_read_only_properties() -> None:
+    assert isinstance(TokenBudget.estimated_tokens, property)
+    assert isinstance(TokenBudget.status, property)
