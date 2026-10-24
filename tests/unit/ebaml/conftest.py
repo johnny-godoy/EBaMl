@@ -51,6 +51,17 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
     return fit
 
 
+@pytest.fixture(scope="module")
+def continuous_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+    rng = np.random.default_rng(2)
+    data = pd.DataFrame({"a": rng.normal(size=600), "b": rng.normal(size=600), "c": rng.choice(["x", "y"], 600)})
+    noise = rng.normal(size=600)
+    target = ((2 * data["a"] + 0.3 * data["b"] + (data["c"] == "x") + noise) > 0).astype(int)
+    return fit_ebm(data, target, interactions=0, random_state=0), data
+
+
 # fake_model builds EBM instances with preset attributes, so tests can pass them where an EBM type is required.
 def fake_model(**attributes: Any) -> ExplainableBoostingClassifier:  # ruff: ignore[any-type] -- attribute values are arbitrary test data
     """Build an EBM without fitting it, and set the given attributes on it.

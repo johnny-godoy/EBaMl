@@ -1,0 +1,211 @@
+"""Put the local facts of one EBM prediction in words, as JSON texts for the LLM prompts.
+
+``ebaml.local`` computes the facts. This module only renders them, for one audience: a layperson gets words in place
+of the model numbers, so the LLM has no number to repeat, and a data scientist gets the numbers. The prompts that read
+the texts are in ``baml_src/local_explanations.baml``.
+"""
+
+import abc
+from collections.abc import Mapping
+from typing import Any, override
+
+import orjson
+
+from ebaml.custom_types import Audience
+from ebaml.local import Change, Contribution, Counterfactual, LocalFacts, Prediction, SufficientReason
+
+_LIKELIHOOD_WORDS = (
+    (0.95, "almost certain"),
+    (0.8, "very likely"),
+    (0.6, "likely"),
+    (0.4, "about as likely as not"),
+    (0.2, "unlikely"),
+    (0.05, "very unlikely"),
+)
+_STRENGTH_WORDS = ((0.5, "strongly"), (0.2, "moderately"))
+
+
+def _likelihood(probability: float) -> str:
+    for threshold, word in _LIKELIHOOD_WORDS:
+        if probability >= threshold:
+            return word
+    return "almost impossible"
+
+
+def _strength(score: float) -> str:
+    for threshold, word in _STRENGTH_WORDS:
+        if abs(score) >= threshold:
+            return word
+    return "slightly"
+
+
+def _dump(data: Mapping[str, Any]) -> str:
+    return orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
+
+
+def _round(value: float) -> float:
+    return round(value, 3)
+
+
+class _AudienceRenderer(abc.ABC):
+    """The parts of the fact texts that depend on the audience.
+
+    ``facts_to_texts`` builds the keys that all audiences share. Each method here returns the keys that one audience
+    adds, so a new audience is a new subclass and one entry in ``_RENDERERS``.
+    """
+
+    @abc.abstractmethod
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+        """Return the keys that describe the size of one contribution."""
+
+    @abc.abstractmethod
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+        """Return the keys that describe how sure the model is of the prediction."""
+
+    @abc.abstractmethod
+    def change(self, change: Change) -> dict[str, Any]:
+        """Return the keys that describe the size of one change of the counterfactual."""
+
+    @abc.abstractmethod
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+        """Return the keys that tell how sure the flip of the counterfactual is."""
+
+    @abc.abstractmethod
+    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+        """Return the keys that describe the margin of the sufficient reason."""
+
+    @abc.abstractmethod
+    def share(self, share: float) -> float | str:
+        """Return the share of completions with the same prediction."""
+
+
+class _LaypersonRenderer(_AudienceRenderer):
+    """Replace every model number by a word, so the LLM has no number to repeat."""
+
+    @override
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+        # a score points towards the prediction if it has the sign of the logit; a logit of 0 is the negative class
+        direction = (
+            "towards" if (contribution.score if prediction.logit > 0 else -contribution.score) > 0 else "against"
+        )
+        return {"effect": f"{_strength(contribution.score)} {direction} this prediction"}
+
+    @override
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+        return {"likelihood": _likelihood(prediction.probability)}
+
+    @override
+    def change(self, change: Change) -> dict[str, Any]:
+        return {}
+
+    @override
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+        return {
+            "flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0,
+            "likelihood_of_new_prediction": _likelihood(counterfactual.new_probability),
+        }
+
+    @override
+    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+        return {}
+
+    @override
+    def share(self, share: float) -> float | str:
+        return _likelihood(share)
+
+
+class _DataScientistRenderer(_AudienceRenderer):
+    """Give the scores, the probabilities and the confidence interval, rounded."""
+
+    @override
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+        return {"score": _round(contribution.score), "std": _round(contribution.std)}
+
+    @override
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+        return {
+            "probability": _round(prediction.probability),
+            "confidence_interval": [_round(prediction.lower), _round(prediction.upper)],
+            "confidence_level": confidence_level,
+            "logit": _round(prediction.logit),
+        }
+
+    @override
+    def change(self, change: Change) -> dict[str, Any]:
+        return {"score_change": _round(change.score_change)}
+
+    @override
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+        return {
+            "flip_holds_at_confidence": confidence_level,
+            "probability_of_new_prediction": _round(counterfactual.new_probability),
+        }
+
+    @override
+    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+        return {"guaranteed_margin_logit": _round(reason.guaranteed_margin)}
+
+    @override
+    def share(self, share: float) -> float | str:
+        return _round(share)
+
+
+_RENDERERS: Mapping[Audience, _AudienceRenderer] = {
+    Audience.LAYPERSON: _LaypersonRenderer(),
+    Audience.DATA_SCIENTIST: _DataScientistRenderer(),
+}
+
+
+def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -> dict[str, str]:
+    """Render the facts as one JSON text per explanation, for the prompts.
+
+    For a layperson the model numbers (scores, probabilities, intervals) are replaced by words, so the LLM has none to
+    repeat. A data scientist gets the numbers.
+
+    Parameters
+    ----------
+    facts: LocalFacts
+        The facts of the prediction.
+    audience: Audience, default=Audience.LAYPERSON
+        Who will read the explanation.
+
+    Returns
+    -------
+    dict[str, str]
+        The keys ``prediction``, ``counterfactual``, ``sufficient_reason`` and ``completions``.
+
+    """
+    renderer = _RENDERERS[audience]
+    p = facts.prediction
+    prediction: dict[str, Any] = {"predicted_class": p.label}
+    prediction["contributions_largest_first"] = [
+        {"feature": c.feature, "value": c.value} | renderer.contribution(c, p) for c in facts.contributions
+    ]
+    prediction |= renderer.prediction(p, facts.confidence_level)
+
+    cf = facts.counterfactual
+    counterfactual: dict[str, Any] = {"flip_possible": cf is not None}
+    if cf is not None:
+        counterfactual["changes"] = [
+            {"feature": c.feature, "from": c.from_value, "to": c.to_value} | renderer.change(c) for c in cf.changes
+        ]
+        counterfactual["minimum_number_of_changes"] = len(cf.changes)
+        counterfactual |= renderer.flip(cf, facts.confidence_level)
+
+    all_names = [c.feature for c in facts.contributions]
+    sr = facts.sufficient_reason
+    sufficient: dict[str, Any] = {"exists": sr is not None}
+    if sr is not None:
+        sufficient["features"] = sr.features
+        sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
+        sufficient |= renderer.margin(sr)
+
+    completions = [
+        {"known_features": s.fixed, "share_with_same_prediction": renderer.share(s.share)} for s in facts.completions
+    ]
+    return {
+        "prediction": _dump(prediction),
+        "counterfactual": _dump(counterfactual),
+        "sufficient_reason": _dump(sufficient),
+        "completions": _dump({"steps": completions}),
+    }

@@ -8,6 +8,10 @@
 
 ::: ebaml.local
 
+## Text of the local explanations
+
+::: ebaml.local_text
+
 ## Graphs
 
 ::: ebaml.graphs
