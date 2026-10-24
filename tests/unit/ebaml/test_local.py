@@ -1,18 +1,15 @@
 """Tests for the deterministic local explanations."""
 
 import itertools
-import json
 import math
 from collections.abc import Callable, Iterator
 
-import attrs
 import numpy as np
 import pandas as pd
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
 
 from ebaml import local
-from ebaml.custom_types import Audience
 from ebaml.graphs import EBMGraph
 from tests.unit.ebaml.conftest import fake_model
 
@@ -29,17 +26,6 @@ def categorical_ebm(
     effect = data["f0"].map({"p": 1.5, "q": 0.0, "r": -1.5}) + data["f1"].map({"p": 0.5, "q": 0.0, "r": -0.5})
     effect += data["f2"].map({"p": 0.2, "q": 0.0, "r": -0.2}) + rng.normal(size=900) * 0.3
     target = (effect > 0).astype(int)
-    return fit_ebm(data, target, interactions=0, random_state=0), data
-
-
-@pytest.fixture(scope="module")
-def continuous_ebm(
-    fit_ebm: Callable[..., ExplainableBoostingClassifier],
-) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
-    rng = np.random.default_rng(2)
-    data = pd.DataFrame({"a": rng.normal(size=600), "b": rng.normal(size=600), "c": rng.choice(["x", "y"], 600)})
-    noise = rng.normal(size=600)
-    target = ((2 * data["a"] + 0.3 * data["b"] + (data["c"] == "x") + noise) > 0).astype(int)
     return fit_ebm(data, target, interactions=0, random_state=0), data
 
 
@@ -169,42 +155,6 @@ def test_rejects_interactions_and_bad_confidence(continuous_ebm: tuple, fit_ebm:
         local.compute_local_facts(with_interactions, frame.iloc[0].to_dict())
 
 
-def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple) -> None:
-    ebm, data = continuous_ebm
-    facts = local.compute_local_facts(ebm, data.iloc[0].to_dict())
-    layperson = local.facts_to_texts(facts)
-    expert = local.facts_to_texts(facts, Audience.DATA_SCIENTIST)
-    assert set(layperson) == {"prediction", "counterfactual", "sufficient_reason", "completions"}
-    for text in layperson.values():
-        for key in ("score", "std", "probability", "logit", "confidence"):
-            assert key not in text
-    assert "score" in expert["prediction"]
-    assert "flip_holds_at_confidence" in expert["counterfactual"]
-    assert "confidence_interval" in expert["prediction"]
-    assert json.loads(expert["completions"])["steps"][0]["share_with_same_prediction"] <= 1
-
-
-@pytest.mark.parametrize(
-    ("probability", "word"),
-    [
-        (0.99, "almost certain"),
-        (0.85, "very likely"),
-        (0.7, "likely"),
-        (0.5, "about as likely as not"),
-        (0.3, "unlikely"),
-        (0.1, "very unlikely"),
-        (0.01, "almost impossible"),
-    ],
-)
-def test_likelihood_words(probability: float, word: str) -> None:
-    assert local._likelihood(probability) == word
-
-
-@pytest.mark.parametrize(("score", "word"), [(-0.6, "strongly"), (0.3, "moderately"), (0.1, "slightly")])
-def test_strength_words(score: float, word: str) -> None:
-    assert local._strength(score) == word
-
-
 def _feature(
     scores: list[float],
     bin_index: int,
@@ -233,14 +183,6 @@ def test_counterfactual_skips_unplausible_bins() -> None:
 def test_sufficient_reason_is_none_when_not_even_all_features_guarantee() -> None:
     features = [_feature([0.5, -2.0], 0, std=1.0), _feature([0.5, -2.0], 0, std=1.0)]
     assert local._sufficient_reason(features, intercept=0.0, sign=1, z=1.96) is None
-
-
-def test_texts_without_counterfactual_or_sufficient_reason() -> None:
-    prediction = local.Prediction(label=0, probability=0.7, lower=0.6, upper=0.8, logit=-0.8, logit_std=0.1)
-    facts = local.LocalFacts(prediction, [], None, None, [], 0.95)
-    texts = local.facts_to_texts(facts, Audience.DATA_SCIENTIST)
-    assert json.loads(texts["counterfactual"]) == {"flip_possible": False}
-    assert json.loads(texts["sufficient_reason"]) == {"exists": False}
 
 
 def test_rejects_multiclass(fit_ebm: Callable) -> None:
@@ -583,157 +525,3 @@ def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pyt
 def test_facts_reject_a_confidence_level_out_of_range(confidence_level: float) -> None:
     with pytest.raises(ValueError, match="confidence_level"):
         local.compute_local_facts(_hand_model(), {}, local.LocalOptions(confidence_level=confidence_level))
-
-
-@pytest.mark.parametrize(
-    ("probability", "word"),
-    [
-        (0.95, "almost certain"),
-        (0.8, "very likely"),
-        (0.6, "likely"),
-        (0.4, "about as likely as not"),
-        (0.2, "unlikely"),
-        (0.05, "very unlikely"),
-    ],
-)
-def test_likelihood_words_start_at_their_threshold(probability: float, word: str) -> None:
-    assert local._likelihood(probability) == word
-
-
-@pytest.mark.parametrize(
-    ("score", "word"),
-    [(0.5, "strongly"), (-0.5, "strongly"), (0.2, "moderately"), (-0.2, "moderately")],
-)
-def test_strength_words_start_at_their_threshold(score: float, word: str) -> None:
-    assert local._strength(score) == word
-
-
-def test_round_keeps_three_decimals() -> None:
-    assert local._round(0.12351) == pytest.approx(0.124, abs=1e-12)
-    assert local._round(0.12349) == pytest.approx(0.123, abs=1e-12)
-
-
-def _text_facts(logit: float, scores: list[float], confidence_level: float = 0.95) -> local.LocalFacts:
-    contributions = [local.Contribution(f"f{i}", i, score, 0.1) for i, score in enumerate(scores)]
-    prediction = local.Prediction(label="y", probability=0.7, lower=0.6, upper=0.8, logit=logit, logit_std=0.1)
-    return local.LocalFacts(prediction, contributions, None, None, [], confidence_level)
-
-
-@pytest.mark.parametrize(
-    ("logit", "scores", "effects"),
-    [
-        (1.4, [0.6, -0.3, 0.0], ["strongly towards", "moderately against", "slightly against"]),
-        (-0.8, [-0.6, 0.3, 0.0], ["strongly towards", "moderately against", "slightly against"]),
-        (0.0, [-0.3], ["moderately towards"]),  # a logit of 0 belongs to the negative class
-        (0.5, [0.3, -0.3], ["moderately towards", "moderately against"]),
-    ],
-)
-def test_layperson_effects_point_towards_or_against_the_prediction(
-    logit: float,
-    scores: list[float],
-    effects: list[str],
-) -> None:
-    texts = local.facts_to_texts(_text_facts(logit, scores))
-    found = [entry["effect"] for entry in json.loads(texts["prediction"])["contributions_largest_first"]]
-    assert found == [f"{effect} this prediction" for effect in effects]
-
-
-def test_layperson_text_of_a_prediction() -> None:
-    texts = local.facts_to_texts(_text_facts(1.4, [0.6]))
-    assert json.loads(texts["prediction"]) == {
-        "predicted_class": "y",
-        "contributions_largest_first": [{"feature": "f0", "value": 0, "effect": "strongly towards this prediction"}],
-        "likelihood": "likely",
-    }
-
-
-def test_data_scientist_text_of_a_prediction() -> None:
-    texts = local.facts_to_texts(_text_facts(1.4, [0.6123]), Audience.DATA_SCIENTIST)
-    assert json.loads(texts["prediction"]) == {
-        "predicted_class": "y",
-        "contributions_largest_first": [{"feature": "f0", "value": 0, "score": 0.612, "std": 0.1}],
-        "probability": 0.7,
-        "confidence_interval": [0.6, 0.8],
-        "confidence_level": 0.95,
-        "logit": 1.4,
-    }
-
-
-def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
-    change = local.Change("f0", 1.0, "[2, 3)", -0.1234)
-    steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
-    return attrs.evolve(
-        _text_facts(1.4, [0.6, 0.1], confidence_level),
-        counterfactual=local.Counterfactual([change], 0.3),
-        sufficient_reason=local.SufficientReason(["f0"], 0.9876),
-        completions=steps,
-    )
-
-
-def test_layperson_text_of_the_explanations() -> None:
-    texts = local.facts_to_texts(_text_facts_with_everything(0.95))
-    assert json.loads(texts["counterfactual"]) == {
-        "flip_possible": True,
-        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)"}],
-        "minimum_number_of_changes": 1,
-        "flip_holds_even_if_the_model_is_somewhat_off": True,
-        "likelihood_of_new_prediction": "unlikely",
-    }
-    assert json.loads(texts["sufficient_reason"]) == {
-        "exists": True,
-        "features": ["f0"],
-        "features_not_needed": ["f1"],
-    }
-    assert json.loads(texts["completions"]) == {
-        "steps": [
-            {"known_features": [], "share_with_same_prediction": "about as likely as not"},
-            {"known_features": ["f0"], "share_with_same_prediction": "very unlikely"},
-        ],
-    }
-
-
-def test_data_scientist_text_of_the_explanations() -> None:
-    texts = local.facts_to_texts(_text_facts_with_everything(0.95), Audience.DATA_SCIENTIST)
-    assert json.loads(texts["counterfactual"]) == {
-        "flip_possible": True,
-        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)", "score_change": -0.123}],
-        "minimum_number_of_changes": 1,
-        "flip_holds_at_confidence": 0.95,
-        "probability_of_new_prediction": 0.3,
-    }
-    assert json.loads(texts["sufficient_reason"]) == {
-        "exists": True,
-        "features": ["f0"],
-        "features_not_needed": ["f1"],
-        "guaranteed_margin_logit": 0.988,
-    }
-    assert json.loads(texts["completions"]) == {
-        "steps": [
-            {"known_features": [], "share_with_same_prediction": 0.5},
-            {"known_features": ["f0"], "share_with_same_prediction": 0.124},
-        ],
-    }
-
-
-@pytest.mark.parametrize(("confidence_level", "holds"), [(-0.5, False), (0.0, False), (0.5, True), (2.0, True)])
-def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
-    texts = local.facts_to_texts(_text_facts_with_everything(confidence_level))
-    assert json.loads(texts["counterfactual"])["flip_holds_even_if_the_model_is_somewhat_off"] is holds
-
-
-RENDERER_METHODS = ["contribution", "prediction", "change", "flip", "margin", "share"]
-
-
-@pytest.mark.parametrize("missing", RENDERER_METHODS)
-def test_a_renderer_must_define_every_method(missing: str) -> None:
-    others = {name: lambda *_args: None for name in RENDERER_METHODS if name != missing}
-    incomplete = type("Incomplete", (local._AudienceRenderer,), others)
-    with pytest.raises(TypeError, match=missing):
-        incomplete()
-
-
-@pytest.mark.parametrize("name", RENDERER_METHODS)
-@pytest.mark.parametrize("audience", list(Audience))
-def test_renderers_mark_the_methods_they_override(audience: Audience, name: str) -> None:
-    method = type(local._RENDERERS[audience]).__dict__[name]
-    assert method.__override__ is True

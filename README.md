@@ -161,7 +161,7 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 | `src/ebaml/graphs.py`, `graph_text.py`, `descriptors.py` | Graph extraction and simplification (numpy, `interpret`), the text the LLM reads, then calls into BAML. |
 | `src/ebaml/custom_types.py`, `exceptions.py`, `model_properties.py`, `utils.py` | Shared types, errors and helpers. |
 | `baml_src/talk_to_ebm.baml` | Prompts, LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
-| `src/ebaml/local.py`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, and the prompts that put them in words. |
+| `src/ebaml/local.py`, `src/ebaml/local_text.py`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
 | `baml_src/talk_to_ebm_test.baml` | Offline tests on a scripted client. |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |

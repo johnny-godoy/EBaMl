@@ -33,7 +33,7 @@ EBM + one input
       │  ebaml.local (Python, deterministic)
       ▼
 Facts: prediction, counterfactual, sufficient reason, completions
-      │  facts_to_texts(audience)
+      │  ebaml.local_text.facts_to_texts(audience)
       ▼
 One JSON text per explanation ──┐
                                 ├──▶ BAML explain_local (3 LLM calls) ──▶ LocalExplanation
@@ -42,7 +42,8 @@ Global explanation (describe_ebm) ┘                                         (3
 
 1. `compute_local_facts` reads the scores and confidence intervals of the EBM and works out the facts. It is
    deterministic: the same model and input always give the same facts.
-2. `facts_to_texts` renders each fact as JSON for the audience. This is where numbers are removed for a layperson.
+2. `facts_to_texts` (module `ebaml.local_text`) renders each fact as JSON for the audience. This is where numbers are
+   removed for a layperson.
 3. `explain_local` (BAML, `baml_src/local_explanations.baml`) makes three LLM calls concurrently, one per
    explanation. Each prompt starts with the **global explanation** of the model, so the LLM knows what the features
    mean, then the prediction, a question, and the facts.
@@ -112,7 +113,8 @@ You can see exactly what the LLM reads, without calling it:
 
 ```python
 from ebaml.custom_types import Audience
-from ebaml.local import compute_local_facts, facts_to_texts
+from ebaml.local import compute_local_facts
+from ebaml.local_text import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
 texts = facts_to_texts(facts, Audience.DATA_SCIENTIST)

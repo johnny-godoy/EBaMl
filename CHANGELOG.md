@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING:** `facts_to_texts` moved from `ebaml.local` to the new module `ebaml.local_text`. `ebaml.local` now computes
+  the facts only, and `ebaml.local_text` renders them. Change `from ebaml.local import facts_to_texts` to
+  `from ebaml.local_text import facts_to_texts`.
+
 ## [0.0.2] - 2026-10-23
 
 ### Added

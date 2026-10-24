@@ -17,7 +17,8 @@ import baml_sdk
 from ebaml.custom_types import Audience, ExplainableBoostingModel, coerce_enum
 from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
 from ebaml.graphs import EBMGraph
-from ebaml.local import LocalFacts, LocalOptions, compute_local_facts, facts_to_texts
+from ebaml.local import LocalFacts, LocalOptions, compute_local_facts
+from ebaml.local_text import facts_to_texts
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
