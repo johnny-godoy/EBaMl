@@ -19,15 +19,15 @@ class LocalExplanationText {
 }
 
 function local_system_msg(expert_description: string) -> string {
-    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You are given an explanation of the whole model and facts about one prediction that were computed exactly from the model. Use only those facts: never invent feature effects, values or probabilities that are not in them.`
+    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
 // The audience decides the vocabulary. The facts of a "layperson" carry no model numbers, but the instruction repeats it.
 function audience_guidance(audience: "layperson" | "data_scientist") -> string {
     if (audience == "data_scientist") {
-        return "The reader is a data scientist. Be precise: quote the scores (log-odds contributions), probabilities and confidence intervals from the facts, and say how uncertain a statement is when the facts show wide confidence intervals.";
+        return "The reader is a data scientist, so be precise. Quote the scores (log-odds contributions), probabilities and confidence intervals from the facts. Say how uncertain a statement is when the facts show wide confidence intervals.";
     };
-    "The reader is not technical and knows no statistics. Do not use any number that describes the model (scores, log-odds, probabilities, percentages, intervals, standard deviations), and do not use jargon. Values of the person's own inputs (for example their age) are fine. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'."
+    "The reader is not technical and knows no statistics, so write in everyday words. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. Mention only values of the person's own inputs (for example their age), because model numbers (scores, log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader."
 }
 
 function local_user_msg(
@@ -39,42 +39,63 @@ function local_user_msg(
     dataset_description: string,
 ) -> string {
     let msg = `
-        Here is an explanation of the whole model:
-
+        <global_explanation>
         ${global_explanation}
+        </global_explanation>
     `
         + "\n\n";
     if (dataset_description.length() > 0) {
-        msg
-            = msg
-                + `Here is a description of the dataset that the model was trained on:\n\n${dataset_description}\n\n`;
+        msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
     msg
         + `
-            Here is the prediction to explain:
-
+            <prediction>
             ${prediction}
+            </prediction>
 
-            ${question}
-
-            Here are the facts, computed exactly from the model:
-
+            <facts>
             ${facts}
+            </facts>
 
+            <audience>
             ${audience_guidance(audience)}
+            </audience>
+
+            <question>
+            ${question}
+            </question>
         `
 }
 
 function counterfactual_question(num_sentences: int) -> string {
-    `Explain, in at most ${num_sentences} sentences, what would have to change for the prediction to be different. The facts list the smallest set of input changes that flips the prediction (a minimum change required), and whether the flip survives the model's uncertainty. If no change flips it, say that the prediction cannot be changed by altering the inputs. This set is exact, not a guess: no smaller set of changes flips the prediction, because the model adds up one independent effect per input. Only realistic alternative values were considered (rare extreme values are left out), and the flip is required to hold even if the model's effects are at the unfavourable edge of their confidence interval. Do not suggest changes that are not listed.`
+    `
+        Explain, in at most ${num_sentences} sentences, what would have to change for the prediction to be different.
+                The facts list the smallest set of input changes that flips the prediction (a minimum change required), and whether the flip survives the model's uncertainty.
+                This set is exact, not a guess: no smaller set of changes flips the prediction, because the model adds up one independent effect per input.
+                Only realistic alternative values were considered (rare extreme values are left out), and the flip holds even if the model's effects are at the unfavourable edge of their confidence interval.
+                Suggest only the changes that the facts list, because they are the only ones that the model supports.
+                If no change flips the prediction, say that the prediction cannot be changed by altering the inputs.
+    `
 }
 
 function sufficient_reason_question(num_sentences: int) -> string {
-    `Explain, in at most ${num_sentences} sentences, which inputs are enough to settle the prediction. The facts list a smallest set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome. If there is no such set, say that every input matters. This is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input. The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval. It is a statement about this model, not about the real world.`
+    `
+        Explain, in at most ${num_sentences} sentences, which inputs are enough to settle the prediction.
+                The facts list a smallest set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome.
+                This is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input.
+                The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval.
+                Present it as a statement about this model, not about the real world.
+                If there is no such set, say that every input matters.
+    `
 }
 
 function completions_question(num_sentences: int) -> string {
-    `Explain, in at most ${num_sentences} sentences, how the outcome gets more certain as the inputs become known. The facts give the share of people who would get the same prediction when only the first inputs are known and the rest are unknown (count completions). Describe how that share grows and which inputs make the biggest difference. Unlike the other two explanations, these shares are estimates from a large random sample that treats the unknown inputs as independent and distributed as in the training data, so describe them as approximate and never as guarantees.`
+    `
+        Explain, in at most ${num_sentences} sentences, how the outcome gets more certain as the inputs become known.
+                The facts give the share of people who would get the same prediction when only the first inputs are known and the rest are unknown (count completions).
+                Describe how that share grows and which inputs make the biggest difference.
+                Unlike the other two explanations, these shares are estimates from a large random sample that treats the unknown inputs as independent and distributed as in the training data. Describe them as approximate, because they are not guarantees.
+    `
 }
 
 function LocalCounterfactual(

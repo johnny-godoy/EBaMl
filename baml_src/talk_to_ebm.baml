@@ -29,45 +29,44 @@ function default_graph_options() -> GraphPromptOptions {
         expert_description: "an expert statistician and data scientist",
         graph_description: "",
         dataset_description: "",
-        task_description: "Please describe the general pattern of the graph.",
+        task_description: "Describe the general pattern of the graph.",
     }
 }
 
 // Prompt text helpers. Pure functions, so the Jinja `{% if %}` blocks become plain BAML.
 
 function graph_system_msg(expert_description: string) -> string {
-    `You are ${expert_description}. You interpret global explanations produced by a Generalized Additive Model (GAM). You answer all questions to the best of your ability, relying on the graphs provided by the user, any other information you are given, and your knowledge about the real world.`
+    `You are ${expert_description}. You interpret global explanations produced by a Generalized Additive Model (GAM). Base every answer on the graph from the user, on any other information you are given, and on your knowledge of the real world. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
 function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
     let msg = `
-        Below is the graph of a Generalized Additive Model (GAM). The graph is presented as a JSON object with keys representing the x-axis and values representing the y-axis. For continuous features, the keys are intervals that represent ranges where the function predicts the same value. For categorical features, each key represents a possible value that the feature can take.
+        <graph_format>
+        The graph is a JSON object. Its keys are the x-axis and its values are the y-axis. For a continuous feature, each key is an interval where the function predicts the same value. For a categorical feature, each key is a possible value of the feature.
+        The graph contains these items:
+        1. The name of the feature.
+        2. The type of the feature (continuous, categorical, or boolean).
+        3. The mean values.
+        4. The lower bounds of the confidence interval (optional).
+        5. The upper bounds of the confidence interval (optional).
+        </graph_format>
 
-        The graph is provided in the following format:
-            - The name of the feature depicted in the graph
-            - The type of the feature (continuous, categorical, or boolean)
-            - Mean values
-            - Lower bounds of confidence interval (optional)
-            - Upper bounds of confidence interval (optional)
-
-        Here is the graph:
-
+        <graph>
         ${graph}
+        </graph>
     `
         + "\n\n";
     if (opts.graph_description.length() > 0) {
-        msg = msg + `${opts.graph_description}\n\n`;
+        msg = msg + `<graph_description>\n${opts.graph_description}\n</graph_description>\n\n`;
     };
     if (opts.dataset_description.length() > 0) {
-        msg
-            = msg
-                + `Here is a description of the dataset that the model was trained on:\n\n${opts.dataset_description}\n\n`;
+        msg = msg + `<dataset_description>\n${opts.dataset_description}\n</dataset_description>\n\n`;
     };
-    msg + opts.task_description
+    msg + `<task>\n${opts.task_description}\n</task>`
 }
 
 function summarize_ebm_system_msg(expert_description: string) -> string {
-    `You are ${expert_description}. Your task is to provide an overall summary of a Generalized Additive Model (GAM). The model consists of different graphs that contain the effect of a specific input feature. `
+    `You are ${expert_description}. You provide an overall summary of a Generalized Additive Model (GAM). The model consists of different graphs, and each graph shows the effect of one input feature. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
 function summarize_ebm_msg(
@@ -76,30 +75,45 @@ function summarize_ebm_msg(
     dataset_description: string,
 ) -> string {
     let msg = `
-        Your task is to summarize a Generalized Additive Model (GAM). To perform this task, you will be given
-            - The global feature importances of the different features in the model.
-            - Summaries of the graphs for the different features in the model. There is exactly one graph for each feature in the model. Here are the global feature importances.
-
+        <feature_importances>
         ${feature_importances}
+        </feature_importances>
 
-        Here are the descriptions of the different graphs.
-
+        <graph_descriptions>
         ${graph_descriptions}
+        </graph_descriptions>
     `
         + "\n\n";
     if (dataset_description.length() > 0) {
-        msg
-            = msg
-                + `Here is a description of the dataset that the model was trained on.\n\n${dataset_description}\n\n`;
+        msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
     msg
         + `
-            Now, please provide a summary of the model.
-
-            The summary should contain the most important features in the model and their effect on the outcome. Unimportant effects and features can be ignored.
-
-            Pay special attention to include any surprising patterns in the summary.
+            <instructions>
+            Summarize the model. The feature importances are global, and there is exactly one graph description for each feature.
+            Cover the most important features and their effect on the outcome. Leave out unimportant features and effects, so the summary stays short.
+            Include any surprising pattern, because the reader wants to know where the model differs from expectation.
+            </instructions>
         `
+}
+
+// Request text shared by the second turn and the replay of that turn in the third.
+function surprises_request() -> string {
+    `
+        <instructions>
+                Study the graph carefully. Highlight any region that you find surprising or counterintuitive, and name its range or category so the reader can find it. Suggest why the behavior is surprising and what may have caused it.
+                </instructions>
+    `
+}
+
+function final_description_request(num_sentences: int) -> string {
+    `
+        <instructions>
+                Describe the graph in at most ${num_sentences} sentences.
+                Include the important surprising patterns, because the reader uses them to decide where to look closer.
+                The reader knows that the graph is from a Generalized Additive Model (GAM), so leave that background out.
+                </instructions>
+    `
 }
 
 // describe_graph_cot, turn 1: system + describe_graph prompt.
@@ -124,7 +138,7 @@ function GraphSurprises(graph: string, first_pass: string, opts: GraphPromptOpti
         ${role("assistant")}
         ${first_pass}
         ${role("user")}
-        Great, now please study the graph carefully and highlight any regions you may find surprising or counterintuitive. You may also suggest an explanation for why this behavior is surprising, and what may have caused it.
+        ${surprises_request()}
     `
 }
 
@@ -145,11 +159,11 @@ function GraphFinalDescription(
         ${role("assistant")}
         ${first_pass}
         ${role("user")}
-        Great, now please study the graph carefully and highlight any regions you may find surprising or counterintuitive. You may also suggest an explanation for why this behavior is surprising, and what may have caused it.
+        ${surprises_request()}
         ${role("assistant")}
         ${surprises}
         ${role("user")}
-        Thanks. Now please provide a brief, at most ${num_sentences} sentence description of the graph. Be sure to include any important surprising patterns in the description. You can assume that the user knows that the graph is from a Generalized Additive Model (GAM).
+        ${final_description_request(num_sentences)}
     `
 }
 
@@ -185,7 +199,9 @@ function EbmSummaryShorten(
         ${role("assistant")}
         ${draft}
         ${role("user")}
-        Great. Now shorten the above summary to at most ${num_sentences} sentences. Be sure to keep the most important information.
+        <instructions>
+        Shorten your summary to at most ${num_sentences} sentences. Keep the most important information, because the reader wants the main effects and surprises.
+        </instructions>
     `
 }
 
@@ -344,7 +360,9 @@ function BenchmarkAnswer(question: string, reasoning: string, answer_format: str
         ${role("assistant")}
         ${reasoning}
         ${role("user")}
-        Thanks. Now please summarize your response by answering with ${answer_format}. Reply with the answer only.
+        <instructions>
+        Summarize your response by answering with ${answer_format}. Reply with the answer only, because a program parses your reply.
+        </instructions>
     `
 }
 
