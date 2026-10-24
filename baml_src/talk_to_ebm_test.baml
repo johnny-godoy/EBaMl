@@ -61,8 +61,8 @@ test "add_usage sums both counters" {
 test "describe_graph_msg includes optional sections only when set" {
     let bare = describe_graph_msg("GRAPH", default_graph_options());
     assert.is_true(bare.includes("GRAPH"));
-    assert.is_true(bare.includes("Please describe the general pattern of the graph."));
-    assert.is_true(!bare.includes("description of the dataset"));
+    assert.is_true(bare.includes("Describe the general pattern of the graph."));
+    assert.is_true(!bare.includes("<dataset_description>"));
 
     let opts = GraphPromptOptions { ...default_graph_options(), dataset_description: "A pneumonia dataset" };
     assert.is_true(describe_graph_msg("GRAPH", opts).includes("A pneumonia dataset"))
@@ -119,8 +119,8 @@ test "local_user_msg prepends the global explanation and follows the audience" {
     let layperson = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "layperson", "");
     assert.is_true(layperson.includes("GLOBAL"));
     assert.is_true(layperson.includes("FACTS"));
-    assert.is_true(layperson.includes("Do not use any number"));
-    assert.is_true(!layperson.includes("description of the dataset"));
+    assert.is_true(layperson.includes("model numbers"));
+    assert.is_true(!layperson.includes("<dataset_description>"));
 
     let expert = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "data_scientist", "A bank dataset");
     assert.is_true(expert.includes("confidence intervals"));
@@ -188,7 +188,7 @@ function position_of(text: string, needle: string) -> int {
 test "local_system_msg names the expert and forbids invented facts" {
     let msg = local_system_msg("a credit risk analyst");
     assert.is_true(msg.includes("You are a credit risk analyst."));
-    assert.is_true(msg.includes("never invent"))
+    assert.is_true(msg.includes("invented number"))
 }
 
 test "audience_guidance differs per audience" {
@@ -200,15 +200,15 @@ test "audience_guidance differs per audience" {
     assert.is_true(!expert.includes("not technical"))
 }
 
-test "local_user_msg orders the global explanation, dataset, prediction, question, facts and guidance" {
+test "local_user_msg orders the global explanation, dataset, prediction, facts, guidance and question" {
     let msg = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "layperson", "DATASET");
     let positions = [
         position_of(msg, "GLOBAL"),
         position_of(msg, "DATASET"),
         position_of(msg, "PRED"),
-        position_of(msg, "QUESTION"),
         position_of(msg, "FACTS"),
         position_of(msg, "not technical"),
+        position_of(msg, "QUESTION"),
     ];
     assert.is_true(positions[0] >= 0);
     assert.is_true(positions[0] < positions[1]);
@@ -347,7 +347,7 @@ test "default_graph_options is a plain statistician with no extra context" {
     assert.equal(opts.expert_description, "an expert statistician and data scientist");
     assert.equal(opts.graph_description, "");
     assert.equal(opts.dataset_description, "");
-    assert.equal(opts.task_description, "Please describe the general pattern of the graph.")
+    assert.equal(opts.task_description, "Describe the general pattern of the graph.")
 }
 
 test "estimate_tokens rounds up at every remainder" {
@@ -398,16 +398,14 @@ test "describe_graph_msg orders graph, graph description, dataset and task" {
     assert.is_true(position_of(msg, "GRAPH") < position_of(msg, "GRAPHDESC"));
     assert.is_true(position_of(msg, "GRAPHDESC") < position_of(msg, "DATASET"));
     assert.is_true(position_of(msg, "DATASET") < position_of(msg, "TASK"));
-    assert.is_true(
-        msg.includes("Here is a description of the dataset that the model was trained on"),
-    )
+    assert.is_true(msg.includes("<dataset_description>"))
 }
 
 test "describe_graph_msg leaves out each optional section on its own" {
     let only_graph = GraphPromptOptions { ...default_graph_options(), graph_description: "GRAPHDESC" };
     let msg = describe_graph_msg("GRAPH", only_graph);
     assert.is_true(msg.includes("GRAPHDESC"));
-    assert.is_true(!msg.includes("description of the dataset"));
+    assert.is_true(!msg.includes("<dataset_description>"));
 
     let only_dataset = GraphPromptOptions { ...default_graph_options(), dataset_description: "DATASET" };
     let other = describe_graph_msg("GRAPH", only_dataset);
@@ -417,7 +415,7 @@ test "describe_graph_msg leaves out each optional section on its own" {
     let custom = GraphPromptOptions { ...default_graph_options(), task_description: "MY TASK" };
     let task = describe_graph_msg("GRAPH", custom);
     assert.is_true(task.includes("MY TASK"));
-    assert.is_true(!task.includes("Please describe the general pattern"))
+    assert.is_true(!task.includes("Describe the general pattern"))
 }
 
 test "summarize_ebm_system_msg names the expert" {
@@ -431,11 +429,11 @@ test "summarize_ebm_msg orders importances, descriptions and dataset, and the da
     assert.is_true(position_of(msg, "IMPORTANCES") >= 0);
     assert.is_true(position_of(msg, "IMPORTANCES") < position_of(msg, "DESCRIPTIONS"));
     assert.is_true(position_of(msg, "DESCRIPTIONS") < position_of(msg, "DATASET"));
-    assert.is_true(position_of(msg, "DATASET") < position_of(msg, "please provide a summary"));
+    assert.is_true(position_of(msg, "DATASET") < position_of(msg, "<instructions>"));
 
     let bare = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "");
-    assert.is_true(!bare.includes("description of the dataset"));
-    assert.is_true(bare.includes("please provide a summary"))
+    assert.is_true(!bare.includes("<dataset_description>"));
+    assert.is_true(bare.includes("<instructions>"))
 }
 
 test "describe_graph_cot prompts: roles, content and sentence limit per turn" {
@@ -471,10 +469,10 @@ test "describe_graph_cot feeds each reply to the next turn in order" {
     let echo = describe_graph_cot("GRAPH", 7, default_graph_options(), client = EchoClient {});
     assert.is_true(echo.text.includes("GRAPH"));
     assert.is_true(echo.text.includes("at most 7 sentence"));
-    assert.is_true(position_of(echo.text, "Great, now please study") >= 0);
+    assert.is_true(position_of(echo.text, "Highlight any region") >= 0);
     assert.is_true(
-        position_of(echo.text, "Thanks. Now please provide")
-            > position_of(echo.text, "Great, now please study"),
+        position_of(echo.text, "Describe the graph in at most")
+            > position_of(echo.text, "Highlight any region"),
     )
 }
 
@@ -609,7 +607,7 @@ test "benchmark prompts: roles, question, reasoning and answer format" {
     assert.is_true(message_at(answer, 1).includes("QUESTION"));
     assert.equal(message_at(answer, 2).trim(), "REASONING");
     assert.is_true(message_at(answer, 3).includes("'a' or 'b'"));
-    assert.is_true(message_at(answer, 3).includes("Reply with the answer only."))
+    assert.is_true(message_at(answer, 3).includes("Reply with the answer only"))
 }
 
 test "answer_benchmark_question hands the reasoning to the answer turn" {
@@ -623,7 +621,7 @@ test "answer_benchmark_question hands the reasoning to the answer turn" {
     let echo = answer_benchmark_question("QUESTION", "'a' or 'b'", client = EchoClient {});
     assert.is_true(echo.text.includes("'a' or 'b'"));
     assert.is_true(echo.text.includes("QUESTION"));
-    assert.is_true(echo.text.includes("Thanks. Now please summarize"))
+    assert.is_true(echo.text.includes("Summarize your response"))
 }
 
 // A model turn that holds `text` and reports 1 input and 1 output token.
@@ -720,7 +718,7 @@ test "answer_benchmark_question puts the reasoning reply in the answer prompt" {
     assert.is_true(result.text.starts_with("R2<<"));
     assert.is_true(result.text.includes("R1<<"));
     assert.is_true(
-        position_of(result.text, "R1<<") < position_of(result.text, "Thanks. Now please summarize"),
+        position_of(result.text, "R1<<") < position_of(result.text, "Summarize your response"),
     )
 }
 

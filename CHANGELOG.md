@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- All prompts in `baml_src/` follow the prompting guide. Inputs are in XML tags, long data comes first and the task
+  comes last, rules give their reason, and multi-turn requests are in `<instructions>` tags. The default
+  `task_description` is now "Describe the general pattern of the graph." Compare results before and after on the
+  benchmark.
 - **BREAKING:** `ebaml.benchmark` no longer imports `baml_sdk`. `run_task(task, data_dir, limit)` is now
   `run_task(task, questions, ask)`. Load the questions with `load_questions` and cut them with a slice for a limit. Pass
   `baml_sdk.answer_benchmark_question` as `ask`, or any function with the same keyword arguments that returns an object
