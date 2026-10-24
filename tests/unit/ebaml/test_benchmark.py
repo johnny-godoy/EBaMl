@@ -9,6 +9,7 @@ import pytest
 from structlog.testing import capture_logs
 
 import baml_sdk
+from ebaml import benchmark
 from ebaml.benchmark import (
     AskQuestion,
     Outcome,
@@ -49,6 +50,10 @@ def counted(text: str, input_tokens: int = 3, output_tokens: int = 5) -> FakeRep
 
 def write_questions(tmp_path: Path, task: Task, records: list[list[str]]) -> None:
     (tmp_path / f"{task}.json").write_bytes(orjson.dumps(records))
+
+
+def test_every_task_has_one_spec() -> None:
+    assert set(benchmark._SPECS) == set(Task)
 
 
 @pytest.mark.parametrize("task", list(Task))
