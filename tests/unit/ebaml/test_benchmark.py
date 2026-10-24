@@ -1,17 +1,22 @@
 """Tests for the benchmark."""
 
+import inspect
 from pathlib import Path
 
+import attrs
 import orjson
 import pytest
 from structlog.testing import capture_logs
 
 import baml_sdk
 from ebaml.benchmark import (
+    AskQuestion,
     Outcome,
     Question,
+    Reply,
     Task,
     TaskResult,
+    Usage,
     format_results,
     is_correct,
     load_questions,
@@ -22,9 +27,24 @@ from ebaml.benchmark import (
 DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "data"
 
 
-def counted(text: str, input_tokens: int = 3, output_tokens: int = 5) -> baml_sdk.Counted:
-    usage = baml_sdk.TokenUsage(input_tokens=input_tokens, output_tokens=output_tokens)
-    return baml_sdk.Counted(text=text, usage=usage)
+@attrs.frozen
+class FakeUsage:
+    """The tokens of a fake reply."""
+
+    input_tokens: int
+    output_tokens: int
+
+
+@attrs.frozen
+class FakeReply:
+    """A reply that obeys the ``Reply`` protocol, with no LLM client."""
+
+    text: str
+    usage: FakeUsage
+
+
+def counted(text: str, input_tokens: int = 3, output_tokens: int = 5) -> FakeReply:
+    return FakeReply(text, FakeUsage(input_tokens, output_tokens))
 
 
 def write_questions(tmp_path: Path, task: Task, records: list[list[str]]) -> None:
@@ -157,21 +177,17 @@ def test_task_result_scores_the_outcomes() -> None:
     assert result.accuracy == pytest.approx(2 / 3)
 
 
-def test_run_task_asks_every_question_and_sums_the_tokens(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    write_questions(tmp_path, Task.MONOTONICITY, [["q1", "Increasing"], ["q2", "Decreasing"], ["q3", "Not monotone"]])
+def test_run_task_asks_every_question_and_sums_the_tokens() -> None:
+    questions = [Question("q1", "Increasing"), Question("q2", "Decreasing"), Question("q3", "Not monotone")]
     replies = {"q1": "Increasing", "q2": "Increasing", "q3": "Not monotone."}
     calls = []
 
-    def fake(*, question: str, answer_format: str) -> baml_sdk.Counted:
+    def ask(*, question: str, answer_format: str) -> FakeReply:
         calls.append((question, answer_format))
         return counted(replies[question], input_tokens=10, output_tokens=2)
 
-    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", fake)
     with capture_logs() as logs:
-        result = run_task(Task.MONOTONICITY, tmp_path)
+        result = run_task(Task.MONOTONICITY, questions, ask)
 
     assert calls == [(q, Task.MONOTONICITY.answer_format) for q in ("q1", "q2", "q3")]
     assert result.task is Task.MONOTONICITY
@@ -192,32 +208,42 @@ def test_task_result_without_outcomes_has_the_accuracy_zero() -> None:
     assert result.accuracy == pytest.approx(0.0)
 
 
-def test_run_task_reads_the_directory_from_a_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_questions_reads_the_directory_from_a_string(tmp_path: Path) -> None:
     write_questions(tmp_path, Task.JUMPS, [["q1", "1"]])
-    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", lambda **_kw: counted("1"))
-    assert run_task(Task.JUMPS, str(tmp_path)).correct == 1
+    assert load_questions(Task.JUMPS, str(tmp_path)) == [Question("q1", "1")]
 
 
-def test_run_task_limit_zero_asks_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_questions(tmp_path, Task.JUMPS, [["q1", "1"]])
-    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", lambda **_kw: pytest.fail("no question is expected"))
-    result = run_task(Task.JUMPS, tmp_path, limit=0)
+def test_run_task_without_questions_asks_nothing() -> None:
+    def ask(*, question: str, answer_format: str) -> FakeReply:
+        pytest.fail(f"no question is expected: {question}, {answer_format}")
+
+    result = run_task(Task.JUMPS, [], ask)
     assert result.outcomes == ()
     assert result.accuracy == pytest.approx(0.0)
 
 
-def test_run_task_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    write_questions(tmp_path, Task.JUMPS, [["q1", "1"], ["q2", "2"], ["q3", "3"]])
-    asked = []
+def test_baml_function_satisfies_the_benchmark_protocols() -> None:
+    assert isinstance(baml_sdk.answer_benchmark_question, AskQuestion)
+    reply = baml_sdk.Counted(text="a", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2))
+    assert isinstance(reply, Reply)
+    assert isinstance(reply.usage, Usage)
+    assert isinstance(counted("a"), Reply)
 
-    def fake(*, question: str, answer_format: str) -> baml_sdk.Counted:  # ruff: ignore[unused-function-argument] -- fake must accept the keywords of baml_sdk.answer_benchmark_question
-        asked.append(question)
-        return counted("1")
 
-    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", fake)
-    result = run_task(Task.JUMPS, tmp_path, limit=2)
-    assert asked == ["q1", "q2"]
-    assert len(result.outcomes) == 2
+def test_ask_question_protocol_takes_keyword_arguments_only() -> None:
+    kinds = {name: parameter.kind for name, parameter in inspect.signature(AskQuestion.__call__).parameters.items()}
+    assert kinds == {
+        "self": inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        "question": inspect.Parameter.KEYWORD_ONLY,
+        "answer_format": inspect.Parameter.KEYWORD_ONLY,
+    }
+
+
+def test_reply_protocol_members_are_read_only_properties() -> None:
+    assert isinstance(Usage.input_tokens, property)
+    assert isinstance(Usage.output_tokens, property)
+    assert isinstance(Reply.text, property)
+    assert isinstance(Reply.usage, property)
 
 
 def test_format_results() -> None:
