@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `ebaml.benchmark.run_task` accepts a `str` or any path for `data_dir`. Its type hint allowed only a `Path`, so a
+  `str` raised a `BeartypeCallHintViolation`.
+- `TaskResult.accuracy` is `0.0` for a task with no outcomes (`limit=0`). It raised a `ZeroDivisionError` before, and
+  so did `format_results`.
+
 ### Changed
 
 - **BREAKING:** `describe_graph`, `describe_ebm` and `explain_instance` no longer take `**kwargs`. Three option classes
