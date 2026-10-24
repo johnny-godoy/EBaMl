@@ -186,6 +186,26 @@ def test_run_task_asks_every_question_and_sums_the_tokens(
     ]
 
 
+def test_task_result_without_outcomes_has_the_accuracy_zero() -> None:
+    result = TaskResult(Task.JUMPS, (), input_tokens=0, output_tokens=0)
+    assert result.correct == 0
+    assert result.accuracy == pytest.approx(0.0)
+
+
+def test_run_task_reads_the_directory_from_a_string(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    write_questions(tmp_path, Task.JUMPS, [["q1", "1"]])
+    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", lambda **_kw: counted("1"))
+    assert run_task(Task.JUMPS, str(tmp_path)).correct == 1
+
+
+def test_run_task_limit_zero_asks_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    write_questions(tmp_path, Task.JUMPS, [["q1", "1"]])
+    monkeypatch.setattr(baml_sdk, "answer_benchmark_question", lambda **_kw: pytest.fail("no question is expected"))
+    result = run_task(Task.JUMPS, tmp_path, limit=0)
+    assert result.outcomes == ()
+    assert result.accuracy == pytest.approx(0.0)
+
+
 def test_run_task_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     write_questions(tmp_path, Task.JUMPS, [["q1", "1"], ["q2", "2"], ["q3", "3"]])
     asked = []
