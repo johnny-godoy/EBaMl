@@ -719,3 +719,21 @@ def test_data_scientist_text_of_the_explanations() -> None:
 def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
     texts = local.facts_to_texts(_text_facts_with_everything(confidence_level))
     assert json.loads(texts["counterfactual"])["flip_holds_even_if_the_model_is_somewhat_off"] is holds
+
+
+RENDERER_METHODS = ["contribution", "prediction", "change", "flip", "margin", "share"]
+
+
+@pytest.mark.parametrize("missing", RENDERER_METHODS)
+def test_a_renderer_must_define_every_method(missing: str) -> None:
+    others = {name: lambda *_args: None for name in RENDERER_METHODS if name != missing}
+    incomplete = type("Incomplete", (local._AudienceRenderer,), others)
+    with pytest.raises(TypeError, match=missing):
+        incomplete()
+
+
+@pytest.mark.parametrize("name", RENDERER_METHODS)
+@pytest.mark.parametrize("audience", list(Audience))
+def test_renderers_mark_the_methods_they_override(audience: Audience, name: str) -> None:
+    method = type(local._RENDERERS[audience]).__dict__[name]
+    assert method.__override__ is True
