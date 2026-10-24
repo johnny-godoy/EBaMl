@@ -36,7 +36,10 @@ def test_layout_without_problems(tmp_path: Path) -> None:
 
 
 def test_package_that_is_no_layer(tmp_path: Path) -> None:
-    found = problems(tmp_path, [*GOOD, "src/ebaml/misc/__init__.py", "src/ebaml/misc/tool.py", "tests/unit/ebaml/misc/test_tool.py"])
+    found = problems(
+        tmp_path,
+        [*GOOD, "src/ebaml/misc/__init__.py", "src/ebaml/misc/tool.py", "tests/unit/ebaml/misc/test_tool.py"],
+    )
     assert found == ["misc: not a layer in the import-linter layers contract - add it there or remove it"]
 
 
@@ -48,13 +51,17 @@ def test_layer_without_package(tmp_path: Path) -> None:
 def test_package_without_docstring(tmp_path: Path) -> None:
     src, tests = build(tmp_path, GOOD)
     (src / "core" / "__init__.py").write_text("x = 1\n", encoding="utf-8")
-    assert check_layout.layout_problems(src, tests, ["core"], TOP) == ["core/__init__.py: missing, or it has no docstring"]
+    assert check_layout.layout_problems(src, tests, ["core"], TOP) == [
+        "core/__init__.py: missing, or it has no docstring",
+    ]
 
 
 def test_package_without_init(tmp_path: Path) -> None:
     src, tests = build(tmp_path, GOOD)
     (src / "core" / "__init__.py").unlink()
-    assert check_layout.layout_problems(src, tests, ["core"], TOP) == ["core/__init__.py: missing, or it has no docstring"]
+    assert check_layout.layout_problems(src, tests, ["core"], TOP) == [
+        "core/__init__.py: missing, or it has no docstring",
+    ]
 
 
 def test_module_at_top_level(tmp_path: Path) -> None:

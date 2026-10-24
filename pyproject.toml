@@ -50,7 +50,11 @@ requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.ruff]
+# reason: semgrep/ebaml.py holds bad code on purpose, as test data for the semgrep rules, and a fix by ruff would break
+# the annotations that semgrep reads.
+force-exclude = true
 exclude = [
+    "semgrep",
     ".bzr",
     ".direnv",
     ".eggs",

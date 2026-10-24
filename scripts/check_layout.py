@@ -50,7 +50,19 @@ def layer_names(pyproject: dict[str, Any]) -> list[str]:
 
 
 def _has_docstring(path: Path) -> bool:
-    """Tell whether a Python file starts with a docstring."""
+    """Tell whether a Python file starts with a docstring.
+
+    Parameters
+    ----------
+    path: Path
+        The Python file.
+
+    Returns
+    -------
+    bool
+        True if the file has a non-empty docstring.
+
+    """
     return bool(ast.get_docstring(ast.parse(path.read_bytes())))
 
 
