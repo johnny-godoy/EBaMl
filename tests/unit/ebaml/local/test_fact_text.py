@@ -5,8 +5,9 @@ import json
 import attrs
 import pytest
 
-from ebaml import local, local_text
-from ebaml.custom_types import Audience
+from ebaml.core.custom_types import Audience
+from ebaml.local import fact_text as local_text
+from ebaml.local import facts as local
 
 
 def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple) -> None:

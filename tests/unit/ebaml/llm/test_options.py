@@ -5,8 +5,8 @@ import inspect
 import attrs
 import pytest
 
-from ebaml.graphs import EBMGraph
-from ebaml.options import GraphOptions, PromptOptions
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.llm.options import GraphOptions, PromptOptions
 
 
 def _defaults(function: object, names: set[str]) -> dict[str, object]:

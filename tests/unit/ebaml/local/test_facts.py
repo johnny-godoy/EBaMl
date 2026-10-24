@@ -9,8 +9,8 @@ import pandas as pd
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml import local
-from ebaml.graphs import EBMGraph
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.local import facts as local
 from tests.unit.ebaml.conftest import fake_model
 
 CATEGORIES = ["p", "q", "r"]

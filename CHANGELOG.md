@@ -14,25 +14,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** The modules of `ebaml` now sit in packages. Change your imports as the table shows. The classes and
+  functions are the same.
+
+  | Before | After |
+  | --- | --- |
+  | `ebaml.custom_types`, `ebaml.exceptions` | `ebaml.core.custom_types`, `ebaml.core.exceptions` |
+  | `ebaml.graphs`, `ebaml.graph_text` | `ebaml.graphs.ebm_graph`, `ebaml.graphs.graph_text` |
+  | `ebaml.local`, `ebaml.local_text` | `ebaml.local.facts`, `ebaml.local.fact_text` |
+  | `ebaml.descriptors`, `ebaml.options`, `ebaml.retry` | `ebaml.llm.descriptors`, `ebaml.llm.options`, `ebaml.llm.retry` |
+
+  The names `ebaml.EBMGraph`, `ebaml.Audience` and the other names in `ebaml.__all__` do not change. The `structlog`
+  logger `ebaml.descriptors` is now `ebaml.llm.descriptors`.
 - **BREAKING:** `ebaml.benchmark` no longer imports `baml_sdk`. `run_task(task, data_dir, limit)` is now
   `run_task(task, questions, ask)`. Load the questions with `load_questions` and cut them with a slice for a limit. Pass
   `baml_sdk.answer_benchmark_question` as `ask`, or any function with the same keyword arguments that returns an object
   with `text` and `usage`. `benchmark/run.py` does this for you.
 - **BREAKING:** `describe_graph`, `describe_ebm` and `explain_instance` no longer take `**kwargs`. Three option classes
-  replace them, as keyword-only arguments. `graph=GraphOptions(...)` (module `ebaml.options`) holds the options of
-  `EBMGraph.from_ebm` and `EBMGraph.to_text`. `prompt=PromptOptions(...)` (module `ebaml.options`) holds
+  replace them, as keyword-only arguments. `graph=GraphOptions(...)` (module `ebaml.llm.options`) holds the options of
+  `EBMGraph.from_ebm` and `EBMGraph.to_text`. `prompt=PromptOptions(...)` (module `ebaml.llm.options`) holds
   `expert_description`, `graph_description`, `dataset_description` and `task_description`. `local=LocalOptions(...)`
-  (module `ebaml.local`, only for `explain_instance`) holds the options of the local facts. A misspelled option was
+  (module `ebaml.local.facts`, only for `explain_instance`) holds the options of the local facts. A misspelled option was
   silently ignored before. It now raises a `TypeError`. For example, change `describe_ebm(ebm, dataset_description="x")`
   to `describe_ebm(ebm, prompt=PromptOptions(dataset_description="x"))`.
-- **BREAKING:** `ebaml.graphs` no longer imports `baml_sdk`. `EBMGraph.to_text` takes a new keyword argument,
+- **BREAKING:** `ebaml.graphs.ebm_graph` no longer imports `baml_sdk`. `EBMGraph.to_text` takes a new keyword argument,
   `check_budget`, a function that compares the estimated tokens of the text with `max_tokens` and
   `overbudget_percent`. `baml_sdk.check_token_budget` is such a function. If you call `EBMGraph.to_text` yourself and
   pass no `check_budget`, the function checks nothing: it writes the text once, and does not warn or simplify. Pass
   `check_budget=baml_sdk.check_token_budget` to get the old behavior. `describe_graph` and `describe_ebm` pass it for you.
-- **BREAKING:** `facts_to_texts` moved from `ebaml.local` to the new module `ebaml.local_text`. `ebaml.local` now computes
-  the facts only, and `ebaml.local_text` renders them. Change `from ebaml.local import facts_to_texts` to
-  `from ebaml.local_text import facts_to_texts`.
+- **BREAKING:** `facts_to_texts` moved from the local facts module to the new module `ebaml.local.fact_text`.
+  `ebaml.local.facts` now computes the facts only, and `ebaml.local.fact_text` renders them. Change
+  `from ebaml.local import facts_to_texts` to `from ebaml.local.fact_text import facts_to_texts`.
 
 ## [0.0.2] - 2026-10-23
 

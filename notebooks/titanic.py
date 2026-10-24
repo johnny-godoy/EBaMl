@@ -17,9 +17,9 @@ def _():
     from sklearn.model_selection import train_test_split
 
     from baml_sdk import check_token_budget
-    from ebaml.descriptors import describe_ebm, describe_graph
-    from ebaml.graphs import EBMGraph
-    from ebaml.options import PromptOptions
+    from ebaml.graphs.ebm_graph import EBMGraph
+    from ebaml.llm.descriptors import describe_ebm, describe_graph
+    from ebaml.llm.options import PromptOptions
 
     return (
         EBMGraph,

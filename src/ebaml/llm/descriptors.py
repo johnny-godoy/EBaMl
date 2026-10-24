@@ -13,12 +13,12 @@ import structlog
 from baml_bridge.errors import BamlError
 
 import baml_sdk
-from ebaml.custom_types import Audience, ExplainableBoostingModel, coerce_enum
-from ebaml.graphs import EBMGraph
-from ebaml.local import LocalFacts, LocalOptions, compute_local_facts
-from ebaml.local_text import facts_to_texts
-from ebaml.options import GraphOptions, PromptOptions
-from ebaml.retry import call_with_shrinking_graph
+from ebaml.core.custom_types import Audience, ExplainableBoostingModel, coerce_enum
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.llm.options import GraphOptions, PromptOptions
+from ebaml.llm.retry import call_with_shrinking_graph
+from ebaml.local.fact_text import facts_to_texts
+from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
@@ -160,7 +160,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
     The function raises the ``BamlError`` of the LLM call if the call fails. A reply cut off by ``max_tokens`` is
-    retried first, as ``ebaml.retry.call_with_shrinking_graph`` says.
+    retried first, as ``ebaml.llm.retry.call_with_shrinking_graph`` says.
 
     Parameters
     ----------

@@ -18,11 +18,11 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
-    from ebaml.custom_types import Audience
-    from ebaml.descriptors import describe_ebm, explain_instance
-    from ebaml.local import LocalOptions, compute_local_facts
-    from ebaml.local_text import facts_to_texts
-    from ebaml.options import PromptOptions
+    from ebaml.core.custom_types import Audience
+    from ebaml.llm.descriptors import describe_ebm, explain_instance
+    from ebaml.llm.options import PromptOptions
+    from ebaml.local.fact_text import facts_to_texts
+    from ebaml.local.facts import LocalOptions, compute_local_facts
 
     return (
         Audience,

@@ -1,4 +1,4 @@
-"""Options of the functions in ``ebaml.descriptors``.
+"""Options of the functions in ``ebaml.llm.descriptors``.
 
 Each class holds the settings of one part of the work: ``GraphOptions`` for the graph and its text, ``PromptOptions``
 for the prompts. ``ebaml.local.LocalOptions`` holds the settings of the local facts. A default of an option is the
@@ -9,7 +9,7 @@ from typing import Literal
 
 import attrs
 
-from ebaml.custom_types import FeatureType, Normalization
+from ebaml.core.custom_types import FeatureType, Normalization
 
 
 @attrs.frozen

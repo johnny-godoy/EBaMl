@@ -47,7 +47,7 @@ jobs:
           echo "Commits touching code in the last 7 days: $changed (run=$run)"
       - name: List the modules
         id: modules
-        run: echo "modules=$(ls src/ebaml/*.py | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+        run: echo "modules=$(find src/ebaml -name '*.py' -not -path 'src/ebaml/*/__init__.py' | sort | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   mutation:
     name: mutation (${{ matrix.module }})

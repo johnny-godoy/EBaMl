@@ -8,11 +8,12 @@ from interpret.glassbox import ExplainableBoostingClassifier
 from structlog.testing import capture_logs
 
 import baml_sdk
-from ebaml import descriptors, local
-from ebaml.custom_types import Audience, FeatureType, Normalization
-from ebaml.exceptions import EBMGraphSimplificationError, InvalidOptionError
-from ebaml.graphs import EBMGraph
-from ebaml.options import GraphOptions, PromptOptions
+from ebaml.core.custom_types import Audience, FeatureType, Normalization
+from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.llm import descriptors
+from ebaml.llm.options import GraphOptions, PromptOptions
+from ebaml.local import facts as local
 from tests.unit.ebaml.conftest import fake_model
 
 FAKE_EBM: ExplainableBoostingClassifier = fake_model()

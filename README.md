@@ -117,8 +117,8 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml.descriptors import describe_ebm, describe_graph
-from ebaml.options import PromptOptions
+from ebaml.llm.descriptors import describe_ebm, describe_graph
+from ebaml.llm.options import PromptOptions
 
 ebm = ExplainableBoostingClassifier().fit(X, y)
 
@@ -132,12 +132,12 @@ embedded in a longer prompt. It needs the confidence bounds, and it only reads c
 Two keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
 `EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
 (`expert_description`, `graph_description`, `dataset_description` and `task_description`). Both classes are in
-`ebaml.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.descriptors` logger.
+`ebaml.llm.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
 
 ### Explaining one prediction
 
 ```python
-from ebaml.descriptors import describe_ebm, explain_instance
+from ebaml.llm.descriptors import describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
 global_explanation = describe_ebm(ebm)  # computed once, prepended to every local prompt
@@ -160,10 +160,11 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
 | Where | What |
 | --- | --- |
-| `src/ebaml/graphs.py`, `graph_text.py`, `options.py`, `retry.py`, `descriptors.py` | Graph extraction and simplification (numpy, `interpret`), the text the LLM reads, then calls into BAML. |
-| `src/ebaml/custom_types.py`, `exceptions.py`, `model_properties.py`, `utils.py` | Shared types, errors and helpers. |
+| `src/ebaml/core/` | Shared kernel: types and errors. It imports no other part of `ebaml`. |
+| `src/ebaml/graphs/` | Graph extraction and simplification (numpy, `interpret`), and the text the LLM reads. |
+| `src/ebaml/llm/` | The edge: the calls into BAML (`descriptors.py`), their options and the retry after a cut-off reply. |
 | `baml_src/talk_to_ebm.baml` | Prompts, LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
-| `src/ebaml/local.py`, `src/ebaml/local_text.py`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
+| `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
 | `baml_src/talk_to_ebm_test.baml` | Offline tests on a scripted client. |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
@@ -184,7 +185,7 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 - **Token budget:** there is no tokenizer before a call, so the check uses a rough estimate (about 3 characters per
   token). Going a little over `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes
   `to_text` simplify the graph, or raise if it cannot. The provider's own error is the real limit. The functions in
-  `ebaml.descriptors` pass the BAML check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass
+  `ebaml.llm.descriptors` pass the BAML check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass
   `check_budget`, for example `baml_sdk.check_token_budget`.
 
 <!-- --8<-- [end:behaviour] -->
@@ -302,7 +303,7 @@ Then run your usual code. `describe_graph` and `describe_ebm` need no other chan
 All BAML entry points (`describe_graph_cot`, `summarize_ebm`, `describe_ebm`, `answer_benchmark_question`) take an
 optional `client: ai.Client`. When it is `null` they use the clients above. The offline tests pass a scripted client
 this way. From BAML code you can pass any `ai.Client`, including your own implementation of the interface. The Python
-wrappers in `ebaml.descriptors` do not expose this parameter, so from Python the clients in
+wrappers in `ebaml.llm.descriptors` do not expose this parameter, so from Python the clients in
 `baml_src/talk_to_ebm.baml` are the way to configure the provider.
 
 <!-- --8<-- [end:changing-model] -->
@@ -320,7 +321,7 @@ uv run pytest     # Python unit tests, fails under 100% coverage
 prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
 uv run python scripts/mutation.py          # mutation testing of all modules, fails if any mutant survives
 uv run python scripts/mutation.py --base origin/main   # the same, but only for modules changed since main
-uv run python scripts/mutation.py --module src/ebaml/local.py   # the same, but only for one module
+uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # the same, but only for one module
 uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
 uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
 uv run --group docs mkdocs serve          # preview the docs (runs the notebook, so the first build is slow)

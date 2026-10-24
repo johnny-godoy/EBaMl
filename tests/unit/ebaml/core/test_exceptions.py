@@ -2,8 +2,8 @@
 
 import pytest
 
-from ebaml.custom_types import FeatureType
-from ebaml.exceptions import (
+from ebaml.core.custom_types import FeatureType
+from ebaml.core.exceptions import (
     EBMGraphError,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,

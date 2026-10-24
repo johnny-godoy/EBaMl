@@ -4,8 +4,8 @@ import pytest
 from beartype.roar import BeartypeCallHintViolation
 
 import ebaml
-from ebaml import local
-from ebaml.custom_types import coerce_enum
+from ebaml.core.custom_types import coerce_enum
+from ebaml.local import facts as local
 
 
 def test_package_docstring() -> None:

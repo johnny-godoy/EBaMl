@@ -10,14 +10,14 @@ from beartype.claw import beartype_this_package
 # Checking annotated variables is off, because structlog's lazy logger proxy does not match its own logger type.
 beartype_this_package(conf=BeartypeConf(is_pep484_tower=True, claw_is_pep526=False))  # ruff: ignore[non-empty-init-module] -- the hook must run before the submodule imports below
 
-from ebaml.custom_types import Audience, FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.core.custom_types import Audience, FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
     EBMGraphError,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
     InvalidOptionError,
 )
-from ebaml.graphs import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
 __version__: str = version("ebaml")
 

@@ -80,7 +80,7 @@ the normal order and fit every model.
 uv run python scripts/mutation.py      # one shard per CPU
 uv run python scripts/mutation.py 4    # four shards
 uv run python scripts/mutation.py --base origin/main   # only modules changed since main
-uv run python scripts/mutation.py --module src/ebaml/local.py   # only one module
+uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # only one module
 ```
 
 If no module changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. The workflow
