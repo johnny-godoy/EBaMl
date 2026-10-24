@@ -7,7 +7,8 @@ import-linter limits what a module imports. This check limits where a module liv
 2. Each package has an ``__init__.py`` with a docstring that says what the package holds.
 3. Only the modules in ``TOP_LEVEL_MODULES`` sit directly in ``src/ebaml``. A new module goes into a layer.
 4. Each module name is unique in ``src/ebaml``, because ``scripts/mutation.py`` finds the tests of a module by name.
-5. Each module has a test file at the same path under ``tests/unit/ebaml``, with ``test_`` before the name.
+5. The test tree mirrors the source tree. Each module has a test file at the same path under ``tests/unit/ebaml``, with
+   ``test_`` before the name. Each test file and test directory has a source module or package at the same path.
 
 Run it from the repo root: ``uv run python -m scripts.check_layout``.
 """
@@ -24,6 +25,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # The benchmark has no import of another part of ebaml, so it is a layer of its own.
 TOP_LEVEL_MODULES = frozenset({"__init__.py", "benchmark.py"})
 LAYERS_CONTRACT = "layers"
+# The tests of a package file ``__init__.py`` cannot be named ``test___init__.py``, so they have a short name.
+INIT_TESTS = {"test_init.py": "__init__.py"}
 
 
 def layer_names(pyproject: dict[str, Any]) -> list[str]:
@@ -119,6 +122,39 @@ def layout_problems(src: Path, tests: Path, layers: Collection[str], top_level: 
         f"{path.relative_to(src)}: no test file {test.relative_to(tests.parent)}"
         for path in modules
         if not (test := tests / path.relative_to(src).with_name(f"test_{path.name}")).is_file()
+    )
+    problems.extend(_orphan_tests(src, tests))
+    return problems
+
+
+def _orphan_tests(src: Path, tests: Path) -> list[str]:
+    """List the test files and test directories that have no source at the mirrored path.
+
+    Parameters
+    ----------
+    src: Path
+        The package directory.
+    tests: Path
+        The test directory of the package.
+
+    Returns
+    -------
+    list[str]
+        One message for each test file or directory without a source.
+
+    """
+    problems = [
+        f"{path.relative_to(tests.parent)}: no package {path.relative_to(tests).as_posix()} in {src.name}"
+        for path in sorted(tests.rglob("*"))
+        if path.is_dir() and path.name != "__pycache__" and not (src / path.relative_to(tests)).is_dir()
+    ]
+    problems.extend(
+        f"{path.relative_to(tests.parent)}: no module {source.relative_to(src.parent)}"
+        for path in sorted(tests.rglob("test_*.py"))
+        if not (
+            source := src
+            / path.relative_to(tests).with_name(INIT_TESTS.get(path.name, path.name.removeprefix("test_")))
+        ).is_file()
     )
     return problems
 

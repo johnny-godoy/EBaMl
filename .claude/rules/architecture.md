@@ -20,7 +20,8 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
   layers contract and a new row in this table.
 - Give each module a name that no other module in `src/ebaml` has. `scripts/mutation.py` finds the tests of a module by
   its name.
-- Put the test of `src/ebaml/<pkg>/<name>.py` in `tests/unit/ebaml/<pkg>/test_<name>.py`.
+- Mirror the source tree in the test tree. Put the test of `src/ebaml/<pkg>/<name>.py` in
+  `tests/unit/ebaml/<pkg>/test_<name>.py`. A test file or directory with no source at the mirrored path is an error.
 
 ## Guards
 
@@ -29,7 +30,7 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 | Guard | Config | What it checks |
 | --- | --- | --- |
 | import-linter | `[tool.importlinter]` in `pyproject.toml` | Layer order and the limits on `baml_sdk`. Run it alone with `uv run lint-imports`. |
-| Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test file. |
+| Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree. |
 | semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, banned libraries. |
 | Claude rules | `.claude/rules/` | The design judgment that no tool can check: one job per unit, small interfaces. |
 

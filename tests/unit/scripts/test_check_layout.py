@@ -81,6 +81,16 @@ def test_module_without_test(tmp_path: Path) -> None:
     assert found == ["core/errors.py: no test file ebaml/core/test_errors.py"]
 
 
+def test_test_file_without_module(tmp_path: Path) -> None:
+    found = problems(tmp_path, [*GOOD, "tests/unit/ebaml/core/test_stray.py"])
+    assert found == ["ebaml/core/test_stray.py: no module ebaml/core/stray.py"]
+
+
+def test_test_directory_without_package(tmp_path: Path) -> None:
+    found = problems(tmp_path, [*GOOD, "tests/unit/ebaml/other/__init__.py"])
+    assert found == ["ebaml/other: no package other in ebaml"]
+
+
 def test_pycache_is_no_package(tmp_path: Path) -> None:
     src, _ = build(tmp_path, GOOD)
     (src / "__pycache__").mkdir()
