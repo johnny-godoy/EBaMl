@@ -104,7 +104,8 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, kwargs: Mappi
 
     """
     graph = EBMGraph.from_ebm(ebm, feature_index, **_accepted_kwargs(EBMGraph.from_ebm, kwargs))
-    return graph.to_text(**_accepted_kwargs(EBMGraph.to_text, kwargs))
+    # the BAML check is the default, and a caller can replace it
+    return graph.to_text(**{"check_budget": baml_sdk.check_token_budget, **_accepted_kwargs(EBMGraph.to_text, kwargs)})
 
 
 def _is_truncated(error: BamlError) -> bool:

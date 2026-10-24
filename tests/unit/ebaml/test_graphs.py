@@ -1,5 +1,9 @@
 """Tests for the EBM graphs."""
 
+import itertools
+import warnings
+from collections.abc import Callable
+
 import numpy as np
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
@@ -17,9 +21,14 @@ def budget(status: str, tokens: int = 10) -> baml_sdk.TokenBudget:
     return baml_sdk.TokenBudget(estimated_tokens=tokens, status=status)
 
 
-@pytest.fixture
-def ok_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("ok"))
+def checker(*statuses: str, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
+    # the check answers with each status in turn, and with the last one after that
+    answers = itertools.chain(statuses, itertools.repeat(statuses[-1]))
+
+    def check(**_kw: object) -> baml_sdk.TokenBudget:
+        return budget(next(answers), tokens)
+
+    return check
 
 
 def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> ExplainableBoostingClassifier:
@@ -145,7 +154,6 @@ def test_simplify_merges_within_threshold() -> None:
 # to_text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_continuous() -> None:
     text = cont_graph().to_text()
     assert text.startswith("This graph represents a continuous-valued feature.")
@@ -155,7 +163,6 @@ def test_to_text_continuous() -> None:
     assert "Upper Bounds (95%-Confidence Interval):" in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_no_description_no_bounds_explicit_precisions() -> None:
     text = cont_graph().to_text(
         include_description=False,
@@ -166,20 +173,17 @@ def test_to_text_no_description_no_bounds_explicit_precisions() -> None:
     assert text == 'Feature Name: age\nFeature Type: continuous\nMeans: {"(0.0, 2.0)": 1.0, "(2.0, 3.0)": 5.0}\n'
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_y_precision_large_variation_skips_auto_loop() -> None:
     text = cont_graph(scores=(0.0, 0.0, 500.0)).to_text(y_axis_precision="auto", confidence_bounds=False)
     assert '"(2.0, 3.0)": 500.0' in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_categorical() -> None:
     text = cat_graph().to_text(feature_format=FeatureType.CATEGORICAL)
     assert text.startswith("This graph represents categorical feature.")
     assert '"red": 1.0' in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_boolean_autodetect() -> None:
     g = EBMGraph("flag", "nominal", ["False", "True"], [0.0, 2.0], [0.1, 0.1])
     text = g.to_text()
@@ -187,7 +191,6 @@ def test_to_text_boolean_autodetect() -> None:
     assert "Feature Type: boolean" in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_nominal_defaults_to_categorical() -> None:
     # regression: nominal features used to raise unless feature_format was passed explicitly
     text = cat_graph().to_text()
@@ -195,55 +198,46 @@ def test_to_text_nominal_defaults_to_categorical() -> None:
     assert "Feature Type: categorical" in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_flat_graph_terminates() -> None:
     # regression: zero variation made the y-axis precision loop run forever
     g = cont_graph(scores=(2.0, 2.0, 2.0))
     assert '"(0.0, 3.0)": 2.0' in g.to_text(confidence_bounds=False)
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_flat_categorical_graph_terminates() -> None:
     g = EBMGraph("color", "nominal", ["red", "blue"], [1.0, 1.0], [0.1, 0.1])
     assert '"blue": 1.0' in g.to_text()
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_boolean_wrong_number_of_values() -> None:
     g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
     with pytest.raises(ValueError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_unsupported_format() -> None:
     with pytest.raises(InvalidOptionError):
         cat_graph().to_text(feature_format=FeatureType.ORDINAL)
 
 
-def test_to_text_warn_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("warn", 4000))
+def test_to_text_warn_budget() -> None:
     with pytest.warns(UserWarning, match="estimated at 4000 tokens"):
-        text = cont_graph().to_text()
+        text = cont_graph().to_text(check_budget=checker("warn", tokens=4000))
     assert "Feature Name: age" in text
 
 
-def test_to_text_simplifies_when_over_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    statuses = iter(["over", "over", "ok"])
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget(next(statuses)))
-    assert "Feature Name: age" in cont_graph().to_text()
+def test_to_text_simplifies_when_over_budget() -> None:
+    assert "Feature Name: age" in cont_graph().to_text(check_budget=checker("over", "over", "ok"))
 
 
-def test_to_text_continuous_cannot_be_simplified(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over", 99999))
+def test_to_text_continuous_cannot_be_simplified() -> None:
     with pytest.raises(EBMGraphSimplificationError, match="99999"):
-        cont_graph().to_text()
+        cont_graph().to_text(check_budget=checker("over", tokens=99999))
 
 
-def test_to_text_categorical_over_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over", 99999))
+def test_to_text_categorical_over_budget() -> None:
     with pytest.raises(EBMGraphTokenLimitError, match="exceeds the token budget"):
-        cat_graph().to_text(feature_format=FeatureType.CATEGORICAL)
+        cat_graph().to_text(feature_format=FeatureType.CATEGORICAL, check_budget=checker("over", tokens=99999))
 
 
 # mutation-testing regressions: from_ebm
@@ -334,20 +328,17 @@ def to_text_precision(variation: float) -> tuple[str, float]:
     ("variation", "precision"),
     [(1000, 1), (100.5, 1), (100, 1), (99.5, 2), (99, 2), (9.11, 3), (0.5, 4), (0.3, 4), (0.12, 4)],
 )
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_auto_y_precision(variation: float, precision: int) -> None:
     text, mid = to_text_precision(variation)
     assert f'"(1.0, 2.0)": {round(mid, precision)},' in text
     assert f'"(2.0, 3.0)": {round(variation, precision)}' in text
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_auto_keyword_equals_default() -> None:
     g = cont_graph(scores=(0.0, 0.0123456, 0.3))
     assert g.to_text(y_axis_precision="auto") == g.to_text()
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_confidence_bounds_values() -> None:
     g = cont_graph(scores=(1.0, 2.0, 5.0), stds=(0.5, 0.25, 1.0))
     text = g.to_text(include_description=False, y_axis_precision=3)
@@ -357,45 +348,57 @@ def test_to_text_confidence_bounds_values() -> None:
     ]
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_confidence_level_changes_bounds() -> None:
     g = cont_graph(scores=(1.0, 2.0, 5.0), stds=(1.0, 1.0, 1.0))
     text = g.to_text(include_description=False, y_axis_precision=2, confidence_level=0.9)
     assert 'Lower Bounds (90%-Confidence Interval): {"(0.0, 1.0)": -0.64,' in text
 
 
-def test_to_text_default_budget_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_to_text_default_budget_arguments() -> None:
     seen = {}
 
     def check(**kw: object) -> baml_sdk.TokenBudget:
         seen.update(kw)
         return budget("ok")
 
-    monkeypatch.setattr(baml_sdk, "check_token_budget", check)
-    cont_graph().to_text()
+    text = cont_graph().to_text(check_budget=check)
     assert (seen["max_tokens"], seen["overbudget_percent"]) == (3000, 50)
-    cont_graph().to_text(max_tokens=7, overbudget_percent=9)
+    assert seen["text"] == text
+    cont_graph().to_text(max_tokens=7, overbudget_percent=9, check_budget=check)
     assert (seen["max_tokens"], seen["overbudget_percent"]) == (7, 9)
 
 
-@pytest.mark.usefixtures("ok_budget")
+def test_to_text_without_a_check_writes_the_graph_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    levels = []
+    simplify = EBMGraph.simplify
+
+    def spy(self: EBMGraph, min_variation_per_cent: float = 0.0) -> EBMGraph:
+        levels.append(min_variation_per_cent)
+        return simplify(self, min_variation_per_cent)
+
+    monkeypatch.setattr(EBMGraph, "simplify", spy)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        text = cont_graph().to_text(max_tokens=1, overbudget_percent=0)
+    assert "Feature Name: age" in text
+    assert levels == [0.0]
+
+
 def test_to_text_options_are_keyword_only() -> None:
     with pytest.raises(TypeError):
         cont_graph().to_text(*(True,))
 
 
-def test_to_text_warning_points_at_the_caller(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("warn"))
+def test_to_text_warning_points_at_the_caller() -> None:
     with pytest.warns(UserWarning, match="estimated at") as record:
-        cont_graph().to_text()
+        cont_graph().to_text(check_budget=checker("warn"))
     assert record[0].filename == __file__
 
 
-def test_to_text_tries_every_simplification_level(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_to_text_tries_every_simplification_level() -> None:
     calls = []
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **kw: calls.append(kw) or budget("over", 5))
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
-        cont_graph().to_text()
+        cont_graph().to_text(check_budget=lambda **kw: calls.append(kw) or budget("over", 5))
     assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
 
 
@@ -403,44 +406,37 @@ def test_to_text_tries_every_simplification_level(monkeypatch: pytest.MonkeyPatc
     "x_vals",
     [["a", "b"], ["no", "yes"], ["True", "False"], ["False", "True", "x"], ["x", "False"]],
 )
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_not_boolean(x_vals: list[str]) -> None:
     g = EBMGraph("flag", "nominal", x_vals, [0.0] * len(x_vals), [0.1] * len(x_vals))
     assert "Feature Type: categorical" in g.to_text()
 
 
 @pytest.mark.parametrize("x_vals", [["false", "true"], ["FALSE", "TRUE"], ["False", "True"]])
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_boolean_case_insensitive(x_vals: list[str]) -> None:
     g = EBMGraph("flag", "nominal", x_vals, [0.0, 2.0], [0.1, 0.1])
     assert "Feature Type: boolean" in g.to_text()
     assert '"False": 0.0, "True": 2.0' in g.to_text(y_axis_precision=1)
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_boolean_with_one_value() -> None:
     g = EBMGraph("flag", "nominal", ["a"], [0.0], [0.1])
     with pytest.raises(ValueError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_plain_string_feature_format() -> None:
     assert "Feature Type: categorical" in cat_graph().to_text(feature_format="categorical")
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_unknown_feature_format() -> None:
     with pytest.raises(InvalidOptionError):
         cat_graph().to_text(feature_format="bogus")
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_continuous_is_simplified() -> None:
     assert '"(0.0, 2.0)"' in cont_graph().to_text(confidence_bounds=False)  # first two bins are equal and merged
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_categorical_is_not_simplified() -> None:
     g = EBMGraph("color", "nominal", ["a", "b"], [1.0, 1.0], [0.1, 0.1])
     assert '"a": 1.0, "b": 1.0' in g.to_text()
@@ -452,7 +448,6 @@ def test_simplify_rejects_non_continuous_string_variants() -> None:
         g.simplify()
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_to_text_auto_y_precision_depends_on_range_not_offset() -> None:
     # a score range of 0.5 around 1000 needs 4 decimals, whatever the offset
     g = cont_graph(scores=(1000.0, 1000.123456, 1000.5))
@@ -468,9 +463,8 @@ def test_to_text_simplification_levels_grow_by_a_tenth_of_a_percent(monkeypatch:
         return simplify(self, min_variation_per_cent)
 
     monkeypatch.setattr(EBMGraph, "simplify", spy)
-    monkeypatch.setattr(baml_sdk, "check_token_budget", lambda **_kw: budget("over"))
     with pytest.raises(EBMGraphSimplificationError):
-        cont_graph().to_text()
+        cont_graph().to_text(check_budget=checker("over"))
     assert levels == pytest.approx([step * 0.001 for step in range(102)])
 
 
@@ -484,7 +478,6 @@ def round_trip_graph() -> EBMGraph:
     )
 
 
-@pytest.mark.usefixtures("ok_budget")
 @pytest.mark.parametrize("confidence_level", [0.95, 0.9, 0.99])
 def test_from_text_inverts_to_text(confidence_level: float) -> None:
     graph = round_trip_graph()
@@ -497,7 +490,6 @@ def test_from_text_inverts_to_text(confidence_level: float) -> None:
     assert parsed.stds == pytest.approx(graph.stds, abs=1e-5)
 
 
-@pytest.mark.usefixtures("ok_budget")
 def test_from_text_reads_a_graph_inside_a_prompt() -> None:
     graph_text = round_trip_graph().to_text(y_axis_precision=6)
     indented = "\n".join(f"    {line}" for line in graph_text.splitlines())
@@ -507,7 +499,6 @@ def test_from_text_reads_a_graph_inside_a_prompt() -> None:
     assert parsed.stds == pytest.approx(round_trip_graph().stds, abs=1e-5)
 
 
-@pytest.mark.usefixtures("ok_budget")
 @pytest.mark.parametrize("label", ["Feature Name", "Feature Type", "Means", "Lower Bounds", "Upper Bounds"])
 def test_from_text_requires_every_line(label: str) -> None:
     lines = round_trip_graph().to_text(y_axis_precision=6).splitlines()
@@ -516,7 +507,6 @@ def test_from_text_requires_every_line(label: str) -> None:
         EBMGraph.from_text(text)
 
 
-@pytest.mark.usefixtures("ok_budget")
 @pytest.mark.parametrize("feature_type", ["nominal", "boolean", "bogus"])
 def test_from_text_rejects_other_feature_types(feature_type: str) -> None:
     text = (
