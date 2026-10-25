@@ -126,7 +126,7 @@ rules:
       Return an attrs class, not a dict, a tuple of fields or a list of them, so a type checker knows each field and a
       caller reads it by name. If the keys are data (not a fixed set of fields) or the container is the point (a
       JSON fragment, a homogeneous interval), add `# nosemgrep: ebaml-return-attrs-not-container -- <reason>` to the
-      def line. The reason is the rule in .claude/rules/return-types.md.
+      def line. See .claude/rules/types.md.
     patterns:
       - pattern: |
           def $F(...) -> $R:
