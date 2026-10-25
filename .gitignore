@@ -41,4 +41,4 @@ site/
 
 # Lean (proofs/)
 proofs/.lake/
-proofs/paper.pdf
+proofs/papers/**/*.pdf

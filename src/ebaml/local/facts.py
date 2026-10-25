@@ -11,7 +11,7 @@ An EBM without interactions is a sum of one score per feature, so the first two 
 features by how much they move the score, and the third by sampling the unknown features from their training
 distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
 ``ebaml.local.fact_text`` puts the facts in words for the prompts in ``baml_src/local_explanations.baml``.
-The proof that the first two are exact is in ``proofs/paper.typ``.
+The proof that the first two are exact is in ``proofs/papers/local-explanations/paper.typ``.
 
 The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
 the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason

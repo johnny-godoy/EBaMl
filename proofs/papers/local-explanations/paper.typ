@@ -1,49 +1,9 @@
 // Paper: why sorting solves two queries of local EBM explanations exactly.
-// Compile from this directory with: typst compile paper.typ
+// Compile from proofs/ with: typst compile --root papers papers/local-explanations/paper.typ
 
-#set document(title: "Optimality of the Greedy Local Explanations of EBaMl", author: "EBaMl contributors")
-#set page(paper: "a4", margin: 2.4cm, numbering: "1")
-#set text(size: 10.5pt, lang: "en")
-#set par(justify: true, leading: 0.62em)
-#set heading(numbering: "1.1")
-#show heading.where(level: 1): set block(above: 1.6em, below: 0.9em)
-#show raw: set text(size: 9pt)
-#show link: set text(fill: rgb("#1a4f8b"))
-#show table: set par(justify: false)
+#import "/style.typ": *
+#show: paper.with(title: "Optimality of the Greedy Local Explanations of EBaMl")
 
-// ---- Bourbaki-style numbered statements -----------------------------------------------------------------------
-
-#let stmt(kind, name, body, lean: none, italic: true) = {
-  counter(kind).step()
-  block(width: 100%, above: 1em, below: 0.8em, breakable: false, {
-    strong[#kind #context counter(kind).display().]
-    if name != none [ (#name).]
-    [ ]
-    if italic { emph(body) } else { body }
-    if lean != none {
-      v(0.2em)
-      set par(justify: false)
-      text(size: 9pt, fill: rgb("#444444"))[Lean: #lean.slice(1).map(raw).join(", "), in #raw(lean.at(0)).]
-    }
-  })
-}
-#let notation(name, body) = stmt("Notation", name, body, italic: false)
-#let definition(name, body, lean: none) = stmt("Definition", name, body, lean: lean, italic: false)
-#let lemma(name, body, lean: none) = stmt("Lemma", name, body, lean: lean)
-#let theorem(name, body, lean: none) = stmt("Theorem", name, body, lean: lean)
-#let corollary(name, body, lean: none) = stmt("Corollary", name, body, lean: lean)
-
-// ---- Lamport-style hierarchical proofs ------------------------------------------------------------------------
-
-#let step(level, number, body) = block(
-  width: 100%,
-  above: 0.55em,
-  below: 0.55em,
-  inset: (left: (level - 1) * 1.6em),
-  [$chevron.l #level chevron.r #number$ #h(0.5em) #body],
-)
-#let proof(body) = block(width: 100%, inset: (left: 1em), above: 0.3em, below: 1em, body)
-#let qed(uses) = [*Q.E.D.* by #uses.]
 
 
 
@@ -193,7 +153,7 @@ docstring says that every score moves by $z$ deviations. @sec-limits discusses t
   [first $k$ with $W(emptyset) + Pi_k > 0$], [`np.flatnonzero(margins > 0)`, `enough[0]`], [421, 424],
 )
 
-The Lean file `proofs/EBaMlProofs/Model.lean` states these notations as the structure `EBaMlProofs.Model` and the
+The Lean file `proofs/EBaMlProofs/LocalExplanations/Model.lean` states these notations as the structure `EBaMlProofs.LocalExplanations.Model` and the
 definitions `logit`, `eps`, `t`, `margin`, `p`, `g`, `pmin`, `drop`, `gain`, `beta`, `robustMargin`, `Admissible`,
 `CanFlip`, `worst` and `Sufficient`.
 
@@ -204,11 +164,11 @@ For a finite set $S$, write $d(S) = sum_(i in S) d(i)$.
 
 #definition("top set", [
   A set $T subset.eq I$ is a _top set_ of $d$ iff $d(j) <= d(i)$ for each $i in T$ and each $j in.not T$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.IsTopSet"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.IsTopSet"))
 
 #lemma("top-set bound", [
   If $T$ is a top set of $d$ and $|S| = |T|$, then $d(S) <= d(T)$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.topSet_sum_le"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.topSet_sum_le"))
 
 #v(0.3em)
 *Warning.* The condition $|S| = |T|$ is necessary. Take $d = (5, -1)$, $T = I$ and $S = {1}$. Then $T$ is a top
@@ -241,7 +201,7 @@ two sets by a bijection. It needs no choice of a bijection and gives the same bo
   Let $e : {0, dots, n - 1} -> I$ be a bijection such that $d compose e$ does not increase. Let
   $T_k = e({0, dots, k - 1})$ and $Pi_k = sum_(j < k) d(e(j))$. For $k <= n$, the set $T_k$ is a top set of $d$,
   $|T_k| = k$, and $d(T_k) = Pi_k$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.isTopSet_prefixSet", "EBaMlProofs.Greedy.card_prefixSet", "EBaMlProofs.Greedy.sum_prefixSet"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.isTopSet_prefixSet", "EBaMlProofs.LocalExplanations.Greedy.card_prefixSet", "EBaMlProofs.LocalExplanations.Greedy.sum_prefixSet"))
 
 #proof[
   *ASSUME:* $e$ is a bijection, $d compose e$ does not increase, and $k <= n$. *PROVE:* the three claims.
@@ -259,7 +219,7 @@ two sets by a bijection. It needs no choice of a bijection and gives the same bo
 #theorem("greedy threshold", [
   Let $tau in RR$, and let $e$ be as in Lemma 2. *Assume* $k <= n$, $Pi_k > tau$, and $Pi_j <= tau$ for each
   $j < k$. Then (a) $d(T_k) > tau$, and (b) each set $S$ with $d(S) > tau$ has $|S| >= k$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.threshold_minimal"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.threshold_minimal"))
 
 #proof[
   *ASSUME:* $k <= n$, $Pi_k > tau$, and $Pi_j <= tau$ for each $j < k$. *PROVE:* (a) and (b).
@@ -275,7 +235,7 @@ two sets by a bijection. It needs no choice of a bijection and gives the same bo
 
 #corollary("no answer", [
   If $Pi_k <= tau$ for each $k <= n$, then $d(S) <= tau$ for each set $S$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.no_answer"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.no_answer"))
 
 #proof[
   Let $S$ be a set. Then $|S| <= n$, and $d(S) <= d(T_(|S|)) = Pi_(|S|) <= tau$ by Lemma 1, Lemma 2 and the
@@ -284,7 +244,7 @@ two sets by a bijection. It needs no choice of a bijection and gives the same bo
 
 #corollary("chosen values are positive", [
   Under the assumptions of Theorem 1, $d(e(j)) > 0$ for each $j < k$.
-], lean: ("proofs/EBaMlProofs/Greedy.lean", "EBaMlProofs.Greedy.pos_of_threshold"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Greedy.lean", "EBaMlProofs.LocalExplanations.Greedy.pos_of_threshold"))
 
 #proof[
   *ASSUME:* the assumptions of Theorem 1, and $j < k$ (so $k >= 1$). *PROVE:* $d(e(j)) > 0$.
@@ -301,7 +261,7 @@ and this is the reason why the abstract result applies.
 
 #lemma("the margin is not negative", [
   $M >= 0$. Therefore no change with $S = emptyset$ flips the prediction.
-], lean: ("proofs/EBaMlProofs/Model.lean", "EBaMlProofs.Model.margin_nonneg"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.margin_nonneg"))
 
 #proof[
   *ASSUME:* the model of @sec-model. *PROVE:* $M >= 0$.
@@ -315,7 +275,7 @@ and this is the reason why the abstract result applies.
 #lemma("best change of a set", [
   For each change $(S, w)$: $R(S, w) = M - sum_(i in S) (t_i (c_i) - p_i (w_i)) >= M - d(S)$, with equality when
   $w = beta$. Therefore a set $S$ has a change that flips the prediction iff $d(S) > M$.
-], lean: ("proofs/EBaMlProofs/Model.lean", "EBaMlProofs.Model.robustMargin_eq", "EBaMlProofs.Model.robustMargin_ge", "EBaMlProofs.Model.robustMargin_beta", "EBaMlProofs.Model.canFlip_iff"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.robustMargin_eq", "EBaMlProofs.LocalExplanations.Model.robustMargin_ge", "EBaMlProofs.LocalExplanations.Model.robustMargin_beta", "EBaMlProofs.LocalExplanations.Model.canFlip_iff"))
 
 #proof[
   *ASSUME:* a change $(S, w)$. *PROVE:* the equation, the bound, the equality and the equivalence.
@@ -335,7 +295,7 @@ and this is the reason why the abstract result applies.
 
 #lemma("fixing adds the gain", [
   $W(F) = W(emptyset) + sum_(i in F) h_i$. Therefore $F$ is sufficient iff $sum_(i in F) h_i > -W(emptyset)$.
-], lean: ("proofs/EBaMlProofs/Model.lean", "EBaMlProofs.Model.worst_eq", "EBaMlProofs.Model.sufficient_iff"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.worst_eq", "EBaMlProofs.LocalExplanations.Model.sufficient_iff"))
 
 #proof[
   *ASSUME:* a set $F$. *PROVE:* the equation and the equivalence.
@@ -354,7 +314,7 @@ and this is the reason why the abstract result applies.
   (b) no change of fewer than $k$ features flips the prediction,
   (c) each of these $k$ features moves to a bin $beta_i eq.not c_i$, and
   (d) if $Pi_k <= M$ for each $k <= n$, no change of any set of features flips the prediction.
-], lean: ("proofs/EBaMlProofs/Model.lean", "EBaMlProofs.Model.min_change (a, b)", "EBaMlProofs.Model.chosen_bin_differs (c)", "EBaMlProofs.Model.min_change_none (d)"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.min_change (a, b)", "EBaMlProofs.LocalExplanations.Model.chosen_bin_differs (c)", "EBaMlProofs.LocalExplanations.Model.min_change_none (d)"))
 
 #proof[
   *ASSUME:* the model, an ordering $e$ of the drops, and the conditions of the statement. *PROVE:* (a)–(d).
@@ -382,7 +342,7 @@ and this is the reason why the abstract result applies.
   (b) no set of fewer than $k$ features is sufficient, and
   (c) if $W(emptyset) + Pi_k <= 0$ for each $k <= n$, no set of features is sufficient. This includes the set of all
   features.
-], lean: ("proofs/EBaMlProofs/Model.lean", "EBaMlProofs.Model.min_sufficient_reason (a, b)", "EBaMlProofs.Model.min_sufficient_reason_none (c)"))
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.min_sufficient_reason (a, b)", "EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none (c)"))
 
 #proof[
   *ASSUME:* the model, an ordering $e$ of the gains, and the conditions of the statement. *PROVE:* (a)–(c).
@@ -433,8 +393,8 @@ The proof does not cover the following points.
 = Computer check <sec-computer>
 
 The Lean 4 library in `proofs/` states each lemma, theorem and corollary of @sec-abstract and @sec-application
-and proves it with the Mathlib library @mathlib2020. The file `EBaMlProofs/Greedy.lean` holds the abstract part, and
-the file `EBaMlProofs/Model.lean` holds the model and the two theorems. The file `EBaMlProofs/Axioms.lean` prints the
+and proves it with the Mathlib library @mathlib2020. The file `EBaMlProofs/LocalExplanations/Greedy.lean` holds the abstract part, and
+the file `EBaMlProofs/LocalExplanations/Model.lean` holds the model and the two theorems. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
 axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
 
 The check is not part of continuous integration. A reader runs it by hand. @sec-appendix gives the exact commands,
@@ -458,7 +418,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`037af8ba9f730bd9bf47c88873b825dfc4e25967`],
+  [Lean sources checked at commit], [`fa80d8d76f4c42836ed0221bc796cb6e0d42acb8`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -474,11 +434,11 @@ are the same at the commit above and at the commit of this paper. The line numbe
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 037af8ba9f730bd9bf47c88873b825dfc4e25967
+git checkout fa80d8d76f4c42836ed0221bc796cb6e0d42acb8
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
-typst compile paper.typ   # build paper.pdf
+typst compile --root papers papers/local-explanations/paper.typ
 ```
 
 If `lake exe cache get` cannot reach its server, `lake build` compiles the imported part of Mathlib from source.
@@ -488,22 +448,22 @@ This takes tens of minutes, and the result is the same.
 with `error`. The file `Axioms.lean` prints these lines, in this order:
 
 ```text
-info: EBaMlProofs/Axioms.lean:10:0: 'EBaMlProofs.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Axioms.lean:11:0: 'EBaMlProofs.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Axioms.lean:12:0: 'EBaMlProofs.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Axioms.lean:13:0: 'EBaMlProofs.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Axioms.lean:14:0: 'EBaMlProofs.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Axioms.lean:15:0: 'EBaMlProofs.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:10:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:11:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
-are expected, and they do not affect the result. The output of each `#print axioms` shows only `propext`, `Classical.choice` and `Quot.sound`. The word `sorryAx`
+are expected, and they do not affect the result. The output of each `#print axioms` shows only `propext`, `Classical.choice` and `Quot.sound`. The line breaks of long lines may differ. The word `sorryAx`
 must not appear. To search for it, run `lake build 2>&1 | grep -c sorry`. The expected result is `0`.
 
-The command `typst compile paper.typ` writes `paper.pdf` and prints nothing.
+The last command writes `papers/local-explanations/paper.pdf` and prints nothing.
 
-*Statements and Lean names.* The directory is `proofs/EBaMlProofs/`. The namespace of each name is
-`EBaMlProofs.Greedy` or `EBaMlProofs.Model`.
+*Statements and Lean names.* The directory is `proofs/EBaMlProofs/LocalExplanations/`. In the table, `Greedy.` stands for
+`EBaMlProofs.LocalExplanations.Greedy.` and `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`.
 
 #table(
   columns: (auto, 1fr, auto),
