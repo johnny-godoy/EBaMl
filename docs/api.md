@@ -2,39 +2,39 @@
 
 ## Describing graphs and models
 
-::: ebaml.descriptors
+::: ebaml.llm.descriptors
 
 ## Options
 
-::: ebaml.options
+::: ebaml.llm.options
 
 ## Retry after a cut-off reply
 
-::: ebaml.retry
+::: ebaml.llm.retry
 
 ## Local explanations
 
-::: ebaml.local
+::: ebaml.local.facts
 
 ## Text of the local explanations
 
-::: ebaml.local_text
+::: ebaml.local.fact_text
 
 ## Graphs
 
-::: ebaml.graphs
+::: ebaml.graphs.ebm_graph
 
 ## Text of the graphs
 
-::: ebaml.graph_text
+::: ebaml.graphs.graph_text
 
 ## Types
 
-::: ebaml.custom_types
+::: ebaml.core.custom_types
 
 ## Exceptions
 
-::: ebaml.exceptions
+::: ebaml.core.exceptions
 
 ## Benchmark
 

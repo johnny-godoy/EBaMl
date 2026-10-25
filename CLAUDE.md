@@ -21,7 +21,7 @@ baml test -i root::Live            # live prompt tests (baml_src/prompt_tests.ba
 uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 prek run --all-files               # all hooks: ruff, vulture, pyrefly, baml fmt, check-ignores, uv lock --check
-uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
+uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
 uv run --group docs mkdocs serve   # preview the docs; the first build runs the notebook and is slow
@@ -39,11 +39,11 @@ The boundary between the two languages is the generated `baml_sdk` package.
   `ai.clients.Retry` wraps each one (`Router`, `RouterLong`, `RouterBenchmark`). To change the provider, edit only the
   `*Base` lines and run `baml generate`. The Python code stays the same. Every BAML entry point accepts an optional
   `client: ai.Client`, which the offline tests use. The Python wrappers do not expose it.
-- `baml_src/local_explanations.baml` and `src/ebaml/local.py` produce local (per-prediction) explanations. Python
+- `baml_src/local_explanations.baml` and `src/ebaml/local/` produce local (per-prediction) explanations. Python
   computes the facts exactly from EBM scores and confidence intervals (counterfactual, sufficient reason, completions;
   arXiv:2010.12265). The LLM only puts them in words. Only binary classifiers without interactions work.
-- `src/ebaml/graphs.py` and `graph_text.py` extract and simplify an `EBMGraph` and convert it to and from text. The
-  token budget is an estimate of about 3 characters per token. `descriptors.py` connects this code to `baml_sdk`
+- `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text. The
+  token budget is an estimate of about 3 characters per token. `llm/descriptors.py` connects this code to `baml_sdk`
   (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
 - `src/ebaml/benchmark.py` and `benchmark/` are the port of the TalkToEBM benchmark. `is_correct` parses and compares
   values.

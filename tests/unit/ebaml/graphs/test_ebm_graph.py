@@ -10,9 +10,9 @@ import pytest
 from interpret.glassbox import ExplainableBoostingClassifier
 
 import baml_sdk
-from ebaml.custom_types import FeatureType, Normalization
-from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
-from ebaml.graphs import BudgetCheck, EBMGraph, TokenBudget
+from ebaml.core.custom_types import FeatureType, Normalization
+from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
+from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
 from tests.unit.ebaml.conftest import fake_model
 
 INF = float("inf")

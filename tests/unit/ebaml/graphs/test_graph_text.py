@@ -2,7 +2,7 @@
 
 import pytest
 
-from ebaml.graph_text import parse_str_tuple_to_float_tuple, xy_to_json
+from ebaml.graphs.graph_text import parse_str_tuple_to_float_tuple, xy_to_json
 
 
 def test_xy_to_jsoncontinuous() -> None:

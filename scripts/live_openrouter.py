@@ -11,8 +11,8 @@ import numpy as np
 from interpret.glassbox import ExplainableBoostingClassifier
 from structlog.testing import capture_logs
 
-from ebaml.descriptors import describe_ebm, describe_graph
-from ebaml.options import PromptOptions
+from ebaml.llm.descriptors import describe_ebm, describe_graph
+from ebaml.llm.options import PromptOptions
 
 
 def _fit_small_ebm() -> ExplainableBoostingClassifier:

@@ -11,8 +11,8 @@ from typing import Any, override
 
 import orjson
 
-from ebaml.custom_types import Audience
-from ebaml.local import Change, Contribution, Counterfactual, LocalFacts, Prediction, SufficientReason
+from ebaml.core.custom_types import Audience
+from ebaml.local.facts import Change, Contribution, Counterfactual, LocalFacts, Prediction, SufficientReason
 
 _LIKELIHOOD_WORDS = (
     (0.95, "almost certain"),

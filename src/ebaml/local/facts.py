@@ -9,8 +9,8 @@ Interpretability through the Lens of Computational Complexity" (arXiv:2010.12265
 
 An EBM without interactions is a sum of one score per feature, so the first two are solved exactly by sorting the
 features by how much they move the score, and the third by sampling the unknown features from their training
-distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text: ``ebaml.local_text`` puts the
-facts in words for the prompts in ``baml_src/local_explanations.baml``.
+distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
+``ebaml.local.fact_text`` puts the facts in words for the prompts in ``baml_src/local_explanations.baml``.
 
 The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
 the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason
@@ -26,8 +26,8 @@ from typing import Any
 import attrs
 import numpy as np
 
-from ebaml.custom_types import ExplainableBoostingModel
-from ebaml.graphs import EBMGraph
+from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.graphs.ebm_graph import EBMGraph
 
 _N_CLASSES = 2
 

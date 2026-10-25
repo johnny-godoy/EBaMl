@@ -6,8 +6,8 @@ from collections.abc import Iterable, Sequence
 import orjson
 import scipy
 
-from ebaml.custom_types import FeatureType, normalize_feature_type
-from ebaml.exceptions import InvalidOptionError
+from ebaml.core.custom_types import FeatureType, normalize_feature_type
+from ebaml.core.exceptions import InvalidOptionError
 
 # the lines of the textual representation of a graph, as written by ``EBMGraph.to_text``
 _NAME_LINE = re.compile(r"^[ \t]*Feature Name: (.*)$", re.MULTILINE)

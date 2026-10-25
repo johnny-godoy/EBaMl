@@ -6,8 +6,8 @@ model predict this for this one input?**
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml.descriptors import describe_ebm, explain_instance
-from ebaml.options import PromptOptions
+from ebaml.llm.descriptors import describe_ebm, explain_instance
+from ebaml.llm.options import PromptOptions
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
 global_explanation = describe_ebm(ebm, prompt=PromptOptions(dataset_description="..."))  # once per model
@@ -31,10 +31,10 @@ The design has one rule: **nothing that can be computed is left to the LLM.**
 
 ```text
 EBM + one input
-      │  ebaml.local (Python, deterministic)
+      │  ebaml.local.facts (Python, deterministic)
       ▼
 Facts: prediction, counterfactual, sufficient reason, completions
-      │  ebaml.local_text.facts_to_texts(audience)
+      │  ebaml.local.fact_text.facts_to_texts(audience)
       ▼
 One JSON text per explanation ──┐
                                 ├──▶ BAML explain_local (3 LLM calls) ──▶ LocalExplanation
@@ -43,7 +43,7 @@ Global explanation (describe_ebm) ┘                                         (3
 
 1. `compute_local_facts` reads the scores and confidence intervals of the EBM and works out the facts. It is
    deterministic: the same model and input always give the same facts.
-2. `facts_to_texts` (module `ebaml.local_text`) renders each fact as JSON for the audience. This is where numbers are
+2. `facts_to_texts` (module `ebaml.local.fact_text`) renders each fact as JSON for the audience. This is where numbers are
    removed for a layperson.
 3. `explain_local` (BAML, `baml_src/local_explanations.baml`) makes three LLM calls concurrently, one per
    explanation. Each prompt starts with the **global explanation** of the model, so the LLM knows what the features
@@ -113,9 +113,9 @@ having the number. The choice is validated, so `audience="child"` raises `Invali
 You can see exactly what the LLM reads, without calling it:
 
 ```python
-from ebaml.custom_types import Audience
-from ebaml.local import compute_local_facts
-from ebaml.local_text import facts_to_texts
+from ebaml.core.custom_types import Audience
+from ebaml.local.facts import compute_local_facts
+from ebaml.local.fact_text import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
 texts = facts_to_texts(facts, Audience.DATA_SCIENTIST)
@@ -151,8 +151,8 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 ## Options
 
 The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, local, prompt)`.
-The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions` from `ebaml.local`. `prompt` is a
-`PromptOptions` from `ebaml.options`. The table shows where each setting goes:
+The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions` from `ebaml.local.facts`. `prompt` is a
+`PromptOptions` from `ebaml.llm.options`. The table shows where each setting goes:
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
@@ -167,7 +167,7 @@ The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions`
 
 The LLM client is the `Router` in `baml_src/talk_to_ebm.baml`, shared with the global explanation: see
 [Changing the LLM provider](providers.md). Token usage of the three calls is logged at `INFO` on the
-`ebaml.descriptors` logger as `usage`.
+`ebaml.llm.descriptors` logger as `usage`.
 
 To compute the facts alone, with no LLM and no key, call `compute_local_facts(ebm, instance, LocalOptions(...))`.
 

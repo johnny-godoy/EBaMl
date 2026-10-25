@@ -10,13 +10,19 @@ import numpy.typing as npt
 import scipy
 from interpret.glassbox._ebm._utils import convert_to_intervals  # ruff: ignore[import-private-name] -- interpret has no public convert_to_intervals
 
-from ebaml.custom_types import ExplainableBoostingModel, FeatureType, Normalization, coerce_enum, normalize_feature_type
-from ebaml.exceptions import (
+from ebaml.core.custom_types import (
+    ExplainableBoostingModel,
+    FeatureType,
+    Normalization,
+    coerce_enum,
+    normalize_feature_type,
+)
+from ebaml.core.exceptions import (
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
     InvalidOptionError,
 )
-from ebaml.graph_text import parse_graph_text, xy_to_json
+from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
 
 # nominal features are unordered categories
 _FORMAT_ALIASES = {FeatureType.NOMINAL: FeatureType.CATEGORICAL}
@@ -526,7 +532,7 @@ class EBMGraph:
     def from_text(cls, text: str) -> Self:
         """Parse the textual representation of a graph back into a graph. The inverse of ``to_text``.
 
-        See ``ebaml.graph_text.parse_graph_text`` for the details of the format.
+        See ``ebaml.graphs.graph_text.parse_graph_text`` for the details of the format.
 
         Parameters
         ----------

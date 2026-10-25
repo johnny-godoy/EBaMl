@@ -2,7 +2,7 @@
 
 import pytest
 
-from ebaml.custom_types import (
+from ebaml.core.custom_types import (
     ExplainableBoostingModel,
     FeatureType,
     Normalization,
@@ -10,7 +10,7 @@ from ebaml.custom_types import (
     normalize_feature_type,
     normalize_feature_types,
 )
-from ebaml.exceptions import InvalidOptionError
+from ebaml.core.exceptions import InvalidOptionError
 
 
 def test_normalization_values() -> None:

@@ -1,14 +1,14 @@
 """Retry an LLM call with a smaller graph when the reply is cut off.
 
 This module holds the policy only. It imports no LLM client, so the caller passes the call, the truncation test, the
-token estimate and the graph rebuild. ``ebaml.descriptors`` passes the real ``baml_sdk`` functions.
+token estimate and the graph rebuild. ``ebaml.llm.descriptors`` passes the real ``baml_sdk`` functions.
 """
 
 from collections.abc import Callable
 
 import structlog
 
-from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
+from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 

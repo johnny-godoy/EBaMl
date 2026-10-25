@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 from structlog.testing import capture_logs
 
-from ebaml import retry
-from ebaml.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
+from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError
+from ebaml.llm import retry
 
 
 class CutOffError(Exception):

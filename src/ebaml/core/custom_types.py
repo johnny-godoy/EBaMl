@@ -9,7 +9,7 @@ from interpret.glassbox import (
     ExplainableBoostingRegressor,
 )
 
-from ebaml.exceptions import InvalidOptionError
+from ebaml.core.exceptions import InvalidOptionError
 
 ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRegressor
 
