@@ -12,6 +12,19 @@ structured logging.
 LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrouter/free`), so no paid API key is needed.
 
 <!-- --8<-- [end:intro] -->
+## Supported models
+
+<!-- --8<-- [start:supported-models] -->
+| Feature | Binary classifier | Regressor | Multiclass classifier | Interactions |
+| --- | :---: | :---: | :---: | :---: |
+| Graph descriptions (`describe_graph`) | ✅ | ✅ | ❌ | ⚠️ |
+| Model summary (`describe_ebm`) | ✅ | ✅ | ❌ | ⚠️ |
+| Graph text (`EBMGraph`) | ✅ | ✅ | ❌ | ⚠️ |
+| Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
+
+✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped without a
+warning. ❌ not supported yet. Full support is on the roadmap.
+<!-- --8<-- [end:supported-models] -->
 ## Setup
 
 <!-- --8<-- [start:setup] -->

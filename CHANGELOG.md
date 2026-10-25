@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The README and the home page of the documentation have a table of the model types that each feature supports:
+  binary classifiers, regressors, multiclass classifiers and models with interactions.
 - `ebaml.EBaMlError` is the base class of every error that `ebaml` raises on purpose, so `except EBaMlError` catches
   all of them. The existing error classes derive from it.
 - New error classes replace the plain `ValueError` errors: `OptionRangeError`, `InvalidInstanceError`,

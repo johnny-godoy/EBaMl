@@ -2,6 +2,10 @@
 
 --8<-- "README.md:intro"
 
+## Supported models
+
+--8<-- "README.md:supported-models"
+
 ## Where to go next
 
 - [Setup](setup.md): install the BAML toolchain, set an API key, generate the SDK, troubleshooting.
