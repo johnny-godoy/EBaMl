@@ -90,3 +90,43 @@ def fakes(monkeypatch, counted):
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("describe_graph_cot", returning(counted)))
     # ok: ebaml-sdk-fake-is-checked
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+
+
+# ruleid: ebaml-return-attrs-not-container
+def returns_dict(x) -> dict[str, float]:
+    return {"a": x}
+
+
+# ruleid: ebaml-return-attrs-not-container
+def returns_tuple(x) -> tuple[str, float]:
+    return ("a", x)
+
+
+# ruleid: ebaml-return-attrs-not-container
+def returns_list_of_tuples(x) -> list[tuple[float, str]]:
+    return [(x, "a")]
+
+
+# ruleid: ebaml-return-attrs-not-container
+def returns_list_of_dicts(x) -> list[dict[str, float]]:
+    return [{"a": x}]
+
+
+# ok: ebaml-return-attrs-not-container
+def returns_attrs(x) -> Fields:
+    return Fields(x)
+
+
+# ok: ebaml-return-attrs-not-container
+def returns_homogeneous_tuple(x) -> tuple[float, ...]:
+    return (x,)
+
+
+# ok: ebaml-return-attrs-not-container
+def returns_list(x) -> list[float]:
+    return [x]
+
+
+# ok: ebaml-return-attrs-not-container
+def returns_suppressed(x) -> dict[str, float]:  # nosemgrep: ebaml-return-attrs-not-container -- test of the opt-out
+    return {"a": x}

@@ -324,7 +324,10 @@ def _(Audience, facts, facts_to_texts, mo) -> None:
     audience_texts = {audience: facts_to_texts(facts, audience) for audience in Audience}
     mo.ui.tabs({
         kind: mo.hstack(
-            [mo.md(f"**{audience.value}**\n```json\n{audience_texts[audience][kind]}\n```") for audience in Audience],
+            [
+                mo.md(f"**{audience.value}**\n```json\n{getattr(audience_texts[audience], kind)}\n```")
+                for audience in Audience
+            ],
             align="start",
             justify="start",
         )

@@ -65,6 +65,7 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 
 - Run `prek run --all-files` before you report a task as done. The hooks enforce the project's quality bar.
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
+- Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/return-types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
 - Ship each bug fix with a guard: a unit test or a semgrep rule that fails on the old code (`.claude/rules/bug-fixes.md`).
 - Add a `CHANGELOG.md` entry under `[Unreleased]` for each user-visible change.

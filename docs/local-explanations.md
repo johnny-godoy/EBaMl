@@ -119,7 +119,7 @@ from ebaml.local.fact_text import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
 texts = facts_to_texts(facts, Audience.DATA_SCIENTIST)
-print(texts["counterfactual"])
+print(texts.counterfactual)
 ```
 
 ```json

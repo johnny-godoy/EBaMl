@@ -3,6 +3,7 @@
 import re
 from collections.abc import Iterable, Sequence
 
+import attrs
 import orjson
 import scipy
 
@@ -37,6 +38,7 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
     return "{" + ", ".join(f'"{key}": {y}' for key, y in zip(keys, y_vals, strict=True)) + "}"
 
 
+# nosemgrep: ebaml-return-attrs-not-container -- an interval is a homogeneous pair, like EBMGraph.x_vals
 def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
     """Parse a string tuple to a float tuple.
 
@@ -94,6 +96,7 @@ def _search_line(pattern: re.Pattern[str], text: str, what: str) -> re.Match[str
     return match
 
 
+# nosemgrep: ebaml-return-attrs-not-container -- the keys are the intervals of the line, so they are data
 def _load_line(line: str, what: str) -> dict[str, float]:
     """Read the JSON object of one line of the textual representation of a graph.
 
@@ -123,9 +126,18 @@ def _load_line(line: str, what: str) -> dict[str, float]:
     return values
 
 
-def parse_graph_text(
-    text: str,
-) -> tuple[str, str, list[tuple[float, float]], list[float], list[float]]:
+@attrs.frozen
+class ParsedGraph:
+    """The fields of a graph that ``parse_graph_text`` reads from a text. They are the fields of ``EBMGraph``."""
+
+    feature_name: str
+    feature_type: str
+    x_vals: list[tuple[float, float]]
+    scores: list[float]
+    stds: list[float]
+
+
+def parse_graph_text(text: str) -> ParsedGraph:
     """Read the fields of a graph from its textual representation. The inverse of ``EBMGraph.to_text``.
 
     The text may contain other lines (such as the preamble or an LLM prompt around the graph). Only the lines
@@ -140,7 +152,7 @@ def parse_graph_text(
 
     Returns
     -------
-    tuple[str, str, list[tuple[float, float]], list[float], list[float]]
+    ParsedGraph
         The feature name, the feature type, the x-axis intervals, the scores and the standard deviations.
 
     Raises
@@ -168,10 +180,10 @@ def parse_graph_text(
         raise GraphTextError(msg)
     confidence_level = float(lower_match.group(1)) / 100
     factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
-    return (
-        feature_name,
-        feature_type,
-        [parse_str_tuple_to_float_tuple(interval) for interval in means],
-        list(means.values()),
-        [(upper[interval] - lower[interval]) / 2 / factor for interval in means],
+    return ParsedGraph(
+        feature_name=feature_name,
+        feature_type=feature_type,
+        x_vals=[parse_str_tuple_to_float_tuple(interval) for interval in means],
+        scores=list(means.values()),
+        stds=[(upper[interval] - lower[interval]) / 2 / factor for interval in means],
     )

@@ -557,4 +557,4 @@ class EBMGraph:
             The graph.
 
         """
-        return cls(*parse_graph_text(text))
+        return cls(**attrs.asdict(parse_graph_text(text), recurse=False))
