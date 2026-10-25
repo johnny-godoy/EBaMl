@@ -12,6 +12,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 120,
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && $(command -v prek || echo 'uvx prek') install > /dev/null 2>&1 || echo 'prek install failed: commit messages are not checked before CI. Run prek install.' >&2"
+          }
+        ]
+      }
     ]
   }
 }
