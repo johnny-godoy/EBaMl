@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
+from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -206,6 +206,15 @@ def test_rejects_multiclass(fit_ebm: Callable[..., ExplainableBoostingClassifier
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
     ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
+    with pytest.raises(UnsupportedModelError, match="binary"):
+        local.compute_local_facts(ebm, instance_of(frame, 0))
+
+
+def test_rejects_regressor_with_unsupported_model_error() -> None:
+    # a regressor has no classes_, so the check once raised an AttributeError and not an UnsupportedModelError
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(rng.normal(size=(200, 2)), columns=["a", "b"])
+    ebm = ExplainableBoostingRegressor(interactions=0, random_state=0).fit(frame, frame["a"] * 2)
     with pytest.raises(UnsupportedModelError, match="binary"):
         local.compute_local_facts(ebm, instance_of(frame, 0))
 
