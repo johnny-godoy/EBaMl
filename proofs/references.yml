@@ -1,0 +1,39 @@
+barcelo2020:
+  type: web
+  title: "Model Interpretability through the Lens of Computational Complexity"
+  author: ["Barceló, Pablo", "Monet, Mikaël", "Pérez, Jorge", "Subercaseaux, Bernardo"]
+  date: 2020
+  url: https://arxiv.org/abs/2010.12265
+  note: "arXiv:2010.12265. NeurIPS 2020."
+
+lamport2012:
+  type: article
+  title: "How to Write a 21st Century Proof"
+  author: ["Lamport, Leslie"]
+  date: 2012
+  parent:
+    type: periodical
+    title: "Journal of Fixed Point Theory and Applications"
+    volume: 11
+  page-range: 43-63
+
+asd2021:
+  type: web
+  title: "ASD-STE100 Simplified Technical English"
+  author: ["ASD Simplified Technical English Maintenance Group"]
+  url: https://www.asd-ste100.org
+
+mathlib2020:
+  type: web
+  title: "The Lean Mathematical Library"
+  author: ["The mathlib Community"]
+  date: 2020
+  url: https://arxiv.org/abs/1910.09336
+  note: "arXiv:1910.09336. Source: https://github.com/leanprover-community/mathlib4."
+
+lean4:
+  type: web
+  title: "The Lean 4 Theorem Prover and Programming Language"
+  author: ["de Moura, Leonardo", "Ullrich, Sebastian"]
+  date: 2021
+  url: https://lean-lang.org
