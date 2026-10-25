@@ -106,10 +106,10 @@ hooks = [
   },
   {
     id = "check-changelog",
-    name = "each user-visible change is released with a new version",
+    name = "the changelog, its fragments and the version agree",
     language = "system",
     entry = "uv run python -m scripts.check_changelog",
-    files = "^(CHANGELOG\\.md|pyproject\\.toml)$",
+    files = "^(CHANGELOG\\.md|pyproject\\.toml|changelog\\.d/.*)$",
     pass_filenames = false,
     priority = 50,
   },
