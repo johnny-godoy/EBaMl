@@ -30,7 +30,7 @@ the *gains*.
 ## How the proof is checked
 
 A Lean 4 library checks each statement with the Mathlib library. The paper names the Lean theorem of each statement.
-Its appendix gives the commands to repeat the check. The check runs by hand, and it is not part of CI.
+Its appendix gives the commands to repeat the check. A CI job repeats it when the Lean files change.
 
 - [Lean files](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/EBaMlProofs)
 - [Typst source of the paper](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/papers/local-explanations)

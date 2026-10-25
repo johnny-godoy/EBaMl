@@ -57,6 +57,8 @@ One Lake project serves all topics. Add a topic. Do not add a project.
   commit in the appendix, and rebuild. A proof of old code is not a proof of the new code.
 - Do not mark a proof as checked without a successful `lake build`. If the network blocks elan or the Mathlib cache,
   read the environment documentation, report the blocked host, and say what you ran instead.
-- The check runs by hand. Do not add a GitHub workflow for it, unless the user asks.
+- `.github/workflows/proofs.yml` runs `lake build` and checks the axioms, but only when the Lean files or the pins
+  change. A change to the code does not start it, because the proofs do not import the code. The unit tests guard the
+  link between the code and the model. The docs build compiles the papers.
 - Write the paper by `writing-style.md`: Bourbaki structure, Lamport steps, ASD-STE100 language, one term for one
   concept.

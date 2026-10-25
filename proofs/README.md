@@ -18,7 +18,8 @@ directory are in `.claude/rules/proofs.md`.
 - `EBaMlProofs.lean` imports every topic file.
 - `papers/style.typ` is the Typst style that all papers share. `papers/<topic>/paper.typ` is the paper of a topic.
 
-CI does not run this check. Run it by hand with the commands below.
+CI runs `lake build` when the Lean files or the pins change (`.github/workflows/proofs.yml`). To run the check by hand,
+use the commands below.
 
 ## Check the proofs
 

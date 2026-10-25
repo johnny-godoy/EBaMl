@@ -396,7 +396,8 @@ and proves it with the Mathlib library @mathlib2020. The file `EBaMlProofs/Local
 the file `EBaMlProofs/LocalExplanations/Model.lean` holds the model and the two theorems. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
 axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
 
-The check is not part of continuous integration. A reader runs it by hand. @sec-appendix gives the exact commands,
+A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
+by hand. @sec-appendix gives the exact commands,
 the versions, the expected output and a table from each statement to its Lean name.
 
 = References <sec-references>
