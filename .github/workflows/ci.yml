@@ -23,15 +23,71 @@ env:
   CI_REPORT: /tmp/ci-report
 
 # Fail-fast order: cheap static gates first, in parallel; slower dynamic gates only run once those pass.
+#   changes: decides which gates a pull request needs (dorny/paths-filter); a push to main runs every gate
 #   stage 1: prek, trufflehog, semgrep, trivy
-#   stage 2: baml, pytest (needs stage 1)
-#   stage 3: mutation (needs stage 2; slowest). Only modules changed against the base run; mutation-weekly.yml runs all.
+#   stage 2: baml, pytest (need prek only, so they start while the scanners still run)
+#   stage 3: mutation (needs every gate above; slowest). Only modules changed against the base run; mutation-weekly.yml
+#            runs all.
+#
+# The ruleset requires every gate on every pull request, so a gate that the changed files cannot affect is skipped with
+# a job-level `if`, not removed with a workflow-level `paths:` filter. GitHub counts a skipped job as a pass, and a
+# filtered-out workflow would leave its required checks pending forever.
 #   progress: runs next to the gates on same-repo PRs; keeps one PR comment up to date ("CI in progress") while they run
 #   report:  always runs after all of them, replaces that comment with what failed and how to fix it
 #
 # Every gate tees its output to $CI_LOGS. A failed gate then runs `ci_report.py snippet <gate>`, which turns the logs
 # into a short "what failed / how to fix" section and uploads it for the report job.
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    # Outside a pull request there is no base to compare with, so every filter answers "true".
+    outputs:
+      baml: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.baml }}
+      deps: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.deps }}
+      python: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.python }}
+      src: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.src }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          # Each filter also lists the CI definition: a change to it must run the gates that it defines.
+          filters: |
+            baml:
+              - "baml_src/**"
+              - "baml.toml"
+              - ".github/workflows/ci.yml"
+              - ".github/actions/**"
+            deps:
+              - "uv.lock"
+              - "pyproject.toml"
+              - "**/Dockerfile*"
+              - ".github/**"
+            python:
+              - "src/**"
+              - "tests/**"
+              - "baml_src/**"
+              - "baml.toml"
+              - "benchmark/**"
+              - "scripts/**"
+              - "semgrep/**"
+              - "pyproject.toml"
+              - "uv.lock"
+              - "cosmic-ray.toml"
+              - ".github/workflows/ci.yml"
+              - ".github/actions/**"
+            src:
+              - "src/ebaml/**"
+              - ".github/workflows/ci.yml"
+              - ".github/actions/**"
+              - "scripts/mutation.py"
+              - "cosmic-ray.toml"
+
   prek:
     name: prek
     runs-on: ubuntu-latest
@@ -94,6 +150,8 @@ jobs:
 
   trivy:
     name: trivy
+    needs: [changes]
+    if: needs.changes.outputs.deps == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -115,7 +173,8 @@ jobs:
 
   baml:
     name: baml check + test
-    needs: [prek, trufflehog, semgrep, trivy]
+    needs: [changes, prek]
+    if: needs.changes.outputs.baml == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -145,7 +204,8 @@ jobs:
 
   pytest:
     name: pytest (100% coverage)
-    needs: [prek, trufflehog, semgrep, trivy]
+    needs: [changes, prek]
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -163,7 +223,10 @@ jobs:
 
   mutation:
     name: mutation (changed modules, 100% score)
-    needs: [baml, pytest]
+    needs: [changes, prek, trufflehog, semgrep, trivy, baml, pytest]
+    # A skipped gate does not block this job, so a failed or cancelled gate must be named. Without `!cancelled()` the
+    # default `success()` would skip the job whenever any gate is skipped.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.changes.outputs.src == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -219,7 +282,7 @@ jobs:
   report:
     name: report
     if: always()
-    needs: [prek, trufflehog, semgrep, trivy, baml, pytest, mutation, progress] # progress ends first, so it cannot overwrite the report
+    needs: [changes, prek, trufflehog, semgrep, trivy, baml, pytest, mutation, progress] # progress ends first, so it cannot overwrite the report
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
