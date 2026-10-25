@@ -1,7 +1,7 @@
 # Notebook
 
 A [marimo](https://marimo.io) notebook that trains an EBM on the Titanic data, asks the LLM to describe a graph and the
-whole model, and walks through the graph and text API. It is the port of TalkToEBM's *Spaceship Titanic* notebook.
+whole model, and walks through the graph and text API. It follows TalkToEBM's *Spaceship Titanic* notebook.
 To explain a single prediction, see the [local explanations notebook](local-notebook.md).
 
 The page below is the notebook with the output of its cells, exported when the docs are built. The cells that call the

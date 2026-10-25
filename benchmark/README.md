@@ -1,6 +1,6 @@
 # benchmark
 
-A port of the [benchmark of TalkToEBM](https://github.com/interpretml/TalkToEBM/tree/main/benchmark), which measures how
+This benchmark follows the [benchmark of TalkToEBM](https://github.com/interpretml/TalkToEBM/tree/main/benchmark), which measures how
 well an LLM reads the graphs of Explainable Boosting Machines. The data files are copied from there (TalkToEBM is MIT
 licensed, see its `LICENSE`) and live in `data/` instead of `benchmark/benchmark/`.
 
@@ -37,10 +37,10 @@ TalkToEBM's notebooks print each answer next to the solution and leave the compa
 `ebaml.benchmark.is_correct` parses both and compares the values, so `(a)` matches `a)`, `0.50` matches `0.5` and
 `Not monotone.` matches `Not monotone`, but `0.51` does not match `0.5`. An answer that cannot be parsed is wrong.
 
-## Not ported
+## Left out
 
 - The notebooks (`benchmark/notebooks/`) that generated the questions from an `all_graphs.pkl`, which is not in the
   upstream repository, so the questions cannot be regenerated here.
 - The saved results for GPT-4 Turbo, GPT-3.5 and Gemini 1.5 (`benchmark/results/`). They hold the raw responses next to
-  the solutions, with no scores, and they come from other models, so they are not a baseline for this port.
+  the solutions, with no scores, and they come from other models, so they are not a baseline for this benchmark.
 - `benchmark_utils.py`, which loads and trains the models on the datasets that the generator notebooks used.

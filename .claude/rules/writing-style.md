@@ -28,6 +28,24 @@ as a guide, and break one when a strict version would make the text harder to re
 The STE dictionary at <https://www.asd-ste100.org> is the reference for approved words and meanings. A technical name
 (`describe_ebm`, `OPENROUTER_API_KEY`) is always allowed.
 
+## Current state, not history
+
+The package has no users yet and makes no promise of backward compatibility. Every document describes the code as it
+is now. It is not a log. Edit or replace a sentence when the code changes, and do not add a note about the old state.
+
+- Do not write "before", "no longer", "now", "used to", "still", "keeps working", "the old ..." or "new" to compare
+  with an earlier version. Write what the code does.
+- Do not promise compatibility with an earlier version ("so code that you wrote before still works"), unless the user
+  has chosen to keep it.
+- Do not tell the story of the project ("started as a port of", "ported from"). State the relation in the present
+  tense ("is based on", "follows") and only where the reader needs it.
+- Do not keep a deprecated or removed item in the text. Delete the text with the item.
+- A comparison with another tool is allowed as a description (`docs/index.md`, "How EBaMl differs from TalkToEBM").
+- Exempt: `CHANGELOG.md`, which is a log by design, and a word with its normal sense ("before the call" for order,
+  "a new row" for an addition).
+- Audit: run `rg -in "\bbefore\b|no longer|used to|started as|\bported?\b|\bold\b|backward"` over the files in
+  scope and read each match. Fix the sentence when it compares with an earlier state.
+
 ## LLM prompts: Anthropic prompting guide
 
 Scope: every prompt string in `baml_src/*.baml`, and `CLAUDE.md`. Reference:
