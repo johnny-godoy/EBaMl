@@ -24,7 +24,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
 )
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
-from tests.unit.ebaml.conftest import appending, fake_model
+from tests.unit.ebaml.conftest import appending, call_mismatches, fake_model, fake_sdk, protocol_mismatches
 
 INF = float("inf")
 type Status = Literal["ok", "warn", "over"]
@@ -41,7 +41,7 @@ def checker(*statuses: Status, tokens: int = 10) -> Callable[..., baml_sdk.Token
     def check(**_kw: object) -> baml_sdk.TokenBudget:
         return budget(next(answers), tokens)
 
-    return check
+    return fake_sdk("check_token_budget", check)
 
 
 def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> ExplainableBoostingClassifier:
@@ -390,10 +390,11 @@ def test_to_text_default_budget_arguments() -> None:
         seen.update(kw)
         return budget("ok")
 
-    text = cont_graph().to_text(check_budget=check)
+    checked = fake_sdk("check_token_budget", check)
+    text = cont_graph().to_text(check_budget=checked)
     assert (seen["max_tokens"], seen["overbudget_percent"]) == (3000, 50)
     assert seen["text"] == text
-    cont_graph().to_text(max_tokens=7, overbudget_percent=9, check_budget=check)
+    cont_graph().to_text(max_tokens=7, overbudget_percent=9, check_budget=checked)
     assert (seen["max_tokens"], seen["overbudget_percent"]) == (7, 9)
 
 
@@ -428,7 +429,7 @@ def test_to_text_warning_points_at_the_caller() -> None:
 def test_to_text_tries_every_simplification_level() -> None:
     calls: list[dict[str, Any]] = []
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
-        cont_graph().to_text(check_budget=appending(calls, budget("over", 5)))
+        cont_graph().to_text(check_budget=fake_sdk("check_token_budget", appending(calls, budget("over", 5))))
     assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
 
 
@@ -598,6 +599,14 @@ def test_to_text_rejects_more_stds_than_scores() -> None:
     graph = EBMGraph("color", "nominal", ["a", "b"], [0.1, 0.2], [0.1, 0.1, 0.1])
     with pytest.raises(ValueError, match="longer"):
         graph.to_text()
+
+
+def test_the_budget_check_protocol_matches_the_sdk_function() -> None:
+    assert call_mismatches(BudgetCheck, "check_token_budget") == []
+
+
+def test_the_token_budget_protocol_matches_the_sdk_class() -> None:
+    assert protocol_mismatches(TokenBudget, "TokenBudget", {}) == []
 
 
 def test_baml_check_satisfies_the_budget_check_protocol() -> None:

@@ -2,6 +2,7 @@
 
 import inspect
 from pathlib import Path
+from typing import Protocol
 
 import attrs
 import orjson
@@ -26,6 +27,7 @@ from ebaml.benchmark import (
     parse_answer,
     run_task,
 )
+from tests.unit.ebaml.conftest import call_mismatches, protocol_mismatches, same_type, sdk_fields, sdk_signature
 
 DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "data"
 
@@ -237,6 +239,25 @@ def test_baml_function_satisfies_the_benchmark_protocols() -> None:
     assert isinstance(counted("a"), Reply)
 
 
+def test_the_ask_question_protocol_matches_the_sdk_function() -> None:
+    assert call_mismatches(AskQuestion, "answer_benchmark_question") == []
+    assert sdk_signature("answer_benchmark_question").return_annotation is baml_sdk.Counted
+
+
+def test_the_reply_protocol_matches_the_sdk_class() -> None:
+    assert protocol_mismatches(Reply, "Counted", {Usage: "TokenUsage"}) == []
+
+
+@pytest.mark.parametrize(("fake", "sdk_class"), [(FakeReply, "Counted"), (FakeUsage, "TokenUsage")])
+def test_a_fake_reply_has_the_fields_of_the_sdk_class(fake: type, sdk_class: str) -> None:
+    # a fake stands for an SDK class, so a field that `baml generate` renames or retypes must fail this test
+    nested = {FakeUsage: baml_sdk.TokenUsage}
+    ours = {field.name: nested.get(field.type, field.type) for field in attrs.fields(fake)}
+    theirs = sdk_fields(sdk_class)
+    assert ours.keys() == theirs.keys()
+    assert all(same_type(ours[name], theirs[name]) for name in theirs)
+
+
 def test_ask_question_protocol_takes_keyword_arguments_only() -> None:
     kinds = {name: parameter.kind for name, parameter in inspect.signature(AskQuestion.__call__).parameters.items()}
     assert kinds == {
@@ -286,3 +307,41 @@ def test_every_task_has_a_solution_strategy() -> None:
 def test_every_well_formed_solution_matches_itself(data: st.DataObject, task: Task) -> None:
     solution = data.draw(_SOLUTIONS[task], label="solution")
     assert is_correct(task, solution, solution)
+
+
+class WrongAsk(Protocol):
+    """An AskQuestion that drifted from the SDK: a retyped parameter and a renamed one."""
+
+    def __call__(self, *, question: int, answer: str) -> Reply:
+        """Ask the question."""
+        ...
+
+
+class WrongReply(Protocol):
+    """A Reply that drifted from the SDK: a retyped property and one that the SDK class lacks."""
+
+    @property
+    def text(self) -> int:
+        """The answer."""
+        ...
+
+    @property
+    def cost(self) -> float:
+        """The price."""
+        ...
+
+
+def test_call_mismatches_reports_each_difference() -> None:
+    assert call_mismatches(WrongAsk, "answer_benchmark_question") == [
+        "answer_benchmark_question has no parameter answer",
+        "the protocol lacks the parameter answer_format",
+        "answer_benchmark_question(question) is <class 'str'>, the protocol passes <class 'int'>",
+    ]
+
+
+def test_protocol_mismatches_reports_each_difference() -> None:
+    assert isinstance(WrongReply.cost, property)
+    assert protocol_mismatches(WrongReply, "Counted", {}) == [
+        "Counted.text is <class 'str'>, the protocol reads <class 'int'>",
+        "Counted has no field cost",
+    ]
