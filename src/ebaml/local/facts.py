@@ -279,7 +279,8 @@ def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, object], min
     if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
         raise UnsupportedModelError(msg)
-    if np.shape(ebm.classes_) != (_N_CLASSES,):
+    # a regressor has no classes_
+    if not hasattr(ebm, "classes_") or np.shape(ebm.classes_) != (_N_CLASSES,):
         msg = "Local explanations need a binary classifier."
         raise UnsupportedModelError(msg)
     features = []
