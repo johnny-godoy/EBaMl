@@ -9,7 +9,8 @@
    wrapper checks each call against the stub that `baml generate` writes, so a changed signature fails the test.
 5. A workaround (`# noqa`, `# type: ignore`, `pytest.mark.skip`, ...) needs a written reason next to it. Check with
    `uv run python -m scripts.check_ignores`.
-6. User-visible changes get an entry under `## [Unreleased]` in `CHANGELOG.md`.
+6. A user-visible change is a release. Raise `version` in `pyproject.toml`, run `uv lock`, and write the entries under
+   a new heading `## [X.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`. The `check-changelog` hook checks this.
 7. Open a pull request. CI must pass.
 
 Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).

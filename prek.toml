@@ -105,6 +105,15 @@ hooks = [
     priority = 50,
   },
   {
+    id = "check-changelog",
+    name = "each user-visible change is released with a new version",
+    language = "system",
+    entry = "uv run python -m scripts.check_changelog",
+    files = "^(CHANGELOG\\.md|pyproject\\.toml)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "import-linter",
     name = "import-linter: layers and BAML SDK limits",
     language = "system",

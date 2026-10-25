@@ -7,6 +7,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
+| `check_changelog.py` | Fails unless the newest `CHANGELOG.md` heading is the version in `pyproject.toml` and no change waits under `[Unreleased]`. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
@@ -58,6 +59,24 @@ uv run python -m scripts.check_exclusions   # fails if an exemption is no longer
 ```
 
 It also runs as the `check-exclusions` hook in `prek.toml`.
+
+## `check_changelog.py`
+
+Each pull request with a user-visible change is a release (see `.claude/rules/changelog-and-versioning.md`).
+`check_changelog` fails when:
+
+- `CHANGELOG.md` has an `[Unreleased]` heading,
+- the newest heading is not the `version` in `pyproject.toml`,
+- a heading is not `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`, or the versions do not decrease from top to bottom.
+
+If it fails, raise `version` in `pyproject.toml`, run `uv lock`, and put the entries under a heading for the new
+version.
+
+```bash
+uv run python -m scripts.check_changelog   # fails if a change is not released
+```
+
+It also runs as the `check-changelog` hook in `prek.toml`.
 
 ## `build_docs.py`
 

@@ -5,8 +5,9 @@ prompts, so they follow Anthropic's prompting guide. Choose the style by the rea
 
 ## Documentation: 80% of the way to ASD-STE100
 
-Scope: `README.md`, `docs/`, `benchmark/README.md`, `scripts/README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, docstrings,
-code comments and notebook prose. Exempt: code, command output, quoted error text and proper names.
+Scope: `README.md`, `ROADMAP.md`, `docs/` (except `docs/plans/`), `benchmark/README.md`, `scripts/README.md`,
+`CONTRIBUTING.md`, `CHANGELOG.md`, docstrings, code comments and notebook prose. Exempt: code, command output, quoted
+error text and proper names.
 
 Write "80% of the way to ASD-STE100". The full specification is very strict, so follow its spirit: plain, short,
 unambiguous sentences. Models know the specification well, so no tool or count measures compliance. Use the rules below
@@ -48,7 +49,8 @@ is now. It is not a log. Edit or replace a sentence when the code changes, and d
 
 ## LLM prompts: Anthropic prompting guide
 
-Scope: every prompt string in `baml_src/*.baml`, and `CLAUDE.md`. Reference:
+Scope: every prompt string in `baml_src/*.baml`, `CLAUDE.md`, and the implementation plans in `docs/plans/`, which are
+handoff prompts for the agent that implements each feature. Reference:
 <https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/overview>, which sends you to
 <https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices>.
 
@@ -79,4 +81,4 @@ headings or tags. Keep it short, because every line costs context in every sessi
 
 - After you edit a prose file, reread it once against the documentation list above, or the prompt list for a prompt.
 - A prompt change in `baml_src/` needs `baml generate`, `baml fmt`, `baml check` and `OPENROUTER_API_KEY=unused baml test -x root::Live`. Also run the live prompt tests, `baml test -i root::Live`, with a real key.
-- A user-visible wording change in a prompt needs a `CHANGELOG.md` entry under `[Unreleased]`.
+- A user-visible wording change in a prompt is a release: it needs a new version and a `CHANGELOG.md` entry.
