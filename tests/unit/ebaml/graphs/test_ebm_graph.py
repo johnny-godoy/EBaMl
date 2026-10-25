@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 import numpy as np
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
@@ -498,6 +500,14 @@ def round_trip_graph() -> EBMGraph:
     )
 
 
+def test_from_text_reads_a_confidence_level_between_whole_percents() -> None:
+    # Hypothesis found it: the label said "88%" for 0.875, so from_text read the bounds at the wrong level
+    graph = EBMGraph("age", "continuous", [(0.0, 1.0)], [0.0], [1.0])
+    text = graph.to_text(y_axis_precision=2, confidence_level=0.875)
+    assert "(87.5%-Confidence Interval)" in text
+    assert EBMGraph.from_text(text).stds == pytest.approx([1.0], abs=0.01)
+
+
 @pytest.mark.parametrize("confidence_level", [0.95, 0.9, 0.99])
 def test_from_text_inverts_to_text(confidence_level: float) -> None:
     graph = round_trip_graph()
@@ -600,3 +610,43 @@ def test_budget_check_protocol_takes_keyword_arguments_only() -> None:
 def test_token_budget_protocol_members_are_read_only_properties() -> None:
     assert isinstance(TokenBudget.estimated_tokens, property)
     assert isinstance(TokenBudget.status, property)
+
+
+type GraphParts = tuple[list[tuple[float, float]], list[float], list[float]]
+
+
+# The bins, the finite scores and the standard deviations of a continuous graph, as from_ebm builds it. The strategy
+# draws the parts and not the graph, because beartype samples with `random` when it checks the arguments of EBMGraph,
+# and Hypothesis does not allow `random` inside a strategy.
+@st.composite
+def continuous_graph_parts(draw: st.DrawFn) -> GraphParts:
+    finite = st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_subnormal=False)
+    cuts = sorted(draw(st.sets(finite, min_size=2, max_size=9)))
+    if draw(st.booleans()):
+        cuts = [-INF, *cuts[1:-1], INF]
+    x_vals = list(itertools.pairwise(cuts))
+    scores = draw(st.lists(finite, min_size=len(x_vals), max_size=len(x_vals)))
+    stds = draw(st.lists(st.floats(min_value=0, max_value=100), min_size=len(x_vals), max_size=len(x_vals)))
+    return x_vals, scores, stds
+
+
+@given(
+    parts=continuous_graph_parts(),
+    precision=st.integers(min_value=0, max_value=8),
+    confidence_level=st.floats(min_value=0.5, max_value=0.999),
+)
+def test_from_text_inverts_to_text_within_the_rounding(
+    parts: GraphParts,
+    precision: int,
+    confidence_level: float,
+) -> None:
+    graph = EBMGraph("age", "continuous", *parts)
+    text = graph.to_text(y_axis_precision=precision, confidence_level=confidence_level)
+    parsed = EBMGraph.from_text(text)
+    # to_text merges the neighboring bins of equal score first, and rounds each mean and each bound to `precision`
+    graph = graph.simplify()
+    step = 10.0**-precision
+    assert (parsed.feature_name, parsed.feature_type, parsed.x_vals) == (graph.feature_name, "continuous", graph.x_vals)
+    # a half step is the largest rounding error, and the float error of the rounding can add a tiny bit to it
+    assert parsed.scores == pytest.approx(graph.scores, rel=1e-12, abs=step / 2 * (1 + 1e-9))
+    assert parsed.stds == pytest.approx(graph.stds, rel=1e-6, abs=step)

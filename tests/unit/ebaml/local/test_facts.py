@@ -2,11 +2,13 @@
 
 import itertools
 import math
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 
 import numpy as np
 import pandas as pd
 import pytest
+from hypothesis import assume, given
+from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -539,3 +541,91 @@ def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pyt
 def test_facts_reject_a_confidence_level_out_of_range(confidence_level: float) -> None:
     with pytest.raises(ValueError, match="confidence_level"):
         local.compute_local_facts(_hand_model(), {}, local.LocalOptions(confidence_level=confidence_level))
+
+
+# A feature for the properties below: the scores, the standard deviations and the plausible bins of its graph, and the
+# bin of the instance. The strategies draw these parts and not the _Feature, because beartype samples with `random`
+# when it checks the arguments of a class, and Hypothesis does not allow `random` inside a strategy.
+type FeatureParts = tuple[list[float], list[float], list[bool], int]
+
+
+@st.composite
+def feature_parts(draw: st.DrawFn) -> FeatureParts:
+    n_bins = draw(st.integers(min_value=2, max_value=3))
+    scores = draw(st.lists(st.floats(min_value=-3, max_value=3), min_size=n_bins, max_size=n_bins))
+    stds = draw(st.lists(st.floats(min_value=0, max_value=1), min_size=n_bins, max_size=n_bins))
+    bin_index = draw(st.integers(min_value=0, max_value=n_bins - 1))
+    plausible = draw(st.lists(st.booleans(), min_size=n_bins, max_size=n_bins))
+    plausible[bin_index] = True  # _features always offers the bin of the instance
+    return scores, stds, plausible, bin_index
+
+
+def _build(parts: Sequence[FeatureParts]) -> list[local._Feature]:
+    features = []
+    for index, (scores, stds, plausible, bin_index) in enumerate(parts):
+        name = f"f{index}"
+        graph = EBMGraph(name, "nominal", [str(b) for b in range(len(scores))], scores, stds)
+        features.append(
+            local._Feature(name, graph, np.ones(len(scores)), bin_index, str(bin_index), np.array(plausible)),
+        )
+    return features
+
+
+def _sign(features: Sequence[local._Feature], intercept: float) -> int:
+    # a logit of 0 is the negative class, as in compute_local_facts
+    return 1 if intercept + sum(f.current for f in features) > 0 else -1
+
+
+# the properties recompute a sum in another order than the code, so they allow for the float error of that sum
+TOLERANCE = 1e-9
+
+FEATURES: st.SearchStrategy[list[FeatureParts]] = st.lists(feature_parts(), min_size=1, max_size=4)
+INTERCEPT: st.SearchStrategy[float] = st.floats(min_value=-2, max_value=2)
+Z: st.SearchStrategy[float] = st.floats(min_value=0, max_value=2.5)
+
+
+@given(parts=FEATURES, intercept=INTERCEPT, z=Z)
+def test_the_changes_of_a_counterfactual_flip_the_prediction(
+    parts: list[FeatureParts],
+    intercept: float,
+    z: float,
+) -> None:
+    features = _build(parts)
+    sign = _sign(features, intercept)
+    counterfactual = local._counterfactual(features, intercept, sign, z)
+    assume(counterfactual is not None)
+    assert counterfactual is not None
+    new_bins = {change.feature: int(change.to_value) for change in counterfactual.changes}
+    # the margin of the outcome after the changes, with each changed score at its most unfavourable value
+    margin = sign * intercept
+    for feature in features:
+        if feature.name in new_bins:
+            new = new_bins[feature.name]
+            assert feature.plausible[new]
+            margin += sign * float(feature.graph.scores[new]) + z * float(feature.graph.stds[new])
+        else:
+            margin += sign * feature.current
+    assert margin < TOLERANCE
+
+
+@given(parts=FEATURES, intercept=INTERCEPT, z=Z)
+def test_the_features_of_a_sufficient_reason_fix_the_outcome_for_every_completion(
+    parts: list[FeatureParts],
+    intercept: float,
+    z: float,
+) -> None:
+    features = _build(parts)
+    sign = _sign(features, intercept)
+    reason = local._sufficient_reason(features, intercept, sign, z)
+    assume(reason is not None)
+    assert reason is not None
+    # each feature of the reason keeps the bin of the instance; each other one takes any plausible bin
+    choices = [
+        [f.bin_index] if f.name in reason.features else [int(b) for b in np.flatnonzero(f.plausible)] for f in features
+    ]
+    for completion in itertools.product(*choices):
+        margin = sign * intercept + sum(
+            sign * float(f.graph.scores[b]) - z * float(f.graph.stds[b])
+            for f, b in zip(features, completion, strict=True)
+        )
+        assert margin > -TOLERANCE
