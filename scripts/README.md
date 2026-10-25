@@ -9,6 +9,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
+| `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
@@ -89,6 +90,25 @@ uv run python -m scripts.release                   # prints the next version
 ```
 
 `check_changelog` also runs as the `check-changelog` hook in `prek.toml`.
+
+## `check_commits.py`
+
+`cz check` (commitizen) checks that a commit message is a conventional commit. `check_commits` checks the rest of
+`.claude/rules/commits-and-prs.md`:
+
+- the description starts with a lower-case word and has no period at the end,
+- a commit changes at most 400 lines without generated files (`uv.lock`, `CHANGELOG.md`, `changelog.d/`), unless its
+  message has the trailer `Large-Commit: <reason of at least 4 words>`.
+
+Merge commits and `fixup!` or `squash!` commits are skipped.
+
+```bash
+uv run python -m scripts.check_commits --message-file .git/COMMIT_EDITMSG   # one message, as the commit-msg hook does
+uv run python -m scripts.check_commits --base origin/main                   # each commit of the branch, as CI does
+```
+
+The `commit-style` hook in `prek.toml` runs it at the `commit-msg` stage, next to the `commitizen` hook.
+`.github/workflows/commits.yml` runs both on the title and the commits of each pull request.
 
 ## `build_docs.py`
 
