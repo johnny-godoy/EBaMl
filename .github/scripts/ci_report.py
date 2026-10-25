@@ -558,7 +558,7 @@ def render_progress(states: Mapping[str, str]) -> str:
         "success": "✅ passed",
         "failure": "❌ **failed**, details follow when the run ends",
         "cancelled": "🚫 cancelled",
-        "skipped": "⏭️ skipped (blocked by an earlier gate)",
+        "skipped": "⏭️ skipped (no relevant change, or blocked by an earlier gate)",
     }
     finished = sum(state in FINISHED for state in states.values())
     failed = sum(state == "failure" for state in states.values())
@@ -646,15 +646,17 @@ def assemble() -> None:
         "success": "✅ passed",
         "failure": "❌ **failed**",
         "cancelled": "🚫 cancelled",
-        "skipped": "⏭️ skipped (blocked by an earlier gate)",
+        "skipped": "⏭️ skipped (no relevant change, or blocked by an earlier gate)",
     }
     results = {gate: needs.get(gate, {}).get("result", "skipped") for gate, _ in GATES}
     failed = [(gate, title) for gate, title in GATES if results[gate] == "failure"]
 
     if failed:
         lines = [f"## ❌ CI failed: {len(failed)} of {len(GATES)} gates", ""]
-    elif all(r == "success" for r in results.values()):
-        lines = ["## ✅ CI passed", "", f"All {len(GATES)} gates green on `{sha}`."]
+    elif all(r in {"success", "skipped"} for r in results.values()):
+        # With no failure, a skipped gate is one that the changed files cannot affect (see `changes` in ci.yml).
+        passed = sum(r == "success" for r in results.values())
+        lines = ["## ✅ CI passed", "", f"{passed} of {len(GATES)} gates green on `{sha}`; the others need no run."]
     else:
         lines = ["## ⚠️ CI did not finish", ""]
     lines += ["| Gate | Result |", "|---|---|"]

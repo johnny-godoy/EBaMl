@@ -18,8 +18,41 @@ env:
   OPENROUTER_API_KEY: unused
 
 jobs:
+  changes:
+    name: docs changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    # The ruleset requires "docs build" on every pull request, so the build is skipped with a job-level `if` and not
+    # removed with a workflow-level `paths:` filter. Outside a pull request the build always runs.
+    outputs:
+      docs: ${{ github.event_name != 'pull_request' && 'true' || steps.filter.outputs.docs }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            docs:
+              - "docs/**"
+              - "notebooks/**"
+              - "proofs/papers/**"
+              - "src/**"
+              - "baml_src/**"
+              - "README.md"
+              - "zensical.toml"
+              - "pyproject.toml"
+              - "uv.lock"
+              - "scripts/build_docs.py"
+              - ".github/workflows/docs.yml"
+              - ".github/actions/**"
+
   build:
     name: docs build
+    needs: [changes]
+    if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
