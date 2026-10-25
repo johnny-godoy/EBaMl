@@ -1,6 +1,7 @@
 """Fixtures and helpers for the tests of the ebaml package."""
 
 import ast
+import builtins
 import functools
 import hashlib
 import inspect
@@ -170,8 +171,60 @@ def _sdk_functions() -> dict[str, ast.FunctionDef]:
     return {node.name: node for node in _sdk_stub().body if isinstance(node, ast.FunctionDef)}
 
 
+class _UnknownNameError(LookupError):
+    """The annotation names a type that exists only in the stub, such as ``UNSET``."""
+
+
+def _lookup(name: str) -> object:
+    for namespace in (baml_sdk, builtins):
+        if hasattr(namespace, name):
+            return getattr(namespace, name)
+    raise _UnknownNameError(name)
+
+
+def _subscript(origin: object, item: object) -> object:
+    if not hasattr(origin, "__getitem__"):
+        raise _UnknownNameError(repr(origin))
+    # a special form of typing, such as typing.Union, has no static type that takes arguments in square brackets
+    generic: Any = origin
+    built: object = generic[item]
+    return built
+
+
+def _build(node: ast.expr) -> object:
+    """Build the type that an annotation of the stub names, by name lookup only, so no code of the stub runs.
+
+    Returns
+    -------
+    object
+        The type.
+
+    Raises
+    ------
+    _UnknownNameError
+        If a name is neither in ``baml_sdk``, nor in ``typing``, nor a builtin.
+
+    """
+    match node:
+        case ast.Constant(value=value):
+            built = value
+        case ast.Name(id=name):
+            built = _lookup(name)
+        case ast.Attribute(value=ast.Name(id="typing"), attr=name):
+            built = getattr(typing, name)
+        case ast.Subscript(value=origin, slice=ast.Tuple(elts=items)):
+            built = _subscript(_build(origin), tuple(_build(item) for item in items))
+        case ast.Subscript(value=origin, slice=item):
+            built = _subscript(_build(origin), _build(item))
+        case ast.BinOp(left=left, op=ast.BitOr(), right=right):
+            built = _subscript(typing.Union, (_build(left), _build(right)))
+        case _:
+            raise _UnknownNameError(ast.unparse(node))
+    return built
+
+
 def _resolve(annotation: ast.expr | None) -> object:
-    """Evaluate an annotation of the stub, or keep its text when it names a type that exists only in the stub.
+    """Build the type of an annotation of the stub, or keep its text when it names a type that exists only in the stub.
 
     Returns
     -------
@@ -181,11 +234,10 @@ def _resolve(annotation: ast.expr | None) -> object:
     """
     if annotation is None:
         return inspect.Parameter.empty
-    text = ast.unparse(annotation)
     try:
-        return eval(text, {**vars(baml_sdk), "typing": typing})  # ruff: ignore[suspicious-eval-usage] -- the text is an annotation of the generated stub, not untrusted input
-    except NameError:
-        return text
+        return _build(annotation)
+    except _UnknownNameError:
+        return ast.unparse(annotation)
 
 
 def sdk_signature(name: str) -> inspect.Signature:
