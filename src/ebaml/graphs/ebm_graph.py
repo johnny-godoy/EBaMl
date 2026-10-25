@@ -393,8 +393,11 @@ class EBMGraph:
                 for low, high in x_vals
             ]
         # formatting for boolean features
-        if feature_format is FeatureType.BOOLEAN:
-            x_vals = _BOOLEAN_KEYS
+        match feature_format:
+            case FeatureType.BOOLEAN:
+                x_vals = _BOOLEAN_KEYS
+            case _:
+                pass
 
         prompt = f"Feature Name: {self.feature_name}\n"
         prompt += f"Feature Type: {feature_format}\n"
