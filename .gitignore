@@ -45,3 +45,4 @@ proofs/.lake/
 proofs/papers/**/*.pdf
 # Notebooks exported by scripts/build_docs.py
 docs/notebooks/
+docs/proofs/

@@ -37,20 +37,24 @@ One Lake project serves all topics. Add a topic. Do not add a project.
    docstring or from the request, prove the code and report the difference to the user as an open question. Do not
    change the code to match a proof, unless the user asks.
 2. Prove the abstract result first, then apply it in the model file.
-3. Write the paper from the template: claims and scope, model with a table from each symbol to a line of the code, the
+3. Write the paper from the template: claims and scope, model with a table from each symbol to the function and expression of the code, the
    abstract result, the application, limits, computer check, references, and an appendix. Cite the Lean name and file
    next to each statement. The appendix has the commit, the versions, the commands from a clean clone, the expected output
    and a table from each statement to its Lean theorem.
+   Name functions and expressions of the code. Do not cite line numbers, because they go stale with the next change.
+   Do not describe the writing style of the paper inside the paper.
 4. Commit the Lean files first. Write that commit in the appendix as the commit that the proof was checked at. Then
    commit the paper. Commit the Typst source only, not a PDF.
-5. Point the docstring of the covered code to the paper in one sentence.
+5. Point the docstring of the covered code to the paper in one sentence. Add a docs page `docs/<topic>-proof.md` that
+   states the claims and links to `proofs/<topic>.pdf`. `scripts/build_docs.py` compiles each
+   `proofs/papers/<topic>/paper.typ` into `docs/proofs/<topic>.pdf`. Add the page to the nav in `zensical.toml`.
 6. Run `prek run --all-files`, then `cd proofs && lake build`, then compile the paper
    (`typst compile --root papers papers/<topic>/paper.typ`).
 
 ## Keep the proof true
 
-- When you change code that a paper covers, read its correspondence table. Update the model, the Lean files, the line
-  numbers and the commit in the appendix, and rebuild. A proof of old code is not a proof of the new code.
+- When you change code that a paper covers, read its correspondence table. Update the model, the Lean files and the
+  commit in the appendix, and rebuild. A proof of old code is not a proof of the new code.
 - Do not mark a proof as checked without a successful `lake build`. If the network blocks elan or the Mathlib cache,
   read the environment documentation, report the blocked host, and say what you ran instead.
 - The check runs by hand. Do not add a GitHub workflow for it, unless the user asks.

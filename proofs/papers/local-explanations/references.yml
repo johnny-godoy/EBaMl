@@ -6,23 +6,6 @@ barcelo2020:
   url: https://arxiv.org/abs/2010.12265
   note: "arXiv:2010.12265. NeurIPS 2020."
 
-lamport2012:
-  type: article
-  title: "How to Write a 21st Century Proof"
-  author: ["Lamport, Leslie"]
-  date: 2012
-  parent:
-    type: periodical
-    title: "Journal of Fixed Point Theory and Applications"
-    volume: 11
-  page-range: 43-63
-
-asd2021:
-  type: web
-  title: "ASD-STE100 Simplified Technical English"
-  author: ["ASD Simplified Technical English Maintenance Group"]
-  url: https://www.asd-ste100.org
-
 mathlib2020:
   type: web
   title: "The Lean Mathematical Library"

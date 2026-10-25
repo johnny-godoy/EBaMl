@@ -136,6 +136,7 @@ dev = [
     "ruff>=0.17.0",
     "scipy-stubs>=1.18.1.1",
     "semgrep>=1.181.0",
+    "typst>=0.15.0",
     "vulture>=2.16",
 ]
 docs = [

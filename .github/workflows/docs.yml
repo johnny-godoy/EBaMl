@@ -40,13 +40,14 @@ jobs:
           # scikit-learn stores the OpenML download here, which is the cached folder.
           SCIKIT_LEARN_DATA: ${{ runner.temp }}/scikit_learn_data
         run: uv run --frozen --group docs python -m scripts.build_docs
-      - name: Check the notebook export
+      - name: Check the notebook and paper exports
         # Zensical ignores a `hooks` setting without a warning, and an iframe target is raw HTML that no link
         # check reads. A missing export would publish empty notebook pages.
         run: |
           for name in titanic local_explanations; do
             test -s "site/notebooks/${name}.html" || { echo "::error::site/notebooks/${name}.html is missing or empty"; exit 1; }
           done
+          test -s site/proofs/local-explanations.pdf || { echo "::error::site/proofs/local-explanations.pdf is missing or empty"; exit 1; }
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:

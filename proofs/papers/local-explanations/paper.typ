@@ -12,7 +12,7 @@
 #align(center)[
   #text(size: 17pt, weight: "bold")[Optimality of the Greedy Local Explanations of EBaMl]
   #v(0.4em)
-  #text(size: 11pt)[A proof by hierarchical steps, checked in Lean 4]
+  #text(size: 11pt)[A proof checked in Lean 4]
 ]
 
 #v(1em)
@@ -22,8 +22,7 @@ _minimum change required_ is the fewest features to change so that the predictio
 reason_ is the fewest features to fix so that no values of the other features can flip the prediction. Both queries
 come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
 one sort. This paper proves that the sort is optimal. A Lean 4 file @lean4 checks every statement, and the appendix tells
-the reader how to repeat the check. The proofs use the hierarchical style of Lamport @lamport2012, and the text
-follows the rules of ASD-STE100 @asd2021.
+the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
 
@@ -77,7 +76,7 @@ code stores one flag per bin.
   `confidence_level` in $[0, 1)$ with the inverse normal distribution, so $z >= 0$.
 ])
 
-The code marks $c_i$ as plausible for each feature (`facts.py:288`). Therefore $P_i$ is not empty, and a minimum
+The code marks $c_i$ as plausible for each feature (in `_features`). Therefore $P_i$ is not empty, and a minimum
 over $P_i$ exists.
 
 #notation("sign and margin", [
@@ -95,7 +94,7 @@ The sign is $-1$ for $L = 0$. This is the same as in the code (`sign = 1 if logi
   prediction to stay.
 ])
 
-The code gives the value $+infinity$ to each bin outside $P_i$ (`facts.py:325`). A minimum over all bins is then
+The code gives the value $+infinity$ to each bin outside $P_i$ (in `_robust_scores`). A minimum over all bins is then
 a minimum over $P_i$. The paper restricts the minimum to $P_i$, and so it needs no extended reals.
 
 #notation("change and robust margin", [
@@ -104,7 +103,7 @@ a minimum over $P_i$. The paper restricts the minimum to $P_i$, and so it needs 
   The change _flips_ the prediction iff $R(S, w) < 0$.
 ])
 
-A feature outside $S$ keeps its score without deviation. The code does this (`facts.py:348`, `356`). The module
+A feature outside $S$ keeps its score without deviation. The code does this (in `_counterfactual`). The module
 docstring says that every score moves by $z$ deviations. @sec-limits discusses this difference.
 
 #notation("drop", [
@@ -126,31 +125,31 @@ docstring says that every score moves by $z$ deviations. @sec-limits discusses t
   the code returns `None`.
 ])
 
-*Correspondence of symbols to the code.* The line numbers are for `src/ebaml/local/facts.py` at the commit in
-@sec-appendix.
+*Correspondence of symbols to the code.* The code is in `src/ebaml/local/facts.py`. The table names the function
+that computes each symbol.
 
 #table(
   columns: (auto, 1fr, auto),
   stroke: 0.4pt + luma(160),
   inset: 5pt,
-  [*Symbol*], [*Computed by*], [*Line*],
-  [$z$], [`statistics.NormalDist().inv_cdf((1 + confidence_level) / 2)`], [504],
-  [$b$], [`intercept = float(np.ravel(ebm.intercept_)[0])`], [506],
-  [$L$], [`logit = intercept + sum(f.current ...)`], [507],
-  [$epsilon$], [`sign = 1 if logit > 0 else -1`], [509],
-  [$t_i (v)$], [`scores = sign * np.asarray(feature.graph.scores)`], [323],
-  [$P_i$, $c_i in P_i$], [`_plausible_bins`, then `plausible[bin_index] = True`], [215–246, 288],
-  [$p_i$, $g_i$], [`scores + stds` and `scores - stds`, with `np.inf` outside $P_i$], [324–325],
-  [$M$], [`margin = sign * intercept + sum(sign * f.current ...)`], [348],
-  [$min p_i$, $beta_i$], [`best = int(np.argmin(pessimistic))`], [351–352],
-  [$d_i$], [`sign * feature.current - float(pessimistic[best])`], [353],
-  [order $e$ for $d$], [`sorted(drops, ..., reverse=True)`], [354],
-  [first $k$ with $Pi_k > M$], [`np.flatnonzero(margin - np.cumsum(...) < 0)`, `flips[0] + 1`], [356, 359],
-  [$h_i$], [`guaranteed[feature.bin_index] - guaranteed.min()`], [393],
-  [order $e$ for $h$], [`sorted(gains, ..., reverse=True)`], [394],
-  [$W(emptyset)$], [`worst = sign * intercept + sum(... .min() ...)`], [417],
-  [$W(emptyset) + Pi_k$], [`margins = worst + np.concatenate(([0.0], np.cumsum(...)))`], [420],
-  [first $k$ with $W(emptyset) + Pi_k > 0$], [`np.flatnonzero(margins > 0)`, `enough[0]`], [421, 424],
+  [*Symbol*], [*Computed by*], [*Function*],
+  [$z$], [`statistics.NormalDist().inv_cdf((1 + confidence_level) / 2)`], [`compute_local_facts`],
+  [$b$], [`intercept = float(np.ravel(ebm.intercept_)[0])`], [`compute_local_facts`],
+  [$L$], [`logit = intercept + sum(f.current ...)`], [`compute_local_facts`],
+  [$epsilon$], [`sign = 1 if logit > 0 else -1`], [`compute_local_facts`],
+  [$t_i (v)$], [`scores = sign * np.asarray(feature.graph.scores)`], [`_robust_scores`],
+  [$P_i$, $c_i in P_i$], [`_plausible_bins`, then `plausible[bin_index] = True`], [`_plausible_bins, _features`],
+  [$p_i$, $g_i$], [`scores + stds` and `scores - stds`, with `np.inf` outside $P_i$], [`_robust_scores`],
+  [$M$], [`margin = sign * intercept + sum(sign * f.current ...)`], [`_counterfactual`],
+  [$min p_i$, $beta_i$], [`best = int(np.argmin(pessimistic))`], [`_counterfactual`],
+  [$d_i$], [`sign * feature.current - float(pessimistic[best])`], [`_counterfactual`],
+  [order $e$ for $d$], [`sorted(drops, ..., reverse=True)`], [`_counterfactual`],
+  [first $k$ with $Pi_k > M$], [`np.flatnonzero(margin - np.cumsum(...) < 0)`, `flips[0] + 1`], [`_counterfactual`],
+  [$h_i$], [`guaranteed[feature.bin_index] - guaranteed.min()`], [`_fixing_order`],
+  [order $e$ for $h$], [`sorted(gains, ..., reverse=True)`], [`_fixing_order`],
+  [$W(emptyset)$], [`worst = sign * intercept + sum(... .min() ...)`], [`_sufficient_reason`],
+  [$W(emptyset) + Pi_k$], [`margins = worst + np.concatenate(([0.0], np.cumsum(...)))`], [`_sufficient_reason`],
+  [first $k$ with $W(emptyset) + Pi_k > 0$], [`np.flatnonzero(margins > 0)`, `enough[0]`], [`_sufficient_reason`],
 )
 
 The Lean file `proofs/EBaMlProofs/LocalExplanations/Model.lean` states these notations as the structure `EBaMlProofs.LocalExplanations.Model` and the
@@ -378,7 +377,7 @@ The proof does not cover the following points.
 - *The docstring.* The module docstring says that every score moves by $z$ deviations in the direction that makes
   the claim harder to prove. This holds for the sufficient reason: the fixed and the unknown features both use $g$.
   For the counterfactual, only the changed features use $p$. The unchanged features keep their mean scores in
-  $M$ (`facts.py:348`). The proof covers the code. If the docstring is the intention, the counterfactual needs a
+  $M$ (in `_counterfactual`). The proof covers the code. If the docstring is the intention, the counterfactual needs a
   different definition of $M$, and Theorem 2 needs a new proof.
 - *Interaction terms.* With interaction terms the score is not a sum of one term per feature, and the greedy rule
   is not minimal. Take three features $a$, $b$ and $c$ with bins in ${0, 1}$, and the instance $(0, 0, 0)$. Let the
@@ -425,8 +424,8 @@ the versions, the expected output and a table from each statement to its Lean na
 )
 
 The files in `proofs/EBaMlProofs/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
-are the same at the commit above and at the commit of this paper. The line numbers of @sec-model are for
-`src/ebaml/local/facts.py` at the commit of this paper.
+are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
+`src/ebaml/local/facts.py`. Read the paper together with the version of that file at the commit of this paper.
 
 *Commands from a clean clone.*
 

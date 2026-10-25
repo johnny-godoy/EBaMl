@@ -15,6 +15,9 @@ nav = [
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
   ] },
+  { Proofs = [
+    { "Local explanations" = "local-explanations-proof.md" },
+  ] },
   { Benchmark = "benchmark.md" },
   { "API reference" = "api.md" },
   { Changelog = "changelog.md" },
