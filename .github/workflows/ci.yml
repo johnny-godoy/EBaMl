@@ -127,8 +127,12 @@ jobs:
       - name: Install trufflehog
         if: steps.trufflehog-cache.outputs.cache-hit != 'true'
         run: |
+          # Download first and check the hash, so a changed installer fails here and does not run. Recompute the hash
+          # with `sha256sum` when you bump the version.
           mkdir -p ~/.local/bin
-          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.90.8/scripts/install.sh | sh -s -- -b ~/.local/bin v3.90.8
+          curl -sSfL -o "$RUNNER_TEMP/trufflehog-install.sh" https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.90.8/scripts/install.sh
+          echo "c394defeaea8a7c48f828a2051b608a9b19f43f34b891407b66a386c3e2591e2  $RUNNER_TEMP/trufflehog-install.sh" | sha256sum --check
+          sh "$RUNNER_TEMP/trufflehog-install.sh" -b ~/.local/bin v3.90.8
       - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Scan git history
         env:
