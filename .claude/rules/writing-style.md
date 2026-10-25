@@ -81,4 +81,4 @@ headings or tags. Keep it short, because every line costs context in every sessi
 
 - After you edit a prose file, reread it once against the documentation list above, or the prompt list for a prompt.
 - A prompt change in `baml_src/` needs `baml generate`, `baml fmt`, `baml check` and `OPENROUTER_API_KEY=unused baml test -x root::Live`. Also run the live prompt tests, `baml test -i root::Live`, with a real key.
-- A user-visible wording change in a prompt is a release: it needs a new version and a `CHANGELOG.md` entry.
+- A user-visible wording change in a prompt needs a changelog fragment (`uv run scriv create`).

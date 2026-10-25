@@ -42,9 +42,10 @@ milestone adds no feature. A release that only stabilizes is easy to review.
 </steps>
 
 <release>
-This PR completes the milestone and takes version 1.0.0. Its `CHANGELOG.md` entry lists the public API, links
-`docs/stability.md`, and lists the names that the audit made private as **BREAKING**. Mark the 1.0.0 row of
-`ROADMAP.md` as done. After the merge, the maintainer pushes the tag `v1.0.0`.
+This PR completes the milestone: it sets `version = "1.0.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+fragment lists the public API, links `docs/stability.md`, and lists the names that the audit made private as
+**BREAKING**. Mark the 1.0.0 row of `ROADMAP.md` as done. The release workflow tags and publishes 1.0.0 after the
+merge. From then on, `scripts/release.py` raises the MAJOR, MINOR or PATCH number from the fragments.
 </release>
 
 <done>

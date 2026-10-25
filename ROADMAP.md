@@ -39,8 +39,8 @@ model that has them. The [model-kinds](docs/plans/model-kinds.md) plan says what
 
 EBaMl follows [Semantic Versioning 2.0.0](https://semver.org/) strictly.
 
-- Each pull request with a user-visible change is a release. It raises the version and adds its own heading to
-  `CHANGELOG.md`.
+- Each pull request with a user-visible change adds a changelog fragment. After the merge, a workflow releases it with
+  a new version.
 - Before 1.0.0, any release can break the API. Such a change is marked **BREAKING** in the changelog. A release between
   two milestones raises the PATCH number, and the release that completes a milestone takes the version in the table.
 - From 1.0.0, a breaking change needs a new MAJOR version, after a deprecation of at least one MINOR version. A

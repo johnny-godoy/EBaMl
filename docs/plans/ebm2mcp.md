@@ -106,9 +106,10 @@ The edit tools wrap the `ebaml.experimental` edit API of the `model-editing.md` 
 </documentation>
 
 <release>
-Each PR with a user-visible change is a release (`.claude/rules/changelog-and-versioning.md`). The PR that completes
-the read and explain tools takes version 0.3.0. The PR that completes the edit tools is the 1.4.0 milestone, which is a
-MINOR release.
+Each PR with a user-visible change adds a changelog fragment, and the release workflow releases it after the merge
+(`.claude/rules/changelog-and-versioning.md`). The PR that completes the read and explain tools also sets
+`version = "0.3.0"` in `pyproject.toml`. After 1.0.0, the `Added` fragment of the edit tools makes the release workflow
+raise the MINOR number, so that PR sets no version.
 </release>
 
 <done>

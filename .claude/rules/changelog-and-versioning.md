@@ -1,21 +1,26 @@
 # Changelog and versioning
 
-## Release each user-visible change in its own PR
+## Add a changelog fragment, and let the release workflow release it
 
-Every merge to `main` reaches the users of the repository, so a PR with a user-visible change is a release. Agents left
-changes under `[Unreleased]` with the old version before, and the version then did not say what users had. So:
+Every merge to `main` reaches the users of the repository, so each merge with a user-visible change is released at
+once. Agents forgot to raise the version and left changes under `[Unreleased]`, so the version did not say what users
+had. A fragment per pull request and a release workflow after the merge make the release automatic, and two open pull
+requests never conflict on the version or the changelog.
 
-- In the PR that makes a user-visible change, raise `version` in `pyproject.toml`, run `uv lock`, and write the
-  entries under a new heading `## [X.Y.Z] - YYYY-MM-DD` with today's date. Do not keep an `[Unreleased]` section.
-- Raise the version from the one on the base branch. If another release merges first, the merge conflict in
-  `pyproject.toml`, `uv.lock` or `CHANGELOG.md` shows it: take the base version, raise it again, and keep your
-  entries under your own new heading, never under a heading that is already on `main`.
-- One PR is one release, even with several changes. Take the largest bump that any of its changes needs.
-- A PR with no user-visible change (tests, CI, hooks, contributor docs, plans) gets no entry and no new version.
-- The `check-changelog` hook (`scripts/check_changelog.py`) fails on an `[Unreleased]` heading, on a version that does
-  not match the newest heading, and on headings out of order.
-- After the merge, the maintainer pushes the tag `vX.Y.Z`, and `.github/workflows/release.yml` publishes it. Do not push
-  tags.
+- In a PR with a user-visible change, run `uv run scriv create`, uncomment the right category sections of the new file
+  in `changelog.d/`, and write the entries there. Commit the fragment with the change. `changelog.d/README.md` has the
+  steps.
+- Mark a breaking change with `**BREAKING:**` at the start of its entry, or put it under `Removed`.
+- Do not edit `CHANGELOG.md` or `version` in `pyproject.toml`. After the merge, `.github/workflows/release.yml` chooses
+  the version (`scripts/release.py`), runs `uv version`, moves the fragments into `CHANGELOG.md` with `scriv collect`,
+  and pushes the release commit and the tag `vX.Y.Z`. Do not push tags.
+- The one exception: the PR that completes a milestone of `ROADMAP.md` also sets `version` in `pyproject.toml` to the
+  milestone version (for example 0.1.0) and runs `uv lock`. The release workflow then uses that version.
+- A PR with no user-visible change (tests, CI, hooks, contributor docs, plans, an internal refactor) gets no fragment.
+  If it changes `src/ebaml/`, `baml_src/` or `benchmark/`, add the label `no-changelog` to the PR.
+- Guards: the `check-changelog` hook (`scripts/check_changelog.py`) checks the fragments, the headings and the
+  version. `.github/workflows/changelog.yml` (`scripts/check_fragment.py`) fails a PR that changes those paths with no
+  fragment and no `no-changelog` label.
 
 ## Semantic versioning
 
@@ -36,13 +41,15 @@ in `pyproject.toml`. `ROADMAP.md` lists the planned versions.
   change in a MINOR or PATCH at any time. Say so in their docstrings.
 - From 1.0.0, deprecate before you remove: keep the old name for at least one MINOR with a `DeprecationWarning`, and add
   a `Deprecated` entry. Remove it only in the next MAJOR.
-- Never invent a version. Derive it from the table above and from `ROADMAP.md`.
+- Never invent a version. `scripts/release.py` derives it from the table above, and a milestone PR takes it from
+  `ROADMAP.md`.
 
 ## Changelog
 
 - Keep `CHANGELOG.md` at the repo root in [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) format, with
-  no `[Unreleased]` section, because each change is released at once.
+  no `[Unreleased]` section: the pending entries are the fragments in `changelog.d/`. scriv inserts each release below
+  the line `<!-- scriv-insert-here -->`.
 - Group entries under: `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`. Omit empty groups.
 - Write entries for users, not for the diff: say what changed and why it matters, one line each. Skip pure internal churn (formatting, test-only edits, CI tweaks).
 - The changelog is for people who use the package: public API changes, BAML function signatures, prompt behavior, bug fixes and dependency changes that affect them. Leave out repository metadata and developer tooling (`CITATION.cff`, `dependabot.yml`, issue and PR templates, CI workflows, test suites, prek hooks, contributor docs, `ROADMAP.md`, `docs/plans/`), even when the change is new.
-- Do not add compare links at the bottom of the file while the versions have no tags.
+- scriv writes no compare links at the bottom of the file. Do not add them by hand.

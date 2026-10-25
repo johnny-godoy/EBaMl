@@ -68,8 +68,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
 - Ship each bug fix with a guard: a unit test or a semgrep rule that fails on the old code (`.claude/rules/bug-fixes.md`).
-- Release each user-visible change in its own PR: raise the version, run `uv lock`, and write the `CHANGELOG.md` entries
-  under the new version (`.claude/rules/changelog-and-versioning.md`). Agents forgot this before.
+- Add a changelog fragment (`uv run scriv create`) for each user-visible change. Leave `CHANGELOG.md` and the version
+  alone: the release workflow sets them after the merge (`.claude/rules/changelog-and-versioning.md`).
 - Write a reason next to each `noqa`, `type: ignore`, pragma, skipped test and config ignore (` -- reason`, or a
   `# reason:` block in TOML). Check with `uv run python -m scripts.check_ignores`. Fix the code or ask the user when a
   hook fails. Leave `scripts/check_ignores.py`, `scripts/ignore_sites.py` and the hook unchanged.

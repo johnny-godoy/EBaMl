@@ -119,9 +119,10 @@ new local proofs. Write a short note on that in the PR description, as input for
 </documentation>
 
 <release>
-This milestone can take more than one PR. Each PR with a user-visible change is a PATCH release
-(`.claude/rules/changelog-and-versioning.md`). The PR that completes the milestone takes version 0.2.0. Mark the
-renamed fields as **BREAKING** in `CHANGELOG.md`, with a table from the old name to the new name.
+This milestone can take more than one PR. Each PR with a user-visible change adds a changelog fragment, and the release
+workflow releases it as a PATCH (`.claude/rules/changelog-and-versioning.md`). The PR that completes the milestone also
+sets `version = "0.2.0"` in `pyproject.toml`. Mark the renamed fields as **BREAKING** in the fragment, with a table from
+the old name to the new name.
 </release>
 
 <done>

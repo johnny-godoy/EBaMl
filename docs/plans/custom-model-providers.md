@@ -193,10 +193,11 @@ ASD-STE100 style of `.claude/rules/writing-style.md`: "model", "provider" and "c
 </documentation>
 
 <release>
-This PR completes the 0.1.0 milestone. Follow `.claude/rules/changelog-and-versioning.md`: set `version = "0.1.0"`,
-run `uv lock`, and add `## [0.1.0] - YYYY-MM-DD` to `CHANGELOG.md` with `Added` (the `model=` argument, `ModelOptions`,
-the benchmark `--model` flag) and `Changed` (the new optional `model` argument of the BAML entry points). Mark the row
-of 0.1.0 in `ROADMAP.md` as done.
+This PR completes the 0.1.0 milestone. Follow `.claude/rules/changelog-and-versioning.md`: set `version = "0.1.0"` in
+`pyproject.toml`, run `uv lock`, and add a changelog fragment (`uv run scriv create`) with `Added` (the `model=`
+argument, `ModelOptions`, the benchmark `--model` flag) and `Changed` (the new optional `model` argument of the BAML
+entry points). The release workflow releases it as 0.1.0 after the merge. Mark the row of 0.1.0 in `ROADMAP.md` as
+done.
 </release>
 
 <done>
