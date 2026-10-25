@@ -105,6 +105,15 @@ hooks = [
     priority = 50,
   },
   {
+    id = "check-changelog",
+    name = "the changelog, its fragments and the version agree",
+    language = "system",
+    entry = "uv run python -m scripts.check_changelog",
+    files = "^(CHANGELOG\\.md|pyproject\\.toml|changelog\\.d/.*)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "import-linter",
     name = "import-linter: layers and BAML SDK limits",
     language = "system",

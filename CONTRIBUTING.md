@@ -9,7 +9,9 @@
    wrapper checks each call against the stub that `baml generate` writes, so a changed signature fails the test.
 5. A workaround (`# noqa`, `# type: ignore`, `pytest.mark.skip`, ...) needs a written reason next to it. Check with
    `uv run python -m scripts.check_ignores`.
-6. User-visible changes get an entry under `## [Unreleased]` in `CHANGELOG.md`.
+6. For a user-visible change, run `uv run scriv create` and write the entries in the new file in `changelog.d/` (see
+   `changelog.d/README.md`). Do not edit `CHANGELOG.md` or the version: the release workflow sets them after the merge.
+   If the change is internal but touches `src/ebaml/`, `baml_src/` or `benchmark/`, add the label `no-changelog`.
 7. Open a pull request. CI must pass.
 
 Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).

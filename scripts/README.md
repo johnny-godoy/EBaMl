@@ -7,6 +7,9 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
+| `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
+| `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
+| `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
@@ -58,6 +61,34 @@ uv run python -m scripts.check_exclusions   # fails if an exemption is no longer
 ```
 
 It also runs as the `check-exclusions` hook in `prek.toml`.
+
+## `check_changelog.py`, `check_fragment.py` and `release.py`
+
+Each pull request with a user-visible change adds a fragment to `changelog.d/` with `uv run scriv create`. After the
+merge, `.github/workflows/release.yml` releases the fragments. `.claude/rules/changelog-and-versioning.md` has the rule.
+
+`check_changelog` fails when:
+
+- `CHANGELOG.md` has an `[Unreleased]` heading, or lacks the line `<!-- scriv-insert-here -->`,
+- a heading is not `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`, or the versions do not decrease from top to bottom,
+- a fragment has no category, or a category that `[tool.scriv]` in `pyproject.toml` does not list,
+- the version in `pyproject.toml` is lower than the newest heading, or higher with no fragment to release.
+
+`check_fragment` compares a pull request with its base. It fails when the pull request changes `src/ebaml/`,
+`baml_src/` (except the test files) or `benchmark/`, and adds no fragment. `.github/workflows/changelog.yml` runs it,
+unless the pull request has the label `no-changelog`.
+
+`release` prints the next version, or nothing if no fragment waits. A version in `pyproject.toml` above the newest
+heading is a milestone version, and it is used as it is. Else, before 1.0.0, each release raises the PATCH number. From
+1.0.0, the categories and the `**BREAKING:**` marks of the fragments choose the MAJOR, MINOR or PATCH number.
+
+```bash
+uv run python -m scripts.check_changelog           # fails if the changelog, the fragments and the version disagree
+uv run python -m scripts.check_fragment origin/main   # fails if the branch needs a fragment
+uv run python -m scripts.release                   # prints the next version
+```
+
+`check_changelog` also runs as the `check-changelog` hook in `prek.toml`.
 
 ## `build_docs.py`
 
