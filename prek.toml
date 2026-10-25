@@ -165,6 +165,15 @@ hooks = [
     priority = 40,
   },
   {
+    id = "check-ruleset",
+    name = "required checks of the ruleset report on every pull request",
+    language = "system",
+    entry = "uv run python -m scripts.check_ruleset",
+    files = "^\\.github/(rulesets/.*\\.json|workflows/.*\\.ya?ml)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "commitizen",
     name = "commit message: conventional commit",
     language = "system",

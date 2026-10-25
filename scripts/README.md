@@ -10,6 +10,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
+| `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
@@ -109,6 +110,22 @@ uv run python -m scripts.check_commits --base origin/main                   # ea
 
 The `commit-style` hook in `prek.toml` runs it at the `commit-msg` stage, next to the `commitizen` hook.
 `.github/workflows/commits.yml` runs both on the title and the commits of each pull request.
+
+## `check_ruleset.py`
+
+`.github/rulesets/main.json` lists the checks that a pull request must pass. GitHub matches each one by the name of a
+job. If no job of that name runs on every pull request, the check never reports, and every pull request waits for it.
+`check_ruleset` fails when a required check:
+
+- is not the name of a job in a workflow that runs on `pull_request`,
+- belongs to a workflow with a `paths` or `paths-ignore` filter on `pull_request`,
+- is the name of more than one job that runs on `pull_request`.
+
+```bash
+uv run python -m scripts.check_ruleset   # fails if a required check cannot report
+```
+
+It also runs as the `check-ruleset` hook in `prek.toml`. `.github/rulesets/README.md` says how to apply the ruleset.
 
 ## `build_docs.py`
 

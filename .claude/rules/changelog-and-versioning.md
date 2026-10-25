@@ -13,7 +13,8 @@ requests never conflict on the version or the changelog.
 - Mark a breaking change with `**BREAKING:**` at the start of its entry, or put it under `Removed`.
 - Do not edit `CHANGELOG.md` or `version` in `pyproject.toml`. After the merge, `.github/workflows/release.yml` chooses
   the version (`scripts/release.py`), runs `uv version`, moves the fragments into `CHANGELOG.md` with `scriv collect`,
-  and pushes the release commit and the tag `vX.Y.Z`. Do not push tags.
+  and pushes the release commit and the tag `vX.Y.Z`. It then creates the GitHub release of the tag, with the
+  `CHANGELOG.md` entry as notes (`scriv print`) and the built files. Do not push tags or create releases by hand.
 - The one exception: the PR that completes a milestone of `ROADMAP.md` also sets `version` in `pyproject.toml` to the
   milestone version (for example 0.1.0) and runs `uv lock`. The release workflow then uses that version.
 - A PR with no user-visible change (tests, CI, hooks, contributor docs, plans, an internal refactor) gets no fragment.
