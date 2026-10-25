@@ -7,7 +7,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
-| `build_docs.py` | Exports the marimo notebooks, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
+| `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
 ## `check_ignores.py` and `compile_ignores.py`

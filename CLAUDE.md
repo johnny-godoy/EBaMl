@@ -22,6 +22,7 @@ uv run pytest                      # unit tests in tests/unit; fails below 100% 
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 prek run --all-files               # all hooks: ruff, vulture, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
+(cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
 uv run --group docs python -m scripts.build_docs         # build the docs like CI: strict, and fails on a griffe warning
@@ -73,5 +74,7 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See
   `.claude/rules/writing-style.md`.
 - Ruff selects all rules with line length 120. Tests live in `tests/unit/ebaml/`.
+- Back each exact mathematical claim ("optimal", "minimal", "exact") with a Lean proof and a Typst paper in `proofs/`,
+  and keep both true when the code changes (`.claude/rules/proofs.md`).
 - Leave `src/baml_sdk/` and `.pyi` files unedited. Regenerate them with `baml generate`.
 </conventions>

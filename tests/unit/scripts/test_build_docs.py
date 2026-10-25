@@ -23,7 +23,28 @@ def sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, ...]
     monkeypatch.setattr(build_docs, "NOTEBOOKS", notebooks)
     monkeypatch.setattr(build_docs, "PACKAGE", package)
     monkeypatch.setattr(build_docs, "EXPORT_DIR", tmp_path / "docs" / "notebooks")
+    monkeypatch.setattr(build_docs, "PAPERS_ROOT", tmp_path / "papers")
+    monkeypatch.setattr(build_docs, "PAPER_DIR", tmp_path / "docs" / "proofs")
     return (*notebooks, *package)
+
+
+@pytest.fixture
+def compiled(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, Path, Path]]:
+    """Replace ``typst.compile``, so that no test compiles a real paper.
+
+    Returns
+    -------
+    list[tuple[Path, Path, Path]]
+        The list that collects the paper, the output and the root of each call.
+
+    """
+    calls: list[tuple[Path, Path, Path]] = []
+
+    def compile_paper(paper: Path, *, output: Path, root: Path) -> None:
+        calls.append((paper, output, root))
+
+    monkeypatch.setattr(build_docs.typst, "compile", compile_paper)
+    return calls
 
 
 def record_runs(monkeypatch: pytest.MonkeyPatch, result: Callable[[list[str]], int] | None = None) -> list[list[str]]:
@@ -193,3 +214,41 @@ def test_failed_export_leaves_no_file_that_looks_fresh(
     with pytest.raises(build_docs.subprocess.CalledProcessError):
         build_docs.export_notebooks()
     assert not (tmp_path / "docs" / "notebooks" / "first.html").exists()
+
+
+@pytest.mark.usefixtures("sources")
+def test_export_papers_compiles_every_topic_into_the_docs_folder(
+    tmp_path: Path,
+    compiled: list[tuple[Path, Path, Path]],
+) -> None:
+    second = touch(tmp_path / "papers" / "second-topic" / "paper.typ", 100)
+    first = touch(tmp_path / "papers" / "first-topic" / "paper.typ", 100)
+    touch(tmp_path / "papers" / "style.typ", 100)
+    build_docs.export_papers()
+
+    pdfs = tmp_path / "docs" / "proofs"
+    assert pdfs.is_dir()
+    assert compiled == [
+        (first, pdfs / "first-topic.pdf", tmp_path / "papers"),
+        (second, pdfs / "second-topic.pdf", tmp_path / "papers"),
+    ]
+
+
+@pytest.mark.usefixtures("sources")
+def test_export_papers_without_a_paper_creates_nothing(tmp_path: Path, compiled: list[tuple[Path, Path, Path]]) -> None:
+    build_docs.export_papers()
+    assert compiled == []
+    assert not (tmp_path / "docs" / "proofs").exists()
+
+
+@pytest.mark.parametrize("command", ["build", "serve"])
+def test_build_and_serve_export_the_papers_before_the_site(
+    command: str,
+    sources: tuple[Path, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del sources
+    events = record_runs(monkeypatch)
+    monkeypatch.setattr(build_docs, "export_papers", lambda: events.append(["papers"]))
+    build_docs.COMMANDS[command]()
+    assert [event[0] if event == ["papers"] else event[2] for event in events[-2:]] == ["papers", "zensical"]

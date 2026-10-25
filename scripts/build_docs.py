@@ -1,7 +1,10 @@
-"""Build or serve the documentation with Zensical, after the marimo notebooks are exported.
+"""Build or serve the documentation with Zensical, after the marimo notebooks and the proof papers are exported.
 
 Run it from the repo root: ``uv run --group docs python -m scripts.build_docs [build|serve]``. CI runs the same
 command, so a local build fails exactly when CI fails.
+
+The proof papers of ``proofs/papers/<topic>/paper.typ`` are compiled into ``docs/proofs/<topic>.pdf`` in the same way,
+and the proof pages link to them.
 
 The notebook pages embed ``notebooks/<name>.html``. The script exports these files into ``docs/notebooks/`` before
 the build. Zensical copies a non-Markdown file of ``docs/`` to the site unchanged, so the public URL stays
@@ -21,6 +24,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import structlog
+import typst
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
@@ -29,6 +33,8 @@ NOTEBOOKS: tuple[Path, ...] = (ROOT / "notebooks" / "titanic.py", ROOT / "notebo
 EXPORT_DIR = ROOT / "docs" / "notebooks"
 # the notebooks run the package, so a change to any module makes the output stale
 PACKAGE: tuple[Path, ...] = tuple(sorted((ROOT / "src" / "ebaml").rglob("*.py")))
+PAPERS_ROOT = ROOT / "proofs" / "papers"
+PAPER_DIR = ROOT / "docs" / "proofs"
 WARNING_PREFIX = "griffe:"
 
 
@@ -79,6 +85,19 @@ def export_notebooks() -> None:
             raise
 
 
+def export_papers() -> None:
+    """Compile each proof paper of ``proofs/papers/`` into ``docs/proofs/<topic>.pdf``.
+
+    The paper of a topic imports the shared style of ``proofs/papers/``, so that folder is the root of the compilation.
+    Compiling takes a second, so the function compiles every paper on every call. A paper that does not compile fails
+    the build.
+
+    """
+    for paper in sorted(PAPERS_ROOT.glob("*/paper.typ")):
+        PAPER_DIR.mkdir(parents=True, exist_ok=True)
+        typst.compile(paper, output=PAPER_DIR / f"{paper.parent.name}.pdf", root=PAPERS_ROOT)
+
+
 def find_warnings(output: str) -> list[str]:
     """Find the docstring warnings in the output of a Zensical build.
 
@@ -97,7 +116,7 @@ def find_warnings(output: str) -> list[str]:
 
 
 def build() -> int:
-    """Export the notebooks, build the site in strict mode, and fail on a docstring warning.
+    """Export the notebooks and the papers, build the site in strict mode, and fail on a docstring warning.
 
     Returns
     -------
@@ -106,6 +125,7 @@ def build() -> int:
 
     """
     export_notebooks()
+    export_papers()
     command = [sys.executable, "-m", "zensical", "build", "--strict"]
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
         command,
@@ -126,7 +146,7 @@ def build() -> int:
 
 
 def serve() -> int:
-    """Export the notebooks and start the preview server of Zensical.
+    """Export the notebooks and the papers, and start the preview server of Zensical.
 
     Returns
     -------
@@ -135,6 +155,7 @@ def serve() -> int:
 
     """
     export_notebooks()
+    export_papers()
     command = [sys.executable, "-m", "zensical", "serve"]
     return subprocess.run(command, cwd=ROOT, check=False).returncode  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
 

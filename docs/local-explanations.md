@@ -56,7 +56,7 @@ checked against the data.
 
 They are the explainability queries of Barceló, Monet, Pérez and Subercaseaux,
 [*Model Interpretability through the Lens of Computational Complexity*](https://arxiv.org/abs/2010.12265). An EBM without interactions predicts `intercept + Σ score_i(value_i)`, one independent effect per feature, which
-makes the first two queries solvable exactly.
+makes the first two queries solvable exactly: the [proof](local-explanations-proof.md) shows that the sorting rules below find the smallest set.
 
 | Explanation | Query in the paper | Question | How it is computed |
 | --- | --- | --- | --- |
