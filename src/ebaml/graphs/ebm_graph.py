@@ -18,9 +18,11 @@ from ebaml.core.custom_types import (
     normalize_feature_type,
 )
 from ebaml.core.exceptions import (
+    EBMGraphShapeError,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
     InvalidOptionError,
+    OptionRangeError,
 )
 from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
 
@@ -195,12 +197,12 @@ class EBMGraph:
 
         Raises
         ------
-        ValueError
-            If the feature type is not continuous or nominal.
         InvalidOptionError
-            If the normalization option is not valid.
+            If the feature type is not continuous or nominal.
         InvalidOptionError.from_enum
             If the normalization option is not valid.
+        EBMGraphShapeError
+            If the number of bins does not match the number of scores.
 
         """
         # read the variables from the ebm
@@ -242,9 +244,7 @@ class EBMGraph:
                 f"The number of bins ({len(x_vals)}) and scores ({len(scores)}) does not match"
                 f" for feature {feature_name} of type {feature_type}."
             )
-            raise ValueError(
-                msg,
-            )
+            raise EBMGraphShapeError(msg)
         return cls(feature_name, feature_type, x_vals, scores, stds)
 
     def simplify(self, min_variation_per_cent: float = 0.0) -> Self:
@@ -267,7 +267,7 @@ class EBMGraph:
         ------
         InvalidOptionError
             If the feature type is not continuous.
-        ValueError
+        OptionRangeError
             If min_variation_per_cent is not between 0 and 1.
 
         """
@@ -278,7 +278,7 @@ class EBMGraph:
                 raise InvalidOptionError(self.feature_type, ["continuous"])
         if not 0 <= min_variation_per_cent <= 1:
             msg = f"min_variation_per_cent must be between 0 and 1. Got {min_variation_per_cent}."
-            raise ValueError(msg)
+            raise OptionRangeError(msg)
         # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
         x_vals = [(float(low), float(high)) for low, high in self.x_vals]
         scores, stds = self.scores, self.stds
@@ -337,7 +337,7 @@ class EBMGraph:
 
         Raises
         ------
-        ValueError
+        EBMGraphShapeError
             If the format is boolean and the graph does not have exactly two x-axis values.
 
         """
@@ -346,7 +346,7 @@ class EBMGraph:
                 pass
             case FeatureType.BOOLEAN, _:
                 msg = f"Requested a boolean format, but the feature has more than x-axis values: {self.x_vals}"
-                raise ValueError(msg)
+                raise EBMGraphShapeError(msg)
 
     def to_body_text(
         self,
@@ -438,7 +438,7 @@ class EBMGraph:
         feature_format: FeatureType | str, optional
             The format of the feature (continuous, categorical, boolean).
             If not provided, auto-detection is attempted based on the feature type and the x-axis values.
-            A boolean format needs exactly two x-axis values, and raises a ValueError otherwise.
+            A boolean format needs exactly two x-axis values, and raises an EBMGraphShapeError otherwise.
         x_axis_precision: int, optional
             The precision of the values on the x-axis.
             If not provided, the precision is not adjusted.

@@ -12,10 +12,16 @@ beartype_this_package(conf=BeartypeConf(is_pep484_tower=True, claw_is_pep526=Fal
 
 from ebaml.core.custom_types import Audience, FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+    EBaMlError,
     EBMGraphError,
+    EBMGraphShapeError,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
+    GraphTextError,
+    InvalidInstanceError,
     InvalidOptionError,
+    OptionRangeError,
+    UnsupportedModelError,
 )
 from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
@@ -25,10 +31,16 @@ __all__ = [
     "Audience",
     "EBMGraph",
     "EBMGraphError",
+    "EBMGraphShapeError",
     "EBMGraphSimplificationError",
     "EBMGraphTokenLimitError",
+    "EBaMlError",
     "FeatureType",
+    "GraphTextError",
+    "InvalidInstanceError",
     "InvalidOptionError",
     "Normalization",
+    "OptionRangeError",
+    "UnsupportedModelError",
     "__version__",
 ]

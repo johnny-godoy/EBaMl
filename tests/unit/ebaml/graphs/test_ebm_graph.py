@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 import numpy as np
+import orjson
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -14,7 +15,14 @@ from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
-from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
+from ebaml.core.exceptions import (
+    EBMGraphShapeError,
+    EBMGraphSimplificationError,
+    EBMGraphTokenLimitError,
+    GraphTextError,
+    InvalidOptionError,
+    OptionRangeError,
+)
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
 from tests.unit.ebaml.conftest import appending, fake_model
 
@@ -121,7 +129,7 @@ def test_from_ebm_unsupported_feature_type() -> None:
 
 def test_from_ebm_bin_score_mismatch() -> None:
     ebm = continuous_ebm(scores=(9.0, 1.0, 2.0, 9.0))
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(EBMGraphShapeError, match="does not match"):
         EBMGraph.from_ebm(ebm, 0)
 
 
@@ -149,7 +157,7 @@ def test_simplify_rejects_non_continuous() -> None:
 
 @pytest.mark.parametrize("bad", [-0.1, 1.1])
 def test_simplify_rejects_bad_variation(bad: float) -> None:
-    with pytest.raises(ValueError, match="between 0 and 1"):
+    with pytest.raises(OptionRangeError, match="between 0 and 1"):
         cont_graph().simplify(bad)
 
 
@@ -230,7 +238,7 @@ def test_to_text_flat_categorical_graph_terminates() -> None:
 
 def test_to_text_boolean_wrong_number_of_values() -> None:
     g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
-    with pytest.raises(ValueError, match="boolean format"):
+    with pytest.raises(EBMGraphShapeError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
@@ -305,7 +313,7 @@ def test_from_ebm_mismatch_in_both_directions(n_scores: int) -> None:
     ebm = continuous_ebm()
     ebm.term_scores_ = [np.zeros(n_scores)]
     ebm.standard_deviations_ = [np.zeros(n_scores)]
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(EBMGraphShapeError, match="does not match"):
         EBMGraph.from_ebm(ebm, 0)
 
 
@@ -442,7 +450,7 @@ def test_to_text_boolean_case_insensitive(x_vals: list[str]) -> None:
 
 def test_to_text_boolean_with_one_value() -> None:
     g = EBMGraph("flag", "nominal", ["a"], [0.0], [0.1])
-    with pytest.raises(ValueError, match="boolean format"):
+    with pytest.raises(EBMGraphShapeError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
@@ -533,7 +541,7 @@ def test_from_text_reads_a_graph_inside_a_prompt() -> None:
 def test_from_text_requires_every_line(label: str) -> None:
     lines = round_trip_graph().to_text(y_axis_precision=6).splitlines()
     text = "\n".join(line for line in lines if not line.startswith(label))
-    with pytest.raises(ValueError, match=f"no '{label}' line"):
+    with pytest.raises(GraphTextError, match=f"no '{label}' line"):
         EBMGraph.from_text(text)
 
 
@@ -576,7 +584,7 @@ def graph_text_with_intervals(means: list[str], lower: list[str], upper: list[st
     ],
 )
 def test_from_text_rejects_bounds_with_other_intervals(means: list[str], lower: list[str], upper: list[str]) -> None:
-    with pytest.raises(ValueError, match="same intervals"):
+    with pytest.raises(GraphTextError, match="same intervals"):
         EBMGraph.from_text(graph_text_with_intervals(means, lower, upper))
 
 
@@ -650,3 +658,14 @@ def test_from_text_inverts_to_text_within_the_rounding(
     # a half step is the largest rounding error, and the float error of the rounding can add a tiny bit to it
     assert parsed.scores == pytest.approx(graph.scores, rel=1e-12, abs=step / 2 * (1 + 1e-9))
     assert parsed.stds == pytest.approx(graph.stds, rel=1e-6, abs=step)
+
+
+@pytest.mark.parametrize("label", ["Means", "Lower Bounds", "Upper Bounds"])
+def test_from_text_rejects_a_line_that_is_not_json(label: str) -> None:
+    text = graph_text_with_intervals(["(0.0, 1.0)"], ["(0.0, 1.0)"], ["(0.0, 1.0)"])
+    broken = "\n".join(
+        f"{line[: line.index('{')]}{{not json" if line.startswith(label) else line for line in text.splitlines()
+    )
+    with pytest.raises(GraphTextError, match=f"'{label}' line of the graph text is not valid JSON") as caught:
+        EBMGraph.from_text(broken)
+    assert isinstance(caught.value.__cause__, orjson.JSONDecodeError)

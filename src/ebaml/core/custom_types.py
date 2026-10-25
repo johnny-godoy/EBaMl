@@ -102,7 +102,7 @@ def normalize_feature_types(
         The feature types.
     reject_set: AbstractSet[FeatureType], optional
         Set of feature types to reject.
-        If a feature is in this set, we raise a ValueError.
+        If a feature type is in this set, the function raises an InvalidOptionError.
 
     Returns
     -------
