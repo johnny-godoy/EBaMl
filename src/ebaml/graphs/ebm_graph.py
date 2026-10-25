@@ -2,7 +2,7 @@
 
 import warnings
 from collections.abc import Sequence
-from typing import Literal, Protocol, Self, runtime_checkable
+from typing import Literal, Protocol, Self, cast, runtime_checkable
 
 import attrs
 import numpy as np
@@ -81,12 +81,12 @@ _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
 _BOOLEAN_KEYS = ["False", "True"]
 
 
-def _is_boolean(x_vals: Sequence) -> bool:
+def _is_boolean(x_vals: Sequence[object]) -> bool:
     """Whether the x-axis values are exactly the keys ``False`` and ``True`` (case-insensitive).
 
     Parameters
     ----------
-    x_vals: Sequence
+    x_vals: Sequence[object]
         The values of the x-axis.
 
     Returns
@@ -218,7 +218,7 @@ class EBMGraph:
             case Normalization.NONE:
                 normalization_constant = 0
             case _:
-                raise InvalidOptionError.from_enum(str(normalization), Normalization)
+                raise InvalidOptionError.from_enum(normalization, Normalization)
         scores -= normalization_constant
 
         # read the x-axis bins from the ebm
@@ -231,7 +231,9 @@ class EBMGraph:
                     x_vals[-1] = (x_vals[-1][0], ebm.feature_bounds_[feature_index][1])
             case "nominal":
                 # the bins map each category to its (1-based, after the missing bin) position
-                positions = {position - 1: category for category, position in ebm.bins_[feature_index][0].items()}
+                # interpret types bins_ as arrays, but the bins of a nominal feature are a dict of category to position
+                bins = cast("dict[str, int]", ebm.bins_[feature_index][0])
+                positions = {position - 1: category for category, position in bins.items()}
                 x_vals = [positions[idx] for idx in range(len(positions))]
             case _:
                 raise InvalidOptionError(feature_type, ["continuous", "nominal"])
@@ -243,7 +245,7 @@ class EBMGraph:
             raise ValueError(
                 msg,
             )
-        return EBMGraph(feature_name, feature_type, x_vals, scores, stds)
+        return cls(feature_name, feature_type, x_vals, scores, stds)
 
     def simplify(self, min_variation_per_cent: float = 0.0) -> Self:
         """Simplifies the graph. Removes redundant (flat) bins from the graph.
@@ -277,7 +279,9 @@ class EBMGraph:
         if not 0 <= min_variation_per_cent <= 1:
             msg = f"min_variation_per_cent must be between 0 and 1. Got {min_variation_per_cent}."
             raise ValueError(msg)
-        x_vals, scores, stds = self.x_vals, self.scores, self.stds
+        # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
+        x_vals = [(float(low), float(high)) for low, high in self.x_vals]
+        scores, stds = self.scores, self.stds
         total_variation = np.max(scores) - np.min(scores)
         new_x_vals, new_scores, new_stds = [x_vals[0]], [scores[0]], [stds[0]]
         later_bins = range(1, len(x_vals))  # pragma: no mutate -- the first bin compared with itself changes nothing
@@ -293,7 +297,7 @@ class EBMGraph:
                 new_x_vals.append((b0, b1))
                 new_scores.append(scores[idx])
                 new_stds.append(stds[idx])
-        return EBMGraph(
+        return type(self)(
             self.feature_name,
             self.feature_type,
             new_x_vals,
@@ -382,13 +386,18 @@ class EBMGraph:
         # significant digits)
         if x_axis_precision is not None:
             x_vals = [
-                (np.round(x[0], x_axis_precision).astype(str), np.round(x[1], x_axis_precision).astype(str))
-                for x in x_vals
+                (
+                    np.round(float(low), x_axis_precision).astype(str),
+                    np.round(float(high), x_axis_precision).astype(str),
+                )
+                for low, high in x_vals
             ]
         # formatting for boolean features
         match feature_format:
             case FeatureType.BOOLEAN:
                 x_vals = _BOOLEAN_KEYS
+            case _:
+                pass
 
         prompt = f"Feature Name: {self.feature_name}\n"
         prompt += f"Feature Type: {feature_format}\n"
@@ -476,9 +485,11 @@ class EBMGraph:
         # simplify the graph until it fits into the max_tokens limit
         simplification_step = 0
         while True:
-            simplified_graph = self
-            if simplifiable:
-                simplified_graph = self.simplify(min_variation_per_cent=simplification_step * _SIMPLIFICATION_STEP)
+            simplified_graph = (
+                self.simplify(min_variation_per_cent=simplification_step * _SIMPLIFICATION_STEP)
+                if simplifiable
+                else self
+            )
             prompt = simplified_graph.to_body_text(
                 feature_format=feature_format,
                 x_axis_precision=x_axis_precision,
@@ -510,22 +521,23 @@ class EBMGraph:
                         skip_file_prefixes=(__file__, "<@beartype"),
                     )
                     return prompt
-            # obviously over budget
-            if not simplifiable:
-                msg = (
-                    f"The graph for feature {self.feature_name} of type"
-                    f" {self.feature_type} is estimated at {budget.estimated_tokens} tokens and"
-                    f" exceeds the token budget of {max_tokens}."
-                )
-                raise EBMGraphTokenLimitError(msg)
-            if simplification_step > _MAX_SIMPLIFICATION_STEPS:
-                msg = (
-                    f"The graph for feature {self.feature_name} of type"
-                    f" {self.feature_type} is estimated at {budget.estimated_tokens} tokens even at"
-                    " a simplification level of 10%. This graph is too complex to"
-                    f" be passed to the LLM within the token budget of {max_tokens} tokens."
-                )
-                raise EBMGraphSimplificationError(msg)
+                case _:
+                    # the status is "over": obviously over budget
+                    if not simplifiable:
+                        msg = (
+                            f"The graph for feature {self.feature_name} of type"
+                            f" {self.feature_type} is estimated at {budget.estimated_tokens} tokens and"
+                            f" exceeds the token budget of {max_tokens}."
+                        )
+                        raise EBMGraphTokenLimitError(msg)
+                    if simplification_step > _MAX_SIMPLIFICATION_STEPS:
+                        msg = (
+                            f"The graph for feature {self.feature_name} of type"
+                            f" {self.feature_type} is estimated at {budget.estimated_tokens} tokens even at"
+                            " a simplification level of 10%. This graph is too complex to"
+                            f" be passed to the LLM within the token budget of {max_tokens} tokens."
+                        )
+                        raise EBMGraphSimplificationError(msg)
             simplification_step += 1
 
     @classmethod

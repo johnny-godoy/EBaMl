@@ -2,7 +2,7 @@
 
 import hashlib
 import os
-from collections.abc import Callable
+from collections.abc import Callable, MutableMapping, MutableSequence
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 
 @pytest.fixture(scope="session")
@@ -25,13 +25,20 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
     Returns
     -------
     Callable[..., ExplainableBoostingClassifier]
-        The function. It takes the data, the target and the keyword arguments of the classifier.
+        The function. It takes the data, the target, and the ``interactions`` and ``random_state`` of the classifier.
 
     """
     cache = os.environ.get("EBAML_FIT_CACHE")
 
-    def fit(data: pd.DataFrame, target: object, **params: object) -> ExplainableBoostingClassifier:
-        ebm = ExplainableBoostingClassifier(**params)
+    def fit(
+        data: pd.DataFrame,
+        target: object,
+        *,
+        interactions: int,
+        random_state: int,
+    ) -> ExplainableBoostingClassifier:
+        params = {"interactions": interactions, "random_state": random_state}
+        ebm = ExplainableBoostingClassifier(interactions=interactions, random_state=random_state)
         if not cache:
             return ebm.fit(data, target)
         digest = hashlib.sha256(interpret.__version__.encode())
@@ -41,7 +48,9 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
         digest.update(np.asarray(target).tobytes())
         path = Path(cache) / f"{digest.hexdigest()}.joblib"
         if path.exists():
-            return joblib.load(path)
+            cached = joblib.load(path)
+            assert isinstance(cached, ExplainableBoostingClassifier)
+            return cached
         ebm.fit(data, target)
         partial = path.with_suffix(f".{os.getpid()}.tmp")
         joblib.dump(ebm, partial)
@@ -75,3 +84,65 @@ def fake_model(**attributes: Any) -> ExplainableBoostingClassifier:  # ruff: ign
     model = ExplainableBoostingClassifier.__new__(ExplainableBoostingClassifier)
     vars(model).update(attributes)
     return model
+
+
+def instance_of(data: pd.DataFrame, index: int) -> dict[str, object]:
+    """Read one row of ``data`` as the instance of a local explanation, with the column names as keys.
+
+    Returns
+    -------
+    dict[str, object]
+        The value of every feature, by feature name.
+
+    """
+    return {str(name): value for name, value in data.iloc[index].items()}
+
+
+def returning[T](value: T) -> Callable[..., T]:
+    """Build a fake function that takes any arguments and returns ``value``.
+
+    Returns
+    -------
+    Callable[..., T]
+        The fake.
+
+    """
+
+    def fake(*_args: object, **_kwargs: object) -> T:
+        return value
+
+    return fake
+
+
+def recording[T](calls: MutableMapping[str, Any], value: T) -> Callable[..., T]:
+    """Build a fake function that stores its keyword arguments in ``calls`` and returns ``value``.
+
+    Returns
+    -------
+    Callable[..., T]
+        The fake.
+
+    """
+
+    def fake(**kwargs: object) -> T:
+        calls.update(kwargs)
+        return value
+
+    return fake
+
+
+def appending[T](calls: MutableSequence[dict[str, Any]], value: T) -> Callable[..., T]:
+    """Build a fake function that appends its keyword arguments to ``calls`` and returns ``value``.
+
+    Returns
+    -------
+    Callable[..., T]
+        The fake.
+
+    """
+
+    def fake(**kwargs: object) -> T:
+        calls.append(kwargs)
+        return value
+
+    return fake

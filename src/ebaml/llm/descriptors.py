@@ -4,9 +4,9 @@ The prompts and the chat conversations live in ``baml_src/talk_to_ebm.baml``; th
 EBM, converts them to text, and calls the generated ``baml_sdk`` functions.
 """
 
+import functools
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
 
 import attrs
 import structlog
@@ -278,8 +278,15 @@ def describe_ebm(
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
         described = list(
             pool.map(
-                lambda item: _describe_graph_counted(ebm, item[0], item[1], _GRAPH_SENTENCES, graph, prompt),
-                enumerate(graph_texts),
+                functools.partial(
+                    _describe_graph_counted,
+                    ebm,
+                    num_sentences=_GRAPH_SENTENCES,
+                    graph_options=graph,
+                    prompt=prompt,
+                ),
+                range(len(graph_texts)),
+                graph_texts,
             ),
         )
     graph_descriptions = "\n\n".join(
@@ -315,7 +322,7 @@ class LocalExplanation:
 
 def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the instance, three settings of the explanation, and two option sets
     ebm: ExplainableBoostingModel,
-    instance: Mapping[str, Any],
+    instance: Mapping[str, object],
     global_explanation: str,
     audience: Audience | str = Audience.LAYPERSON,
     num_sentences: int = 5,
@@ -335,7 +342,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     ----------
     ebm: ExplainableBoostingModel
         The EBM: a binary classifier without interactions.
-    instance: Mapping[str, Any]
+    instance: Mapping[str, object]
         The value of every feature, by feature name.
     global_explanation: str
         The explanation of the whole model, computed once.

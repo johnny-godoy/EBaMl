@@ -7,11 +7,11 @@ from collections.abc import Callable, Iterator
 import numpy as np
 import pandas as pd
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
-from tests.unit.ebaml.conftest import fake_model
+from tests.unit.ebaml.conftest import fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
@@ -31,7 +31,8 @@ def categorical_ebm(
 
 def _scores(ebm: ExplainableBoostingClassifier, combo: tuple[str, ...]) -> float:
     frame = pd.DataFrame([dict(zip(NAMES, combo, strict=True))])
-    return float(ebm.decision_function(frame)[0])
+    logits: np.ndarray = ebm.decision_function(frame)
+    return float(logits[0])
 
 
 def _all_combos() -> Iterator[tuple[str, ...]]:
@@ -60,7 +61,10 @@ def _brute_force(ebm: ExplainableBoostingClassifier, row: tuple[str, ...]) -> tu
 
 
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
-def test_matches_brute_force(categorical_ebm: tuple, row: tuple[str, ...]) -> None:
+def test_matches_brute_force(
+    categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    row: tuple[str, ...],
+) -> None:
     ebm, _ = categorical_ebm
     facts = local.compute_local_facts(
         ebm,
@@ -76,7 +80,7 @@ def test_matches_brute_force(categorical_ebm: tuple, row: tuple[str, ...]) -> No
     assert len(facts.sufficient_reason.features) == sufficient
 
 
-def test_counterfactual_really_flips(categorical_ebm: tuple) -> None:
+def test_counterfactual_really_flips(categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, _ = categorical_ebm
     row = {"f0": "p", "f1": "p", "f2": "p"}
     facts = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0, min_support=0))
@@ -85,18 +89,19 @@ def test_counterfactual_really_flips(categorical_ebm: tuple) -> None:
     assert ebm.predict(pd.DataFrame([changed]))[0] != ebm.predict(pd.DataFrame([row]))[0]
 
 
-def test_prediction_matches_model(continuous_ebm: tuple) -> None:
+def test_prediction_matches_model(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, data = continuous_ebm
-    row = data.iloc[3].to_dict()
+    row = instance_of(data, 3)
     facts = local.compute_local_facts(ebm, row)
-    assert facts.prediction.logit == pytest.approx(ebm.decision_function(data.iloc[[3]])[0])
+    logits: np.ndarray = ebm.decision_function(data.iloc[[3]])
+    assert facts.prediction.logit == pytest.approx(logits[0])
     assert facts.prediction.lower <= facts.prediction.probability <= facts.prediction.upper
     assert facts.prediction.label == ebm.predict(data.iloc[[3]])[0]
 
 
-def test_confidence_makes_claims_harder(continuous_ebm: tuple) -> None:
+def test_confidence_makes_claims_harder(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, data = continuous_ebm
-    row = data.iloc[0].to_dict()
+    row = instance_of(data, 0)
     loose = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0))
     strict = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0.99))
     assert loose.sufficient_reason is not None
@@ -107,9 +112,11 @@ def test_confidence_makes_claims_harder(continuous_ebm: tuple) -> None:
     assert strict.counterfactual is None or len(strict.counterfactual.changes) >= len(loose.counterfactual.changes)
 
 
-def test_completions_are_reproducible_and_grow(continuous_ebm: tuple) -> None:
+def test_completions_are_reproducible_and_grow(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
     ebm, data = continuous_ebm
-    row = data.iloc[5].to_dict()
+    row = instance_of(data, 5)
     first = local.compute_local_facts(ebm, row, local.LocalOptions(seed=7, max_steps=2))
     again = local.compute_local_facts(ebm, row, local.LocalOptions(seed=7, max_steps=2))
     assert first.completions == again.completions
@@ -118,9 +125,9 @@ def test_completions_are_reproducible_and_grow(continuous_ebm: tuple) -> None:
     assert first.completions[-1].share >= first.completions[0].share
 
 
-def test_sufficient_reason_decides_outcome(continuous_ebm: tuple) -> None:
+def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, data = continuous_ebm
-    row = data.iloc[0].to_dict()
+    row = instance_of(data, 0)
     facts = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0, min_support=0))
     assert facts.sufficient_reason is not None
     free = [n for n in row if n not in facts.sufficient_reason.features]
@@ -139,20 +146,27 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple) -> None:
         ({"a": 0, "b": 0, "c": "?"}, "Unknown"),
     ],
 )
-def test_bad_instances(continuous_ebm: tuple, instance: dict, message: str) -> None:
+def test_bad_instances(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    instance: dict[str, object],
+    message: str,
+) -> None:
     with pytest.raises(ValueError, match=message):
         local.compute_local_facts(continuous_ebm[0], instance)
 
 
-def test_rejects_interactions_and_bad_confidence(continuous_ebm: tuple, fit_ebm: Callable) -> None:
+def test_rejects_interactions_and_bad_confidence(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> None:
     ebm, data = continuous_ebm
     with pytest.raises(ValueError, match="confidence_level"):
-        local.compute_local_facts(ebm, data.iloc[0].to_dict(), local.LocalOptions(confidence_level=1))
+        local.compute_local_facts(ebm, instance_of(data, 0), local.LocalOptions(confidence_level=1))
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 3)), columns=list("abc"))
     with_interactions = fit_ebm(frame, (frame["a"] * frame["b"] > 0).astype(int), interactions=1, random_state=0)
     with pytest.raises(ValueError, match="interactions"):
-        local.compute_local_facts(with_interactions, frame.iloc[0].to_dict())
+        local.compute_local_facts(with_interactions, instance_of(frame, 0))
 
 
 def _feature(
@@ -185,12 +199,12 @@ def test_sufficient_reason_is_none_when_not_even_all_features_guarantee() -> Non
     assert local._sufficient_reason(features, intercept=0.0, sign=1, z=1.96) is None
 
 
-def test_rejects_multiclass(fit_ebm: Callable) -> None:
+def test_rejects_multiclass(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> None:
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
     ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
     with pytest.raises(ValueError, match="binary"):
-        local.compute_local_facts(ebm, frame.iloc[0].to_dict())
+        local.compute_local_facts(ebm, instance_of(frame, 0))
 
 
 # The tests below use hand-built features and hand-computed numbers, so each expected value is checked by arithmetic
@@ -313,7 +327,7 @@ def test_features_trim_by_the_type_of_the_feature(
     graph = EBMGraph("a", feature_type, [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)], [0.0] * 3, [0.0] * 3)
     if feature_type != "continuous":
         graph = EBMGraph("a", feature_type, ["p", "q", "r"], [0.0] * 3, [0.0] * 3)
-    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(lambda _ebm, _index: graph))
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(returning(graph)))
     ebm = fake_model(
         feature_names_in_=["a"],
         term_features_=[(0,)],
@@ -461,7 +475,7 @@ def test_completions_reveal_max_steps_features(max_steps: int) -> None:
 
 
 def _patch_features(monkeypatch: pytest.MonkeyPatch, features: list[local._Feature]) -> None:
-    monkeypatch.setattr(local, "_features", lambda _ebm, _instance, _support: features)
+    monkeypatch.setattr(local, "_features", returning(features))
 
 
 def _hand_model(intercept: float = 0.25) -> ExplainableBoostingClassifier:
