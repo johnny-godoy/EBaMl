@@ -1,5 +1,7 @@
 """Tests for the custom types."""
 
+import typing
+
 import pytest
 
 from ebaml.core.custom_types import (
@@ -27,7 +29,7 @@ def test_str_enum_compares_to_str() -> None:
 
 
 def test_model_union_has_two_members() -> None:
-    assert len(ExplainableBoostingModel.__args__) == 2
+    assert len(typing.get_args(ExplainableBoostingModel)) == 2
 
 
 @pytest.mark.parametrize("name", ["continuous", "CONTINUOUS", "Continuous"])

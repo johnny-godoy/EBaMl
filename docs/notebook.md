@@ -18,5 +18,5 @@ uv run marimo edit notebooks/titanic.py
   src="../notebooks/titanic.html"
   title="The Titanic notebook, exported from marimo"
   loading="lazy"
-  style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lightest);"
+  style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lighter);"
 ></iframe>

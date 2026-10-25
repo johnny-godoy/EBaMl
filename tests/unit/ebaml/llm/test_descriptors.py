@@ -1,10 +1,11 @@
 """Tests for the LLM descriptors."""
 
 import inspect
+from typing import Any
 
 import pytest
 from baml_bridge.errors import BamlError
-from interpret.glassbox import ExplainableBoostingClassifier
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from structlog.testing import capture_logs
 
 import baml_sdk
@@ -14,7 +15,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, PromptOptions
 from ebaml.local import facts as local
-from tests.unit.ebaml.conftest import fake_model
+from tests.unit.ebaml.conftest import appending, fake_model, recording, returning
 
 FAKE_EBM: ExplainableBoostingClassifier = fake_model()
 
@@ -68,7 +69,7 @@ def test_prompt_options_override_every_description() -> None:
 
 
 def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen = {}
+    seen: dict[str, Any] = {}
 
     class FakeGraph:
         @staticmethod
@@ -127,9 +128,12 @@ def test_describe_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, options: f"graph{idx}:{options.max_tokens}")
-    calls = {}
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: calls.update(kw) or counted)
+    def graph_text(_ebm: object, idx: int, options: GraphOptions) -> str:
+        return f"graph{idx}:{options.max_tokens}"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", recording(calls, counted))
     result = descriptors.describe_graph(
         fake_ebm,
         1,
@@ -148,11 +152,14 @@ def test_describe_ebm(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, idx, _kwargs: f"graph{idx}")
-    graph_calls = []
-    summary_calls = {}
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: graph_calls.append(kw) or counted)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **kw: summary_calls.update(kw) or counted)
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+        return f"graph{idx}"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", appending(graph_calls, counted))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", recording(summary_calls, counted))
     assert descriptors.describe_ebm(fake_ebm, num_sentences=9, max_concurrency=2) == "answer"
     assert sorted(call["graph"] for call in graph_calls) == ["graph0", "graph1"]
     assert all(call["num_sentences"] == 7 for call in graph_calls)
@@ -167,9 +174,9 @@ def test_describe_ebm_sums_usage(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: counted)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", returning(counted))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", returning(counted))
     with capture_logs() as logs:
         descriptors.describe_ebm(fake_ebm)
     # two graphs and the summary, 3 input and 5 output tokens each
@@ -181,11 +188,10 @@ def test_describe_ebm_retries_a_truncated_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(
-        descriptors,
-        "_graph_text",
-        lambda _ebm, _idx, options: "x" * 300 if options == GraphOptions() else "short",
-    )
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+        return "x" * 300 if options == GraphOptions() else "short"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
     seen = []
 
     def cot(*, graph: str, **_kw: object) -> baml_sdk.Counted:
@@ -196,7 +202,7 @@ def test_describe_ebm_retries_a_truncated_graph(
         return counted
 
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", returning(counted))
     assert descriptors.describe_ebm(fake_ebm) == "answer"
     assert seen.count("short") == 2
 
@@ -206,9 +212,9 @@ def test_describe_graph_defaults(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
-    calls = {}
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: calls.update(kw) or counted)
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", recording(calls, counted))
     descriptors.describe_graph(fake_ebm, 0)
     assert calls["num_sentences"] == 7
 
@@ -218,10 +224,10 @@ def test_describe_ebm_defaults(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
-    calls = {}
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: counted)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **kw: calls.update(kw) or counted)
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", returning(counted))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", recording(calls, counted))
     descriptors.describe_ebm(fake_ebm)
     assert calls["num_sentences"] == 30
 
@@ -237,31 +243,26 @@ def _facts() -> local.LocalFacts:
 
 
 def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen = {}
+    seen: dict[str, Any] = {}
 
-    def compute(ebm: str, instance: dict, options: local.LocalOptions) -> local.LocalFacts:
+    def compute(ebm: str, instance: dict[str, object], options: local.LocalOptions) -> local.LocalFacts:
         seen["compute"] = (ebm, instance, options)
         return _facts()
 
     monkeypatch.setattr(descriptors, "compute_local_facts", compute)
-    monkeypatch.setattr(
-        descriptors,
-        "facts_to_texts",
-        lambda _facts, audience: {
-            "prediction": "p",
-            "counterfactual": f"c-{audience}",
-            "sufficient_reason": "s",
-            "completions": "k",
-        },
-    )
+
+    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> dict[str, str]:
+        return {"prediction": "p", "counterfactual": f"c-{audience}", "sufficient_reason": "s", "completions": "k"}
+
+    monkeypatch.setattr(descriptors, "facts_to_texts", facts_to_texts)
     text = baml_sdk.LocalExplanationText(
         counterfactual="cf",
         sufficient_reason="sr",
         completions="cc",
         usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2),
     )
-    calls = {}
-    monkeypatch.setattr(baml_sdk, "explain_local", lambda **kw: calls.update(kw) or text)
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", recording(calls, text))
     with capture_logs() as logs:
         result = descriptors.explain_instance(
             FAKE_EBM,
@@ -282,24 +283,22 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_explain_instance_defaults_to_layperson(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(descriptors, "compute_local_facts", lambda *_a: _facts())
-    audiences = []
-    monkeypatch.setattr(
-        descriptors,
-        "facts_to_texts",
-        lambda _f, audience: (
-            audiences.append(audience)
-            or dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x")
-        ),
-    )
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    audiences: list[Audience] = []
+
+    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> dict[str, str]:
+        audiences.append(audience)
+        return dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x")
+
+    monkeypatch.setattr(descriptors, "facts_to_texts", facts_to_texts)
     text = baml_sdk.LocalExplanationText(
         counterfactual="",
         sufficient_reason="",
         completions="",
         usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
     )
-    calls = {}
-    monkeypatch.setattr(baml_sdk, "explain_local", lambda **kw: calls.update(kw) or text)
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", recording(calls, text))
     descriptors.explain_instance(FAKE_EBM, {}, "G")
     assert calls["audience"] == "layperson"
     assert audiences == [Audience.LAYPERSON]
@@ -349,7 +348,7 @@ def test_describe_graph_does_not_retry_other_errors(
         error = _finish_error("Refused")
         raise error
 
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
     with pytest.raises(BamlError):
         descriptors.describe_graph(fake_ebm, 0)
@@ -411,7 +410,10 @@ def test_describe_graph_stops_after_four_retries(
         error = _finish_error("MaxTokens")
         raise error
 
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: next(graphs))
+    def graph_text(*_args: object) -> str:
+        return next(graphs)
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
     with capture_logs() as logs, pytest.raises(BamlError):
         descriptors.describe_graph(fake_ebm, 0)
@@ -431,7 +433,7 @@ def test_describe_graph_asks_once_when_the_error_is_not_a_truncation(
         error = _finish_error("Refused")
         raise error
 
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", cot)
     with pytest.raises(BamlError):
         descriptors.describe_graph(fake_ebm, 0)
@@ -445,9 +447,9 @@ def test_describe_ebm_adds_the_usage_of_every_call(
     # The numbers share bits, so a bitwise or / xor in place of the sum gives another total.
     graph = baml_sdk.Counted(text="g", usage=baml_sdk.TokenUsage(input_tokens=6, output_tokens=7))
     summary = baml_sdk.Counted(text="s", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5))
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: graph)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: summary)
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", returning(graph))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", returning(summary))
     with capture_logs() as logs:
         descriptors.describe_ebm(fake_ebm)
     assert (logs[-1]["input_tokens"], logs[-1]["output_tokens"]) == (3 + 6 * 2, 5 + 7 * 2)
@@ -466,9 +468,9 @@ def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
             super().__init__(max_workers=max_workers)
 
     monkeypatch.setattr(descriptors, "ThreadPoolExecutor", RecordingPool)
-    monkeypatch.setattr(descriptors, "_graph_text", lambda *_args: "g")
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **_kw: counted)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", returning(counted))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", returning(counted))
     descriptors.describe_ebm(fake_ebm)
     assert workers == [8]
 
@@ -478,12 +480,17 @@ def test_describe_ebm_passes_the_options_to_every_graph_and_the_summary(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    graph_options = []
-    graph_calls = []
-    summary_calls = {}
-    monkeypatch.setattr(descriptors, "_graph_text", lambda _ebm, _idx, options: graph_options.append(options) or "g")
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", lambda **kw: graph_calls.append(kw) or counted)
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **kw: summary_calls.update(kw) or counted)
+    graph_options: list[GraphOptions] = []
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+        graph_options.append(options)
+        return "g"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", appending(graph_calls, counted))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", recording(summary_calls, counted))
     options = GraphOptions(max_tokens=9)
     descriptors.describe_ebm(fake_ebm, graph=options, prompt=PromptOptions(dataset_description="D"))
     assert graph_options == [options, options]
@@ -492,16 +499,17 @@ def test_describe_ebm_passes_the_options_to_every_graph_and_the_summary(
 
 
 def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen = []
-    monkeypatch.setattr(
-        descriptors,
-        "compute_local_facts",
-        lambda _ebm, _instance, options: seen.append(options) or _facts(),
-    )
+    seen: list[local.LocalOptions] = []
+
+    def compute(_ebm: object, _instance: object, options: local.LocalOptions) -> local.LocalFacts:
+        seen.append(options)
+        return _facts()
+
+    monkeypatch.setattr(descriptors, "compute_local_facts", compute)
     monkeypatch.setattr(
         descriptors,
         "facts_to_texts",
-        lambda *_a: dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x"),
+        returning(dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x")),
     )
     text = baml_sdk.LocalExplanationText(
         counterfactual="",
@@ -509,7 +517,7 @@ def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.Mon
         completions="",
         usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
     )
-    monkeypatch.setattr(baml_sdk, "explain_local", lambda **_kw: text)
+    monkeypatch.setattr(baml_sdk, "explain_local", returning(text))
     descriptors.explain_instance(FAKE_EBM, {}, "G")
     assert seen == [local.LocalOptions()]
 

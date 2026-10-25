@@ -7,8 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ebaml.EBaMlError` is the base class of every error that `ebaml` raises on purpose, so `except EBaMlError` catches
+  all of them. The existing error classes derive from it.
+- New error classes replace the plain `ValueError` errors: `OptionRangeError`, `InvalidInstanceError`,
+  `UnsupportedModelError`, `GraphTextError` and `EBMGraphShapeError`. Each one also derives from `ValueError`, so code
+  that catches `ValueError` keeps working. The README section "Errors" lists when each one is raised.
+- `EBMGraph.from_text` raises a `GraphTextError` for a line that is not valid JSON. It raised the `JSONDecodeError` of
+  `orjson` before, which is also a `ValueError`.
+
 ### Fixed
 
+- `EBMGraph.to_text` writes the confidence level of the bounds with its decimals, for example `87.5%`. It rounded the
+  level to a whole percent before, so `EBMGraph.from_text` computed the standard deviations at the wrong level.
+- `EBMGraph.from_ebm` and `EBMGraph.simplify` return an instance of the subclass when you call them on a subclass of
+  `EBMGraph`. They returned a plain `EBMGraph` before, so the runtime type check raised an error.
+- `parse_str_tuple_to_float_tuple` raises a `ValueError` for a text with more or fewer than two values. It returned a
+  tuple of any length before, for example three ends for the interval `"(1, 2, 3)"`.
 - `TaskResult.accuracy` is `0.0` for a task with no outcomes. It raised a `ZeroDivisionError` before, and so did
   `format_results`.
 

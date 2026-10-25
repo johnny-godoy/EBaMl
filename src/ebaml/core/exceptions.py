@@ -1,11 +1,19 @@
-"""Exceptions for EBM models."""
+"""Exceptions for EBM models.
+
+Every error that ``ebaml`` raises on purpose derives from ``EBaMlError``, so ``except EBaMlError`` catches all of them.
+An error for a bad value also derives from ``ValueError``, so code that catches ``ValueError`` keeps working.
+"""
 
 import enum
 from collections.abc import Collection
 from typing import Self
 
 
-class InvalidOptionError(ValueError):
+class EBaMlError(Exception):
+    """The base class of the errors that ``ebaml`` raises."""
+
+
+class InvalidOptionError(EBaMlError, ValueError):
     """Exception raised for invalid options."""
 
     def __init__(self, option: str, valid_options: Collection[str]) -> None:
@@ -23,14 +31,14 @@ class InvalidOptionError(ValueError):
         super().__init__(message)
 
     @classmethod
-    def from_enum(cls, option: str, validation_enum: enum.EnumMeta) -> Self:
+    def from_enum(cls, option: str, validation_enum: type[enum.Enum]) -> Self:
         """Create an InvalidOptionError from an enum.
 
         Parameters
         ----------
         option : str
             The invalid option provided.
-        validation_enum : enum.EnumMeta
+        validation_enum : type[enum.Enum]
             The enum class that defines the valid options.
 
         Returns
@@ -43,7 +51,11 @@ class InvalidOptionError(ValueError):
         return cls(option, valid_options)
 
 
-class EBMGraphError(Exception):
+class OptionRangeError(EBaMlError, ValueError):
+    """Exception raised when a number option is outside its range."""
+
+
+class EBMGraphError(EBaMlError):
     """Exception raised for errors in the EBM graph processing."""
 
 
@@ -53,3 +65,19 @@ class EBMGraphSimplificationError(EBMGraphError):
 
 class EBMGraphTokenLimitError(EBMGraphError):
     """Exception raised when an EBM graph exceeds the max_tokens limit even after simplification."""
+
+
+class EBMGraphShapeError(EBMGraphError, ValueError):
+    """Exception raised when the bins of an EBM graph do not fit the scores or the requested format."""
+
+
+class GraphTextError(EBaMlError, ValueError):
+    """Exception raised when the textual representation of a graph cannot be read."""
+
+
+class UnsupportedModelError(EBaMlError, ValueError):
+    """Exception raised when a function does not support the kind of EBM, such as one with interactions."""
+
+
+class InvalidInstanceError(EBaMlError, ValueError):
+    """Exception raised when the instance to explain lacks a value or has a value that the EBM did not see."""

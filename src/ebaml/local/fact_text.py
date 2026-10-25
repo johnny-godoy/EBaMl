@@ -7,7 +7,7 @@ the texts are in ``baml_src/local_explanations.baml``.
 
 import abc
 from collections.abc import Mapping
-from typing import Any, override
+from typing import override
 
 import orjson
 
@@ -39,7 +39,7 @@ def _strength(score: float) -> str:
     return "slightly"
 
 
-def _dump(data: Mapping[str, Any]) -> str:
+def _dump(data: Mapping[str, object]) -> str:
     return orjson.dumps(data, option=orjson.OPT_INDENT_2).decode()
 
 
@@ -55,23 +55,23 @@ class _AudienceRenderer(abc.ABC):
     """
 
     @abc.abstractmethod
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
         """Return the keys that describe the size of one contribution."""
 
     @abc.abstractmethod
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
         """Return the keys that describe how sure the model is of the prediction."""
 
     @abc.abstractmethod
-    def change(self, change: Change) -> dict[str, Any]:
+    def change(self, change: Change) -> dict[str, object]:
         """Return the keys that describe the size of one change of the counterfactual."""
 
     @abc.abstractmethod
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
         """Return the keys that tell how sure the flip of the counterfactual is."""
 
     @abc.abstractmethod
-    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+    def margin(self, reason: SufficientReason) -> dict[str, object]:
         """Return the keys that describe the margin of the sufficient reason."""
 
     @abc.abstractmethod
@@ -83,7 +83,7 @@ class _LaypersonRenderer(_AudienceRenderer):
     """Replace every model number by a word, so the LLM has no number to repeat."""
 
     @override
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
         # a score points towards the prediction if it has the sign of the logit; a logit of 0 is the negative class
         direction = (
             "towards" if (contribution.score if prediction.logit > 0 else -contribution.score) > 0 else "against"
@@ -91,22 +91,22 @@ class _LaypersonRenderer(_AudienceRenderer):
         return {"effect": f"{_strength(contribution.score)} {direction} this prediction"}
 
     @override
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
         return {"likelihood": _likelihood(prediction.probability)}
 
     @override
-    def change(self, change: Change) -> dict[str, Any]:
+    def change(self, change: Change) -> dict[str, object]:
         return {}
 
     @override
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
         return {
             "flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0,
             "likelihood_of_new_prediction": _likelihood(counterfactual.new_probability),
         }
 
     @override
-    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+    def margin(self, reason: SufficientReason) -> dict[str, object]:
         return {}
 
     @override
@@ -118,11 +118,11 @@ class _DataScientistRenderer(_AudienceRenderer):
     """Give the scores, the probabilities and the confidence interval, rounded."""
 
     @override
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, Any]:
+    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
         return {"score": _round(contribution.score), "std": _round(contribution.std)}
 
     @override
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, Any]:
+    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
         return {
             "probability": _round(prediction.probability),
             "confidence_interval": [_round(prediction.lower), _round(prediction.upper)],
@@ -131,18 +131,18 @@ class _DataScientistRenderer(_AudienceRenderer):
         }
 
     @override
-    def change(self, change: Change) -> dict[str, Any]:
+    def change(self, change: Change) -> dict[str, object]:
         return {"score_change": _round(change.score_change)}
 
     @override
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, Any]:
+    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
         return {
             "flip_holds_at_confidence": confidence_level,
             "probability_of_new_prediction": _round(counterfactual.new_probability),
         }
 
     @override
-    def margin(self, reason: SufficientReason) -> dict[str, Any]:
+    def margin(self, reason: SufficientReason) -> dict[str, object]:
         return {"guaranteed_margin_logit": _round(reason.guaranteed_margin)}
 
     @override
@@ -177,14 +177,14 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
     """
     renderer = _RENDERERS[audience]
     p = facts.prediction
-    prediction: dict[str, Any] = {"predicted_class": p.label}
+    prediction: dict[str, object] = {"predicted_class": p.label}
     prediction["contributions_largest_first"] = [
         {"feature": c.feature, "value": c.value} | renderer.contribution(c, p) for c in facts.contributions
     ]
     prediction |= renderer.prediction(p, facts.confidence_level)
 
     cf = facts.counterfactual
-    counterfactual: dict[str, Any] = {"flip_possible": cf is not None}
+    counterfactual: dict[str, object] = {"flip_possible": cf is not None}
     if cf is not None:
         counterfactual["changes"] = [
             {"feature": c.feature, "from": c.from_value, "to": c.to_value} | renderer.change(c) for c in cf.changes
@@ -194,7 +194,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason
-    sufficient: dict[str, Any] = {"exists": sr is not None}
+    sufficient: dict[str, object] = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]

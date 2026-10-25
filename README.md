@@ -155,6 +155,27 @@ required, minimum sufficient reason and count completions. `audience="layperson"
 without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
 and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
+### Errors
+
+Every error that `ebaml` raises on purpose derives from `ebaml.EBaMlError`. Use `except EBaMlError` to catch the errors
+of `ebaml` apart from the errors of other code. Each error for a bad value also derives from `ValueError`, so an
+`except ValueError` that you wrote before still catches it.
+
+| Error | `ValueError` | Raised when |
+| --- | --- | --- |
+| `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
+| `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
+| `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
+| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier. |
+| `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
+| `EBMGraphError` | no | The base class of the errors of a graph. |
+| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, or a boolean format gets more than two bins. |
+| `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
+| `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
+
+The last three graph errors derive from `EBMGraphError`. All classes are in `ebaml.core.exceptions`, and `ebaml` exports
+them too.
+
 <!-- --8<-- [end:usage] -->
 ## How it works
 
@@ -169,7 +190,7 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |
-| `docs/`, `mkdocs.yml` | The documentation, built with MkDocs (see [Development](#development)). |
+| `docs/`, `zensical.toml` | The documentation, built with Zensical (see [Development](#development)). |
 | `tests/unit/` | Python unit tests (100% coverage required). `scripts/live_openrouter.py` is the optional live test. |
 | `scripts/` | Maintenance scripts, see [scripts/README.md](scripts/README.md). |
 | `.github/` | CI workflow and the scripts that turn failures into reports. |
@@ -324,7 +345,8 @@ uv run python scripts/mutation.py --base origin/main   # the same, but only for 
 uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # the same, but only for one module
 uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
 uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
-uv run --group docs mkdocs serve          # preview the docs (runs the notebook, so the first build is slow)
+uv run --group docs python -m scripts.build_docs         # build the docs; fails on a broken link or a docstring warning
+uv run --group docs python -m scripts.build_docs serve   # preview the docs (exports the notebooks, so the first run is slow)
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and

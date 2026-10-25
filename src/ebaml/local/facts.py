@@ -21,13 +21,15 @@ keeps it, even if the scores sit at the edge of their confidence interval.
 import math
 import operator
 import statistics
+import typing
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 import attrs
 import numpy as np
+import numpy.typing as npt
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 
 _N_CLASSES = 2
@@ -196,28 +198,30 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
 
     Raises
     ------
-    ValueError
+    InvalidInstanceError
         If the value is missing or the category was not seen in training.
 
     """
     if value is None or (isinstance(value, float) and math.isnan(value)):
         msg = f"Feature {graph.feature_name!r} is missing; local explanations need every input."
-        raise ValueError(msg)
+        raise InvalidInstanceError(msg)
     if graph.feature_type == "continuous":
-        cuts = ebm.bins_[feature_index][0]
-        return int(np.searchsorted(cuts, float(value), side="right"))
+        # interpret types bins_ loosely, but the bins of a continuous feature are an array of cut points
+        cuts = typing.cast("npt.NDArray[np.float64]", ebm.bins_[feature_index][0])
+        # a value of a continuous feature is a number or a numeric text, and float() raises for anything else
+        return int(np.searchsorted(cuts, float(typing.cast("typing.SupportsFloat | str", value)), side="right"))
     if value not in graph.x_vals:
         msg = f"Unknown category {value!r} for feature {graph.feature_name!r}."
-        raise ValueError(msg)
+        raise InvalidInstanceError(msg)
     return graph.x_vals.index(value)
 
 
 def _plausible_bins(
-    weights: np.ndarray,
+    weights: npt.NDArray[np.float64],
     *,  # pragma: no mutate -- a positional-only weights still lets the callers pass the other options by keyword
     continuous: bool,
     min_support: float,
-) -> np.ndarray:
+) -> npt.NDArray[np.bool_]:
     """Bins with enough training support to be offered as alternatives.
 
     A category needs ``min_support`` of the training data. The bins of a continuous feature are thin slices, so instead
@@ -246,14 +250,14 @@ def _plausible_bins(
     return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
-def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_support: float) -> list[_Feature]:
+def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, object], min_support: float) -> list[_Feature]:
     """Read the graph, the training weights and the bin of the instance of every feature.
 
     Parameters
     ----------
     ebm: ExplainableBoostingModel
         The EBM.
-    instance: Mapping[str, Any]
+    instance: Mapping[str, object]
         The value of every feature.
     min_support: float
         See ``LocalOptions.min_support``.
@@ -265,22 +269,24 @@ def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_su
 
     Raises
     ------
-    ValueError
-        If the model is not a binary classifier without interactions, or the instance is incomplete.
+    UnsupportedModelError
+        If the model is not a binary classifier without interactions.
+    InvalidInstanceError
+        If the instance lacks a feature, a value is missing, or a category was not seen in training.
 
     """
     # one term of one feature per feature; comparing the lists also rejects a missing term and an interaction term
     if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
-        raise ValueError(msg)
+        raise UnsupportedModelError(msg)
     if np.shape(ebm.classes_) != (_N_CLASSES,):
         msg = "Local explanations need a binary classifier."
-        raise ValueError(msg)
+        raise UnsupportedModelError(msg)
     features = []
     for index, name in enumerate(ebm.feature_names_in_):
         if name not in instance:
             msg = f"The instance has no value for feature {name!r}."
-            raise ValueError(msg)
+            raise InvalidInstanceError(msg)
         graph = EBMGraph.from_ebm(ebm, index)
         weights = np.asarray(ebm.bin_weights_[index][1:-1], dtype=float)
         bin_index = _bin_index(ebm, index, graph, instance[name])
@@ -472,16 +478,19 @@ def _completions(
 
 def compute_local_facts(
     ebm: ExplainableBoostingModel,
-    instance: Mapping[str, Any],
+    instance: Mapping[str, object],
     options: LocalOptions | None = None,
 ) -> LocalFacts:
     """Compute the three local explanations of one prediction of a binary EBM without interactions.
+
+    The function also raises an ``UnsupportedModelError`` for an EBM that is not a binary classifier without
+    interactions, and an ``InvalidInstanceError`` for an instance that lacks a value or has an unknown category.
 
     Parameters
     ----------
     ebm: ExplainableBoostingModel
         The fitted EBM.
-    instance: Mapping[str, Any]
+    instance: Mapping[str, object]
         The value of every feature, by feature name.
     options: LocalOptions, optional
         Confidence level, sampling and support options.
@@ -493,14 +502,14 @@ def compute_local_facts(
 
     Raises
     ------
-    ValueError
-        If the model is not a binary classifier without interactions, or the instance is incomplete.
+    OptionRangeError
+        If the confidence level is not in [0, 1).
 
     """
     options = options or LocalOptions()
     if not 0 <= options.confidence_level < 1:
         msg = f"confidence_level must be in [0, 1). Got {options.confidence_level}."
-        raise ValueError(msg)
+        raise OptionRangeError(msg)
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
     features = _features(ebm, instance, options.min_support)
     intercept = float(np.ravel(ebm.intercept_)[0])

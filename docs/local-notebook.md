@@ -23,5 +23,5 @@ builds on. The [guide](local-explanations.md) explains the ideas.
   src="../notebooks/local_explanations.html"
   title="The local explanations notebook, exported from marimo"
   loading="lazy"
-  style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lightest);"
+  style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lighter);"
 ></iframe>

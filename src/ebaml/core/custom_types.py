@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from collections.abc import Set as AbstractSet
 
 from interpret.glassbox import (
-    ExplainableBoostingClassifier,
-    ExplainableBoostingRegressor,
+    ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
+    ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 )
 
 from ebaml.core.exceptions import InvalidOptionError
@@ -102,7 +102,7 @@ def normalize_feature_types(
         The feature types.
     reject_set: AbstractSet[FeatureType], optional
         Set of feature types to reject.
-        If a feature is in this set, we raise a ValueError.
+        If a feature type is in this set, the function raises an InvalidOptionError.
 
     Returns
     -------

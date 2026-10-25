@@ -7,7 +7,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
-| `docs_hooks.py` | MkDocs hook: runs the marimo notebook and exports its output into the built docs (`mkdocs.yml`). |
+| `build_docs.py` | Exports the marimo notebooks, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
 ## `check_ignores.py` and `compile_ignores.py`
@@ -58,6 +58,16 @@ uv run python -m scripts.check_exclusions   # fails if an exemption is no longer
 ```
 
 It also runs as the `check-exclusions` hook in `prek.toml`.
+
+## `build_docs.py`
+
+`build` is the default command. It exports the notebooks into `docs/notebooks/` and runs `zensical build --strict`.
+It fails if the output has a `griffe:` warning. CI runs the same command. `serve` exports the notebooks and starts the
+preview server. The module docstring explains why the export goes into `docs/`.
+
+```bash
+uv run --group docs python -m scripts.build_docs [build|serve]
+```
 
 ## `mutation.py`
 

@@ -59,3 +59,25 @@ def shows(x):
 @beartype
 def decorated(x):
     return x
+
+
+def bare_error(x):
+    if x < 0:
+        # ruleid: ebaml-no-bare-value-error
+        raise ValueError("negative")
+    if x > 9:
+        # ruleid: ebaml-no-bare-value-error
+        raise ValueError("large") from None
+    # ruleid: ebaml-no-bare-value-error
+    raise ValueError
+
+
+def own_error(x):
+    if x < 0:
+        # ok: ebaml-no-bare-value-error
+        raise OptionRangeError("negative")
+    try:
+        return int(x)
+    except ValueError:
+        # ok: ebaml-no-bare-value-error
+        raise

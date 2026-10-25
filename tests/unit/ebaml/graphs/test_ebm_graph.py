@@ -4,25 +4,37 @@ import inspect
 import itertools
 import warnings
 from collections.abc import Callable
+from typing import Any, Literal
 
 import numpy as np
+import orjson
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier
+from hypothesis import given
+from hypothesis import strategies as st
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
-from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
+from ebaml.core.exceptions import (
+    EBMGraphShapeError,
+    EBMGraphSimplificationError,
+    EBMGraphTokenLimitError,
+    GraphTextError,
+    InvalidOptionError,
+    OptionRangeError,
+)
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
-from tests.unit.ebaml.conftest import fake_model
+from tests.unit.ebaml.conftest import appending, fake_model
 
 INF = float("inf")
+type Status = Literal["ok", "warn", "over"]
 
 
-def budget(status: str, tokens: int = 10) -> baml_sdk.TokenBudget:
+def budget(status: Status, tokens: int = 10) -> baml_sdk.TokenBudget:
     return baml_sdk.TokenBudget(estimated_tokens=tokens, status=status)
 
 
-def checker(*statuses: str, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
+def checker(*statuses: Status, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
     # the check answers with each status in turn, and with the last one after that
     answers = itertools.chain(statuses, itertools.repeat(statuses[-1]))
 
@@ -117,11 +129,25 @@ def test_from_ebm_unsupported_feature_type() -> None:
 
 def test_from_ebm_bin_score_mismatch() -> None:
     ebm = continuous_ebm(scores=(9.0, 1.0, 2.0, 9.0))
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(EBMGraphShapeError, match="does not match"):
         EBMGraph.from_ebm(ebm, 0)
 
 
 # simplify
+
+
+class SubGraph(EBMGraph):
+    """A subclass, to check that the methods that return ``Self`` keep it."""
+
+
+def test_from_ebm_of_a_subclass_returns_the_subclass() -> None:
+    # from_ebm returned a plain EBMGraph, which broke its `Self` hint and failed the runtime type check
+    assert type(SubGraph.from_ebm(continuous_ebm(), 0)) is SubGraph
+
+
+def test_simplify_of_a_subclass_returns_the_subclass() -> None:
+    graph = SubGraph("age", "continuous", [(0.0, 1.0), (1.0, 2.0)], [1.0, 1.0], [0.1, 0.2])
+    assert type(graph.simplify()) is SubGraph
 
 
 def test_simplify_rejects_non_continuous() -> None:
@@ -131,7 +157,7 @@ def test_simplify_rejects_non_continuous() -> None:
 
 @pytest.mark.parametrize("bad", [-0.1, 1.1])
 def test_simplify_rejects_bad_variation(bad: float) -> None:
-    with pytest.raises(ValueError, match="between 0 and 1"):
+    with pytest.raises(OptionRangeError, match="between 0 and 1"):
         cont_graph().simplify(bad)
 
 
@@ -212,7 +238,7 @@ def test_to_text_flat_categorical_graph_terminates() -> None:
 
 def test_to_text_boolean_wrong_number_of_values() -> None:
     g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
-    with pytest.raises(ValueError, match="boolean format"):
+    with pytest.raises(EBMGraphShapeError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
@@ -266,8 +292,10 @@ def test_from_ebm_rejects_every_unknown_feature_type(bad: str) -> None:
 
 
 def test_from_ebm_use_feature_bounds_is_keyword_only() -> None:
+    # a plain Callable lets the call break the signature, which is the point of the test
+    from_ebm: Callable[..., EBMGraph] = EBMGraph.from_ebm
     with pytest.raises(TypeError):
-        EBMGraph.from_ebm(continuous_ebm(), 0, *(Normalization.NONE, False))
+        from_ebm(continuous_ebm(), 0, *(Normalization.NONE, False))
 
 
 def test_from_ebm_large_graph() -> None:
@@ -285,7 +313,7 @@ def test_from_ebm_mismatch_in_both_directions(n_scores: int) -> None:
     ebm = continuous_ebm()
     ebm.term_scores_ = [np.zeros(n_scores)]
     ebm.standard_deviations_ = [np.zeros(n_scores)]
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(EBMGraphShapeError, match="does not match"):
         EBMGraph.from_ebm(ebm, 0)
 
 
@@ -386,8 +414,9 @@ def test_to_text_without_a_check_writes_the_graph_once(monkeypatch: pytest.Monke
 
 
 def test_to_text_options_are_keyword_only() -> None:
+    to_text: Callable[..., str] = cont_graph().to_text
     with pytest.raises(TypeError):
-        cont_graph().to_text(*(True,))
+        to_text(*(True,))
 
 
 def test_to_text_warning_points_at_the_caller() -> None:
@@ -397,9 +426,9 @@ def test_to_text_warning_points_at_the_caller() -> None:
 
 
 def test_to_text_tries_every_simplification_level() -> None:
-    calls = []
+    calls: list[dict[str, Any]] = []
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
-        cont_graph().to_text(check_budget=lambda **kw: calls.append(kw) or budget("over", 5))
+        cont_graph().to_text(check_budget=appending(calls, budget("over", 5)))
     assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
 
 
@@ -421,7 +450,7 @@ def test_to_text_boolean_case_insensitive(x_vals: list[str]) -> None:
 
 def test_to_text_boolean_with_one_value() -> None:
     g = EBMGraph("flag", "nominal", ["a"], [0.0], [0.1])
-    with pytest.raises(ValueError, match="boolean format"):
+    with pytest.raises(EBMGraphShapeError, match="boolean format"):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
@@ -479,6 +508,14 @@ def round_trip_graph() -> EBMGraph:
     )
 
 
+def test_from_text_reads_a_confidence_level_between_whole_percents() -> None:
+    # Hypothesis found it: the label said "88%" for 0.875, so from_text read the bounds at the wrong level
+    graph = EBMGraph("age", "continuous", [(0.0, 1.0)], [0.0], [1.0])
+    text = graph.to_text(y_axis_precision=2, confidence_level=0.875)
+    assert "(87.5%-Confidence Interval)" in text
+    assert EBMGraph.from_text(text).stds == pytest.approx([1.0], abs=0.01)
+
+
 @pytest.mark.parametrize("confidence_level", [0.95, 0.9, 0.99])
 def test_from_text_inverts_to_text(confidence_level: float) -> None:
     graph = round_trip_graph()
@@ -504,7 +541,7 @@ def test_from_text_reads_a_graph_inside_a_prompt() -> None:
 def test_from_text_requires_every_line(label: str) -> None:
     lines = round_trip_graph().to_text(y_axis_precision=6).splitlines()
     text = "\n".join(line for line in lines if not line.startswith(label))
-    with pytest.raises(ValueError, match=f"no '{label}' line"):
+    with pytest.raises(GraphTextError, match=f"no '{label}' line"):
         EBMGraph.from_text(text)
 
 
@@ -547,7 +584,7 @@ def graph_text_with_intervals(means: list[str], lower: list[str], upper: list[st
     ],
 )
 def test_from_text_rejects_bounds_with_other_intervals(means: list[str], lower: list[str], upper: list[str]) -> None:
-    with pytest.raises(ValueError, match="same intervals"):
+    with pytest.raises(GraphTextError, match="same intervals"):
         EBMGraph.from_text(graph_text_with_intervals(means, lower, upper))
 
 
@@ -581,3 +618,54 @@ def test_budget_check_protocol_takes_keyword_arguments_only() -> None:
 def test_token_budget_protocol_members_are_read_only_properties() -> None:
     assert isinstance(TokenBudget.estimated_tokens, property)
     assert isinstance(TokenBudget.status, property)
+
+
+type GraphParts = tuple[list[tuple[float, float]], list[float], list[float]]
+
+
+# The bins, the finite scores and the standard deviations of a continuous graph, as from_ebm builds it. The strategy
+# draws the parts and not the graph, because beartype samples with `random` when it checks the arguments of EBMGraph,
+# and Hypothesis does not allow `random` inside a strategy.
+@st.composite
+def continuous_graph_parts(draw: st.DrawFn) -> GraphParts:
+    finite = st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_subnormal=False)
+    cuts = sorted(draw(st.sets(finite, min_size=2, max_size=9)))
+    if draw(st.booleans()):
+        cuts = [-INF, *cuts[1:-1], INF]
+    x_vals = list(itertools.pairwise(cuts))
+    scores = draw(st.lists(finite, min_size=len(x_vals), max_size=len(x_vals)))
+    stds = draw(st.lists(st.floats(min_value=0, max_value=100), min_size=len(x_vals), max_size=len(x_vals)))
+    return x_vals, scores, stds
+
+
+@given(
+    parts=continuous_graph_parts(),
+    precision=st.integers(min_value=0, max_value=8),
+    confidence_level=st.floats(min_value=0.5, max_value=0.999),
+)
+def test_from_text_inverts_to_text_within_the_rounding(
+    parts: GraphParts,
+    precision: int,
+    confidence_level: float,
+) -> None:
+    graph = EBMGraph("age", "continuous", *parts)
+    text = graph.to_text(y_axis_precision=precision, confidence_level=confidence_level)
+    parsed = EBMGraph.from_text(text)
+    # to_text merges the neighboring bins of equal score first, and rounds each mean and each bound to `precision`
+    graph = graph.simplify()
+    step = 10.0**-precision
+    assert (parsed.feature_name, parsed.feature_type, parsed.x_vals) == (graph.feature_name, "continuous", graph.x_vals)
+    # a half step is the largest rounding error, and the float error of the rounding can add a tiny bit to it
+    assert parsed.scores == pytest.approx(graph.scores, rel=1e-12, abs=step / 2 * (1 + 1e-9))
+    assert parsed.stds == pytest.approx(graph.stds, rel=1e-6, abs=step)
+
+
+@pytest.mark.parametrize("label", ["Means", "Lower Bounds", "Upper Bounds"])
+def test_from_text_rejects_a_line_that_is_not_json(label: str) -> None:
+    text = graph_text_with_intervals(["(0.0, 1.0)"], ["(0.0, 1.0)"], ["(0.0, 1.0)"])
+    broken = "\n".join(
+        f"{line[: line.index('{')]}{{not json" if line.startswith(label) else line for line in text.splitlines()
+    )
+    with pytest.raises(GraphTextError, match=f"'{label}' line of the graph text is not valid JSON") as caught:
+        EBMGraph.from_text(broken)
+    assert isinstance(caught.value.__cause__, orjson.JSONDecodeError)

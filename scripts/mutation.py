@@ -11,6 +11,7 @@ if any mutant survives.
 """
 
 import argparse
+import itertools
 import os
 import shutil
 import sqlite3
@@ -51,7 +52,7 @@ class Shard:
     module: str
 
 
-def run(*args: str, cwd: Path = ROOT, env: dict | None = None) -> str:
+def run(*args: str, cwd: Path = ROOT, env: dict[str, str] | None = None) -> str:
     """Run a command and collect its output, whatever its exit code.
 
     Parameters
@@ -60,7 +61,7 @@ def run(*args: str, cwd: Path = ROOT, env: dict | None = None) -> str:
         The command and its arguments.
     cwd: Path
         The working directory.
-    env: dict, optional
+    env: dict[str, str], optional
         The environment of the command. Defaults to the current environment.
 
     Returns
@@ -282,10 +283,12 @@ def count_mutants() -> int:
 
     """
     with sqlite3.connect(SESSION) as db:
-        return db.execute(
-            "SELECT COUNT(*) FROM work_items WHERE job_id NOT IN "
-            "(SELECT job_id FROM work_results WHERE worker_outcome = 'SKIPPED')",
-        ).fetchone()[0]
+        return int(
+            db.execute(
+                "SELECT COUNT(*) FROM work_items WHERE job_id NOT IN "
+                "(SELECT job_id FROM work_results WHERE worker_outcome = 'SKIPPED')",
+            ).fetchone()[0],
+        )
 
 
 def main() -> int:
@@ -351,7 +354,7 @@ def main() -> int:
         monitor.start()
         try:
             with ThreadPoolExecutor(max_workers=shards) as pool:
-                list(pool.map(lambda shard: exec_shard(shard, fits), prepared))
+                list(pool.map(exec_shard, prepared, itertools.repeat(fits)))
         finally:
             stop.set()
             monitor.join()
