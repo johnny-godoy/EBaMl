@@ -1,3 +1,3 @@
-import EBaMlProofs.Greedy
-import EBaMlProofs.Model
-import EBaMlProofs.Axioms
+import EBaMlProofs.LocalExplanations.Greedy
+import EBaMlProofs.LocalExplanations.Model
+import EBaMlProofs.LocalExplanations.Axioms

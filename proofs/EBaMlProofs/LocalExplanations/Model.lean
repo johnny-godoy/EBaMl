@@ -1,4 +1,4 @@
-import EBaMlProofs.Greedy
+import EBaMlProofs.LocalExplanations.Greedy
 import Mathlib.Algebra.BigOperators.Ring.Finset
 import Mathlib.Tactic.Linarith
 import Mathlib.Tactic.Ring
@@ -16,9 +16,9 @@ This file formalizes the model of `src/ebaml/local/facts.py` and applies the abs
 * `min_sufficient_reason` and `min_sufficient_reason_none` are Theorem 3.
 -/
 
-open Finset EBaMlProofs.Greedy
+open Finset EBaMlProofs.LocalExplanations.Greedy
 
-namespace EBaMlProofs
+namespace EBaMlProofs.LocalExplanations
 
 /-- A binary EBM without interactions, the instance to explain, and the confidence level.
 Feature `i` has the bins `B i`. The plausible bins `P i` are a finite set that holds the bin `c i` of the
@@ -258,4 +258,4 @@ theorem min_sufficient_reason_none {n : ℕ} {e : Fin n ≃ ι} (he : Antitone (
 
 end Model
 
-end EBaMlProofs
+end EBaMlProofs.LocalExplanations

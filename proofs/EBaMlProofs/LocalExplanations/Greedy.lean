@@ -20,7 +20,7 @@ finds the smallest set whose sum passes the threshold.
 
 open Finset
 
-namespace EBaMlProofs.Greedy
+namespace EBaMlProofs.LocalExplanations.Greedy
 
 section TopSet
 
@@ -158,4 +158,4 @@ theorem pos_of_threshold {d : ι → ℝ} {e : Fin n ≃ ι} (he : Antitone (d �
 
 end Ordering
 
-end EBaMlProofs.Greedy
+end EBaMlProofs.LocalExplanations.Greedy
