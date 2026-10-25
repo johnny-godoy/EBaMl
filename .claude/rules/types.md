@@ -21,3 +21,20 @@ for a valid call.
 - A third-party class with no abstract base (such as `ExplainableBoostingClassifier`) stays as it is.
 - An `attrs` field is both an input and stored state. Give it the abstract type that the class reads.
 - Put an `Optional` or union in the hint when the function accepts plain strings for an enum (`Normalization | str`).
+
+## Return an attrs class for named values
+
+A `dict` or a `tuple` of fields hides the names and the types of the fields: a type checker cannot see a wrong key or a
+swapped position, and a caller must remember the order. An attrs class has one name and one type for each field, and
+`beartype` checks them at run time.
+
+- Return `@attrs.frozen` (or `@attrs.define`) for a fixed set of fields. Do not return `dict[str, ...]`,
+  `tuple[A, B, ...]`, `list[dict[...]]` or `list[tuple[...]]`.
+- Put a result class in the module that builds it, and give it a docstring. A private helper may return a private class.
+- Pass the fields of an attrs class on with `attrs.asdict(x, recurse=False)` where a `**` call needs them.
+- A container is right if the structure is the data, not a set of fields: keys that change from call to call, a fragment
+  of a JSON object that the caller merges and serializes, or a homogeneous pair such as an interval
+  `tuple[float, float]`. Add `# nosemgrep: ebaml-return-attrs-not-container -- <reason>` to the line above the `def`.
+  `tuple[float, ...]` needs no ignore.
+- The semgrep rule `ebaml-return-attrs-not-container` in `semgrep/ebaml.yml` enforces this in `src/ebaml/`. Its test is
+  in `semgrep/ebaml.py`.

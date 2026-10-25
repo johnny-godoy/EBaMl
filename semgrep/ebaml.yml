@@ -118,3 +118,30 @@ rules:
       - pattern-not: $MP.setattr(baml_sdk, $NAME, fake_sdk($NAME, ...))
     paths:
       include: ["/tests/"]
+
+  - id: ebaml-return-attrs-not-container
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Return an attrs class, not a dict, a tuple of fields or a list of them, so a type checker knows each field and a
+      caller reads it by name. If the keys are data (not a fixed set of fields) or the container is the point (a
+      JSON fragment, a homogeneous interval), add `# nosemgrep: ebaml-return-attrs-not-container -- <reason>` to the
+      def line. See .claude/rules/types.md.
+    patterns:
+      - pattern: |
+          def $F(...) -> $R:
+              ...
+      - metavariable-pattern:
+          metavariable: $R
+          pattern-either:
+            - pattern: dict[...]
+            - pattern: list[dict[...]]
+            - pattern: tuple[...]
+            - pattern: list[tuple[...]]
+      # a tuple of one type and any length (`tuple[float, ...]`) is a sequence, not a bag of fields
+      - metavariable-regex:
+          metavariable: $R
+          regex: '^(?!tuple\[[^,\[\]]+,\s*\.\.\.\]$)'
+      - focus-metavariable: $R
+    paths:
+      include: ["/src/ebaml/"]

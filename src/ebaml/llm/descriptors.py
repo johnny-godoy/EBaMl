@@ -368,7 +368,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     texts = facts_to_texts(facts, audience)
     result = baml_sdk.explain_local(
         global_explanation=global_explanation,
-        facts=baml_sdk.LocalFactTexts(**texts),
+        facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts)),
         audience=audience.value,
         num_sentences=num_sentences,
         opts=_prompt_options(prompt),

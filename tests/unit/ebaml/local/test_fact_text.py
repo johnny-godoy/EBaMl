@@ -17,14 +17,13 @@ def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple[ExplainableBoos
     facts = local.compute_local_facts(ebm, instance_of(data, 0))
     layperson = local_text.facts_to_texts(facts)
     expert = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
-    assert set(layperson) == {"prediction", "counterfactual", "sufficient_reason", "completions"}
-    for text in layperson.values():
+    for text in attrs.astuple(layperson):
         for key in ("score", "std", "probability", "logit", "confidence"):
             assert key not in text
-    assert "score" in expert["prediction"]
-    assert "flip_holds_at_confidence" in expert["counterfactual"]
-    assert "confidence_interval" in expert["prediction"]
-    assert orjson.loads(expert["completions"])["steps"][0]["share_with_same_prediction"] <= 1
+    assert "score" in expert.prediction
+    assert "flip_holds_at_confidence" in expert.counterfactual
+    assert "confidence_interval" in expert.prediction
+    assert orjson.loads(expert.completions)["steps"][0]["share_with_same_prediction"] <= 1
 
 
 @pytest.mark.parametrize(
@@ -52,8 +51,8 @@ def test_texts_without_counterfactual_or_sufficient_reason() -> None:
     prediction = local.Prediction(label=0, probability=0.7, lower=0.6, upper=0.8, logit=-0.8, logit_std=0.1)
     facts = local.LocalFacts(prediction, [], None, None, [], 0.95)
     texts = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
-    assert orjson.loads(texts["counterfactual"]) == {"flip_possible": False}
-    assert orjson.loads(texts["sufficient_reason"]) == {"exists": False}
+    assert orjson.loads(texts.counterfactual) == {"flip_possible": False}
+    assert orjson.loads(texts.sufficient_reason) == {"exists": False}
 
 
 @pytest.mark.parametrize(
@@ -105,13 +104,13 @@ def test_layperson_effects_point_towards_or_against_the_prediction(
     effects: list[str],
 ) -> None:
     texts = local_text.facts_to_texts(_text_facts(logit, scores))
-    found = [entry["effect"] for entry in orjson.loads(texts["prediction"])["contributions_largest_first"]]
+    found = [entry["effect"] for entry in orjson.loads(texts.prediction)["contributions_largest_first"]]
     assert found == [f"{effect} this prediction" for effect in effects]
 
 
 def test_layperson_text_of_a_prediction() -> None:
     texts = local_text.facts_to_texts(_text_facts(1.4, [0.6]))
-    assert orjson.loads(texts["prediction"]) == {
+    assert orjson.loads(texts.prediction) == {
         "predicted_class": "y",
         "contributions_largest_first": [{"feature": "f0", "value": 0, "effect": "strongly towards this prediction"}],
         "likelihood": "likely",
@@ -120,7 +119,7 @@ def test_layperson_text_of_a_prediction() -> None:
 
 def test_data_scientist_text_of_a_prediction() -> None:
     texts = local_text.facts_to_texts(_text_facts(1.4, [0.6123]), Audience.DATA_SCIENTIST)
-    assert orjson.loads(texts["prediction"]) == {
+    assert orjson.loads(texts.prediction) == {
         "predicted_class": "y",
         "contributions_largest_first": [{"feature": "f0", "value": 0, "score": 0.612, "std": 0.1}],
         "probability": 0.7,
@@ -143,19 +142,19 @@ def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
 
 def test_layperson_text_of_the_explanations() -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(0.95))
-    assert orjson.loads(texts["counterfactual"]) == {
+    assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)"}],
         "minimum_number_of_changes": 1,
         "flip_holds_even_if_the_model_is_somewhat_off": True,
         "likelihood_of_new_prediction": "unlikely",
     }
-    assert orjson.loads(texts["sufficient_reason"]) == {
+    assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
         "features_not_needed": ["f1"],
     }
-    assert orjson.loads(texts["completions"]) == {
+    assert orjson.loads(texts.completions) == {
         "steps": [
             {"known_features": [], "share_with_same_prediction": "about as likely as not"},
             {"known_features": ["f0"], "share_with_same_prediction": "very unlikely"},
@@ -165,20 +164,20 @@ def test_layperson_text_of_the_explanations() -> None:
 
 def test_data_scientist_text_of_the_explanations() -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(0.95), Audience.DATA_SCIENTIST)
-    assert orjson.loads(texts["counterfactual"]) == {
+    assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)", "score_change": -0.123}],
         "minimum_number_of_changes": 1,
         "flip_holds_at_confidence": 0.95,
         "probability_of_new_prediction": 0.3,
     }
-    assert orjson.loads(texts["sufficient_reason"]) == {
+    assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
         "features_not_needed": ["f1"],
         "guaranteed_margin_logit": 0.988,
     }
-    assert orjson.loads(texts["completions"]) == {
+    assert orjson.loads(texts.completions) == {
         "steps": [
             {"known_features": [], "share_with_same_prediction": 0.5},
             {"known_features": ["f0"], "share_with_same_prediction": 0.124},
@@ -189,7 +188,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
 @pytest.mark.parametrize(("confidence_level", "holds"), [(-0.5, False), (0.0, False), (0.5, True), (2.0, True)])
 def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(confidence_level))
-    assert orjson.loads(texts["counterfactual"])["flip_holds_even_if_the_model_is_somewhat_off"] is holds
+    assert orjson.loads(texts.counterfactual)["flip_holds_even_if_the_model_is_somewhat_off"] is holds
 
 
 RENDERER_METHODS = ["contribution", "prediction", "change", "flip", "margin", "share"]

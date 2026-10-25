@@ -15,6 +15,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, PromptOptions
 from ebaml.local import facts as local
+from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (
     appending,
     fake_model,
@@ -264,8 +265,8 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(descriptors, "compute_local_facts", compute)
 
-    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> dict[str, str]:
-        return {"prediction": "p", "counterfactual": f"c-{audience}", "sufficient_reason": "s", "completions": "k"}
+    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> FactTexts:
+        return FactTexts("p", f"c-{audience}", "s", "k")
 
     monkeypatch.setattr(descriptors, "facts_to_texts", facts_to_texts)
     text = baml_sdk.LocalExplanationText(
@@ -299,9 +300,9 @@ def test_explain_instance_defaults_to_layperson(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
     audiences: list[Audience] = []
 
-    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> dict[str, str]:
+    def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> FactTexts:
         audiences.append(audience)
-        return dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x")
+        return FactTexts("x", "x", "x", "x")
 
     monkeypatch.setattr(descriptors, "facts_to_texts", facts_to_texts)
     text = baml_sdk.LocalExplanationText(
@@ -522,7 +523,7 @@ def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.Mon
     monkeypatch.setattr(
         descriptors,
         "facts_to_texts",
-        returning(dict.fromkeys(("prediction", "counterfactual", "sufficient_reason", "completions"), "x")),
+        returning(FactTexts("x", "x", "x", "x")),
     )
     text = baml_sdk.LocalExplanationText(
         counterfactual="",

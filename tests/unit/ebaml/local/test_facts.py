@@ -425,7 +425,7 @@ def test_fixing_order_counts_what_a_known_value_guarantees() -> None:
     second = _hand("f2", [1.5, 0.0])
     # at z = 1 the guaranteed scores of f1 are 1 and -1, so knowing its value gains 2; f2 gains 1.5
     order = local._fixing_order([second, first], sign=1, z=1.0)
-    assert [(gain, feature.name) for gain, feature in order] == [(2.0, "f1"), (1.5, "f2")]
+    assert [(step.gain, step.feature.name) for step in order] == [(2.0, "f1"), (1.5, "f2")]
 
 
 def test_sufficient_reason_fixes_the_largest_gains_first() -> None:

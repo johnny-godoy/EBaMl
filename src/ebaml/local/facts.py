@@ -376,7 +376,15 @@ def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z
     )
 
 
-def _fixing_order(features: Sequence[_Feature], sign: int, z: float) -> list[tuple[float, _Feature]]:
+@attrs.frozen
+class _Gain:
+    """What knowing the value of one feature guarantees."""
+
+    gain: float
+    feature: _Feature
+
+
+def _fixing_order(features: Sequence[_Feature], sign: int, z: float) -> list[_Gain]:
     """Features by how much knowing their value guarantees, largest first.
 
     Parameters
@@ -390,15 +398,15 @@ def _fixing_order(features: Sequence[_Feature], sign: int, z: float) -> list[tup
 
     Returns
     -------
-    list[tuple[float, _Feature]]
+    list[_Gain]
         The guaranteed gain and the feature, largest gain first.
 
     """
     gains = []
     for feature in features:
         guaranteed = _robust_scores(feature, sign, z, towards_outcome=True)
-        gains.append((float(guaranteed[feature.bin_index] - guaranteed.min()), feature))
-    return sorted(gains, key=operator.itemgetter(0), reverse=True)
+        gains.append(_Gain(float(guaranteed[feature.bin_index] - guaranteed.min()), feature))
+    return sorted(gains, key=operator.attrgetter("gain"), reverse=True)
 
 
 def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int, z: float) -> SufficientReason | None:
@@ -424,13 +432,13 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     worst = sign * intercept + sum(float(_robust_scores(f, sign, z, towards_outcome=True).min()) for f in features)
     order = _fixing_order(features, sign, z)
     # the guaranteed margin after fixing the first 0, 1, 2, ... features; the outcome is certain at the first above zero
-    margins = worst + np.concatenate(([0.0], np.cumsum([gain for gain, _ in order])))
+    margins = worst + np.concatenate(([0.0], np.cumsum([step.gain for step in order])))
     enough = np.flatnonzero(margins > 0)
     if not enough.size:
         return None
     count = int(enough[0])
     return SufficientReason(
-        features=[feature.name for _, feature in order[:count]],
+        features=[step.feature.name for step in order[:count]],
         guaranteed_margin=float(margins[count]),
     )
 
@@ -527,7 +535,7 @@ def compute_local_facts(
         logit=logit,
         logit_std=logit_std,
     )
-    order = [f for _, f in _fixing_order(features, sign, z)]
+    order = [step.feature for step in _fixing_order(features, sign, z)]
     return LocalFacts(
         prediction=prediction,
         contributions=sorted(

@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `facts_to_texts` returns a `FactTexts` object with the fields `prediction`, `counterfactual`,
+  `sufficient_reason` and `completions`, instead of a `dict`. `parse_graph_text` returns a `ParsedGraph` object instead of a
+  tuple of five values.
 - **BREAKING:** The modules of `ebaml` now sit in packages. Change your imports as the table shows. The classes and
   functions are the same.
 

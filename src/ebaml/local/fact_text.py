@@ -9,6 +9,7 @@ import abc
 from collections.abc import Mapping
 from typing import override
 
+import attrs
 import orjson
 
 from ebaml.core.custom_types import Audience
@@ -47,6 +48,16 @@ def _round(value: float) -> float:
     return round(value, 3)
 
 
+@attrs.frozen
+class FactTexts:
+    """The JSON text of each explanation, as the prompts read them."""
+
+    prediction: str
+    counterfactual: str
+    sufficient_reason: str
+    completions: str
+
+
 class _AudienceRenderer(abc.ABC):
     """The parts of the fact texts that depend on the audience.
 
@@ -55,23 +66,41 @@ class _AudienceRenderer(abc.ABC):
     """
 
     @abc.abstractmethod
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
+    def contribution(
+        self,
+        contribution: Contribution,
+        prediction: Prediction,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the size of one contribution."""
 
     @abc.abstractmethod
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
+    def prediction(
+        self,
+        prediction: Prediction,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe how sure the model is of the prediction."""
 
     @abc.abstractmethod
-    def change(self, change: Change) -> dict[str, object]:
+    def change(
+        self,
+        change: Change,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the size of one change of the counterfactual."""
 
     @abc.abstractmethod
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
+    def flip(
+        self,
+        counterfactual: Counterfactual,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell how sure the flip of the counterfactual is."""
 
     @abc.abstractmethod
-    def margin(self, reason: SufficientReason) -> dict[str, object]:
+    def margin(
+        self,
+        reason: SufficientReason,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the margin of the sufficient reason."""
 
     @abc.abstractmethod
@@ -83,7 +112,11 @@ class _LaypersonRenderer(_AudienceRenderer):
     """Replace every model number by a word, so the LLM has no number to repeat."""
 
     @override
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
+    def contribution(
+        self,
+        contribution: Contribution,
+        prediction: Prediction,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         # a score points towards the prediction if it has the sign of the logit; a logit of 0 is the negative class
         direction = (
             "towards" if (contribution.score if prediction.logit > 0 else -contribution.score) > 0 else "against"
@@ -91,22 +124,36 @@ class _LaypersonRenderer(_AudienceRenderer):
         return {"effect": f"{_strength(contribution.score)} {direction} this prediction"}
 
     @override
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
+    def prediction(
+        self,
+        prediction: Prediction,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"likelihood": _likelihood(prediction.probability)}
 
     @override
-    def change(self, change: Change) -> dict[str, object]:
+    def change(
+        self,
+        change: Change,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {}
 
     @override
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
+    def flip(
+        self,
+        counterfactual: Counterfactual,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             "flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0,
             "likelihood_of_new_prediction": _likelihood(counterfactual.new_probability),
         }
 
     @override
-    def margin(self, reason: SufficientReason) -> dict[str, object]:
+    def margin(
+        self,
+        reason: SufficientReason,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {}
 
     @override
@@ -118,11 +165,19 @@ class _DataScientistRenderer(_AudienceRenderer):
     """Give the scores, the probabilities and the confidence interval, rounded."""
 
     @override
-    def contribution(self, contribution: Contribution, prediction: Prediction) -> dict[str, object]:
+    def contribution(
+        self,
+        contribution: Contribution,
+        prediction: Prediction,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"score": _round(contribution.score), "std": _round(contribution.std)}
 
     @override
-    def prediction(self, prediction: Prediction, confidence_level: float) -> dict[str, object]:
+    def prediction(
+        self,
+        prediction: Prediction,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             "probability": _round(prediction.probability),
             "confidence_interval": [_round(prediction.lower), _round(prediction.upper)],
@@ -131,18 +186,28 @@ class _DataScientistRenderer(_AudienceRenderer):
         }
 
     @override
-    def change(self, change: Change) -> dict[str, object]:
+    def change(
+        self,
+        change: Change,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"score_change": _round(change.score_change)}
 
     @override
-    def flip(self, counterfactual: Counterfactual, confidence_level: float) -> dict[str, object]:
+    def flip(
+        self,
+        counterfactual: Counterfactual,
+        confidence_level: float,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             "flip_holds_at_confidence": confidence_level,
             "probability_of_new_prediction": _round(counterfactual.new_probability),
         }
 
     @override
-    def margin(self, reason: SufficientReason) -> dict[str, object]:
+    def margin(
+        self,
+        reason: SufficientReason,
+    ) -> dict[str, object]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"guaranteed_margin_logit": _round(reason.guaranteed_margin)}
 
     @override
@@ -156,7 +221,7 @@ _RENDERERS: Mapping[Audience, _AudienceRenderer] = {
 }
 
 
-def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -> dict[str, str]:
+def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -> FactTexts:
     """Render the facts as one JSON text per explanation, for the prompts.
 
     For a layperson the model numbers (scores, probabilities, intervals) are replaced by words, so the LLM has none to
@@ -171,8 +236,8 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
 
     Returns
     -------
-    dict[str, str]
-        The keys ``prediction``, ``counterfactual``, ``sufficient_reason`` and ``completions``.
+    FactTexts
+        The texts of the prediction, the counterfactual, the sufficient reason and the completions.
 
     """
     renderer = _RENDERERS[audience]
@@ -203,9 +268,9 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
     completions = [
         {"known_features": s.fixed, "share_with_same_prediction": renderer.share(s.share)} for s in facts.completions
     ]
-    return {
-        "prediction": _dump(prediction),
-        "counterfactual": _dump(counterfactual),
-        "sufficient_reason": _dump(sufficient),
-        "completions": _dump({"steps": completions}),
-    }
+    return FactTexts(
+        prediction=_dump(prediction),
+        counterfactual=_dump(counterfactual),
+        sufficient_reason=_dump(sufficient),
+        completions=_dump({"steps": completions}),
+    )
