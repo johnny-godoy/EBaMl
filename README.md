@@ -190,7 +190,7 @@ them too.
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |
-| `docs/`, `mkdocs.yml` | The documentation, built with MkDocs (see [Development](#development)). |
+| `docs/`, `zensical.toml` | The documentation, built with Zensical (see [Development](#development)). |
 | `tests/unit/` | Python unit tests (100% coverage required). `scripts/live_openrouter.py` is the optional live test. |
 | `scripts/` | Maintenance scripts, see [scripts/README.md](scripts/README.md). |
 | `.github/` | CI workflow and the scripts that turn failures into reports. |
@@ -345,7 +345,8 @@ uv run python scripts/mutation.py --base origin/main   # the same, but only for 
 uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # the same, but only for one module
 uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
 uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
-uv run --group docs mkdocs serve          # preview the docs (runs the notebook, so the first build is slow)
+uv run --group docs python -m scripts.build_docs         # build the docs; fails on a broken link or a docstring warning
+uv run --group docs python -m scripts.build_docs serve   # preview the docs (exports the notebooks, so the first run is slow)
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and

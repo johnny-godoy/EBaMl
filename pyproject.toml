@@ -139,9 +139,8 @@ dev = [
     "vulture>=2.16",
 ]
 docs = [
-    "mkdocs>=1.6.1,<2",
-    "mkdocs-material>=9.7.7",
     "mkdocstrings[python]>=1.0.7",
+    "zensical>=0.0.71",
 ]
 
 [tool.vulture]

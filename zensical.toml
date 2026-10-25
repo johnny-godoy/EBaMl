@@ -1,0 +1,65 @@
+[project]
+site_name = "EBaMl"
+site_description = "BAML for Explainable Boosting Machines. Talk to your EBM."
+site_url = "https://johnny-godoy.github.io/EBaMl/"
+repo_url = "https://github.com/johnny-godoy/EBaMl"
+repo_name = "johnny-godoy/EBaMl"
+strict = true
+nav = [
+  { Home = "index.md" },
+  { Setup = "setup.md" },
+  { Usage = "usage.md" },
+  { "Local explanations" = "local-explanations.md" },
+  { "LLM provider" = "providers.md" },
+  { Notebooks = [
+    { Titanic = "notebook.md" },
+    { "Local explanations" = "local-notebook.md" },
+  ] },
+  { Benchmark = "benchmark.md" },
+  { "API reference" = "api.md" },
+  { Changelog = "changelog.md" },
+]
+
+[project.theme]
+features = [
+  "content.code.copy",
+  "navigation.instant",
+  "navigation.sections",
+  "navigation.top",
+  "search.highlight",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+admonition = {}
+tables = {}
+toc.permalink = true
+pymdownx.superfences = {}
+pymdownx.snippets.check_paths = true
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "numpy"
+show_root_heading = true
+show_source = false
+members_order = "source"
+merge_init_into_class = true
+heading_level = 3
