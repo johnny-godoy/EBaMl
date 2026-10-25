@@ -50,7 +50,11 @@ requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.ruff]
+# reason: semgrep/ebaml.py holds bad code on purpose, as test data for the semgrep rules, and a fix by ruff would break
+# the annotations that semgrep reads.
+force-exclude = true
 exclude = [
+    "semgrep",
     ".bzr",
     ".direnv",
     ".eggs",
@@ -120,6 +124,7 @@ select = ["ALL"]
 [dependency-groups]
 dev = [
     "cosmic-ray>=8.7.0",
+    "import-linter>=2.15",
     "marimo>=0.25.1",
     "polars>=2.0.0",
     "pyarrow>=26.0.0",
@@ -127,6 +132,7 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.0",
+    "semgrep>=1.181.0",
     "vulture>=2.16",
 ]
 docs = [
@@ -155,3 +161,31 @@ source = ["ebaml"]
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
+
+[tool.importlinter]
+root_package = "ebaml"
+# External packages are needed so that a contract can forbid baml_sdk and baml_bridge.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: llm over local over graphs over core"
+type = "layers"
+layers = ["ebaml.llm", "ebaml.local", "ebaml.graphs", "ebaml.core"]
+
+[[tool.importlinter.contracts]]
+name = "Domain code does not import the BAML SDK"
+type = "forbidden"
+source_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.benchmark"]
+forbidden_modules = ["baml_sdk", "baml_bridge"]
+
+[[tool.importlinter.contracts]]
+name = "Only llm.descriptors imports the BAML SDK"
+type = "forbidden"
+source_modules = ["ebaml.llm.options", "ebaml.llm.retry"]
+forbidden_modules = ["baml_sdk", "baml_bridge"]
+
+[[tool.importlinter.contracts]]
+name = "The benchmark stands alone"
+type = "forbidden"
+source_modules = ["ebaml.benchmark"]
+forbidden_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.llm"]

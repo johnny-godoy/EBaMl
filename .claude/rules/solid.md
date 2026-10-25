@@ -45,5 +45,7 @@ Domain code (graphs, facts, parsing) must not import I/O or vendor code. The edg
 
 ## Check
 
+- `architecture.md` lists the layers and the tools that enforce them: import-linter, the layout check and semgrep. They
+  cover the mechanical part of S, O, L and D. You judge the rest.
 - Ask for each changed unit: what is its one job, what does the next new case edit, and what does it import?
 - Do not split code only to satisfy a letter. Three similar lines are better than a class with one user.

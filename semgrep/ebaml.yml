@@ -1,0 +1,93 @@
+# In-house rules for the design points that ruff and import-linter cannot see. Each rule has a test in
+# semgrep/ebaml.py; run `uv run semgrep --test semgrep` to check them. The layer limits live in pyproject.toml
+# ([tool.importlinter]); the rules for them are in .claude/rules/architecture.md.
+rules:
+  - id: ebaml-no-kwargs-bag
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A **kwargs parameter hides what the function reads (SOLID: I). Take the values as named parameters or as an
+      attrs option class.
+    pattern: |
+      def $F(..., **$K):
+          ...
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-no-elif-chain-on-one-value
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A chain that tests one value against three or more cases needs an edit for each new case (SOLID: O). Look the
+      case up in a table or use one class per case.
+    pattern: |
+      if $X == $A:
+          ...
+      elif $X == $B:
+          ...
+      elif $X == $C:
+          ...
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-no-not-implemented-stub
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A method that raises NotImplementedError breaks the promise of its base class (SOLID: L). Make the method
+      abstract with abc.abstractmethod, or remove it from the base class.
+    pattern-either:
+      - pattern: raise NotImplementedError
+      - pattern: raise NotImplementedError(...)
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-domain-does-no-io
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Code in core, graphs and local runs in a plain unit test (SOLID: D). Read the file, print or call the service
+      in the edge code (llm) and pass the result in.
+    pattern-either:
+      - pattern: print(...)
+      - pattern: open(...)
+      - pattern: $P.read_text(...)
+      - pattern: $P.read_bytes(...)
+      - pattern: $P.write_text(...)
+      - pattern: $P.write_bytes(...)
+      - pattern: os.environ
+      - pattern: os.getenv(...)
+    paths:
+      include: ["/src/ebaml/core/", "/src/ebaml/graphs/", "/src/ebaml/local/"]
+
+  - id: ebaml-preferred-libraries
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Use structlog instead of logging, orjson instead of json and attrs instead of dataclasses
+      (.claude/rules/libraries.md).
+    pattern-either:
+      - pattern: import logging
+      - pattern: from logging import $X
+      - pattern: import json
+      - pattern: from json import $X
+      - pattern: import dataclasses
+      - pattern: from dataclasses import $X
+    paths:
+      include: ["/src/", "/tests/", "/scripts/", "/benchmark/", "/notebooks/"]
+
+  - id: ebaml-no-manual-beartype
+    languages: [python]
+    severity: ERROR
+    message: >-
+      beartype_this_package already checks every function in ebaml. Remove the decorator
+      (.claude/rules/libraries.md).
+    pattern-either:
+      - pattern: |
+          @beartype
+          def $F(...): ...
+      - pattern: |
+          @beartype.beartype
+          def $F(...): ...
+    paths:
+      include: ["/src/ebaml/"]

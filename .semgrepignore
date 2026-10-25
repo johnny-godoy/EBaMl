@@ -1,0 +1,5 @@
+# Replaces the default list, which skips tests/. The rules cover tests/ too.
+# reason: generated code and the rule tests, which hold the bad code on purpose.
+src/baml_sdk/
+semgrep/
+.venv/
