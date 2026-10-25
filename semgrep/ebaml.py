@@ -59,3 +59,12 @@ def shows(x):
 @beartype
 def decorated(x):
     return x
+
+
+def fakes(monkeypatch, counted):
+    # ruleid: ebaml-sdk-fake-is-checked
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", lambda **_kw: counted)
+    # ruleid: ebaml-sdk-fake-is-checked
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("describe_graph_cot", returning(counted)))
+    # ok: ebaml-sdk-fake-is-checked
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))

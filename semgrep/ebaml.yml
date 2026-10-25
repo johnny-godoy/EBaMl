@@ -91,3 +91,16 @@ rules:
           def $F(...): ...
     paths:
       include: ["/src/ebaml/"]
+
+  - id: ebaml-sdk-fake-is-checked
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Wrap a fake of a baml_sdk function in fake_sdk with the same name (tests/unit/ebaml/conftest.py). The wrapper
+      checks each call against the signature that `baml generate` wrote, so the fake cannot drift from the real
+      function.
+    patterns:
+      - pattern: $MP.setattr(baml_sdk, $NAME, $FAKE)
+      - pattern-not: $MP.setattr(baml_sdk, $NAME, fake_sdk($NAME, ...))
+    paths:
+      include: ["/tests/"]
