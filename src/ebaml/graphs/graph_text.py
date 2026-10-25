@@ -7,7 +7,7 @@ import orjson
 import scipy
 
 from ebaml.core.custom_types import FeatureType, normalize_feature_type
-from ebaml.core.exceptions import InvalidOptionError
+from ebaml.core.exceptions import GraphTextError, InvalidOptionError
 
 # the lines of the textual representation of a graph, as written by ``EBMGraph.to_text``
 _NAME_LINE = re.compile(r"^[ \t]*Feature Name: (.*)$", re.MULTILINE)
@@ -50,9 +50,18 @@ def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
     tuple[float, float]
         The parsed float tuple.
 
+    Raises
+    ------
+    GraphTextError
+        If the text is not two numbers in brackets.
+
     """
-    low, high = str_tuple[1:-1].split(",")
-    return float(low), float(high)
+    try:
+        low, high = (float(part) for part in str_tuple[1:-1].split(","))
+    except ValueError as error:
+        msg = f"{str_tuple!r} is not an interval of two numbers."
+        raise GraphTextError(msg) from error
+    return low, high
 
 
 def _search_line(pattern: re.Pattern[str], text: str, what: str) -> re.Match[str]:
@@ -74,15 +83,44 @@ def _search_line(pattern: re.Pattern[str], text: str, what: str) -> re.Match[str
 
     Raises
     ------
-    ValueError
+    GraphTextError
         If the text has no such line.
 
     """
     match = pattern.search(text)
     if match is None:
         msg = f"The graph text has no '{what}' line."
-        raise ValueError(msg)
+        raise GraphTextError(msg)
     return match
+
+
+def _load_line(line: str, what: str) -> dict[str, float]:
+    """Read the JSON object of one line of the textual representation of a graph.
+
+    Parameters
+    ----------
+    line: str
+        The JSON text of the line.
+    what: str
+        The name of the line, for the error message.
+
+    Returns
+    -------
+    dict[str, float]
+        The value of each interval.
+
+    Raises
+    ------
+    GraphTextError
+        If the line is not valid JSON.
+
+    """
+    try:
+        values: dict[str, float] = orjson.loads(line)
+    except orjson.JSONDecodeError as error:
+        msg = f"The '{what}' line of the graph text is not valid JSON."
+        raise GraphTextError(msg) from error
+    return values
 
 
 def parse_graph_text(
@@ -107,7 +145,7 @@ def parse_graph_text(
 
     Raises
     ------
-    ValueError
+    GraphTextError
         If a line of the graph is missing, is not valid JSON, or the means and the bounds do not share the same
         intervals.
     InvalidOptionError
@@ -121,13 +159,13 @@ def parse_graph_text(
             pass
         case _:
             raise InvalidOptionError(feature_type, ["continuous"])
-    means = orjson.loads(_search_line(_MEANS_LINE, text, "Means").group(1))
+    means = _load_line(_search_line(_MEANS_LINE, text, "Means").group(1), "Means")
     lower_match = _search_line(_LOWER_LINE, text, "Lower Bounds")
-    lower = orjson.loads(lower_match.group(2))
-    upper = orjson.loads(_search_line(_UPPER_LINE, text, "Upper Bounds").group(1))
+    lower = _load_line(lower_match.group(2), "Lower Bounds")
+    upper = _load_line(_search_line(_UPPER_LINE, text, "Upper Bounds").group(1), "Upper Bounds")
     if not means.keys() == lower.keys() == upper.keys():
         msg = "The means and the confidence bounds of the graph text do not have the same intervals."
-        raise ValueError(msg)
+        raise GraphTextError(msg)
     confidence_level = float(lower_match.group(1)) / 100
     factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
     return (

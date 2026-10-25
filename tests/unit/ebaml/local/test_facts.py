@@ -11,6 +11,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
+from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
 from tests.unit.ebaml.conftest import fake_model, instance_of, returning
@@ -153,7 +154,7 @@ def test_bad_instances(
     instance: dict[str, object],
     message: str,
 ) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(InvalidInstanceError, match=message):
         local.compute_local_facts(continuous_ebm[0], instance)
 
 
@@ -162,12 +163,12 @@ def test_rejects_interactions_and_bad_confidence(
     fit_ebm: Callable[..., ExplainableBoostingClassifier],
 ) -> None:
     ebm, data = continuous_ebm
-    with pytest.raises(ValueError, match="confidence_level"):
+    with pytest.raises(OptionRangeError, match="confidence_level"):
         local.compute_local_facts(ebm, instance_of(data, 0), local.LocalOptions(confidence_level=1))
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 3)), columns=list("abc"))
     with_interactions = fit_ebm(frame, (frame["a"] * frame["b"] > 0).astype(int), interactions=1, random_state=0)
-    with pytest.raises(ValueError, match="interactions"):
+    with pytest.raises(UnsupportedModelError, match="interactions"):
         local.compute_local_facts(with_interactions, instance_of(frame, 0))
 
 
@@ -205,7 +206,7 @@ def test_rejects_multiclass(fit_ebm: Callable[..., ExplainableBoostingClassifier
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
     ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
-    with pytest.raises(ValueError, match="binary"):
+    with pytest.raises(UnsupportedModelError, match="binary"):
         local.compute_local_facts(ebm, instance_of(frame, 0))
 
 
@@ -302,13 +303,13 @@ def _model_features(*, term_features: list[tuple[int, ...]], classes: list[str])
     ids=["missing term", "extra term", "interaction", "empty term"],
 )
 def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> None:
-    with pytest.raises(ValueError, match="interactions"):
+    with pytest.raises(UnsupportedModelError, match="interactions"):
         local._features(_model_features(term_features=term_features, classes=["n", "y"]), {}, 0.01)
 
 
 @pytest.mark.parametrize("classes", [["only"], ["a", "b", "c"]])
 def test_features_reject_other_than_two_classes(classes: list[str]) -> None:
-    with pytest.raises(ValueError, match="binary"):
+    with pytest.raises(UnsupportedModelError, match="binary"):
         local._features(_model_features(term_features=[(0,), (1,)], classes=classes), {}, 0.01)
 
 
@@ -539,7 +540,7 @@ def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pyt
 
 @pytest.mark.parametrize("confidence_level", [-0.5, 1.5])
 def test_facts_reject_a_confidence_level_out_of_range(confidence_level: float) -> None:
-    with pytest.raises(ValueError, match="confidence_level"):
+    with pytest.raises(OptionRangeError, match="confidence_level"):
         local.compute_local_facts(_hand_model(), {}, local.LocalOptions(confidence_level=confidence_level))
 
 
