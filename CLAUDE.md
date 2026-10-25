@@ -24,7 +24,8 @@ prek run --all-files               # all hooks: ruff, vulture, pyrefly, import-l
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
-uv run --group docs mkdocs serve   # preview the docs; the first build runs the notebook and is slow
+uv run --group docs python -m scripts.build_docs         # build the docs like CI: strict, and fails on a griffe warning
+uv run --group docs python -m scripts.build_docs serve   # preview the docs; the first run exports the notebooks and is slow
 ```
 
 `ModuleNotFoundError: baml_sdk` means `baml generate` has not run. CI runs prek and the secret scans first, then
@@ -47,8 +48,8 @@ The boundary between the two languages is the generated `baml_sdk` package.
   (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
 - `src/ebaml/benchmark.py` and `benchmark/` are the port of the TalkToEBM benchmark. `is_correct` parses and compares
   values.
-- `baml_src/talk_to_ebm_test.baml` holds the offline BAML tests. `notebooks/` uses marimo. `docs/` uses MkDocs and
-  includes README sections through `--8<--` markers, so keep the markers intact.
+- `baml_src/talk_to_ebm_test.baml` holds the offline BAML tests. `notebooks/` uses marimo. `docs/` uses Zensical
+  (`zensical.toml`) and includes README sections through `--8<--` markers, so keep the markers intact.
 </architecture>
 
 <layout>

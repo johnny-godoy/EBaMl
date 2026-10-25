@@ -39,3 +39,6 @@ graphify-out/
 
 # Built documentation
 site/
+
+# Notebooks exported by scripts/build_docs.py
+docs/notebooks/

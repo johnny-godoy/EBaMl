@@ -33,12 +33,20 @@ jobs:
           path: ${{ runner.temp }}/scikit_learn_data
           key: openml-titanic-v1
       - name: Build the docs
-        # --strict: a broken link or a docstring that does not render fails the build.
-        # The build runs the notebook (it downloads the Titanic data from OpenML) and exports its output.
+        # scripts.build_docs exports the notebooks (it downloads the Titanic data from OpenML), runs
+        # `zensical build --strict` and fails on a griffe warning, so a broken link or a docstring that does not
+        # render fails the build. Zensical alone exits 0 on a griffe warning. A local run uses the same command.
         env:
           # scikit-learn stores the OpenML download here, which is the cached folder.
           SCIKIT_LEARN_DATA: ${{ runner.temp }}/scikit_learn_data
-        run: uv run --frozen --group docs mkdocs build --strict
+        run: uv run --frozen --group docs python -m scripts.build_docs
+      - name: Check the notebook export
+        # Zensical ignores a `hooks` setting without a warning, and an iframe target is raw HTML that no link
+        # check reads. A missing export would publish empty notebook pages.
+        run: |
+          for name in titanic local_explanations; do
+            test -s "site/notebooks/${name}.html" || { echo "::error::site/notebooks/${name}.html is missing or empty"; exit 1; }
+          done
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
