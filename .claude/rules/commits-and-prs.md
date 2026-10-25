@@ -54,8 +54,9 @@ BREAKING CHANGE: what breaks, and what users must change.
 ## Pull requests
 
 - Give each pull request one topic. A second topic is a second pull request.
-- Write the title as a conventional commit, with the same rules as a commit message. A squash merge makes the title the
-  commit on `main`.
+- Write the title as a conventional commit, with the same rules as a commit message. The ruleset of `main` allows rebase
+  merges only, so the commits reach `main` as they are. The title names the pull request in the history of GitHub, and
+  it becomes the commit if the merge method changes to squash.
 - Fill every section of `.github/pull_request_template.md`. Say why for each check that you could not run.
 
 ## Guards
@@ -66,4 +67,7 @@ BREAKING CHANGE: what breaks, and what users must change.
 - `.github/workflows/commits.yml` checks the title and each commit of a pull request, with the same tools and the size
   limit (`scripts/check_commits.py --base`).
 - Dependabot writes `build(deps): ...` and `ci(deps): ...` messages (`.github/dependabot.yml`).
+- `.github/rulesets/main.json` makes the CI gates, the docs build and the `Changelog` and `Commits` checks required on
+  `main`. The `check-ruleset` hook (`scripts/check_ruleset.py`) fails if a required check is not the name of a job that
+  runs on every pull request. If you rename such a job, change the ruleset in the same pull request.
 - Do not bypass a hook with `--no-verify`.
