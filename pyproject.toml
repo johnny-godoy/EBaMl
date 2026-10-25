@@ -138,11 +138,16 @@ dev = [
     "semgrep>=1.181.0",
     "typst>=0.15.0",
     "vulture>=2.16",
+    { include-group = "commits" },
     { include-group = "release" },
 ]
 docs = [
     "mkdocstrings[python]>=1.0.7",
     "zensical>=0.0.71",
+]
+# the commit-msg hook and the commits workflow install only this group to check commit messages
+commits = [
+    "commitizen>=4.19.2",
 ]
 # the release workflow installs only this group to collect the changelog fragments
 release = [
@@ -262,3 +267,8 @@ categories = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
 md_header_level = "2"
 version = "literal: pyproject.toml: project.version"
 entry_title_template = "[{{ version }}] - {{ date.strftime('%Y-%m-%d') }}"
+
+# commitizen only checks commit messages and PR titles here. scriv and scripts/release.py manage the changelog and the
+# version, so `cz bump` and `cz changelog` are not used.
+[tool.commitizen]
+name = "cz_conventional_commits"

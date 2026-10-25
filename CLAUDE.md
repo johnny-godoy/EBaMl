@@ -68,6 +68,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
 - Ship each bug fix with a guard: a unit test or a semgrep rule that fails on the old code (`.claude/rules/bug-fixes.md`).
+- Commit in small steps, each with one purpose and a conventional commit message (`type(scope): description`).
+  Write the PR title the same way, and fill the PR template (`.claude/rules/commits-and-prs.md`). Hooks and CI check it.
 - Add a changelog fragment (`uv run scriv create`) for each user-visible change. Leave `CHANGELOG.md` and the version
   alone: the release workflow sets them after the merge (`.claude/rules/changelog-and-versioning.md`).
 - Write a reason next to each `noqa`, `type: ignore`, pragma, skipped test and config ignore (` -- reason`, or a

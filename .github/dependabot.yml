@@ -9,8 +9,10 @@ updates:
         patterns: ["*"]
     cooldown:
       default-days: 7
+    # conventional commits (.claude/rules/commits-and-prs.md): "build(deps): bump ..." or "build(deps-dev): bump ..."
     commit-message:
-      prefix: deps
+      prefix: build
+      include: scope
   # The workflows and the composite actions pin each action to a commit SHA, so Dependabot must update both places.
   - package-ecosystem: github-actions
     directories:
@@ -23,5 +25,7 @@ updates:
         patterns: ["*"]
     cooldown:
       default-days: 7
+    # conventional commits: "ci(deps): bump ..."
     commit-message:
       prefix: ci
+      include: scope
