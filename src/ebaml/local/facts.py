@@ -28,6 +28,7 @@ import numpy as np
 import numpy.typing as npt
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 
 _N_CLASSES = 2
@@ -196,13 +197,13 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
 
     Raises
     ------
-    ValueError
+    InvalidInstanceError
         If the value is missing or the category was not seen in training.
 
     """
     if value is None or (isinstance(value, float) and math.isnan(value)):
         msg = f"Feature {graph.feature_name!r} is missing; local explanations need every input."
-        raise ValueError(msg)
+        raise InvalidInstanceError(msg)
     if graph.feature_type == "continuous":
         # interpret types bins_ loosely, but the bins of a continuous feature are an array of cut points
         cuts = typing.cast("npt.NDArray[np.float64]", ebm.bins_[feature_index][0])
@@ -210,7 +211,7 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
         return int(np.searchsorted(cuts, float(typing.cast("typing.SupportsFloat | str", value)), side="right"))
     if value not in graph.x_vals:
         msg = f"Unknown category {value!r} for feature {graph.feature_name!r}."
-        raise ValueError(msg)
+        raise InvalidInstanceError(msg)
     return graph.x_vals.index(value)
 
 
@@ -267,22 +268,24 @@ def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, object], min
 
     Raises
     ------
-    ValueError
-        If the model is not a binary classifier without interactions, or the instance is incomplete.
+    UnsupportedModelError
+        If the model is not a binary classifier without interactions.
+    InvalidInstanceError
+        If the instance lacks a feature, a value is missing, or a category was not seen in training.
 
     """
     # one term of one feature per feature; comparing the lists also rejects a missing term and an interaction term
     if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
-        raise ValueError(msg)
+        raise UnsupportedModelError(msg)
     if np.shape(ebm.classes_) != (_N_CLASSES,):
         msg = "Local explanations need a binary classifier."
-        raise ValueError(msg)
+        raise UnsupportedModelError(msg)
     features = []
     for index, name in enumerate(ebm.feature_names_in_):
         if name not in instance:
             msg = f"The instance has no value for feature {name!r}."
-            raise ValueError(msg)
+            raise InvalidInstanceError(msg)
         graph = EBMGraph.from_ebm(ebm, index)
         weights = np.asarray(ebm.bin_weights_[index][1:-1], dtype=float)
         bin_index = _bin_index(ebm, index, graph, instance[name])
@@ -479,6 +482,9 @@ def compute_local_facts(
 ) -> LocalFacts:
     """Compute the three local explanations of one prediction of a binary EBM without interactions.
 
+    The function also raises an ``UnsupportedModelError`` for an EBM that is not a binary classifier without
+    interactions, and an ``InvalidInstanceError`` for an instance that lacks a value or has an unknown category.
+
     Parameters
     ----------
     ebm: ExplainableBoostingModel
@@ -495,14 +501,14 @@ def compute_local_facts(
 
     Raises
     ------
-    ValueError
-        If the model is not a binary classifier without interactions, or the instance is incomplete.
+    OptionRangeError
+        If the confidence level is not in [0, 1).
 
     """
     options = options or LocalOptions()
     if not 0 <= options.confidence_level < 1:
         msg = f"confidence_level must be in [0, 1). Got {options.confidence_level}."
-        raise ValueError(msg)
+        raise OptionRangeError(msg)
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
     features = _features(ebm, instance, options.min_support)
     intercept = float(np.ravel(ebm.intercept_)[0])

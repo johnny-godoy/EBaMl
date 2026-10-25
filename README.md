@@ -155,6 +155,27 @@ required, minimum sufficient reason and count completions. `audience="layperson"
 without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
 and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
+### Errors
+
+Every error that `ebaml` raises on purpose derives from `ebaml.EBaMlError`. Use `except EBaMlError` to catch the errors
+of `ebaml` apart from the errors of other code. Each error for a bad value also derives from `ValueError`, so an
+`except ValueError` that you wrote before still catches it.
+
+| Error | `ValueError` | Raised when |
+| --- | --- | --- |
+| `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
+| `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
+| `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
+| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier. |
+| `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
+| `EBMGraphError` | no | The base class of the errors of a graph. |
+| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, or a boolean format gets more than two bins. |
+| `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
+| `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
+
+The last three graph errors derive from `EBMGraphError`. All classes are in `ebaml.core.exceptions`, and `ebaml` exports
+them too.
+
 <!-- --8<-- [end:usage] -->
 ## How it works
 

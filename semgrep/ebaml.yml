@@ -91,3 +91,17 @@ rules:
           def $F(...): ...
     paths:
       include: ["/src/ebaml/"]
+
+  - id: ebaml-no-bare-value-error
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Raise a subclass of EBaMlError from ebaml.core.exceptions, so callers can catch the errors of ebaml apart from
+      the errors of other code. Give a new error class ValueError as a second base, so `except ValueError` still
+      catches it.
+    pattern-either:
+      - pattern: raise ValueError
+      - pattern: raise ValueError(...)
+      - pattern: raise ValueError(...) from $CAUSE
+    paths:
+      include: ["/src/ebaml/"]
