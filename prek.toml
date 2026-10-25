@@ -1,3 +1,9 @@
+# `prek install` installs both shims. The commit-msg hooks check the message of each commit
+# (.claude/rules/commits-and-prs.md). Every other hook runs at the pre-commit stage only, so a message check does not
+# run the whole suite again.
+default_install_hook_types = ["pre-commit", "commit-msg"]
+default_stages = ["pre-commit"]
+
 exclude = '''(?x)^(
   src/baml_sdk/|
   (.*/)?\.venv/|
@@ -157,6 +163,22 @@ hooks = [
     files = "^baml_src/.*\\.baml$",
     pass_filenames = false,
     priority = 40,
+  },
+  {
+    id = "commitizen",
+    name = "commit message: conventional commit",
+    language = "system",
+    entry = "uv run --frozen --only-group commits cz check -l 72 --commit-msg-file",
+    stages = ["commit-msg"],
+    priority = 0,
+  },
+  {
+    id = "commit-style",
+    name = "commit message: subject style",
+    language = "system",
+    entry = "uv run --frozen --only-group commits python -m scripts.check_commits --message-file",
+    stages = ["commit-msg"],
+    priority = 0,
   },
   {
     id = "uv-lock-check",
