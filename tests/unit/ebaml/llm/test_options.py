@@ -1,6 +1,7 @@
 """Tests for the options of the descriptors."""
 
 import inspect
+from collections.abc import Callable
 
 import attrs
 import pytest
@@ -9,7 +10,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm.options import GraphOptions, PromptOptions
 
 
-def _defaults(function: object, names: set[str]) -> dict[str, object]:
+def _defaults(function: Callable[..., object], names: set[str]) -> dict[str, object]:
     parameters = inspect.signature(function).parameters
     return {name: parameter.default for name, parameter in parameters.items() if name in names}
 

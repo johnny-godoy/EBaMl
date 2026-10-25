@@ -47,8 +47,12 @@ def test_on_post_build_exports_every_notebook_into_the_site(
     sources: tuple[Path, ...],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    calls = []
-    monkeypatch.setattr(docs_hooks.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def run(command: list[str], **kwargs: object) -> None:
+        calls.append((command, kwargs))
+
+    monkeypatch.setattr(docs_hooks.subprocess, "run", run)
     docs_hooks.on_post_build({"site_dir": str(tmp_path / "site")})
 
     assert (tmp_path / "site" / "notebooks").is_dir()
@@ -72,7 +76,11 @@ def test_on_post_build_exports_every_notebook_into_the_site(
 @pytest.mark.usefixtures("sources")
 def test_on_post_build_keeps_an_output_that_is_fresh(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     touch(tmp_path / "site" / "notebooks" / "first.html", 200)
-    calls = []
-    monkeypatch.setattr(docs_hooks.subprocess, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def run(command: list[str], **kwargs: object) -> None:
+        calls.append((command, kwargs))
+
+    monkeypatch.setattr(docs_hooks.subprocess, "run", run)
     docs_hooks.on_post_build({"site_dir": str(tmp_path / "site")})
     assert [command[5] for command, _ in calls] == [str(docs_hooks.NOTEBOOKS[1])]

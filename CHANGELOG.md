@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `EBMGraph.from_ebm` and `EBMGraph.simplify` return an instance of the subclass when you call them on a subclass of
+  `EBMGraph`. They returned a plain `EBMGraph` before, so the runtime type check raised an error.
+- `parse_str_tuple_to_float_tuple` raises a `ValueError` for a text with more or fewer than two values. It returned a
+  tuple of any length before, for example three ends for the interval `"(1, 2, 3)"`.
 - `TaskResult.accuracy` is `0.0` for a task with no outcomes. It raised a `ZeroDivisionError` before, and so did
   `format_results`.
 

@@ -126,12 +126,14 @@ dev = [
     "cosmic-ray>=8.7.0",
     "import-linter>=2.15",
     "marimo>=0.25.1",
+    "pandas-stubs>=3.0.5.260914",
     "polars>=2.0.0",
     "pyarrow>=26.0.0",
     "pyrefly>=1.4.0",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
     "ruff>=0.17.0",
+    "scipy-stubs>=1.18.1.1",
     "semgrep>=1.181.0",
     "vulture>=2.16",
 ]
@@ -189,3 +191,60 @@ name = "The benchmark stands alone"
 type = "forbidden"
 source_modules = ["ebaml.benchmark"]
 forbidden_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.llm"]
+
+[tool.pyrefly]
+# The strict preset reports implicit `Any` in parameters, lambdas, attributes, empty containers and type arguments.
+preset = "strict"
+# The repository root holds the `scripts` and `tests` packages. A config turns off the guessed fallback search path.
+search-path = ["src", "."]
+
+# Raise the checks below to errors, because the strict preset leaves them off or at warning level. Three checks stay
+# off. implicit-bool: ruff prefers `if items:` to `if len(items) > 0:`. unused-call-result: an unused result, such as
+# the count from `Path.write_bytes`, is not a defect. explicit-any: parsed TOML and JSON have no static type, and the
+# strict preset already reports each implicit `Any`.
+# The ignore check reads each key of this table as a workaround, so each key has a reason. No key silences an error.
+[tool.pyrefly.errors]
+# reason: raised to an error because a submodule used without its own import breaks when the import order changes.
+implicit-import = "error"
+# reason: raised to an error because a name imported from a module that does not export it can disappear in a release.
+implicit-reexport = "error"
+# reason: raised to an error because an attribute first set outside __init__ is missing until that method runs.
+implicitly-defined-attribute = "error"
+# reason: raised to an error because an override without @override does not fail when the base method is renamed.
+missing-override-decorator = "error"
+# reason: raised to an error because a function that returns Any hides the real type from each caller.
+no-any-return = "error"
+# reason: raised to an error because a match that misses a case of an enum or Literal falls through without notice.
+non-exhaustive-match = "error"
+# reason: raised to an error because a cast to the type that the value already has hides nothing and only adds noise.
+redundant-cast = "error"
+# reason: raised to an error because a condition that is always true or always false is dead code or a bug.
+redundant-condition = "error"
+# reason: raised to an error because an argument of implicit Any type turns off the check of the parameter.
+unknown-argument-type = "error"
+# reason: raised to an error because an attribute of implicit Any type turns off the checks of each use.
+unknown-attribute-access = "error"
+# reason: raised to an error because an attribute of implicit Any type turns off the checks of each use.
+unknown-attribute-type = "error"
+# reason: raised to an error because a call result of implicit Any type turns off the checks of each use.
+unknown-return-type = "error"
+# reason: raised to an error because a variable of implicit Any type turns off the checks of each use.
+unknown-variable-type = "error"
+# reason: raised to an error because a comparison whose result is known before it runs is a bug in the logic.
+unnecessary-comparison = "error"
+# reason: raised to an error because a conversion to the type that the value already has is dead code.
+unnecessary-type-conversion = "error"
+# reason: raised to an error because an untyped class decorator replaces the class type with Any.
+untyped-class-decorator = "error"
+# reason: raised to an error because an untyped function decorator replaces the signature with Any.
+untyped-function-decorator = "error"
+# reason: raised to an error because a package with no types makes each of its names Any, so add its stubs.
+untyped-import = "error"
+# reason: raised to an error because an ignore that silences nothing must go, so that no stale ignore stays.
+unused-ignore = "error"
+
+# reason: CLAUDE.md freezes scripts/ignore_sites.py, so its code cannot change, and an inline ignore is an edit too.
+# Its walk of the untyped ast and tomllib trees gives these three errors. All other checks still apply to the file.
+[[tool.pyrefly.sub-config]]
+matches = "scripts/ignore_sites.py"
+errors = { missing-attribute = false, unknown-argument-type = false, unknown-variable-type = false }

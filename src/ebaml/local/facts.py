@@ -20,11 +20,12 @@ keeps it, even if the scores sit at the edge of their confidence interval.
 import math
 import operator
 import statistics
+import typing
 from collections.abc import Mapping, Sequence
-from typing import Any
 
 import attrs
 import numpy as np
+import numpy.typing as npt
 
 from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -203,8 +204,10 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
         msg = f"Feature {graph.feature_name!r} is missing; local explanations need every input."
         raise ValueError(msg)
     if graph.feature_type == "continuous":
-        cuts = ebm.bins_[feature_index][0]
-        return int(np.searchsorted(cuts, float(value), side="right"))
+        # interpret types bins_ loosely, but the bins of a continuous feature are an array of cut points
+        cuts = typing.cast("npt.NDArray[np.float64]", ebm.bins_[feature_index][0])
+        # a value of a continuous feature is a number or a numeric text, and float() raises for anything else
+        return int(np.searchsorted(cuts, float(typing.cast("typing.SupportsFloat | str", value)), side="right"))
     if value not in graph.x_vals:
         msg = f"Unknown category {value!r} for feature {graph.feature_name!r}."
         raise ValueError(msg)
@@ -212,11 +215,11 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
 
 
 def _plausible_bins(
-    weights: np.ndarray,
+    weights: npt.NDArray[np.float64],
     *,  # pragma: no mutate -- a positional-only weights still lets the callers pass the other options by keyword
     continuous: bool,
     min_support: float,
-) -> np.ndarray:
+) -> npt.NDArray[np.bool_]:
     """Bins with enough training support to be offered as alternatives.
 
     A category needs ``min_support`` of the training data. The bins of a continuous feature are thin slices, so instead
@@ -245,14 +248,14 @@ def _plausible_bins(
     return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
-def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, Any], min_support: float) -> list[_Feature]:
+def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, object], min_support: float) -> list[_Feature]:
     """Read the graph, the training weights and the bin of the instance of every feature.
 
     Parameters
     ----------
     ebm: ExplainableBoostingModel
         The EBM.
-    instance: Mapping[str, Any]
+    instance: Mapping[str, object]
         The value of every feature.
     min_support: float
         See ``LocalOptions.min_support``.
@@ -471,7 +474,7 @@ def _completions(
 
 def compute_local_facts(
     ebm: ExplainableBoostingModel,
-    instance: Mapping[str, Any],
+    instance: Mapping[str, object],
     options: LocalOptions | None = None,
 ) -> LocalFacts:
     """Compute the three local explanations of one prediction of a binary EBM without interactions.
@@ -480,7 +483,7 @@ def compute_local_facts(
     ----------
     ebm: ExplainableBoostingModel
         The fitted EBM.
-    instance: Mapping[str, Any]
+    instance: Mapping[str, object]
         The value of every feature, by feature name.
     options: LocalOptions, optional
         Confidence level, sampling and support options.

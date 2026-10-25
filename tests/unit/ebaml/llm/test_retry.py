@@ -1,5 +1,6 @@
 """Tests for the truncation retry policy."""
 
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -21,7 +22,12 @@ def _is_cut_off(error: CutOffError) -> bool:
     return str(error) == "cut"
 
 
-def _run(call: object, graph: str, rebuild: object, estimate: object = len) -> object:
+def _run(
+    call: Callable[[str], str],
+    graph: str,
+    rebuild: Callable[[int], str],
+    estimate: Callable[[str], int] = len,
+) -> str:
     return retry.call_with_shrinking_graph(
         call,
         graph,

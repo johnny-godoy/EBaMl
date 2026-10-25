@@ -339,7 +339,7 @@ def pytest() -> str:
     """
     log = read(LOGS / "pytest.log")
     parts = []
-    failures = re.findall(r"^(?:FAILED|ERROR) .+$", log, re.MULTILINE)
+    failures: list[str] = re.findall(r"^(?:FAILED|ERROR) .+$", log, re.MULTILINE)
     if failures:
         parts.append(
             "**Failing tests**\n"
@@ -484,7 +484,7 @@ def pull_request_number() -> int:
         The number of the pull request.
 
     """
-    return json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))["pull_request"]["number"]
+    return int(json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))["pull_request"]["number"])
 
 
 def upsert_comment(text: str) -> None:

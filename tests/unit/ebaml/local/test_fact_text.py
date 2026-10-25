@@ -2,16 +2,19 @@
 
 import attrs
 import orjson
+import pandas as pd
 import pytest
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import Audience
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
+from tests.unit.ebaml.conftest import instance_of, returning
 
 
-def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple) -> None:
+def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, data = continuous_ebm
-    facts = local.compute_local_facts(ebm, data.iloc[0].to_dict())
+    facts = local.compute_local_facts(ebm, instance_of(data, 0))
     layperson = local_text.facts_to_texts(facts)
     expert = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
     assert set(layperson) == {"prediction", "counterfactual", "sufficient_reason", "completions"}
@@ -194,7 +197,7 @@ RENDERER_METHODS = ["contribution", "prediction", "change", "flip", "margin", "s
 
 @pytest.mark.parametrize("missing", RENDERER_METHODS)
 def test_a_renderer_must_define_every_method(missing: str) -> None:
-    others = {name: lambda *_args: None for name in RENDERER_METHODS if name != missing}
+    others = {name: returning(None) for name in RENDERER_METHODS if name != missing}
     incomplete = type("Incomplete", (local_text._AudienceRenderer,), others)
     with pytest.raises(TypeError, match=missing):
         incomplete()

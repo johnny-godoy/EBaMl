@@ -5,8 +5,8 @@ from collections.abc import Iterable
 from collections.abc import Set as AbstractSet
 
 from interpret.glassbox import (
-    ExplainableBoostingClassifier,
-    ExplainableBoostingRegressor,
+    ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
+    ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 )
 
 from ebaml.core.exceptions import InvalidOptionError

@@ -33,7 +33,7 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
         A json string representation of the x and y values.
 
     """
-    keys = [f"({x[0]}, {x[1]})" if isinstance(x, tuple) else str(x) for x in x_vals]
+    keys = [f"({x[0]}, {x[1]})" if isinstance(x, tuple) else x for x in x_vals]
     return "{" + ", ".join(f'"{key}": {y}' for key, y in zip(keys, y_vals, strict=True)) + "}"
 
 
@@ -51,7 +51,8 @@ def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
         The parsed float tuple.
 
     """
-    return tuple(float(x) for x in str_tuple[1:-1].split(","))
+    low, high = str_tuple[1:-1].split(",")
+    return float(low), float(high)
 
 
 def _search_line(pattern: re.Pattern[str], text: str, what: str) -> re.Match[str]:

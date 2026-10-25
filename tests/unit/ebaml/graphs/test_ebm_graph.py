@@ -4,25 +4,27 @@ import inspect
 import itertools
 import warnings
 from collections.abc import Callable
+from typing import Any, Literal
 
 import numpy as np
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier
+from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, InvalidOptionError
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
-from tests.unit.ebaml.conftest import fake_model
+from tests.unit.ebaml.conftest import appending, fake_model
 
 INF = float("inf")
+type Status = Literal["ok", "warn", "over"]
 
 
-def budget(status: str, tokens: int = 10) -> baml_sdk.TokenBudget:
+def budget(status: Status, tokens: int = 10) -> baml_sdk.TokenBudget:
     return baml_sdk.TokenBudget(estimated_tokens=tokens, status=status)
 
 
-def checker(*statuses: str, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
+def checker(*statuses: Status, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
     # the check answers with each status in turn, and with the last one after that
     answers = itertools.chain(statuses, itertools.repeat(statuses[-1]))
 
@@ -122,6 +124,20 @@ def test_from_ebm_bin_score_mismatch() -> None:
 
 
 # simplify
+
+
+class SubGraph(EBMGraph):
+    """A subclass, to check that the methods that return ``Self`` keep it."""
+
+
+def test_from_ebm_of_a_subclass_returns_the_subclass() -> None:
+    # from_ebm returned a plain EBMGraph, which broke its `Self` hint and failed the runtime type check
+    assert type(SubGraph.from_ebm(continuous_ebm(), 0)) is SubGraph
+
+
+def test_simplify_of_a_subclass_returns_the_subclass() -> None:
+    graph = SubGraph("age", "continuous", [(0.0, 1.0), (1.0, 2.0)], [1.0, 1.0], [0.1, 0.2])
+    assert type(graph.simplify()) is SubGraph
 
 
 def test_simplify_rejects_non_continuous() -> None:
@@ -266,8 +282,10 @@ def test_from_ebm_rejects_every_unknown_feature_type(bad: str) -> None:
 
 
 def test_from_ebm_use_feature_bounds_is_keyword_only() -> None:
+    # a plain Callable lets the call break the signature, which is the point of the test
+    from_ebm: Callable[..., EBMGraph] = EBMGraph.from_ebm
     with pytest.raises(TypeError):
-        EBMGraph.from_ebm(continuous_ebm(), 0, *(Normalization.NONE, False))
+        from_ebm(continuous_ebm(), 0, *(Normalization.NONE, False))
 
 
 def test_from_ebm_large_graph() -> None:
@@ -386,8 +404,9 @@ def test_to_text_without_a_check_writes_the_graph_once(monkeypatch: pytest.Monke
 
 
 def test_to_text_options_are_keyword_only() -> None:
+    to_text: Callable[..., str] = cont_graph().to_text
     with pytest.raises(TypeError):
-        cont_graph().to_text(*(True,))
+        to_text(*(True,))
 
 
 def test_to_text_warning_points_at_the_caller() -> None:
@@ -397,9 +416,9 @@ def test_to_text_warning_points_at_the_caller() -> None:
 
 
 def test_to_text_tries_every_simplification_level() -> None:
-    calls = []
+    calls: list[dict[str, Any]] = []
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
-        cont_graph().to_text(check_budget=lambda **kw: calls.append(kw) or budget("over", 5))
+        cont_graph().to_text(check_budget=appending(calls, budget("over", 5)))
     assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
 
 

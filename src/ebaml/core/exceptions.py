@@ -23,14 +23,14 @@ class InvalidOptionError(ValueError):
         super().__init__(message)
 
     @classmethod
-    def from_enum(cls, option: str, validation_enum: enum.EnumMeta) -> Self:
+    def from_enum(cls, option: str, validation_enum: type[enum.Enum]) -> Self:
         """Create an InvalidOptionError from an enum.
 
         Parameters
         ----------
         option : str
             The invalid option provided.
-        validation_enum : enum.EnumMeta
+        validation_enum : type[enum.Enum]
             The enum class that defines the valid options.
 
         Returns
