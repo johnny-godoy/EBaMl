@@ -95,6 +95,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup # pyrefly resolves baml_sdk, so it must be generated
+      - name: Cache the hook environments
+        # prek clones the remote hook repositories (pre-commit-hooks, actionlint); the config pins their revisions.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('prek.toml') }}
       - name: Run all hooks
         run: |
           mkdir -p "$CI_LOGS"
@@ -112,8 +118,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Cache the trufflehog binary
+        id: trufflehog-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.local/bin/trufflehog
+          key: trufflehog-${{ runner.os }}-v3.90.8 # bump with the version in the install step
       - name: Install trufflehog
-        run: curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.90.8/scripts/install.sh | sudo sh -s -- -b /usr/local/bin v3.90.8
+        if: steps.trufflehog-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/bin
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/v3.90.8/scripts/install.sh | sh -s -- -b ~/.local/bin v3.90.8
+      - run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Scan git history
         env:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
