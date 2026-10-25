@@ -3,7 +3,7 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 <project>
-EBaMl is BAML for Explainable Boosting Machines. It is a port and extension of TalkToEBM. Python extracts graphs from an
+EBaMl is BAML for Explainable Boosting Machines. It is based on TalkToEBM and extends it. Python extracts graphs from an
 EBM (`interpret`). BAML holds the prompts, the LLM clients and the chain-of-thought pipelines. The default LLM is
 OpenRouter's `openrouter/free`, which needs `OPENROUTER_API_KEY`.
 </project>
@@ -47,7 +47,7 @@ The boundary between the two languages is the generated `baml_sdk` package.
 - `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text. The
   token budget is an estimate of about 3 characters per token. `llm/descriptors.py` connects this code to `baml_sdk`
   (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
-- `src/ebaml/benchmark.py` and `benchmark/` are the port of the TalkToEBM benchmark. `is_correct` parses and compares
+- `src/ebaml/benchmark.py` and `benchmark/` follow the TalkToEBM benchmark. `is_correct` parses and compares
   values.
 - `baml_src/talk_to_ebm_test.baml` holds the offline BAML tests. `notebooks/` uses marimo. `docs/` uses Zensical
   (`zensical.toml`) and includes README sections through `--8<--` markers, so keep the markers intact.
@@ -71,6 +71,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Write a reason next to each `noqa`, `type: ignore`, pragma, skipped test and config ignore (` -- reason`, or a
   `# reason:` block in TOML). Check with `uv run python -m scripts.check_ignores`. Fix the code or ask the user when a
   hook fails. Leave `scripts/check_ignores.py`, `scripts/ignore_sites.py` and the hook unchanged.
+- Describe the code as it is now. Do not compare with an earlier version or promise backward compatibility: the package
+  has no users yet (`.claude/rules/writing-style.md`).
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See
   `.claude/rules/writing-style.md`.
 - Ruff selects all rules with line length 120. Tests live in `tests/unit/ebaml/`.

@@ -2,6 +2,10 @@
 
 --8<-- "README.md:intro"
 
+## Supported models
+
+--8<-- "README.md:supported-models"
+
 ## Where to go next
 
 - [Setup](setup.md): install the BAML toolchain, set an API key, generate the SDK, troubleshooting.
@@ -13,7 +17,7 @@
 - [Benchmark](benchmark.md): how well does a model read EBM graphs?
 - [API reference](api.md): every public function and class.
 
-## Why a port
+## How EBaMl differs from TalkToEBM
 
 [TalkToEBM](https://github.com/interpretml/TalkToEBM) builds the prompts in Python and calls OpenAI or Azure
 directly. EBaMl keeps the Python that has to touch the EBM (extracting and simplifying the graphs) and moves the rest

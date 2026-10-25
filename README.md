@@ -4,7 +4,7 @@
 BAML for Explainable Boosting Machines. Python extracts the graphs from an EBM, and BAML holds the prompts, the LLM
 clients and the chain-of-thought pipelines.
 
-EBaMl started as a port of [TalkToEBM](https://github.com/interpretml/TalkToEBM) and goes beyond it: it adds local
+EBaMl is based on [TalkToEBM](https://github.com/interpretml/TalkToEBM) and adds local
 explanations (why did the model predict this for this input?) computed exactly and put in words for a layperson or a
 data scientist, a benchmark that scores answers automatically, a configurable LLM provider, token budgets and typed,
 structured logging.
@@ -12,6 +12,19 @@ structured logging.
 LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrouter/free`), so no paid API key is needed.
 
 <!-- --8<-- [end:intro] -->
+## Supported models
+
+<!-- --8<-- [start:supported-models] -->
+| Feature | Binary classifier | Regressor | Multiclass classifier | Interactions |
+| --- | :---: | :---: | :---: | :---: |
+| Graph descriptions (`describe_graph`) | ✅ | ✅ | ❌ | ⚠️ |
+| Model summary (`describe_ebm`) | ✅ | ✅ | ❌ | ⚠️ |
+| Graph text (`EBMGraph`) | ✅ | ✅ | ❌ | ⚠️ |
+| Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
+
+✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped without a
+warning. ❌ not supported yet. Full support is on the roadmap.
+<!-- --8<-- [end:supported-models] -->
 ## Setup
 
 <!-- --8<-- [start:setup] -->
@@ -159,7 +172,7 @@ and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
 Every error that `ebaml` raises on purpose derives from `ebaml.EBaMlError`. Use `except EBaMlError` to catch the errors
 of `ebaml` apart from the errors of other code. Each error for a bad value also derives from `ValueError`, so an
-`except ValueError` that you wrote before still catches it.
+`except ValueError` catches it too.
 
 | Error | `ValueError` | Raised when |
 | --- | --- | --- |
@@ -232,7 +245,7 @@ uv run marimo edit notebooks/local_explanations.py
 
 ## Benchmark
 
-A port of [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
+The benchmark follows [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
 model reads EBM graphs: function recognition (easy and hard), the largest jump, monotonicity, reading a value and the
 widest confidence interval. It makes real requests, so it needs `OPENROUTER_API_KEY`, and it asks two LLM turns per
 question (6 tasks, 480 questions in all).
@@ -241,7 +254,7 @@ question (6 tasks, 480 questions in all).
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json
 ```
 
-See [benchmark/README.md](benchmark/README.md) for the tasks, the scoring and what was not ported.
+See [benchmark/README.md](benchmark/README.md) for the tasks, the scoring and what it leaves out.
 
 ## Changing the LLM provider
 

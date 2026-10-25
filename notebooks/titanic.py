@@ -1,4 +1,4 @@
-"""A marimo notebook that talks to an EBM about the Titanic: the port of TalkToEBM's example notebook."""
+"""A marimo notebook that talks to an EBM about the Titanic, like TalkToEBM's example notebook."""
 
 import marimo
 
@@ -41,7 +41,7 @@ def _(mo) -> None:
     mo.md(r"""
     # Talk to an EBM about the Titanic
 
-    A port of TalkToEBM's *Spaceship Titanic* notebook. It uses the classic
+    It follows TalkToEBM's *Spaceship Titanic* notebook. It uses the classic
     [Titanic dataset](https://www.openml.org/d/40945) from OpenML, which downloads without an account, instead of the
     Kaggle one.
 
