@@ -6,6 +6,8 @@ from pathlib import Path
 import attrs
 import orjson
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 from structlog.testing import capture_logs
 
 import baml_sdk
@@ -262,3 +264,25 @@ def test_format_results() -> None:
         "jumps                             1/2     50.0%        100          20",
         "function-recognition-hard         1/1    100.0%          7           3",
     ]
+
+
+# The solutions of each task, in the format of the data files: Python writes the numbers with repr().
+_NUMBERS = st.floats(allow_nan=False, allow_infinity=False).map(repr)
+_SOLUTIONS = {
+    Task.FUNCTION_RECOGNITION: st.sampled_from("abcde").map(lambda letter: f"{letter})"),
+    Task.FUNCTION_RECOGNITION_HARD: st.sampled_from("abcde").map(lambda letter: f"{letter})"),
+    Task.JUMPS: _NUMBERS,
+    Task.MONOTONICITY: st.sampled_from(["Increasing", "Decreasing", "Not monotone"]),
+    Task.READ_VALUE: _NUMBERS,
+    Task.WIDE_CONFIDENCE: st.tuples(_NUMBERS, _NUMBERS).map(lambda bounds: f"({bounds[0]}, {bounds[1]})"),
+}
+
+
+def test_every_task_has_a_solution_strategy() -> None:
+    assert set(_SOLUTIONS) == set(Task)
+
+
+@given(data=st.data(), task=st.sampled_from(Task))
+def test_every_well_formed_solution_matches_itself(data: st.DataObject, task: Task) -> None:
+    solution = data.draw(_SOLUTIONS[task], label="solution")
+    assert is_correct(task, solution, solution)

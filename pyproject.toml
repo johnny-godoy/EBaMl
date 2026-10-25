@@ -124,6 +124,7 @@ select = ["ALL"]
 [dependency-groups]
 dev = [
     "cosmic-ray>=8.7.0",
+    "hypothesis>=6.170.1",
     "import-linter>=2.15",
     "marimo>=0.25.1",
     "pandas-stubs>=3.0.5.260914",

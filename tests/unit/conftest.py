@@ -1,8 +1,14 @@
-"""Pytest hooks for all unit tests."""
+"""Pytest hooks and Hypothesis settings for all unit tests."""
 
 import os
 
 import pytest
+from hypothesis import settings
+
+# A random failure in CI is a flaky build that blocks other pull requests, so CI and the mutation runs draw the same
+# examples every time and keep no example database. A timing limit fails at random on a slow runner, so it is off.
+settings.register_profile("ci", derandomize=True, database=None, deadline=None)
+settings.load_profile("ci" if os.environ.get("CI") or os.environ.get("MUTATION_FIRST") else "default")
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

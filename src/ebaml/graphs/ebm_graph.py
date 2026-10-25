@@ -408,7 +408,7 @@ class EBMGraph:
             for label, sign in (("Lower", -1), ("Upper", 1)):
                 bounds = [score + sign * factor * std for score, std in zip(scores, self.stds, strict=True)]
                 prompt += (
-                    f"{label} Bounds ({confidence_level * 100:.0f}%-Confidence Interval):"
+                    f"{label} Bounds ({confidence_level * 100:.10g}%-Confidence Interval):"
                     f" {xy_to_json(x_vals, np.round(bounds, y_axis_precision).astype(str))}\n"
                 )
         return prompt
