@@ -38,3 +38,6 @@ graphify-out/
 
 # Built documentation
 site/
+
+# Lean (proofs/)
+proofs/.lake/
