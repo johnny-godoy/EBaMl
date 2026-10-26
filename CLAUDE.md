@@ -22,7 +22,7 @@ uv run pytest                      # unit tests in tests/unit; fails below 100% 
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, vulture, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
-uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
+uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
@@ -31,7 +31,7 @@ uv run --group docs python -m scripts.build_docs serve   # preview the docs; the
 ```
 
 `ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
-`baml` and pytest, then mutation testing of the changed modules. A weekly workflow runs all modules, one job each, when code changed that week.
+`baml` and pytest, then mutation testing of the changed lines. A weekly workflow runs all modules, one job each, when code changed that week.
 </commands>
 
 <architecture>

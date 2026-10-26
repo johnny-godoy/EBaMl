@@ -402,7 +402,7 @@ uv run pytest     # Python unit tests, fails under 100% coverage
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings
 prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
 uv run python scripts/mutation.py          # mutation testing of all modules, fails if any mutant survives
-uv run python scripts/mutation.py --base origin/main   # the same, but only for modules changed since main
+uv run python scripts/mutation.py --base origin/main   # the same, but only for the lines changed since main
 uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # the same, but only for one module
 uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
 uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
@@ -411,7 +411,7 @@ uv run --group docs python -m scripts.build_docs serve   # preview the docs (exp
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and
-`baml test`, pytest with 100% coverage, the code examples of the documentation, and mutation testing of the changed modules with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
+`baml test`, pytest with 100% coverage, the code examples of the documentation, and mutation testing of the changed lines with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
 (`# noqa`, `# type: ignore`, skipped tests, ...) must carry a written reason next to them.
 
 The `python` code blocks of `README.md` and `docs/*.md` run in order, and the blocks of one file share their variables.
