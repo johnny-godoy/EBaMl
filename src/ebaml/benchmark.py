@@ -325,8 +325,7 @@ def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion) -> Tas
     questions: Sequence[Question]
         The questions to ask, for example from ``load_questions``.
     ask: AskQuestion
-        Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question``. The LLM client is configured
-        in ``baml_src/talk_to_ebm.baml``.
+        Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question``. It chooses the model.
 
     Returns
     -------

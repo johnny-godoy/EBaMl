@@ -5,6 +5,8 @@
 - `ebaml.llm.options.ModelOptions` sets the provider, the model, the environment variable of the key, the base URL,
   the temperature, the output limit and the headers.
 
+- `benchmark/run.py --model provider/model` runs the benchmark on another model.
+
 ### Changed
 
 - The BAML entry points `describe_graph_cot`, `summarize_ebm`, `describe_ebm`, `answer_benchmark_question` and
