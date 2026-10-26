@@ -17,6 +17,7 @@ from ebaml.core.custom_types import Audience, ExplainableBoostingModel, coerce_e
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
+from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
 from ebaml.local.fact_text import facts_to_texts
@@ -211,8 +212,9 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 ) -> baml_sdk.Counted:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
-    The function raises the ``BamlError`` of the LLM call if the call fails. A reply cut off by ``max_tokens`` is
-    retried first, as ``ebaml.llm.retry.call_with_shrinking_graph`` says.
+    A failure that the user can fix raises an ``LLMRequestError`` (see ``ebaml.llm.provider_errors``). Any other failure
+    raises the ``BamlError`` of the LLM call. A reply cut off by ``max_tokens`` is retried first, as
+    ``ebaml.llm.retry.call_with_shrinking_graph`` says.
 
     Parameters
     ----------
@@ -238,19 +240,20 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 
     """
     opts = _prompt_options(prompt)
-    return call_with_shrinking_graph(
-        lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
-        graph,
-        error_type=BamlError,
-        is_truncated=_is_truncated,
-        estimate_tokens=lambda text: baml_sdk.estimate_tokens(text=text),
-        rebuild=lambda budget: _graph_text(
-            ebm,
-            feature_index,
-            attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
-        ),
-        label=ebm.feature_names_in_[feature_index],
-    )
+    with provider_errors():
+        return call_with_shrinking_graph(
+            lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
+            graph,
+            error_type=BamlError,
+            is_truncated=_is_truncated,
+            estimate_tokens=lambda text: baml_sdk.estimate_tokens(text=text),
+            rebuild=lambda budget: _graph_text(
+                ebm,
+                feature_index,
+                attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
+            ),
+            label=ebm.feature_names_in_[feature_index],
+        )
 
 
 def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the feature, the length, and three keyword-only option arguments
@@ -360,13 +363,14 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
             strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
         )
     )
-    summary = baml_sdk.summarize_ebm(
-        feature_importances=feature_importances,
-        graph_descriptions=graph_descriptions,
-        num_sentences=num_sentences,
-        opts=_prompt_options(prompt),
-        model=model_spec,
-    )
+    with provider_errors():
+        summary = baml_sdk.summarize_ebm(
+            feature_importances=feature_importances,
+            graph_descriptions=graph_descriptions,
+            num_sentences=num_sentences,
+            opts=_prompt_options(prompt),
+            model=model_spec,
+        )
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.usage.input_tokens for item in described),
         output_tokens=summary.usage.output_tokens + sum(item.usage.output_tokens for item in described),
@@ -434,14 +438,15 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     facts = compute_local_facts(ebm, instance, local)
     texts = facts_to_texts(facts, audience)
     model_spec = _model_spec(model)
-    result = baml_sdk.explain_local(
-        global_explanation=global_explanation,
-        facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts)),
-        audience=audience.value,
-        num_sentences=num_sentences,
-        opts=_prompt_options(prompt),
-        model=model_spec,
-    )
+    with provider_errors():
+        result = baml_sdk.explain_local(
+            global_explanation=global_explanation,
+            facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts)),
+            audience=audience.value,
+            num_sentences=num_sentences,
+            opts=_prompt_options(prompt),
+            model=model_spec,
+        )
     logger.info(
         "usage",
         what="explain_instance",

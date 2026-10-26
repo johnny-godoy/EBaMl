@@ -10,7 +10,7 @@ from structlog.testing import capture_logs
 
 import baml_sdk
 from ebaml.core.custom_types import Audience, FeatureType, Normalization
-from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError
+from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
@@ -778,3 +778,64 @@ def test_a_malformed_model_string_raises_before_any_paid_call(
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     with pytest.raises(InvalidOptionError, match="provider/model"):
         descriptors.describe_graph(fake_ebm, 0, model="gpt-5")
+
+
+def _missing_key_error() -> BamlError:
+    value = baml_sdk.ai.errors.InvalidRequest(
+        provider="openrouter",
+        detail="openrouter needs an API key: pass api_key, or set OPENROUTER_API_KEY",
+    )
+    return BamlError(value, class_name="ai.errors.InvalidRequest")
+
+
+def test_describe_graph_explains_a_missing_key(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    with pytest.raises(MissingAPIKeyError, match=r"export OPENROUTER_API_KEY=\.\.\.") as raised:
+        descriptors.describe_graph(fake_ebm, 0)
+    assert isinstance(raised.value.__cause__, BamlError)
+
+
+def test_describe_ebm_explains_a_missing_key_of_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    def summary(**_kw: object) -> baml_sdk.Counted:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", summary))
+    with pytest.raises(MissingAPIKeyError):
+        descriptors.describe_ebm(fake_ebm)
+
+
+def test_describe_ebm_explains_a_missing_key_of_a_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    with pytest.raises(MissingAPIKeyError):
+        descriptors.describe_ebm(fake_ebm)
+
+
+def test_explain_instance_explains_a_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    def explain(**_kw: object) -> baml_sdk.LocalExplanationText:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    monkeypatch.setattr(descriptors, "facts_to_texts", returning(FactTexts("p", "c", "s", "k")))
+    monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", explain))
+    with pytest.raises(MissingAPIKeyError):
+        descriptors.explain_instance(FAKE_EBM, {}, "G")
