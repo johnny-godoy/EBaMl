@@ -6,13 +6,14 @@ the main session for reporting. A shard runs the tests of its own module first, 
 module, and all shards share one cache of fitted models. A progress line appears every minute.
 
 Usage: ``uv run python scripts/mutation.py [shards] [--base REF | --module PATH ...]``. With ``--base``, only the
-modules that changed since ``REF`` are mutated. With ``--module``, only the given modules are mutated. Exits non-zero
-if any mutant survives.
+mutants on the lines that changed since ``REF`` run. With ``--module``, all mutants of the given modules run. Exits
+non-zero if any mutant survives.
 """
 
 import argparse
 import itertools
 import os
+import re
 import shutil
 import sqlite3
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- must launch cosmic-ray and the interpreter as subprocesses
@@ -20,7 +21,7 @@ import sys
 import tempfile
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -33,6 +34,8 @@ CONFIG = ROOT / "cosmic-ray.toml"
 SESSION = ROOT / ".mutation" / "session.sqlite"
 COPIED = ("src", "tests", "benchmark", "scripts", "pyproject.toml", "cosmic-ray.toml")
 POLL_SECONDS = 60
+# the new side of a hunk header of ``git diff -U0``: ``+start`` or ``+start,count``
+HUNK: re.Pattern[str] = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@")
 
 
 @attrs.frozen
@@ -81,8 +84,33 @@ def run(*args: str, cwd: Path = ROOT, env: dict[str, str] | None = None) -> str:
     return result.stdout + result.stderr
 
 
-def changed_modules(base: str) -> set[str]:
-    """List the source modules that changed between a base revision and HEAD.
+def parse_changed_lines(diff: str) -> dict[str, set[int]]:
+    """Read the changed lines of each file from the output of ``git diff -U0``.
+
+    Parameters
+    ----------
+    diff: str
+        The output of ``git diff -U0``.
+
+    Returns
+    -------
+    dict[str, set[int]]
+        The line numbers on the new side, by the path of the file. A file with deletions only has an empty set.
+
+    """
+    lines: dict[str, set[int]] = {}
+    current: set[int] = set()
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            current = lines.setdefault(line.removeprefix("+++ ").removeprefix("b/"), set())
+        elif match := HUNK.match(line):
+            start, count = int(match[1]), int(match[2] or "1")
+            current.update(range(start, start + count))
+    return lines
+
+
+def changed_lines(base: str) -> dict[str, set[int]]:
+    """List the changed lines of each source module between a base revision and HEAD.
 
     Parameters
     ----------
@@ -91,12 +119,16 @@ def changed_modules(base: str) -> set[str]:
 
     Returns
     -------
-    set[str]
-        The paths of the changed modules, relative to the project root.
+    dict[str, set[int]]
+        The changed line numbers, by the path of the module relative to the project root.
 
     """
-    paths = run("git", "diff", "--name-only", f"{base}...HEAD", "--", "src/ebaml").split()
-    return {path for path in paths if path.endswith(".py") and (ROOT / path).exists()}
+    diff = run("git", "diff", "-U0", "--no-color", "--no-ext-diff", f"{base}...HEAD", "--", "src/ebaml")
+    return {
+        path: lines
+        for path, lines in parse_changed_lines(diff).items()
+        if path.endswith(".py") and (ROOT / path).exists()
+    }
 
 
 def session_modules(session: Path) -> set[str]:
@@ -117,26 +149,41 @@ def session_modules(session: Path) -> set[str]:
         return {row[0] for row in db.execute("SELECT DISTINCT module_path FROM mutation_specs")}
 
 
-def keep_modules(session: Path, modules: set[str]) -> None:
+def keep_lines(session: Path, lines: Mapping[str, Collection[int]]) -> None:
+    """Drop the work items of all mutants that touch none of the given lines.
+
+    Parameters
+    ----------
+    session: Path
+        The cosmic-ray session.
+    lines: Mapping[str, Collection[int]]
+        The line numbers to keep, by the path of the module. A module that is not a key loses all its mutants.
+
+    """
+    with sqlite3.connect(session) as db:
+        specs = db.execute("SELECT job_id, module_path, start_pos_row, end_pos_row FROM mutation_specs").fetchall()
+        dropped = [
+            (job,)
+            for job, module, start, end in specs
+            if not any(row in lines.get(module, ()) for row in range(start, end + 1))
+        ]
+        db.executemany("DELETE FROM work_items WHERE job_id = ?", dropped)
+        db.executemany("DELETE FROM mutation_specs WHERE job_id = ?", dropped)
+        db.commit()
+
+
+def keep_modules(session: Path, modules: Collection[str]) -> None:
     """Drop the work items of all modules except the given ones.
 
     Parameters
     ----------
     session: Path
         The cosmic-ray session.
-    modules: set[str]
+    modules: Collection[str]
         The paths of the modules to keep.
 
     """
-    paths = session_modules(session)
-    with sqlite3.connect(session) as db:
-        dropped = [(path,) for path in paths - modules]
-        db.executemany(
-            "DELETE FROM work_items WHERE job_id IN (SELECT job_id FROM mutation_specs WHERE module_path = ?)",
-            dropped,
-        )
-        db.executemany("DELETE FROM mutation_specs WHERE module_path = ?", dropped)
-        db.commit()
+    keep_lines(session, {module: range(1, sys.maxsize) for module in modules})
 
 
 def make_shard(workdir: Path, module: str, index: int, shards: int) -> Shard:
@@ -291,6 +338,26 @@ def count_mutants() -> int:
         )
 
 
+def select_mutants(base: str | None, modules: Sequence[str] | None) -> None:
+    """Drop the work items of the main session that the run does not need.
+
+    Parameters
+    ----------
+    base: str, optional
+        Keep only the mutants on the lines that changed since this revision.
+    modules: Sequence[str], optional
+        Keep only the mutants of these modules. Without ``base`` and ``modules``, all mutants stay.
+
+    """
+    if base:
+        lines = changed_lines(base)
+        keep_lines(SESSION, lines)
+        logger.info("changed lines", modules=sorted(lines), base=base)
+    elif modules:
+        keep_modules(SESSION, modules)
+        logger.info("partial run", modules=sorted(modules))
+
+
 def main() -> int:
     """Run the mutation testing in shards.
 
@@ -312,18 +379,11 @@ def main() -> int:
     run(sys.executable, "-m", "cosmic_ray.cli", "init", str(CONFIG), str(SESSION))
     # lines marked ``# pragma: no mutate`` hold mutants that are equivalent to the original code
     run(sys.executable, "-m", "cosmic_ray.tools.filters.pragma_no_mutate", str(SESSION))
-    if args.base or args.module:
-        if args.base:
-            modules = changed_modules(args.base)
-        else:
-            modules = set(args.module)
-            missing = sorted(path for path in modules if not (ROOT / path).is_file())
-            if missing:
-                parser.error(f"no such module: {', '.join(missing)}")
-        keep_modules(SESSION, modules)
-        logger.info("partial run", modules=sorted(modules), base=args.base)
-        if not modules:
-            return 0
+    if args.module:
+        missing = sorted(path for path in args.module if not (ROOT / path).is_file())
+        if missing:
+            parser.error(f"no such module: {', '.join(missing)}")
+    select_mutants(args.base, args.module)
     modules = sorted(session_modules(SESSION))
     if not modules:
         logger.info("no mutants to run")

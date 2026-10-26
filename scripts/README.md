@@ -6,7 +6,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | --- | --- |
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
-| `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all or only changed modules, and fails if any mutant survives. |
+| `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
@@ -143,7 +143,8 @@ cosmic-ray mutates the source tree in place, so each shard works on its own copy
 and `cosmic-ray.toml`. The script:
 
 1. creates a session in `.mutation/session.sqlite` and drops mutants on `# pragma: no mutate` lines,
-2. if you give `--base` or `--module`, drops the mutants of all other modules,
+2. if you give `--base`, drops the mutants that touch no line changed since that revision; if you give `--module`,
+   drops the mutants of all other modules,
 3. runs the test baseline and stops if it fails,
 4. splits the work items of each module over the shards and runs them concurrently,
 5. prints a progress line every minute, with the finished, surviving and remaining mutants,
@@ -157,11 +158,12 @@ the normal order and fit every model.
 ```bash
 uv run python scripts/mutation.py      # one shard per CPU
 uv run python scripts/mutation.py 4    # four shards
-uv run python scripts/mutation.py --base origin/main   # only modules changed since main
+uv run python scripts/mutation.py --base origin/main   # only the lines changed since main
 uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # only one module
 ```
 
-If no module changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. The workflow
+If no line of `src/ebaml` changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. A
+change can let a mutant survive on a line that did not change, so the weekly run mutates all lines. The workflow
 `mutation-weekly.yml` runs all modules each Monday, and only if code changed in the last 7 days. It starts one job for
 each module with `--module`, and opens one issue that lists the surviving mutants of all jobs.
 
