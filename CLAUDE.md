@@ -20,6 +20,7 @@ OPENROUTER_API_KEY=unused baml test -x root::Live   # offline BAML tests on a sc
 baml test -i root::Live            # live prompt tests (baml_src/prompt_tests.baml); send real requests, need a real key
 uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
+uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, vulture, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed or named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
@@ -85,6 +86,9 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See
   `.claude/rules/writing-style.md`.
 - Ruff selects all rules with line length 120. Tests live in `tests/unit/ebaml/`.
+- The `python` code blocks of `README.md` and `docs/*.md` and the docstring `Examples` run as tests, so the site shows
+  only code that works. `tests/docs/conftest.py` gives them `X`, `y` and fake LLM replies. Put other setup in a
+  `<!-- invisible-code-block: python -->` comment, which the site does not show.
 - Back each exact mathematical claim ("optimal", "minimal", "exact") with a Lean proof and a Typst paper in `proofs/`,
   and keep both true when the code changes (`.claude/rules/proofs.md`).
 - Leave `src/baml_sdk/` and `.pyi` files unedited. Regenerate them with `baml generate`.

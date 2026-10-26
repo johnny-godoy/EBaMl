@@ -386,6 +386,7 @@ baml check        # compile check
 baml test -x root::Live   # run the offline BAML tests
 baml generate     # regenerate src/baml_sdk/
 uv run pytest     # Python unit tests, fails under 100% coverage
+uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings
 prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
 uv run python scripts/mutation.py          # mutation testing of all modules, fails if any mutant survives
 uv run python scripts/mutation.py --base origin/main   # the same, but only for modules changed since main
@@ -397,6 +398,12 @@ uv run --group docs python -m scripts.build_docs serve   # preview the docs (exp
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and
-`baml test`, pytest with 100% coverage, and mutation testing of the changed modules with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
+`baml test`, pytest with 100% coverage, the code examples of the documentation, and mutation testing of the changed modules with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
 (`# noqa`, `# type: ignore`, skipped tests, ...) must carry a written reason next to them.
+
+The `python` code blocks of `README.md` and `docs/*.md` run in order, and the blocks of one file share their variables.
+The `Examples` sections of the docstrings run as doctests. `tests/docs/conftest.py` gives each Markdown file a small
+data set as `X` and `y`, and it replaces the LLM calls with fakes, so the examples send no request. Put setup that the
+reader does not need in an `<!-- invisible-code-block: python -->` comment. To skip a block, put
+`<!-- skip: next -->` above it, and write the reason in the text.
 <!-- --8<-- [end:development] -->
