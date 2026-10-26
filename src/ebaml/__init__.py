@@ -21,6 +21,7 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     InvalidInstanceError,
     InvalidOptionError,
     OptionRangeError,
+    SDKUnavailableError,
     UnsupportedModelError,
 )
 from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
@@ -41,6 +42,7 @@ __all__ = [
     "InvalidOptionError",
     "Normalization",
     "OptionRangeError",
+    "SDKUnavailableError",
     "UnsupportedModelError",
     "__version__",
 ]

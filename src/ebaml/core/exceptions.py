@@ -81,3 +81,11 @@ class UnsupportedModelError(EBaMlError, ValueError):
 
 class InvalidInstanceError(EBaMlError, ValueError):
     """Exception raised when the instance to explain lacks a value or has a value that the EBM did not see."""
+
+
+class SDKUnavailableError(EBaMlError, ImportError):
+    """Exception raised when the generated ``baml_sdk`` package is missing and ``ebaml`` cannot generate it.
+
+    The message lists the steps that fix the cause. The error also derives from ``ImportError``, so code that catches
+    the import error of a missing package catches it too.
+    """
