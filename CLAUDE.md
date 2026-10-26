@@ -36,11 +36,16 @@ uv run --group docs python -m scripts.build_docs serve   # preview the docs; the
 <architecture>
 The boundary between the two languages is the generated `baml_sdk` package.
 
-- `baml_src/talk_to_ebm.baml` holds the prompts, the LLM clients, the three-turn graph description chain, the summary,
-  `describe_ebm` and the token accounting. The clients are `RouterBase`, `RouterLongBase` and `RouterBenchmarkBase`.
-  `ai.clients.Retry` wraps each one (`Router`, `RouterLong`, `RouterBenchmark`). To change the provider, edit only the
-  `*Base` lines and run `baml generate`. The Python code stays the same. Every BAML entry point accepts an optional
-  `client: ai.Client`, which the offline tests use. The Python wrappers do not expose it.
+- `baml_src/talk_to_ebm.baml` holds the prompts, the default LLM clients, the three-turn graph description chain, the
+  summary, `describe_ebm` and the token accounting. The clients are `RouterBase`, `RouterLongBase` and
+  `RouterBenchmarkBase`. `ai.clients.Retry` wraps each one (`Router`, `RouterLong`, `RouterBenchmark`). The `*Base`
+  lines set the default model only. To change it, edit them, keep `short_defaults`, `long_defaults` and
+  `benchmark_defaults` in `model_spec.baml` equal to their settings, and run `baml generate`.
+- Users choose the model with `model=` (`ModelOptions` in `llm/options.py`). `ModelSpec` in `baml_src/model_spec.baml` is
+  the plain data that crosses the boundary, because a client object cannot cross it in either direction. BAML builds the
+  client from the spec: `client_builders` has one row for each provider. Each BAML entry point accepts `client: ai.Client`
+  and `model: ModelSpec`. The precedence is `client`, then `model`, then the declared client. `client` serves the offline
+  tests, and the Python wrappers do not expose it.
 - `baml_src/local_explanations.baml` and `src/ebaml/local/` produce local (per-prediction) explanations. Python
   computes the facts exactly from EBM scores and confidence intervals (counterfactual, sufficient reason, completions;
   arXiv:2010.12265). The LLM only puts them in words. Only binary classifiers without interactions work.

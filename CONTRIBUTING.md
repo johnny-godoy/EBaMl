@@ -17,4 +17,27 @@
    `fix(graphs): keep the decimals of the confidence level`. `.claude/rules/commits-and-prs.md` has the rules.
 8. Open a pull request with a conventional commit title, and fill the template. CI must pass.
 
+## Change the default model
+
+The default model is a maintainer choice. Users select another model with `model=` and need no change of the package.
+The default sits in the `*Base` lines at the top of `baml_src/talk_to_ebm.baml`:
+
+| Client | Used by | Default settings |
+| --- | --- | --- |
+| `RouterBase` | Turns 2 and 3 of a graph description, the shortening of the summary, and the local explanations | `temperature = 0.7`, `max_tokens = 6000` |
+| `RouterLongBase` | Turn 1 of a graph description, and the draft of the summary | `temperature = 0.7`, `max_tokens = 8000` |
+| `RouterBenchmarkBase` | The benchmark | `temperature = 0.0`, `max_tokens = 8000` |
+
+1. Edit the `*Base` lines only. The clients `Router`, `RouterLong` and `RouterBenchmark` wrap them in
+   `ai.clients.Retry`, so they keep their retry policy.
+2. If you change a temperature or an output limit, change the same value in `short_defaults`, `long_defaults` or
+   `benchmark_defaults` in `baml_src/model_spec.baml`. Those functions give the defaults of a call to a model that a user
+   selects with `model=`.
+3. Run `baml generate`, `baml fmt`, `baml check` and the offline tests: `OPENROUTER_API_KEY=unused baml test -x root::Live`.
+4. A BAML client declaration can use `ai.clients.Fallback`, which Python cannot set up. For example, put the members
+   `anthropic.Client.new(model = "claude-haiku-4-5", api_key = env.ANTHROPIC_API_KEY, ...)` and
+   `openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, ...)` in the `members` list.
+
+To add a provider for `model=`, add a builder function and a row in `client_builders` in `baml_src/model_spec.baml`.
+
 Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
