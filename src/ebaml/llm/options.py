@@ -149,6 +149,12 @@ class ModelOptions:
         InvalidOptionError
             If the string has no ``/``, or its provider or model is empty.
 
+        Examples
+        --------
+        >>> options = ModelOptions.parse("openrouter/openai/gpt-4o-mini")
+        >>> options.provider, options.model
+        ('openrouter', 'openai/gpt-4o-mini')
+
         """
         if isinstance(value, ModelOptions):
             return value

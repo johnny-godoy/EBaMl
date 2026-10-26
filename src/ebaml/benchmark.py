@@ -308,6 +308,15 @@ def is_correct(task: Task, response: str, solution: str) -> bool:
     bool
         True if the response holds an answer, and it is the solution.
 
+    Examples
+    --------
+    >>> is_correct(Task.MONOTONICITY, "The graph is **increasing**.", "increasing")
+    True
+    >>> is_correct(Task.READ_VALUE, "The answer is 0.50.", "0.5")
+    True
+    >>> is_correct(Task.READ_VALUE, "The answer is 0.25.", "0.5")
+    False
+
     """
     answer = parse_answer(task, response)
     return answer is not None and answer == parse_answer(task, solution)
