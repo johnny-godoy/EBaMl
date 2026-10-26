@@ -81,3 +81,35 @@ class UnsupportedModelError(EBaMlError, ValueError):
 
 class InvalidInstanceError(EBaMlError, ValueError):
     """Exception raised when the instance to explain lacks a value or has a value that the EBM did not see."""
+
+
+class SDKUnavailableError(EBaMlError, ImportError):
+    """Exception raised when the generated ``baml_sdk`` package is missing and ``ebaml`` cannot generate it.
+
+    The message lists the steps that fix the cause. The error also derives from ``ImportError``, so code that catches
+    the import error of a missing package catches it too.
+    """
+
+
+class LLMRequestError(EBaMlError):
+    """Exception raised when the provider of the LLM fails a request.
+
+    The message names the cause and lists the steps that fix it. The error that the BAML runtime raised is the
+    ``__cause__``.
+    """
+
+
+class MissingAPIKeyError(LLMRequestError):
+    """Exception raised when a provider needs an API key and the environment has none."""
+
+
+class APIKeyRejectedError(LLMRequestError):
+    """Exception raised when a provider answers a request with "unauthorized" or "forbidden"."""
+
+
+class RateLimitedError(LLMRequestError):
+    """Exception raised when a provider limits the rate of the requests."""
+
+
+class ProviderUnreachableError(LLMRequestError):
+    """Exception raised when a request does not reach the provider."""

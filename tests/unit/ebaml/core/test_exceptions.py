@@ -8,6 +8,7 @@ import ebaml
 from ebaml.core import exceptions
 from ebaml.core.custom_types import FeatureType
 from ebaml.core.exceptions import (
+    APIKeyRejectedError,
     EBaMlError,
     EBMGraphError,
     EBMGraphShapeError,
@@ -16,7 +17,12 @@ from ebaml.core.exceptions import (
     GraphTextError,
     InvalidInstanceError,
     InvalidOptionError,
+    LLMRequestError,
+    MissingAPIKeyError,
     OptionRangeError,
+    ProviderUnreachableError,
+    RateLimitedError,
+    SDKUnavailableError,
     UnsupportedModelError,
 )
 
@@ -52,7 +58,7 @@ def test_graph_error_hierarchy(exc: type[Exception]) -> None:
 
 def test_every_error_of_the_module_derives_from_the_base_class() -> None:
     errors = [value for _, value in inspect.getmembers(exceptions, inspect.isclass) if issubclass(value, Exception)]
-    assert len(errors) == 10
+    assert len(errors) == 16
     assert all(issubclass(error, EBaMlError) for error in errors)
 
 
@@ -63,6 +69,17 @@ def test_an_error_for_a_bad_value_is_a_value_error(exc: type[Exception]) -> None
 
 @pytest.mark.parametrize("exc", [EBaMlError, EBMGraphError, EBMGraphSimplificationError, EBMGraphTokenLimitError])
 def test_an_error_that_was_not_a_value_error_stays_so(exc: type[Exception]) -> None:
+    assert not issubclass(exc, ValueError)
+
+
+def test_sdk_unavailable_error_is_an_import_error() -> None:
+    assert issubclass(SDKUnavailableError, ImportError)
+    assert not issubclass(SDKUnavailableError, ValueError)
+
+
+@pytest.mark.parametrize("exc", [APIKeyRejectedError, MissingAPIKeyError, ProviderUnreachableError, RateLimitedError])
+def test_a_provider_failure_is_an_llm_request_error(exc: type[Exception]) -> None:
+    assert issubclass(exc, LLMRequestError)
     assert not issubclass(exc, ValueError)
 
 

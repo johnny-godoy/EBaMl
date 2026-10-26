@@ -12,6 +12,7 @@ beartype_this_package(conf=BeartypeConf(is_pep484_tower=True, claw_is_pep526=Fal
 
 from ebaml.core.custom_types import Audience, FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+    APIKeyRejectedError,
     EBaMlError,
     EBMGraphError,
     EBMGraphShapeError,
@@ -20,7 +21,12 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     GraphTextError,
     InvalidInstanceError,
     InvalidOptionError,
+    LLMRequestError,
+    MissingAPIKeyError,
     OptionRangeError,
+    ProviderUnreachableError,
+    RateLimitedError,
+    SDKUnavailableError,
     UnsupportedModelError,
 )
 from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
@@ -28,6 +34,7 @@ from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at
 __version__: str = version("ebaml")
 
 __all__ = [
+    "APIKeyRejectedError",
     "Audience",
     "EBMGraph",
     "EBMGraphError",
@@ -39,8 +46,13 @@ __all__ = [
     "GraphTextError",
     "InvalidInstanceError",
     "InvalidOptionError",
+    "LLMRequestError",
+    "MissingAPIKeyError",
     "Normalization",
     "OptionRangeError",
+    "ProviderUnreachableError",
+    "RateLimitedError",
+    "SDKUnavailableError",
     "UnsupportedModelError",
     "__version__",
 ]

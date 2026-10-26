@@ -29,7 +29,7 @@ uv run --group docs python -m scripts.build_docs         # build the docs like C
 uv run --group docs python -m scripts.build_docs serve   # preview the docs; the first run exports the notebooks and is slow
 ```
 
-`ModuleNotFoundError: baml_sdk` means `baml generate` has not run. CI runs prek and the secret scans first, then
+`ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
 `baml` and pytest, then mutation testing of the changed modules. A weekly workflow runs all modules, one job each, when code changed that week.
 </commands>
 
