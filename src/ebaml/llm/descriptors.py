@@ -13,14 +13,19 @@ import attrs
 import structlog
 from baml_bridge.errors import BamlError
 
-import baml_sdk
 from ebaml.core.custom_types import Audience, ExplainableBoostingModel, coerce_enum
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.retry import call_with_shrinking_graph
+from ebaml.llm.sdk_setup import ensure_sdk
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
+
+# `baml_sdk` is generated and gitignored, so a checkout may lack it. Generate it before the import, or explain the fix.
+ensure_sdk()
+
+import baml_sdk  # ruff: ignore[module-import-not-at-top-of-file] -- ensure_sdk must run first
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 

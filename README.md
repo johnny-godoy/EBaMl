@@ -93,6 +93,9 @@ baml generate
 This writes the `src/baml_sdk/` package from `baml_src/`, next to `ebaml`, so it imports wherever the project is
 installed. Rerun it every time a `.baml` file changes, including when you change the provider.
 
+If `src/baml_sdk/` does not exist, `ebaml.llm.descriptors` runs `baml generate` when you import it. If that fails,
+`SDKUnavailableError` lists the steps that fix the cause.
+
 ### 5. Check the setup
 
 ```bash
@@ -120,7 +123,7 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 | --- | --- |
 | `baml: command not found` | The profile line from step 1 is not loaded. Open a new shell or run `. "$HOME/.baml/env"`. |
 | `unknown command: describe` (or `generate add`, `agent`) | An older `baml` is first on `PATH`. See step 1. |
-| `ModuleNotFoundError: baml_sdk` | The SDK is not generated. Run `baml generate` (step 4). |
+| `SDKUnavailableError`, or `ModuleNotFoundError: baml_sdk` | The SDK is not generated, and `ebaml` could not generate it. The message of the error lists the steps. Run `baml generate` (step 4). |
 | An error that names an environment variable | The key of the provider is not exported in this shell. See "Choosing the model" for the variable of each provider. |
 | Rate-limit errors from the free router | Lower the concurrency, `describe_ebm(ebm, max_concurrency=2)`, or pin a paid model. |
 
@@ -186,8 +189,9 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, or a boolean format gets more than two bins. |
 | `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
 | `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
+| `SDKUnavailableError` | no | `baml_sdk` is missing, and `ebaml` cannot run `baml generate`. The error also derives from `ImportError`. |
 
-The last three graph errors derive from `EBMGraphError`. All classes are in `ebaml.core.exceptions`, and `ebaml` exports
+`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. All classes are in `ebaml.core.exceptions`, and `ebaml` exports
 them too.
 
 <!-- --8<-- [end:usage] -->
