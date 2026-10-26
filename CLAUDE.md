@@ -9,7 +9,7 @@ OpenRouter's `openrouter/free`, which needs `OPENROUTER_API_KEY`.
 </project>
 
 <commands>
-Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.22 or later. Put `~/.baml/bin` first on `PATH`,
+Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.23 or later. Put `~/.baml/bin` first on `PATH`,
 because older `baml` versions lack `describe`.
 
 ```bash

@@ -16,7 +16,7 @@ test "every provider of the table builds a client with no network access" {
     let providers = client_builders().keys();
     assert.equal(providers.length(), 9);
     for (let provider in providers) {
-        assert.is_true(build_client(spec_for(provider), short_defaults()).id().includes("m"));
+        assert.equal(build_client(spec_for(provider), short_defaults()).requested_model(), "m");
     }
 }
 
@@ -49,7 +49,7 @@ test "a client with every optional field set builds" {
         max_output_tokens: 100,
         headers: { "x-team": "ebm" },
     };
-    assert.is_true(build_client(spec, short_defaults()).id().includes("m"))
+    assert.equal(build_client(spec, short_defaults()).requested_model(), "m")
 }
 
 test "resolve_settings lets the user values win over the defaults of the call" {
@@ -90,11 +90,12 @@ function failure_message(provider: string) -> string {
     "built"
 }
 
+// The provider and the model that a client asks for, or "null".
 function client_id(client: ai.Client?) -> string {
     if (client == null) {
         return "null";
     };
-    client.id()
+    `${client.provider()}/${client.requested_model()}`
 }
 
 test "an unknown provider throws InvalidArgument that lists the supported providers" {
@@ -119,12 +120,12 @@ test "check_model accepts a known provider and rejects an unknown one" {
 test "select_client prefers the client over the model" {
     let scripted = ScriptedClient { calls: 0 };
     let selected = select_client(scripted, spec_for("ollama"), short_defaults());
-    assert.equal(client_id(selected), "scripted")
+    assert.equal(client_id(selected), "scripted/scripted")
 }
 
 test "select_client builds the client of the model" {
     let selected = select_client(null, spec_for("ollama"), short_defaults());
-    assert.is_true(client_id(selected).includes("ollama"))
+    assert.equal(client_id(selected), "ollama/m")
 }
 
 test "select_client returns null with no client and no model, so the declared client runs" {

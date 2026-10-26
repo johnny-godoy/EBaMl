@@ -249,16 +249,22 @@ function check_token_budget(text: string, max_tokens: int, overbudget_percent: i
     TokenBudget { estimated_tokens: estimated, status: "ok" }
 }
 
-// Runs one text-producing LLM function and keeps the provider's token usage.
+// Runs one text-producing LLM function and keeps the provider's token usage. A count that the provider did not report
+// is zero.
 function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -> Counted {
     let result = ai.Agent.new(client = client).run(spec);
-    Counted {
-        text: result.value,
-        usage: TokenUsage {
-            input_tokens: result.usage.input_tokens,
-            output_tokens: result.usage.output_tokens,
-        },
+    let usage = TokenUsage { input_tokens: 0, output_tokens: 0 };
+    for (let entry in result.usage) {
+        usage
+            = add_usage(
+                usage,
+                TokenUsage {
+                    input_tokens: entry.usage.input_tokens ?? 0,
+                    output_tokens: entry.usage.output_tokens ?? 0,
+                },
+            );
     }
+    Counted { text: result.value, usage: usage }
 }
 
 // Entry points called from Python.
@@ -331,7 +337,7 @@ function describe_ebm(
             describe_graph_cot(graph, graph_sentences, opts, client = client, model = model)
         }
     });
-    let described = await baml.future.all(futures);
+    let described: Counted[] = await baml.future.all(futures);
 
     let usage = TokenUsage { input_tokens: 0, output_tokens: 0 };
     let lines: string[] = [];

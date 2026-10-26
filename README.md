@@ -32,7 +32,7 @@ warning. ❌ not supported yet. Full support is on the
 ### Requirements
 
 - Python 3.13 or later and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-- The BAML toolchain 0.22 or later (step 1).
+- The BAML toolchain 0.23 or later (step 1).
 - An API key for an LLM provider. The default is [OpenRouter](https://openrouter.ai)'s free router, which needs no
   paid plan. You can use another provider instead, see "Choosing the model".
 
@@ -51,7 +51,7 @@ The installer prints a line to add to your shell profile. Add it, then open a ne
 Check it:
 
 ```bash
-baml --version   # toolchain 0.22 or later
+baml --version   # toolchain 0.23 or later
 ```
 
 If `baml` resolves to an older install (Homebrew `baml`, or `baml-py` in a virtualenv), remove it or put `~/.baml/bin`
