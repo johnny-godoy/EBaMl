@@ -71,6 +71,9 @@ jobs:
             python:
               - "src/**"
               - "tests/**"
+              - "conftest.py"
+              - "README.md"
+              - "docs/*.md"
               - "baml_src/**"
               - "baml.toml"
               - "benchmark/**"
@@ -236,6 +239,11 @@ jobs:
         run: |
           mkdir -p "$CI_LOGS"
           uv run pytest --color=no 2>&1 | tee "$CI_LOGS/pytest.log"
+      - name: Run the documentation examples
+        # the code blocks of the Markdown files and the doctests of the docstrings (tests/docs/conftest.py). They run
+        # without coverage, so the coverage gate above measures the unit tests only.
+        run: |
+          uv run pytest --color=no --no-cov README.md docs src 2>&1 | tee -a "$CI_LOGS/pytest.log"
       - uses: ./.github/actions/failure-report
         if: failure()
         with:
