@@ -68,7 +68,8 @@ class AskQuestion(Protocol):
 # a parsed answer: a label, or the numbers of a value (one) or an interval (two)
 Answer = str | tuple[float, ...]
 
-_NUMBER = r"[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
+# ".5" is a number too, so the digits before the decimal point are optional when digits follow it
+_NUMBER = r"[-+]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?"
 _NUMBER_PATTERN = re.compile(_NUMBER)
 _INTERVAL_PATTERN = re.compile(rf"\(\s*({_NUMBER})\s*,\s*({_NUMBER})\s*\)")
 # "17,113.4" is one number, "17,113" in "(17,113)" too, but the "," of "2, 3" is not a separator

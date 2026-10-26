@@ -126,6 +126,10 @@ def test_parse_monotonicity(text: str, expected: str | None) -> None:
         ("x = 2, y = 3", (2.0,)),
         ("2,3", (2.0,)),
         ("1,2345", (1.0,)),
+        # a number with no digit before the decimal point is not read as the digits after it
+        (".5", (0.5,)),
+        ("-.25", (-0.25,)),
+        ("The value is .5.", (0.5,)),
         ("no number", None),
     ],
 )
@@ -140,6 +144,7 @@ def test_parse_number(text: str, expected: tuple[float, ...] | None) -> None:
         ("(0.5, 1.5)", (0.5, 1.5)),
         ("( -3 ,  4e2 )", (-3.0, 400.0)),
         ("The interval is (13.5, 15.0).", (13.5, 15.0)),
+        ("(.5, 1.5)", (0.5, 1.5)),
         ("(1,234, 5,678)", None),
         ("(1.5)", None),
         ("[1, 2]", None),
@@ -158,6 +163,7 @@ def test_parse_interval(text: str, expected: tuple[float, ...] | None) -> None:
         (Task.MONOTONICITY, "Increasing", "Decreasing", False),
         (Task.READ_VALUE, "0.50", "0.5", True),
         (Task.READ_VALUE, "0.51", "0.5", False),
+        (Task.READ_VALUE, ".5", "0.5", True),
         (Task.JUMPS, "2.5", "2.5", True),
         (Task.WIDE_CONFIDENCE, "(0.0, 0.5)", "(0.0, 0.5)", True),
         (Task.WIDE_CONFIDENCE, "(0.0, 0.6)", "(0.0, 0.5)", False),
