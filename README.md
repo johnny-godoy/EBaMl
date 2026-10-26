@@ -411,7 +411,7 @@ uv run --group docs python -m scripts.build_docs serve   # preview the docs (exp
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and
-`baml test`, pytest with 100% coverage, the code examples of the documentation, and mutation testing of the changed lines with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
+`baml test`, pytest with 100% coverage, the code examples of the documentation, and, in pull requests, mutation testing of the changed lines with a 100% score. A weekly run tests all modules, one job for each module. Lint and type workarounds
 (`# noqa`, `# type: ignore`, skipped tests, ...) must carry a written reason next to them.
 
 The `python` code blocks of `README.md` and `docs/*.md` run in order, and the blocks of one file share their variables.
