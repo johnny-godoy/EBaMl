@@ -14,6 +14,7 @@ import argparse
 import itertools
 import os
 import re
+import shlex
 import shutil
 import sqlite3
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- must launch cosmic-ray and the interpreter as subprocesses
@@ -21,12 +22,15 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import attrs
+import orjson
 import structlog
+from coverage import CoverageData
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
@@ -231,24 +235,104 @@ def make_shard(workdir: Path, module: str, index: int, shards: int) -> Shard:
     return Shard(path, module)
 
 
-def exec_shard(shard: Shard, fits: Path) -> None:
+def build_coverage_map(
+    coverage_file: str | Path,
+    root: Path,
+    modules: Collection[str],
+) -> dict[str, dict[str, list[str]]]:
+    """Read the tests that execute each line of the given modules from a coverage file with test contexts.
+
+    Parameters
+    ----------
+    coverage_file: str | Path
+        The data file of a pytest run with ``--cov-context=test``.
+    root: Path
+        The project root. The keys of the map are module paths relative to it.
+    modules: Collection[str]
+        The paths of the modules to read, relative to the project root.
+
+    Returns
+    -------
+    dict[str, dict[str, list[str]]]
+        For each module, the sorted node ids of the tests that execute each line. The line numbers are strings,
+        because the map is written as JSON.
+
+    """
+    data = CoverageData(str(coverage_file))
+    data.read()
+    result: dict[str, dict[str, list[str]]] = {}
+    for measured in data.measured_files():
+        if not Path(measured).is_relative_to(root):
+            continue
+        module = Path(measured).relative_to(root).as_posix()
+        if module not in modules:
+            continue
+        result[module] = {
+            str(line): sorted({context.split("|")[0] for context in contexts if context})
+            for line, contexts in data.contexts_by_lineno(measured).items()
+        }
+    return result
+
+
+def run_baseline(workdir: Path, modules: Collection[str]) -> int:
+    """Run the tests on the unmutated code, and write the coverage map and the cache of fitted models for the shards.
+
+    Parameters
+    ----------
+    workdir: Path
+        The directory that holds the shards. The map goes to ``coverage.json`` and the cache to ``fits/`` in it.
+    modules: Collection[str]
+        The paths of the modules under mutation. The map holds only these.
+
+    Returns
+    -------
+    int
+        The exit code of the tests: non-zero if a test fails on the unmutated code.
+
+    """
+    (workdir / "fits").mkdir()
+    command = shlex.split(tomllib.loads(CONFIG.read_text())["cosmic-ray"]["test-command"])
+    if command[0] == "python":
+        command[0] = sys.executable
+    data = workdir / ".coverage"
+    baseline = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- the test command of cosmic-ray.toml, never untrusted input
+        [*command, "--cov=ebaml", "--cov-context=test", "--cov-report="],
+        cwd=ROOT,
+        env={**os.environ, "EBAML_FIT_CACHE": str(workdir / "fits"), "COVERAGE_FILE": str(data)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if baseline.returncode:
+        logger.error("Baseline failed", output=baseline.stdout[-5000:] + baseline.stderr[-5000:])
+        return baseline.returncode
+    coverage = build_coverage_map(data, ROOT, modules)
+    (workdir / "coverage.json").write_bytes(orjson.dumps(coverage))
+    return 0
+
+
+def exec_shard(shard: Shard, workdir: Path) -> None:
     """Execute the work items of a shard against the copy of the project of that shard.
 
     Parameters
     ----------
     shard: Shard
         The shard.
-    fits: Path
-        The directory of the cache of fitted models that all shards share.
+    workdir: Path
+        The directory that holds the shards, the coverage map and the cache of fitted models of the baseline.
 
     """
     env = {
         **os.environ,
         "PYTHONPATH": str(shard.path / "src"),
-        # tests/unit/conftest.py runs the tests of this module first, so a killed mutant stops the run early
+        # tests/unit/conftest.py runs the tests that execute the mutated statements first, then the tests of this
+        # module, so a killed mutant stops the run early
         "MUTATION_FIRST": Path(shard.module).stem,
+        "MUTATION_MODULE": shard.module,
+        "MUTATION_ORIGINAL": str(ROOT),
+        "MUTATION_COVERAGE": str(workdir / "coverage.json"),
         # tests/unit/ebaml/conftest.py reads fitted models from this directory instead of fitting them again
-        "EBAML_FIT_CACHE": str(fits),
+        "EBAML_FIT_CACHE": str(workdir / "fits"),
     }
     started = time.monotonic()
     run(sys.executable, "-m", "cosmic_ray.cli", "exec", "cosmic-ray.toml", "session.sqlite", cwd=shard.path, env=env)
@@ -393,19 +477,9 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         workdir = Path(tmp)
-        fits = workdir / "fits"
-        fits.mkdir()
-        # the baseline runs every test once, so it also fills the cache of fitted models for the shards
-        baseline = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
-            [sys.executable, "-m", "cosmic_ray.cli", "baseline", str(CONFIG)],
-            cwd=ROOT,
-            env={**os.environ, "EBAML_FIT_CACHE": str(fits)},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if baseline.returncode:
-            return baseline.returncode
+        failed = run_baseline(workdir, modules)
+        if failed:
+            return failed
 
         prepared = [make_shard(workdir, module, i, shards) for module in modules for i in range(shards)]
         sessions = [shard.path / "session.sqlite" for shard in prepared]
@@ -414,7 +488,7 @@ def main() -> int:
         monitor.start()
         try:
             with ThreadPoolExecutor(max_workers=shards) as pool:
-                list(pool.map(exec_shard, prepared, itertools.repeat(fits)))
+                list(pool.map(exec_shard, prepared, itertools.repeat(workdir)))
         finally:
             stop.set()
             monitor.join()

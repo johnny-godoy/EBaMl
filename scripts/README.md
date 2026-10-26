@@ -7,6 +7,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
+| `mutant_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation.py`, so that they run first. |
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
@@ -145,15 +146,18 @@ and `cosmic-ray.toml`. The script:
 1. creates a session in `.mutation/session.sqlite` and drops mutants on `# pragma: no mutate` lines,
 2. if you give `--base`, drops the mutants that touch no line changed since that revision; if you give `--module`,
    drops the mutants of all other modules,
-3. runs the test baseline and stops if it fails,
+3. runs the test baseline with one coverage context for each test, and stops if a test fails,
 4. splits the work items of each module over the shards and runs them concurrently,
 5. prints a progress line every minute, with the finished, surviving and remaining mutants,
 6. merges the results back and prints the survival rate.
 
-Two measures keep each mutant fast. Each shard runs the tests of the mutated module first, because they kill most of
-its mutants (`tests/unit/conftest.py` reads `MUTATION_FIRST`). All shards share one cache of fitted EBMs, which the
-baseline fills (`tests/unit/ebaml/conftest.py` reads `EBAML_FIT_CACHE`). Without these variables, the tests run in
-the normal order and fit every model.
+Three measures keep each mutant fast. The baseline writes a coverage map: the tests that execute each line of the
+mutated modules (`mutant_tests.py`). Under a mutant, each shard runs the tests that execute the mutated statements
+first, then the other tests of the mutated module, then the rest (`tests/unit/conftest.py` reads `MUTATION_FIRST`,
+`MUTATION_MODULE`, `MUTATION_ORIGINAL` and `MUTATION_COVERAGE`). The run stops at the first failure, so a killed mutant
+runs only a few tests, and a surviving mutant runs all of them. All shards share one cache of fitted EBMs, which the
+baseline fills (`tests/unit/ebaml/conftest.py` reads `EBAML_FIT_CACHE`). Without these variables, the tests run in the
+normal order and fit every model.
 
 ```bash
 uv run python scripts/mutation.py      # one shard per CPU
