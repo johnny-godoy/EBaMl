@@ -288,13 +288,14 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
     return _log_usage(f"describe_graph({ebm.feature_names_in_[feature_index]})", counted)
 
 
-def describe_ebm(
+def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and three keyword-only option arguments
     ebm: ExplainableBoostingModel,
     num_sentences: int = 30,
     max_concurrency: int = 8,
     *,
     graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
+    model: ModelOptions | str | None = None,
 ) -> str:
     """Ask the LLM to describe an EBM.
 
@@ -314,6 +315,9 @@ def describe_ebm(
         The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
     prompt: PromptOptions, default=PromptOptions()
         The descriptions that the prompts use.
+    model: ModelOptions | str | None, default=None
+        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
+        ``openrouter/free``. EBaMl sends every request of the call to this model.
 
     Returns
     -------
@@ -321,11 +325,12 @@ def describe_ebm(
         The description of the EBM.
 
     """
-    # Convert all objects to text before prompting the LLM the first time, so that errors in processing one of the
-    # graphs surface before any LLM call is paid for.
+    # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
+    # processing one of the graphs or in the model surface before any LLM call is paid for.
     feature_importances = _feature_importances_to_text(ebm)
     feature_names = list(ebm.feature_names_in_)
     graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]
+    model_spec = _model_spec(model)
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
         described = list(
@@ -336,7 +341,7 @@ def describe_ebm(
                     num_sentences=_GRAPH_SENTENCES,
                     graph_options=graph,
                     prompt=prompt,
-                    model=None,
+                    model=model_spec,
                 ),
                 range(len(graph_texts)),
                 graph_texts,
@@ -355,6 +360,7 @@ def describe_ebm(
         graph_descriptions=graph_descriptions,
         num_sentences=num_sentences,
         opts=_prompt_options(prompt),
+        model=model_spec,
     )
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.usage.input_tokens for item in described),
@@ -382,6 +388,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     *,
     local: LocalOptions = _DEFAULT_LOCAL_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
+    model: ModelOptions | str | None = None,
 ) -> LocalExplanation:
     """Explain one prediction of an EBM with three explanations, computed exactly and put in words by the LLM.
 
@@ -408,6 +415,9 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     prompt: PromptOptions, default=PromptOptions()
         The descriptions that the prompts use. The local prompts read ``expert_description`` and
         ``dataset_description``.
+    model: ModelOptions | str | None, default=None
+        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
+        ``openrouter/free``. EBaMl sends every request of the call to this model.
 
     Returns
     -------
@@ -418,12 +428,14 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     audience = coerce_enum(Audience, audience)
     facts = compute_local_facts(ebm, instance, local)
     texts = facts_to_texts(facts, audience)
+    model_spec = _model_spec(model)
     result = baml_sdk.explain_local(
         global_explanation=global_explanation,
         facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts)),
         audience=audience.value,
         num_sentences=num_sentences,
         opts=_prompt_options(prompt),
+        model=model_spec,
     )
     logger.info(
         "usage",

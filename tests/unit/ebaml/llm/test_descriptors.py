@@ -638,10 +638,14 @@ def test_a_call_with_no_model_sends_no_model_spec(
     counted: baml_sdk.Counted,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
-    calls: dict[str, Any] = {}
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", recording(calls, counted)))
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
     descriptors.describe_graph(fake_ebm, 0)
-    assert calls["model"] is None
+    descriptors.describe_ebm(fake_ebm)
+    assert [call["model"] for call in graph_calls] == [None, None, None]
+    assert summary_calls["model"] is None
     assert checked_models == []
 
 
@@ -699,6 +703,43 @@ def test_describe_graph_sends_the_model_to_the_llm(
     assert len(checked_models) == 1
 
 
+def test_describe_ebm_sends_the_model_to_every_graph_and_the_summary(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
+    descriptors.describe_ebm(fake_ebm, model=ModelOptions("anthropic", "claude-haiku-4-5", temperature=0.1))
+    spec = baml_sdk.ModelSpec(provider="anthropic", model="claude-haiku-4-5", temperature=0.1)
+    assert [call["model"] for call in graph_calls] == [spec, spec]
+    assert summary_calls["model"] == spec
+    assert len(checked_models) == 1  # one check for the whole call, not one for each graph
+
+
+def test_explain_instance_sends_the_model_to_the_llm(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    monkeypatch.setattr(descriptors, "facts_to_texts", returning(FactTexts("x", "x", "x", "x")))
+    text = baml_sdk.LocalExplanationText(
+        counterfactual="",
+        sufficient_reason="",
+        completions="",
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+    )
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
+    descriptors.explain_instance(FAKE_EBM, {}, "G", model="openai/gpt-5")
+    assert calls["model"] == baml_sdk.ModelSpec(provider="openai", model="gpt-5")
+    assert len(checked_models) == 1
+
+
 def test_an_unknown_provider_raises_before_any_paid_call(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
@@ -712,8 +753,9 @@ def test_an_unknown_provider_raises_before_any_paid_call(
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     paid: list[dict[str, Any]] = []
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(paid, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", appending(paid, counted)))
     with pytest.raises(InvalidOptionError, match="nope") as caught:
-        descriptors.describe_graph(fake_ebm, 0, model="nope/m")
+        descriptors.describe_ebm(fake_ebm, model="nope/m")
     assert "anthropic" in str(caught.value)
     assert isinstance(caught.value.__cause__, BamlError)
     assert paid == []
