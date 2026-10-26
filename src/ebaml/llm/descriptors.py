@@ -1,7 +1,8 @@
 """Describe EBM graphs and models using LLMs.
 
 The prompts and the chat conversations live in ``baml_src/talk_to_ebm.baml``; this module extracts the graphs from the
-EBM, converts them to text, and calls the generated ``baml_sdk`` functions.
+EBM, converts them to text, and calls the generated ``baml_sdk`` functions. Each function takes ``model`` to choose the
+LLM of the call.
 """
 
 import functools
@@ -14,8 +15,9 @@ from baml_bridge.errors import BamlError
 
 import baml_sdk
 from ebaml.core.custom_types import Audience, ExplainableBoostingModel, coerce_enum
+from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
-from ebaml.llm.options import GraphOptions, PromptOptions
+from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
@@ -71,6 +73,50 @@ def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
     }
     overrides = {name: value for name, value in descriptions.items() if value is not None}
     return baml_sdk.GraphPromptOptions(**{**options.model_dump(), **overrides})
+
+
+def _model_spec(model: ModelOptions | str | None) -> baml_sdk.ModelSpec | None:
+    """Build the BAML model spec from the model options, and check that BAML knows the provider.
+
+    The check builds the client and discards it. It sends no request, so it runs before the first paid call.
+
+    Parameters
+    ----------
+    model: ModelOptions | str | None
+        The model, or the ``"provider/model"`` shorthand. ``None`` selects the default clients of the BAML code.
+
+    Returns
+    -------
+    baml_sdk.ModelSpec | None
+        The spec to pass as ``model`` to the BAML functions, or ``None`` for the default clients.
+
+    Raises
+    ------
+    InvalidOptionError
+        If BAML does not know the provider.
+    BamlError
+        If the check fails for another reason.
+
+    """
+    if model is None:
+        return None
+    options = ModelOptions.parse(model)
+    spec = baml_sdk.ModelSpec(
+        provider=options.provider,
+        model=options.model,
+        api_key_env=options.api_key_env,
+        base_url=options.base_url,
+        temperature=options.temperature,
+        max_output_tokens=options.max_output_tokens,
+        headers=dict(options.headers) or None,
+    )
+    try:
+        baml_sdk.check_model(spec=spec)
+    except BamlError as error:
+        if error.class_name != "baml.errors.InvalidArgument":
+            raise
+        raise InvalidOptionError(options.provider, baml_sdk.supported_providers()) from error
+    return spec
 
 
 def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: GraphOptions) -> str:
@@ -156,6 +202,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     num_sentences: int,
     graph_options: GraphOptions,
     prompt: PromptOptions,
+    model: baml_sdk.ModelSpec | None,
 ) -> baml_sdk.Counted:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
@@ -176,6 +223,8 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
         The options of the graph text. A retry changes ``max_tokens`` and ``overbudget_percent``.
     prompt: PromptOptions
         The descriptions that the prompt uses.
+    model: baml_sdk.ModelSpec | None
+        The model of the requests, as made by ``_model_spec``. ``None`` selects the default clients.
 
     Returns
     -------
@@ -185,7 +234,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     """
     opts = _prompt_options(prompt)
     return call_with_shrinking_graph(
-        lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts),
+        lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
         graph,
         error_type=BamlError,
         is_truncated=_is_truncated,
@@ -199,18 +248,18 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     )
 
 
-def describe_graph(
+def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the feature, the length, and three keyword-only option arguments
     ebm: ExplainableBoostingModel,
     feature_index: int,
     num_sentences: int = 7,
     *,
     graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
+    model: ModelOptions | str | None = None,
 ) -> str:
     """Ask the LLM to describe a graph. Uses chain-of-thought reasoning.
 
-    The LLM client is configured in ``baml_src/talk_to_ebm.baml``. A reply cut off by ``max_tokens`` is retried with a
-    simplified graph, up to 4 times.
+    A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times.
 
     Parameters
     ----------
@@ -224,6 +273,9 @@ def describe_graph(
         The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
     prompt: PromptOptions, default=PromptOptions()
         The descriptions that the prompts use.
+    model: ModelOptions | str | None, default=None
+        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
+        ``openrouter/free``. EBaMl sends every request of the call to this model.
 
     Returns
     -------
@@ -232,7 +284,7 @@ def describe_graph(
 
     """
     graph_text = _graph_text(ebm, feature_index, graph)
-    counted = _describe_graph_counted(ebm, feature_index, graph_text, num_sentences, graph, prompt)
+    counted = _describe_graph_counted(ebm, feature_index, graph_text, num_sentences, graph, prompt, _model_spec(model))
     return _log_usage(f"describe_graph({ebm.feature_names_in_[feature_index]})", counted)
 
 
@@ -248,7 +300,7 @@ def describe_ebm(
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
-    descriptions. The LLM client is configured in ``baml_src/talk_to_ebm.baml``.
+    descriptions.
 
     Parameters
     ----------
@@ -284,6 +336,7 @@ def describe_ebm(
                     num_sentences=_GRAPH_SENTENCES,
                     graph_options=graph,
                     prompt=prompt,
+                    model=None,
                 ),
                 range(len(graph_texts)),
                 graph_texts,
@@ -335,8 +388,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     The facts come from ``ebaml.local.compute_local_facts``: the minimum change that flips the prediction
     (counterfactual), a minimum set of inputs that fixes it (sufficient reason), and the share of completions of a
     partially known input that get the same prediction (count completions). The global explanation of the model, e.g.
-    the output of ``describe_ebm``, is prepended to each prompt. The LLM client is configured in
-    ``baml_src/local_explanations.baml``.
+    the output of ``describe_ebm``, is prepended to each prompt.
 
     Parameters
     ----------
