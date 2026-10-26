@@ -25,6 +25,7 @@ def sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, ...]
     monkeypatch.setattr(build_docs, "EXPORT_DIR", tmp_path / "docs" / "notebooks")
     monkeypatch.setattr(build_docs, "PAPERS_ROOT", tmp_path / "papers")
     monkeypatch.setattr(build_docs, "PAPER_DIR", tmp_path / "docs" / "proofs")
+    monkeypatch.setattr(build_docs, "SITE_DIR", tmp_path / "site")
     return (*notebooks, *package)
 
 
@@ -252,3 +253,61 @@ def test_build_and_serve_export_the_papers_before_the_site(
     monkeypatch.setattr(build_docs, "export_papers", lambda: events.append(["papers"]))
     build_docs.COMMANDS[command]()
     assert [event[0] if event == ["papers"] else event[2] for event in events[-2:]] == ["papers", "zensical"]
+
+
+def page(site: Path, path: str, body: str) -> None:
+    target = site / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(f"<html><body>{body}</body></html>", encoding="utf-8")
+
+
+@pytest.fixture
+def site(tmp_path: Path) -> Path:
+    site = tmp_path / "site"
+    page(site, "index.html", "home")
+    page(site, "setup/index.html", "setup")
+    page(site, "notebooks/titanic.html", "notebook")
+    return site
+
+
+def test_base_path_is_the_path_of_the_site_url() -> None:
+    assert build_docs.base_path() == "/EBaMl/"
+
+
+def test_raw_html_link_with_one_parent_too_many_is_broken(site: Path) -> None:
+    # Zensical rewrote ``../notebooks/titanic.html`` of docs/notebook.md into this link, which works at ``/`` only.
+    page(site, "notebook/index.html", '<iframe src="../../notebooks/titanic.html"></iframe>')
+    assert build_docs.find_broken_links(site, "/EBaMl/") == ["notebook/index.html: ../../notebooks/titanic.html"]
+
+
+def test_links_that_the_server_can_serve_are_not_broken(site: Path) -> None:
+    links = (
+        '<a href="../notebooks/titanic.html">notebook</a>'
+        '<a href="../setup/">setup</a><a href="./..">home</a><a href="/EBaMl/setup/#install">anchor</a>'
+        '<a href="#top">top</a><a href="https://example.org/x">external</a><a href="//cdn.example.org/x.js">cdn</a>'
+        '<a href="mailto:a@example.org">mail</a><a>no link</a>'
+    )
+    page(site, "notebook/index.html", links)
+    assert build_docs.find_broken_links(site, "/EBaMl/") == []
+
+
+def test_link_to_a_file_that_the_site_does_not_have_is_broken(site: Path) -> None:
+    page(site, "notebook/index.html", '<a href="../proofs/missing.pdf">paper</a>')
+    assert build_docs.find_broken_links(site, "/EBaMl/") == ["notebook/index.html: ../proofs/missing.pdf"]
+
+
+def test_find_broken_links_reads_only_the_pages_of_zensical(site: Path) -> None:
+    # an exported notebook is not a page of Zensical, and its links are not the business of the docs build
+    page(site, "notebooks/titanic.html", '<a href="missing.html">x</a>')
+    assert build_docs.find_broken_links(site, "/EBaMl/") == []
+
+
+def test_build_fails_when_the_site_has_a_broken_link(
+    sources: tuple[Path, ...],
+    site: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del sources
+    page(site, "notebook/index.html", '<iframe src="../../notebooks/titanic.html"></iframe>')
+    record_runs(monkeypatch)
+    assert build_docs.build() == 1

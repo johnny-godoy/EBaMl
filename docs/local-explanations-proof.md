@@ -3,7 +3,7 @@
 The counterfactual and the sufficient reason of [local explanations](local-explanations.md) are exact. This page
 states what a proof shows, and where to read it.
 
-<p><a href="../proofs/local-explanations.pdf">Read the paper (PDF)</a></p>
+<p><a href="proofs/local-explanations.pdf">Read the paper (PDF)</a></p>
 
 ## What is proved
 
@@ -36,7 +36,7 @@ Its appendix gives the commands to repeat the check. A CI job repeats it when th
 - [Typst source of the paper](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/papers/local-explanations)
 
 <iframe
-  src="../proofs/local-explanations.pdf"
+  src="proofs/local-explanations.pdf"
   title="The proof of the local explanations, as a PDF"
   loading="lazy"
   style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lightest, #ccc);"

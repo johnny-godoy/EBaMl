@@ -18,10 +18,10 @@ uv run marimo edit notebooks/local_explanations.py
 New to the package? Start with the [Titanic notebook](notebook.md), which makes the global explanation this notebook
 builds on. The [guide](local-explanations.md) explains the ideas.
 
-<p><a href="../notebooks/local_explanations.html">Open the notebook in its own page</a></p>
+<p><a href="notebooks/local_explanations.html">Open the notebook in its own page</a></p>
 
 <iframe
-  src="../notebooks/local_explanations.html"
+  src="notebooks/local_explanations.html"
   title="The local explanations notebook, exported from marimo"
   loading="lazy"
   style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lighter);"

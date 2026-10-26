@@ -68,7 +68,9 @@ jobs:
       - name: Build the docs
         # scripts.build_docs exports the notebooks (it downloads the Titanic data from OpenML), runs
         # `zensical build --strict` and fails on a griffe warning, so a broken link or a docstring that does not
-        # render fails the build. Zensical alone exits 0 on a griffe warning. A local run uses the same command.
+        # render fails the build. Zensical alone exits 0 on a griffe warning. The script also resolves the links of
+        # the raw HTML (the notebook iframes, the paper link) under /EBaMl/, which strict mode does not read.
+        # A local run uses the same command.
         env:
           # scikit-learn stores the OpenML download here, which is the cached folder.
           SCIKIT_LEARN_DATA: ${{ runner.temp }}/scikit_learn_data
