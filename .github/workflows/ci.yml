@@ -23,11 +23,11 @@ env:
   CI_REPORT: /tmp/ci-report
 
 # Fail-fast order: cheap static gates first, in parallel; slower dynamic gates only run once those pass.
-#   changes: decides which gates a pull request needs (dorny/paths-filter); a push to main runs every gate
+#   changes: decides which gates a pull request needs (dorny/paths-filter); a push to main runs every gate but mutation
 #   stage 1: prek, trufflehog, semgrep, trivy
 #   stage 2: baml, pytest (need prek only, so they start while the scanners still run)
-#   stage 3: mutation (needs every gate above; slowest). Only modules changed against the base run; mutation-weekly.yml
-#            runs all.
+#   stage 3: mutation (needs every gate above; slowest). Pull requests only: only the lines changed against the base
+#            run. A push to main skips it, because its pull request mutated the same lines; mutation-weekly.yml runs all.
 #
 # The ruleset requires every gate on every pull request, so a gate that the changed files cannot affect is skipped with
 # a job-level `if`, not removed with a workflow-level `paths:` filter. GitHub counts a skipped job as a pass, and a
@@ -254,7 +254,9 @@ jobs:
     needs: [changes, prek, trufflehog, semgrep, trivy, baml, pytest]
     # A skipped gate does not block this job, so a failed or cancelled gate must be named. Without `!cancelled()` the
     # default `success()` would skip the job whenever any gate is skipped.
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.changes.outputs.src == 'true' }}
+    if: >-
+      ${{ !cancelled() && !contains(needs.*.result, 'failure') && github.event_name == 'pull_request'
+      && needs.changes.outputs.src == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -262,16 +264,12 @@ jobs:
         with:
           fetch-depth: 0 # the changed-module filter needs the merge base with the base revision
       - uses: ./.github/actions/setup
-      - name: Run cosmic-ray on changed modules, fail on any surviving mutant
+      - name: Run cosmic-ray on the changed lines, fail on any surviving mutant
         env:
-          # A PR compares with its base branch; a push to main compares with the previous head of main.
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          BASE: origin/${{ github.base_ref }}
         run: |
           mkdir -p "$CI_LOGS"
-          # A new branch or a forced push has an all-zero or unknown BASE; mutate every module then.
-          args=()
-          if git rev-parse --verify --quiet "$BASE^{commit}" > /dev/null; then args=(--base "$BASE"); fi
-          uv run python scripts/mutation.py "$(nproc)" "${args[@]}" 2>&1 | tee "$CI_LOGS/mutation.log"
+          uv run python scripts/mutation.py "$(nproc)" --base "$BASE" 2>&1 | tee "$CI_LOGS/mutation.log"
       - name: List surviving mutants with diffs
         if: failure()
         run: |
