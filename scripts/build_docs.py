@@ -15,13 +15,23 @@ when it, or the package that it runs, is newer than its output. The staleness ch
 
 Zensical prints a ``griffe:`` warning for a docstring that does not render, for example a parameter that the function
 does not have, and still exits with code 0. The ``build`` command fails when the output has such a warning.
+
+Strict mode checks the Markdown links only. Zensical also rewrites a relative link in raw HTML, such as the ``<iframe>``
+of a notebook page, as if it were relative to the Markdown file. A link that is relative to the page URL then gets one
+``../`` too many. It works on a local server at ``/``, but it leaves the project path on GitHub Pages and gives a 404.
+So the ``build`` command also resolves every relative ``href`` and ``src`` of the built pages under the path of
+``site_url``, and fails when a link leaves that path or names a file that the site does not have.
 """
 
 import argparse
+import posixpath
+import re
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- marimo and Zensical only offer their build as a command
 import sys
+import tomllib
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from urllib.parse import unquote, urljoin, urlsplit
 
 import structlog
 import typst
@@ -36,6 +46,10 @@ PACKAGE: tuple[Path, ...] = tuple(sorted((ROOT / "src" / "ebaml").rglob("*.py"))
 PAPERS_ROOT = ROOT / "proofs" / "papers"
 PAPER_DIR = ROOT / "docs" / "proofs"
 WARNING_PREFIX = "griffe:"
+CONFIG = ROOT / "zensical.toml"
+SITE_DIR = ROOT / "site"
+# Zensical writes every attribute in double quotes
+LINK: re.Pattern[str] = re.compile(r'\b(?:href|src)="([^"]*)"')
 
 
 def _is_stale(output: Path, notebook: Path) -> bool:
@@ -115,13 +129,87 @@ def find_warnings(output: str) -> list[str]:
     return [line for line in output.splitlines() if line.startswith(WARNING_PREFIX)]
 
 
+def base_path() -> str:
+    """Read the path of ``site_url`` in ``zensical.toml``, where GitHub Pages serves the site.
+
+    Returns
+    -------
+    str
+        The path, for example ``/EBaMl/``.
+
+    """
+    config = tomllib.loads(CONFIG.read_text(encoding="utf-8"))
+    site_url: str = config["project"]["site_url"]
+    return urlsplit(site_url).path
+
+
+def _is_broken(site: Path, base: str, page_url: str, link: str) -> bool:
+    """Whether a relative link of a page leaves the site, or names a file that the site does not have.
+
+    Parameters
+    ----------
+    site: Path
+        The built site.
+    base: str
+        The path of the site on the server, with a slash at the end.
+    page_url: str
+        The path of the page on the server.
+    link: str
+        The value of the ``href`` or ``src`` attribute.
+
+    Returns
+    -------
+    bool
+        True if the server gives a 404 for the link. An external link, or a link to a part of the same page, is not
+        broken.
+
+    """
+    parts = urlsplit(link)
+    if parts.scheme or parts.netloc or not parts.path:
+        return False
+    # normpath drops the slash at the end, so ``./..`` on a top page gives the base path without its slash
+    path = f"{posixpath.normpath(urljoin(page_url, parts.path))}/"
+    if not path.startswith(base):
+        return True
+    target = site / unquote(path.removeprefix(base))
+    return not (target.is_file() or (target / "index.html").is_file())
+
+
+def find_broken_links(site: Path, base: str) -> list[str]:
+    """Find the relative links of the built pages that the server cannot serve.
+
+    Parameters
+    ----------
+    site: Path
+        The built site.
+    base: str
+        The path of the site on the server, with a slash at the end.
+
+    Returns
+    -------
+    list[str]
+        One ``<page>: <link>`` line for each broken link, in the order of the pages and the links.
+
+    """
+    broken: list[str] = []
+    for page in sorted(site.rglob("index.html")):
+        page_url = base + page.relative_to(site).as_posix()
+        broken.extend(
+            f"{page.relative_to(site).as_posix()}: {link}"
+            for link in LINK.findall(page.read_text(encoding="utf-8"))
+            if _is_broken(site, base, page_url, link)
+        )
+    return broken
+
+
 def build() -> int:
-    """Export the notebooks and the papers, build the site in strict mode, and fail on a docstring warning.
+    """Export the notebooks and the papers, build the site in strict mode, and fail on a warning or a broken link.
 
     Returns
     -------
     int
-        The exit code: the code of Zensical if it fails, 1 if the output has a warning, and 0 otherwise.
+        The exit code: the code of Zensical if it fails, 1 if the output has a warning or the site has a broken link,
+        and 0 otherwise.
 
     """
     export_notebooks()
@@ -142,7 +230,10 @@ def build() -> int:
     warnings = find_warnings(output)
     for warning in warnings:
         logger.error("docstring warning", warning=warning)
-    return int(bool(warnings))
+    broken = find_broken_links(SITE_DIR, base_path())
+    for link in broken:
+        logger.error("broken link", link=link)
+    return int(bool(warnings or broken))
 
 
 def serve() -> int:

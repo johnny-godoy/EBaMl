@@ -12,10 +12,10 @@ open the notebook. [Choosing the model](providers.md) explains how to use anothe
 uv run marimo edit notebooks/titanic.py
 ```
 
-<p><a href="../notebooks/titanic.html">Open the notebook in its own page</a></p>
+<p><a href="notebooks/titanic.html">Open the notebook in its own page</a></p>
 
 <iframe
-  src="../notebooks/titanic.html"
+  src="notebooks/titanic.html"
   title="The Titanic notebook, exported from marimo"
   loading="lazy"
   style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lighter);"
