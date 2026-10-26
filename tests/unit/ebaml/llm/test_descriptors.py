@@ -13,7 +13,7 @@ from ebaml.core.custom_types import Audience, FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm import descriptors
-from ebaml.llm.options import GraphOptions, PromptOptions
+from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local import facts as local
 from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (
@@ -541,7 +541,7 @@ def test_option_arguments_are_keyword_only() -> None:
         kinds = {
             name: parameter.kind
             for name, parameter in inspect.signature(function).parameters.items()
-            if name in {"graph", "prompt", "local"}
+            if name in {"graph", "prompt", "local", "model"}
         }
         assert set(kinds.values()) == {inspect.Parameter.KEYWORD_ONLY}
 
@@ -600,3 +600,181 @@ def test_a_result_of_the_wrong_type_is_rejected() -> None:
     fake = fake_sdk("describe_graph_cot", returning("answer"))
     with pytest.raises(AssertionError, match="returned 'answer'"):
         fake(graph="g", num_sentences=1, opts=baml_sdk.default_graph_options())
+
+
+PROVIDERS = ["openai", "anthropic"]
+
+
+def _invalid_argument() -> BamlError:
+    value = baml_sdk.baml.errors.InvalidArgument(message="unknown provider")
+    return BamlError(value, class_name="baml.errors.InvalidArgument")
+
+
+@pytest.fixture
+def checked_models(monkeypatch: pytest.MonkeyPatch) -> list[baml_sdk.ModelSpec]:
+    """Fake ``check_model`` and ``supported_providers`` of the SDK, and record the specs that the check gets.
+
+    Returns
+    -------
+    list[baml_sdk.ModelSpec]
+        The list that the fake fills with the spec of each check.
+
+    """
+    specs: list[baml_sdk.ModelSpec] = []
+
+    def check_model(*, spec: baml_sdk.ModelSpec) -> bool:
+        specs.append(spec)
+        return True
+
+    monkeypatch.setattr(baml_sdk, "check_model", fake_sdk("check_model", check_model))
+    monkeypatch.setattr(baml_sdk, "supported_providers", fake_sdk("supported_providers", returning(PROVIDERS)))
+    return specs
+
+
+def test_a_call_with_no_model_sends_no_model_spec(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
+    descriptors.describe_graph(fake_ebm, 0)
+    descriptors.describe_ebm(fake_ebm)
+    assert [call["model"] for call in graph_calls] == [None, None, None]
+    assert summary_calls["model"] is None
+    assert checked_models == []
+
+
+def test_model_spec_copies_every_field_of_the_model_options(checked_models: list[baml_sdk.ModelSpec]) -> None:
+    options = ModelOptions(
+        "openai-generic",
+        "m",
+        api_key_env="GATEWAY_KEY",
+        base_url="http://gateway.invalid/v1",
+        temperature=0.2,
+        max_output_tokens=99,
+        headers={"x-team": "ebm"},
+    )
+    spec = descriptors._model_spec(options)
+    assert spec == baml_sdk.ModelSpec(
+        provider="openai-generic",
+        model="m",
+        api_key_env="GATEWAY_KEY",
+        base_url="http://gateway.invalid/v1",
+        temperature=0.2,
+        max_output_tokens=99,
+        headers={"x-team": "ebm"},
+    )
+    assert checked_models == [spec]
+
+
+def test_model_spec_leaves_the_unset_fields_to_the_defaults_of_the_call(
+    checked_models: list[baml_sdk.ModelSpec],
+) -> None:
+    spec = descriptors._model_spec(ModelOptions("openai", "m"))
+    assert spec == baml_sdk.ModelSpec(provider="openai", model="m")
+    assert spec is not None
+    assert spec.headers is None
+    assert checked_models == [spec]
+
+
+def test_a_string_model_gives_the_spec_of_the_equal_model_options(checked_models: list[baml_sdk.ModelSpec]) -> None:
+    assert descriptors._model_spec("anthropic/claude-haiku-4-5") == descriptors._model_spec(
+        ModelOptions("anthropic", "claude-haiku-4-5"),
+    )
+    assert len(checked_models) == 2
+
+
+def test_describe_graph_sends_the_model_to_the_llm(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", recording(calls, counted)))
+    descriptors.describe_graph(fake_ebm, 0, model="ollama/llama3.1")
+    assert calls["model"] == baml_sdk.ModelSpec(provider="ollama", model="llama3.1")
+    assert len(checked_models) == 1
+
+
+def test_describe_ebm_sends_the_model_to_every_graph_and_the_summary(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
+    descriptors.describe_ebm(fake_ebm, model=ModelOptions("anthropic", "claude-haiku-4-5", temperature=0.1))
+    spec = baml_sdk.ModelSpec(provider="anthropic", model="claude-haiku-4-5", temperature=0.1)
+    assert [call["model"] for call in graph_calls] == [spec, spec]
+    assert summary_calls["model"] == spec
+    assert len(checked_models) == 1  # one check for the whole call, not one for each graph
+
+
+def test_explain_instance_sends_the_model_to_the_llm(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    monkeypatch.setattr(descriptors, "facts_to_texts", returning(FactTexts("x", "x", "x", "x")))
+    text = baml_sdk.LocalExplanationText(
+        counterfactual="",
+        sufficient_reason="",
+        completions="",
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+    )
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
+    descriptors.explain_instance(FAKE_EBM, {}, "G", model="openai/gpt-5")
+    assert calls["model"] == baml_sdk.ModelSpec(provider="openai", model="gpt-5")
+    assert len(checked_models) == 1
+
+
+def test_an_unknown_provider_raises_before_any_paid_call(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    def check_model(**_kwargs: object) -> bool:
+        raise _invalid_argument()
+
+    monkeypatch.setattr(baml_sdk, "check_model", fake_sdk("check_model", check_model))
+    monkeypatch.setattr(baml_sdk, "supported_providers", fake_sdk("supported_providers", returning(PROVIDERS)))
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    paid: list[dict[str, Any]] = []
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(paid, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", appending(paid, counted)))
+    with pytest.raises(InvalidOptionError, match="nope") as caught:
+        descriptors.describe_ebm(fake_ebm, model="nope/m")
+    assert "anthropic" in str(caught.value)
+    assert isinstance(caught.value.__cause__, BamlError)
+    assert paid == []
+
+
+def test_an_other_error_of_the_model_check_is_not_hidden(monkeypatch: pytest.MonkeyPatch) -> None:
+    def check_model(**_kwargs: object) -> bool:
+        reason = "Refused"
+        raise _finish_error(reason)
+
+    monkeypatch.setattr(baml_sdk, "check_model", fake_sdk("check_model", check_model))
+    with pytest.raises(BamlError, match="FinishReasonError"):
+        descriptors._model_spec("openai/gpt-5")
+
+
+def test_a_malformed_model_string_raises_before_any_paid_call(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    with pytest.raises(InvalidOptionError, match="provider/model"):
+        descriptors.describe_graph(fake_ebm, 0, model="gpt-5")

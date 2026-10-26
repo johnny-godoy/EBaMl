@@ -1,11 +1,46 @@
 // Offline tests for talk_to_ebm.baml: pure helpers and the pipelines on a scripted client.
 
+// A model turn that holds `text` and reports `input_tokens` and `output_tokens`. The runner reads the usage of a turn
+// from its calls.
+function scripted_turn(text: string, input_tokens: int, output_tokens: int) -> ai.ModelTurn {
+    ai.ModelTurn {
+        parsed_output: null,
+        content: [ai.content.Text { text: text }],
+        stop_reason: ai.content.StopReason.Complete,
+        resolved_model: null,
+        requested_model: null,
+        calls: [
+            ai.events.ModelCall {
+                resolved_model: ai.events.ModelKey { provider: "scripted", model: null },
+                usage: ai.events.Usage {
+                    input_tokens: input_tokens,
+                    output_tokens: output_tokens,
+                    cached_input_tokens: null,
+                    reasoning_tokens: null,
+                    cache_write_input_tokens: null,
+                    uncached_input_tokens: null,
+                },
+                timing: ai.events.Timing { start_time: null, duration: null, ttft: null },
+                http_request: null,
+                http_response: null,
+                sse_responses: null,
+            },
+        ],
+        child_turns: [],
+        error: null,
+    }
+}
+
 // Answers every call with "R" and reports 10 input / 5 output tokens; counts the calls.
 class ScriptedClient {
     calls: int,
 
     implements ai.Client {
-        function id(self) -> string {
+        function provider(self) -> string {
+            "scripted"
+        }
+
+        function requested_model(self) -> string {
             "scripted"
         }
 
@@ -15,21 +50,7 @@ class ScriptedClient {
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
             self.calls += 1;
-            ai.ModelTurn {
-                parsed_output: null,
-                content: [ai.content.Text { text: "R" }],
-                stop_reason: ai.content.StopReason.Complete,
-                usage: ai.events.Usage {
-                    input_tokens: 10,
-                    output_tokens: 5,
-                    cached_input_tokens: null,
-                    reasoning_tokens: null,
-                    cache_write_input_tokens: null,
-                    uncached_input_tokens: null,
-                },
-                model: null,
-                calls: [],
-            }
+            scripted_turn("R", 10, 5)
         }
     }
 }
@@ -147,7 +168,11 @@ test "explain_local makes three calls and sums usage" {
 // Answers every call with its own rendered prompt, so a test can see what each call was given.
 class EchoClient {
     implements ai.Client {
-        function id(self) -> string {
+        function provider(self) -> string {
+            "echo"
+        }
+
+        function requested_model(self) -> string {
             "echo"
         }
 
@@ -157,21 +182,7 @@ class EchoClient {
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
             let prompt = input.prompt(ai.internal.build_output_format(input.output_type));
-            ai.ModelTurn {
-                parsed_output: null,
-                content: [ai.content.Text { text: prompt.text() }],
-                stop_reason: ai.content.StopReason.Complete,
-                usage: ai.events.Usage {
-                    input_tokens: 1,
-                    output_tokens: 1,
-                    cached_input_tokens: null,
-                    reasoning_tokens: null,
-                    cache_write_input_tokens: null,
-                    uncached_input_tokens: null,
-                },
-                model: null,
-                calls: [],
-            }
+            scripted_turn(prompt.text(), 1, 1)
         }
     }
 }
@@ -299,7 +310,11 @@ class SequenceClient {
     calls: int,
 
     implements ai.Client {
-        function id(self) -> string {
+        function provider(self) -> string {
+            "sequence"
+        }
+
+        function requested_model(self) -> string {
             "sequence"
         }
 
@@ -309,21 +324,7 @@ class SequenceClient {
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
             self.calls += 1;
-            ai.ModelTurn {
-                parsed_output: null,
-                content: [ai.content.Text { text: `REPLY-${self.calls}` }],
-                stop_reason: ai.content.StopReason.Complete,
-                usage: ai.events.Usage {
-                    input_tokens: 1,
-                    output_tokens: 1,
-                    cached_input_tokens: null,
-                    reasoning_tokens: null,
-                    cache_write_input_tokens: null,
-                    uncached_input_tokens: null,
-                },
-                model: null,
-                calls: [],
-            }
+            scripted_turn(`REPLY-${self.calls}`, 1, 1)
         }
     }
 }
@@ -626,21 +627,7 @@ test "answer_benchmark_question hands the reasoning to the answer turn" {
 
 // A model turn that holds `text` and reports 1 input and 1 output token.
 function text_turn(text: string) -> ai.ModelTurn {
-    ai.ModelTurn {
-        parsed_output: null,
-        content: [ai.content.Text { text: text }],
-        stop_reason: ai.content.StopReason.Complete,
-        usage: ai.events.Usage {
-            input_tokens: 1,
-            output_tokens: 1,
-            cached_input_tokens: null,
-            reasoning_tokens: null,
-            cache_write_input_tokens: null,
-            uncached_input_tokens: null,
-        },
-        model: null,
-        calls: [],
-    }
+    scripted_turn(text, 1, 1)
 }
 
 // Answers call n with "Rn<<" + its rendered prompt + ">>". A later prompt then shows which earlier reply sits where.
@@ -649,7 +636,11 @@ class TaggedEchoClient {
     calls: int,
 
     implements ai.Client {
-        function id(self) -> string {
+        function provider(self) -> string {
+            "tagged-echo"
+        }
+
+        function requested_model(self) -> string {
             "tagged-echo"
         }
 
@@ -668,7 +659,11 @@ class TaggedEchoClient {
 // Answers "R" to graph prompts and echoes the summary prompts, so the graph descriptions stay predictable.
 class SummaryEchoClient {
     implements ai.Client {
-        function id(self) -> string {
+        function provider(self) -> string {
+            "summary-echo"
+        }
+
+        function requested_model(self) -> string {
             "summary-echo"
         }
 

@@ -23,11 +23,13 @@ Each file is a JSON list of `[prompt, solution]` pairs. The prompt holds the gra
 export OPENROUTER_API_KEY=sk-or-...
 uv run python benchmark/run.py                       # every task
 uv run python benchmark/run.py --task jumps --limit 5 --output results.json
+uv run python benchmark/run.py --model anthropic/claude-haiku-4-5   # needs ANTHROPIC_API_KEY
 ```
 
-Questions are asked one at a time (free models are rate limited), two LLM turns each, on the `RouterBenchmark` client of
-`baml_src/talk_to_ebm.baml` (temperature 0): the model reasons step by step, then states its final answer in the format
-of the task. Change the model there, and run `baml generate`.
+Questions are asked one at a time (free models are rate limited), two LLM turns each, at temperature 0: the model
+reasons step by step, then states its final answer in the format of the task. The default model is OpenRouter's
+`openrouter/free`. `--model provider/model` selects another model. The provider is a BAML provider prefix, and the
+README section "Choosing the model" lists the prefixes and the key variable of each one.
 
 `--output` saves every prompt, response and verdict. Token usage is the one the provider reports.
 

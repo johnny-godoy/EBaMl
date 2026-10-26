@@ -165,8 +165,7 @@ The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions`
 | `local.seed` | `0` | Seed of the sampling, so that the facts are reproducible. |
 | `prompt.expert_description`, `prompt.dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
 
-The LLM client is the `Router` in `baml_src/talk_to_ebm.baml`, shared with the global explanation: see
-[Changing the LLM provider](providers.md). Token usage of the three calls is logged at `INFO` on the
+`explain_instance` takes `model=` like `describe_ebm`: see [Choosing the model](providers.md). Token usage of the three calls is logged at `INFO` on the
 `ebaml.llm.descriptors` logger as `usage`.
 
 To compute the facts alone, with no LLM and no key, call `compute_local_facts(ebm, instance, LocalOptions(...))`.

@@ -6,7 +6,7 @@
 
 --8<-- "README.md:behaviour"
 
-The model and provider are configurable: see [Changing the LLM provider](providers.md).
+The `model` argument selects the LLM of a call: see [Choosing the model](providers.md).
 
 ## Development
 

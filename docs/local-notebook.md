@@ -6,7 +6,8 @@ the guarantees by brute force, and compare what the LLM reads for a layperson an
 
 - Everything up to "Put it in words" runs without an API key: it computes and shows the facts.
 - The last cells call the LLM (the global explanation, then the three local ones) and only run when you press their
-  button. They need `OPENROUTER_API_KEY`.
+  button. The default model needs `OPENROUTER_API_KEY`. Pass `model=` to use another model, see
+  [Choosing the model](providers.md).
 
 The page below is the notebook with the output of its cells, exported when the docs are built. To run it:
 

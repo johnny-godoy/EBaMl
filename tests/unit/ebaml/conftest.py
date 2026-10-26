@@ -176,6 +176,10 @@ class _UnknownNameError(LookupError):
 
 
 def _lookup(name: str) -> object:
+    if name == "UNSET":
+        # The stub marks "argument left out" with UNSET in a union such as `ModelSpec | None | UNSET`. A fake never
+        # gets the marker, so for the check it stands for None, and the rest of the union stays checkable.
+        return type(None)
     for namespace in (baml_sdk, builtins):
         if hasattr(namespace, name):
             return getattr(namespace, name)
@@ -211,7 +215,8 @@ def _build(node: ast.expr) -> object:
         case ast.Name(id=name):
             built = _lookup(name)
         case ast.Attribute(value=ast.Name(id="typing"), attr=name):
-            built = getattr(typing, name)
+            # the stub spells a list as typing.List, which beartype reports as deprecated
+            built = list if name == "List" else getattr(typing, name)
         case ast.Subscript(value=origin, slice=ast.Tuple(elts=items)):
             built = _subscript(_build(origin), tuple(_build(item) for item in items))
         case ast.Subscript(value=origin, slice=item):
