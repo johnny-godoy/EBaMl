@@ -154,23 +154,25 @@ function explain_local(
     num_sentences: int,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
+    model: ModelSpec? = null,
 ) -> LocalExplanationText {
+    let selected = select_client(client, model, short_defaults());
     let counterfactual = spawn {
         run_counted(
             LocalCounterfactual@spec(global_explanation, facts, audience, num_sentences, opts),
-            client = client,
+            client = selected,
         )
     };
     let sufficient = spawn {
         run_counted(
             LocalSufficientReason@spec(global_explanation, facts, audience, num_sentences, opts),
-            client = client,
+            client = selected,
         )
     };
     let completions = spawn {
         run_counted(
             LocalCompletions@spec(global_explanation, facts, audience, num_sentences, opts),
-            client = client,
+            client = selected,
         )
     };
     let done = await baml.future.all([counterfactual, sufficient, completions]);

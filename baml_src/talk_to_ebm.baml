@@ -268,13 +268,16 @@ function describe_graph_cot(
     num_sentences: int,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
+    model: ModelSpec? = null,
 ) -> Counted {
     //# Three sequential assistant turns, each seeing the previous replies
-    let first_pass = run_counted(GraphFirstPass@spec(graph, opts), client = client);
-    let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts), client = client);
+    let long = select_client(client, model, long_defaults());
+    let short = select_client(client, model, short_defaults());
+    let first_pass = run_counted(GraphFirstPass@spec(graph, opts), client = long);
+    let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts), client = short);
     let final = run_counted(
         GraphFinalDescription@spec(graph, first_pass.text, surprises.text, num_sentences, opts),
-        client = client,
+        client = short,
     );
     Counted {
         text: final.text,
@@ -289,14 +292,18 @@ function summarize_ebm(
     num_sentences: int?,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
+    model: ModelSpec? = null,
 ) -> Counted {
-    let draft = run_counted(EbmSummaryDraft@spec(feature_importances, graph_descriptions, opts), client = client);
+    let draft = run_counted(
+        EbmSummaryDraft@spec(feature_importances, graph_descriptions, opts),
+        client = select_client(client, model, long_defaults()),
+    );
     if (num_sentences == null) {
         return draft;
     };
     let shortened = run_counted(
         EbmSummaryShorten@spec(feature_importances, graph_descriptions, draft.text, num_sentences, opts),
-        client = client,
+        client = select_client(client, model, short_defaults()),
     );
     Counted { text: shortened.text, usage: add_usage(draft.usage, shortened.usage) }
 }
@@ -312,6 +319,7 @@ function describe_ebm(
     max_concurrency: int,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
+    model: ModelSpec? = null,
 ) -> Counted {
     if (feature_names.length() != graphs.length()) {
         throw baml.errors.InvalidArgument { message: "feature_names and graphs must have the same length" };
@@ -319,7 +327,9 @@ function describe_ebm(
     //# One description chain per graph, at most `max_concurrency` at a time
     let limit = baml.spawn.Limit.new(max_concurrency);
     let futures = graphs.map((graph) -> {
-        spawn with limit { describe_graph_cot(graph, graph_sentences, opts, client = client) }
+        spawn with limit {
+            describe_graph_cot(graph, graph_sentences, opts, client = client, model = model)
+        }
     });
     let described = await baml.future.all(futures);
 
@@ -333,7 +343,7 @@ function describe_ebm(
         i = i + 1;
     }
     //# Summarize all the per-graph descriptions
-    let summary = summarize_ebm(feature_importances, lines.join("\n\n"), num_sentences, opts, client = client);
+    let summary = summarize_ebm(feature_importances, lines.join("\n\n"), num_sentences, opts, client = client, model = model);
     Counted { text: summary.text, usage: add_usage(usage, summary.usage) }
 }
 
@@ -370,8 +380,10 @@ function answer_benchmark_question(
     question: string,
     answer_format: string,
     client: ai.Client? = null,
+    model: ModelSpec? = null,
 ) -> Counted {
-    let reasoning = run_counted(BenchmarkReasoning@spec(question), client = client);
-    let answer = run_counted(BenchmarkAnswer@spec(question, reasoning.text, answer_format), client = client);
+    let selected = select_client(client, model, benchmark_defaults());
+    let reasoning = run_counted(BenchmarkReasoning@spec(question), client = selected);
+    let answer = run_counted(BenchmarkAnswer@spec(question, reasoning.text, answer_format), client = selected);
     Counted { text: answer.text, usage: add_usage(reasoning.usage, answer.usage) }
 }

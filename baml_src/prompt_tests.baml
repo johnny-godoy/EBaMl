@@ -99,6 +99,22 @@ testset "Live" {
         assert.is_true(result.usage.input_tokens > 0)
     }
 
+    test "describe_graph_cot: a ModelSpec sends the requests to the chosen model" {
+        let graph = "{\"feature_name\": \"age\", \"type\": \"continuous\", \"mean\": {\"18-30\": 0.8, \"30-50\": 0.0, \"50-90\": -0.6}}";
+        let model = ModelSpec {
+            provider: "openrouter",
+            model: "openrouter/free",
+            api_key_env: "OPENROUTER_API_KEY",
+            base_url: null,
+            temperature: null,
+            max_output_tokens: null,
+            headers: null,
+        };
+        let result = describe_graph_cot(graph, 3, default_graph_options(), model = model);
+        assert.is_true(result.text.to_lower_case().includes("age"));
+        assert.is_true(result.usage.output_tokens > 0)
+    }
+
     test "answer_benchmark_question: the final turn follows the requested format" {
         let question = "A model's graph for feature x has mean value 2.0 for x < 5 and -1.0 for x >= 5. Is the function decreasing in x? Think step by step.";
         let result = answer_benchmark_question(question, "'yes' or 'no'");
