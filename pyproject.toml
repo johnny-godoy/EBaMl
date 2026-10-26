@@ -1,6 +1,6 @@
 [project]
 name = "ebaml"
-version = "0.0.3"
+version = "0.1.0"
 description = "BAML for Explainable Boosting Machines: talk to your EBM."
 readme = "README.md"
 license = "MIT"
@@ -267,7 +267,7 @@ format = "md"
 fragment_directory = "changelog.d"
 categories = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
 md_header_level = "2"
-version = "literal: pyproject.toml: project.version"
+version = "0.1.0"
 entry_title_template = "[{{ version }}] - {{ date.strftime('%Y-%m-%d') }}"
 
 # commitizen only checks commit messages and PR titles here. scriv and scripts/release.py manage the changelog and the
