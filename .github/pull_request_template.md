@@ -53,6 +53,7 @@ notebook for the input. Mark each step that sends real requests and needs OPENRO
 
 - [ ] `prek run --all-files`
 - [ ] `uv run pytest` (100% coverage)
+- [ ] `uv run pytest README.md docs src --no-cov` (the documentation examples)
 - [ ] `OPENROUTER_API_KEY=unused baml test -x root::Live` (if `baml_src/` changed)
 - [ ] `uv run python scripts/mutation.py --base origin/main` (if `src/ebaml/` changed)
 - [ ] `uv run --group docs python -m scripts.build_docs` (if the docs changed)

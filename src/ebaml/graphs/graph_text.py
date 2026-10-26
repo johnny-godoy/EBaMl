@@ -33,6 +33,11 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
     str
         A json string representation of the x and y values.
 
+    Examples
+    --------
+    >>> xy_to_json([("0.0", "1.5"), "red"], ["0.25", "-1.0"])
+    '{"(0.0, 1.5)": 0.25, "red": -1.0}'
+
     """
     keys = [f"({x[0]}, {x[1]})" if isinstance(x, tuple) else x for x in x_vals]
     return "{" + ", ".join(f'"{key}": {y}' for key, y in zip(keys, y_vals, strict=True)) + "}"
@@ -56,6 +61,15 @@ def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
     ------
     GraphTextError
         If the text is not two numbers in brackets.
+
+    Examples
+    --------
+    >>> parse_str_tuple_to_float_tuple("(0.5, 2)")
+    (0.5, 2.0)
+    >>> parse_str_tuple_to_float_tuple("(a, b)")
+    Traceback (most recent call last):
+    ...
+    ebaml.core.exceptions.GraphTextError: '(a, b)' is not an interval of two numbers.
 
     """
     try:

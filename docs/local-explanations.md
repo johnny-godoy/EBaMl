@@ -112,6 +112,10 @@ having the number. The choice is validated, so `audience="child"` raises `Invali
 
 You can see exactly what the LLM reads, without calling it:
 
+<!-- invisible-code-block: python
+instance = X.iloc[0].to_dict()
+-->
+
 ```python
 from ebaml.core.custom_types import Audience
 from ebaml.local.facts import compute_local_facts
