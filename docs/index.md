@@ -9,7 +9,7 @@
 ## Where to go next
 
 - [Setup](setup.md): install the BAML toolchain, set an API key, generate the SDK, troubleshooting.
-- [LLM provider](providers.md): OpenRouter is only the default; switch to OpenAI, Anthropic, Gemini, Ollama and more.
+- [Choosing the model](providers.md): OpenRouter is only the default. Pass `model=` to use OpenAI, Anthropic, Gemini, Ollama and more.
 - [Usage](usage.md): describe a graph or a whole model, and how the model, retries and token budget behave.
 - [Local explanations](local-explanations.md): why did the model predict this for this input? A counterfactual, a sufficient reason and the share of completions, computed exactly and put in words for a layperson or a data scientist.
 - [Notebook](notebook.md): a worked example on the Titanic data, with its output.

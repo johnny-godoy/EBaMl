@@ -45,10 +45,10 @@ def _(mo) -> None:
     [Titanic dataset](https://www.openml.org/d/40945) from OpenML, which downloads without an account, instead of the
     Kaggle one.
 
-    The LLM cells call [OpenRouter](https://openrouter.ai) through BAML and only run when you press their button. They
-    need an OpenRouter API key: `OPENROUTER_API_KEY` from the environment that started the notebook (see the README), or
-    the password field below when it is not set. The model is configured in
-    `baml_src/talk_to_ebm.baml`.
+    The LLM cells call [OpenRouter](https://openrouter.ai) through BAML and only run when you press their button. The
+    default model needs an OpenRouter API key: `OPENROUTER_API_KEY` from the environment that started the notebook (see
+    the README), or the password field below when it is not set. To use another model, pass `model=` to the functions.
+    The documentation page "Choosing the model" lists the providers.
     """)
 
 

@@ -5,8 +5,8 @@ whole model, and walks through the graph and text API. It follows TalkToEBM's *S
 To explain a single prediction, see the [local explanations notebook](local-notebook.md).
 
 The page below is the notebook with the output of its cells, exported when the docs are built. The cells that call the
-LLM wait for a button press, so they show their idle state here. To run them, set `OPENROUTER_API_KEY` and open the
-notebook:
+LLM wait for a button press, so they show their idle state here. To run them with the default model, set `OPENROUTER_API_KEY` and
+open the notebook. [Choosing the model](providers.md) explains how to use another model:
 
 ```bash
 uv run marimo edit notebooks/titanic.py

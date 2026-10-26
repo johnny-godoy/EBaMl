@@ -34,7 +34,7 @@ warning. ❌ not supported yet. Full support is on the
 - Python 3.13 or later and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 - The BAML toolchain 0.22 or later (step 1).
 - An API key for an LLM provider. The default is [OpenRouter](https://openrouter.ai)'s free router, which needs no
-  paid plan. You can use another provider instead, see "Changing the LLM provider".
+  paid plan. You can use another provider instead, see "Choosing the model".
 
 ### 1. Install the BAML toolchain
 
@@ -81,8 +81,8 @@ export OPENROUTER_API_KEY=sk-or-...
 
 The key is read from the environment when a request is sent. It is never written to a `.baml` file.
 
-Using another provider? Set its variable instead (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ...) and edit the clients as
-described in "Changing the LLM provider". Local models (Ollama) need no key.
+Using another provider? Set its variable instead (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ...) and pass `model=` as
+described in "Choosing the model". Local models (Ollama) need no key.
 
 ### 4. Generate the Python SDK
 
@@ -121,7 +121,7 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 | `baml: command not found` | The profile line from step 1 is not loaded. Open a new shell or run `. "$HOME/.baml/env"`. |
 | `unknown command: describe` (or `generate add`, `agent`) | An older `baml` is first on `PATH`. See step 1. |
 | `ModuleNotFoundError: baml_sdk` | The SDK is not generated. Run `baml generate` (step 4). |
-| An error that names an environment variable | The key of the provider in `baml_src/talk_to_ebm.baml` is not exported in this shell. |
+| An error that names an environment variable | The key of the provider is not exported in this shell. See "Choosing the model" for the variable of each provider. |
 | Rate-limit errors from the free router | Lower the concurrency, `describe_ebm(ebm, max_concurrency=2)`, or pin a paid model. |
 
 <!-- --8<-- [end:setup] -->
@@ -143,10 +143,10 @@ print(describe_ebm(ebm, num_sentences=30, prompt=PromptOptions(dataset_descripti
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
 
-Two keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
+Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
 `EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
-(`expert_description`, `graph_description`, `dataset_description` and `task_description`). Both classes are in
-`ebaml.llm.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
+(`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
+"Choosing the model". The classes are in `ebaml.llm.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
 
 ### Explaining one prediction
 
@@ -198,9 +198,10 @@ them too.
 | `src/ebaml/core/` | Shared kernel: types and errors. It imports no other part of `ebaml`. |
 | `src/ebaml/graphs/` | Graph extraction and simplification (numpy, `interpret`), and the text the LLM reads. |
 | `src/ebaml/llm/` | The edge: the calls into BAML (`descriptors.py`), their options and the retry after a cut-off reply. |
-| `baml_src/talk_to_ebm.baml` | Prompts, LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
+| `baml_src/talk_to_ebm.baml` | Prompts, the default LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
+| `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
 | `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
-| `baml_src/talk_to_ebm_test.baml` | Offline tests on a scripted client. |
+| `baml_src/talk_to_ebm_test.baml`, `baml_src/model_spec_test.baml` | Offline tests on a scripted client. |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |
@@ -229,7 +230,7 @@ them too.
 [`notebooks/titanic.py`](notebooks/titanic.py) is a [marimo](https://marimo.io) notebook that ports TalkToEBM's example.
 It trains an EBM on the Titanic dataset (downloaded from OpenML), asks the LLM to describe a graph and the whole model,
 and shows the graph and text API (`from_ebm`, `simplify`, `to_text`, `from_text`). The LLM cells run only when you press
-their button and need `OPENROUTER_API_KEY`.
+their button. They use the default model, which needs `OPENROUTER_API_KEY`. See "Choosing the model" for other models.
 
 ```bash
 uv run marimo edit notebooks/titanic.py   # interactive
@@ -248,8 +249,8 @@ uv run marimo edit notebooks/local_explanations.py
 
 The benchmark follows [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
 model reads EBM graphs: function recognition (easy and hard), the largest jump, monotonicity, reading a value and the
-widest confidence interval. It makes real requests, so it needs `OPENROUTER_API_KEY`, and it asks two LLM turns per
-question (6 tasks, 480 questions in all).
+widest confidence interval. It makes real requests, and it asks two LLM turns per question (6 tasks, 480 questions in
+all). The default model needs `OPENROUTER_API_KEY`. The flag `--model provider/model` selects another model.
 
 ```bash
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json
@@ -257,90 +258,122 @@ uv run python benchmark/run.py --task monotonicity --limit 10 --output results.j
 
 See [benchmark/README.md](benchmark/README.md) for the tasks, the scoring and what it leaves out.
 
-## Changing the LLM provider
+## Choosing the model
 
 <!-- --8<-- [start:changing-model] -->
-OpenRouter's free router is only the **default**. The prompts and the pipelines do not depend on it: every LLM call goes
-through a BAML client, and BAML ships clients for many providers. To switch, edit the clients at the top of
-`baml_src/talk_to_ebm.baml`, then run `baml generate`. Nothing in Python changes.
+The default model is OpenRouter's free router, `openrouter/free`. It needs `OPENROUTER_API_KEY`. The `model` argument
+of `describe_graph`, `describe_ebm` and `explain_instance` selects another model for one call. EBaMl sends every LLM
+request of that call to that model. You do not change the package.
 
-### The clients
+### Quick start
 
-| Client | Used by | Default settings |
+Pass the shorthand `"provider/model"`:
+
+```python
+from ebaml.llm.descriptors import describe_ebm
+
+print(describe_ebm(ebm, model="anthropic/claude-haiku-4-5"))
+```
+
+Pass `ModelOptions` to set more:
+
+```python
+from ebaml.llm.options import ModelOptions
+
+model = ModelOptions(provider="anthropic", model="claude-haiku-4-5", temperature=0.2, max_output_tokens=8000)
+print(describe_ebm(ebm, model=model))
+```
+
+EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o-mini"` selects the provider
+`openrouter` and the model `openai/gpt-4o-mini`. EBaMl checks the provider before the first paid request. It raises
+`InvalidOptionError` if the provider is not in the table below.
+
+### Providers
+
+The provider is a BAML provider prefix. Set the environment variable of the key in the shell that runs Python.
+
+| Provider | Default key variable | Notes |
 | --- | --- | --- |
-| `RouterBase` | the `Router` client: turns 2 and 3 of a graph description, and the shortening of the summary | `temperature = 0.7`, `max_tokens = 6000` |
-| `RouterLongBase` | the `RouterLong` client: turn 1 of a graph description, and the draft summary | `temperature = 0.7`, `max_tokens = 8000` |
-| `RouterBenchmarkBase` | the `RouterBenchmark` client of the benchmark | `temperature = 0.0`, `max_tokens = 8000` |
+| `openrouter` | `OPENROUTER_API_KEY` | The model name is the OpenRouter name, for example `openai/gpt-4o-mini`. |
+| `openai` | `OPENAI_API_KEY` | |
+| `anthropic` | `ANTHROPIC_API_KEY` | |
+| `google` | `GOOGLE_API_KEY` | The Gemini API. |
+| `ollama` | None | A local server. `base_url` defaults to `http://localhost:11434/v1`. |
+| `openai-generic` | None | Any OpenAI-compatible server. `base_url` is required. Set `api_key_env` if the server needs a key. |
+| `azure` | `AZURE_OPENAI_API_KEY` | The model name is the name of the deployment. Set `base_url` to the deployment, or set `AZURE_OPENAI_ENDPOINT`. |
+| `vertex` | None | Google Cloud credentials (`GOOGLE_APPLICATION_CREDENTIALS` or `gcloud auth`). The project comes from `GOOGLE_CLOUD_PROJECT`. |
+| `bedrock` | None | The AWS credentials of the machine. The region comes from `AWS_REGION`. `api_key_env` has no effect. |
 
-`Router`, `RouterLong` and `RouterBenchmark` wrap the matching `*Base` client in `ai.clients.Retry`, which retries
-transient failures up to 3 times. Change the `*Base` lines only. The retry wrappers keep working with any provider.
-The three can use different providers, for example a cheap model for `RouterBase` and a stronger one for the benchmark.
+Run `baml describe <client>.new`, for example `baml describe aws.BedrockClient.new`, to see all settings of a client.
+
+### Options
+
+| Field | Meaning | Default |
+| --- | --- | --- |
+| `provider` | The BAML provider prefix from the table. | Required. |
+| `model` | The name of the model at the provider. | Required. |
+| `api_key_env` | The name of the environment variable that holds the key. | The variable of the provider. |
+| `base_url` | The address of the server. | The address of the provider. |
+| `temperature` | The sampling temperature. | 0.7 (0.0 in the benchmark). |
+| `max_output_tokens` | The most tokens of one reply. | See below. |
+| `headers` | Headers to add to each request. | None. |
+
+A field that you set wins over the default of the call. The output limit has two defaults:
+
+| Calls | `max_output_tokens` |
+| --- | --- |
+| Turn 1 of a graph description, the draft of the summary, and the two turns of the benchmark | 8000 |
+| All other calls, including the local explanations | 6000 |
 
 ### Examples
 
-Replace the right-hand side of a `*Base` line. Keep each client's own `temperature` and `max_tokens`.
+```python
+# OpenRouter, a pinned model (the free router picks a new model for each request)
+describe_ebm(ebm, model="openrouter/openai/gpt-4o-mini")
 
-```baml
-// OpenRouter, a pinned model (https://openrouter.ai/models)
-client RouterBase = openai.OpenRouterClient.new(model = "<provider>/<model>", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 6000);
+# OpenAI
+describe_ebm(ebm, model="openai/gpt-4o-mini")
 
-// OpenAI
-client RouterBase = openai.ChatClient.new(model = "gpt-4o-mini", api_key = env.OPENAI_API_KEY, temperature = 0.7, max_tokens = 6000);
+# Google Gemini
+describe_ebm(ebm, model="google/gemini-2.5-flash")
 
-// Anthropic
-client RouterBase = anthropic.Client.new(model = "claude-haiku-4-5", api_key = env.ANTHROPIC_API_KEY, temperature = 0.7, max_tokens = 6000);
+# A local model with Ollama. It needs no key.
+describe_ebm(ebm, model="ollama/llama3.1")
 
-// Google Gemini (the output limit is called max_output_tokens)
-client RouterBase = google.GeminiClient.new(model = "gemini-2.5-flash", api_key = env.GEMINI_API_KEY, temperature = 0.7, max_output_tokens = 6000);
-
-// A local model through Ollama (no key; the URL defaults to http://localhost:11434/v1)
-client RouterBase = openai.OllamaClient.new(model = "llama3.1", temperature = 0.7, max_tokens = 6000);
-
-// Any other OpenAI-compatible endpoint (vLLM, LM Studio, a company gateway, ...)
-client RouterBase = openai.GenericClient.new(model = "<model>", base_url = "https://<host>/v1", api_key = env.MY_GATEWAY_KEY, temperature = 0.7, max_tokens = 6000);
+# A company gateway with an OpenAI-compatible API
+gateway = ModelOptions(
+    provider="openai-generic",
+    model="my-model",
+    base_url="https://llm.example.com/v1",
+    api_key_env="MY_GATEWAY_KEY",
+    headers={"x-team": "ebm"},
+)
+describe_ebm(ebm, model=gateway)
 ```
 
-BAML also has `openai.AzureClient`, `aws.BedrockClient`, `google.VertexClient` and `claude_code.ClaudeCodeClient`. Run
-`baml describe <name>` (for example `baml describe aws.BedrockClient.new`) to see every parameter of a client.
-
-Set the environment variable you named in `api_key = env.<NAME>` in the shell you run Python from. Keys are read when a
-request is sent and are never stored in a `.baml` file.
-
-To fall back to a second provider when the first one fails, wrap both in `ai.clients.Fallback`:
-
-```baml
-client RouterBase = ai.clients.Fallback {
-    members: [
-        anthropic.Client.new(model = "claude-haiku-4-5", api_key = env.ANTHROPIC_API_KEY, temperature = 0.7, max_tokens = 6000),
-        openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 6000),
-    ],
-};
-```
-
-### After the change
+The benchmark has the flag `--model`:
 
 ```bash
-baml generate                 # regenerate src/baml_sdk/
-baml fmt                      # keep the .baml files formatted
-OPENROUTER_API_KEY=unused baml test -x root::Live    # offline tests; they use a scripted client and ignore your provider
-baml test -i root::Live    # live prompt tests; they send real requests with your key
+uv run python benchmark/run.py --model anthropic/claude-haiku-4-5 --limit 10
 ```
 
-Then run your usual code. `describe_graph` and `describe_ebm` need no other change.
+### Keys
 
-!!! note
-    Quality, speed and cost depend on the model. Small and free models may ignore the requested number of sentences
-    or fail the benchmark's answer formats. The default `openrouter/free` also picks a different model for each
-    request, so results are not reproducible: pin a model to compare runs.
+Put the key in an environment variable, in the shell or with `os.environ`. `ModelOptions` holds the name of the
+variable, never the key, so the key does not appear in a `repr`, a log line or a traceback. EBaMl reads the variable
+only when it sends a request.
 
-### Using a client you build yourself
+### Limits
 
-All BAML entry points (`describe_graph_cot`, `summarize_ebm`, `describe_ebm`, `answer_benchmark_question`) take an
-optional `client: ai.Client`. When it is `null` they use the clients above. The offline tests pass a scripted client
-this way. From BAML code you can pass any `ai.Client`, including your own implementation of the interface. The Python
-wrappers in `ebaml.llm.descriptors` do not expose this parameter, so from Python the clients in
-`baml_src/talk_to_ebm.baml` are the way to configure the provider.
+- One call uses one model. The turns of a call cannot use different models.
+- Python cannot set up fallback chains or round robin. A BAML client object cannot cross from Python to BAML, so
+  Python sends plain data and BAML builds the client. A BAML client declaration can use `ai.clients.Fallback`: see
+  "Change the default model" in `CONTRIBUTING.md`.
+- A reasoning model counts its hidden tokens in `max_output_tokens`. Keep the limit large, or the reply can end before
+  the answer.
+- Quality, speed and cost depend on the model. Small models can ignore the number of sentences that you ask for.
 
+Every client has the retry policy of the default clients: EBaMl retries a transient failure up to 3 times.
 <!-- --8<-- [end:changing-model] -->
 
 ## Development

@@ -71,9 +71,10 @@ def _(mo) -> None:
     The first two are exact for an EBM without interactions, because the model is a sum of one effect per feature. The
     third is estimated by sampling. See the documentation page "Local explanations" for the details and the limits.
 
-    The cells that call the LLM only run when you press their button and need an OpenRouter API key:
+    The cells that call the LLM only run when you press their button. The default model needs an OpenRouter API key:
     `OPENROUTER_API_KEY` from the environment that started the notebook (see the README), or the password field below
-    when it is not set. Everything before them works without a key.
+    when it is not set. To use another model, pass `model=` to the functions: see the documentation page "Choosing the
+    model". Everything before these cells works without a key.
     """)
 
 
