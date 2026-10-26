@@ -137,3 +137,8 @@ test "describe_graph_cot sends every turn to the client when both client and mod
     assert.equal(result.text, "R");
     assert.equal(scripted.calls, 3)
 }
+
+test "an Azure client without base_url names the deployment after the model" {
+    let azure = build_azure(spec_for("azure"), short_defaults());
+    assert.equal(azure.deployment_id, "m")
+}

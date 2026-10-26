@@ -70,9 +70,12 @@ function build_openai_generic(spec: ModelSpec, settings: CallDefaults) -> ai.Cli
     )
 }
 
-function build_azure(spec: ModelSpec, settings: CallDefaults) -> ai.Client {
+// Azure serves deployments under names that the owner chose, so `model` names the deployment. `base_url` names it too
+// and wins. Without it, the deployment is built on the endpoint in `AZURE_OPENAI_ENDPOINT`.
+function build_azure(spec: ModelSpec, settings: CallDefaults) -> openai.AzureClient {
     openai.AzureClient.new(
         model = spec.model,
+        deployment_id = spec.model,
         api_key = credential(spec.api_key_env),
         base_url = spec.base_url,
         headers = spec.headers,
