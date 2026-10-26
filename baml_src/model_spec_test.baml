@@ -21,7 +21,7 @@ test "every provider of the table builds a client with no network access" {
 }
 
 test "the table lists the BAML provider prefixes" {
-    let providers = client_builders().keys();
+    let providers = supported_providers();
     for (
         let prefix in [
             "openai",

@@ -163,13 +163,18 @@ function client_builders() -> map<string, (ModelSpec, CallDefaults) -> ai.Client
     }
 }
 
+// The provider prefixes that `ModelSpec.provider` accepts, in table order.
+function supported_providers() -> string[] {
+    client_builders().keys()
+}
+
 // Builds the client of `spec` with the retry policy of the default clients.
 function build_client(spec: ModelSpec, defaults: CallDefaults) -> ai.Client {
     let builders = client_builders();
     let build = builders.get(spec.provider);
     if (build == null) {
         throw baml.errors.InvalidArgument {
-            message: `unknown provider "${spec.provider}"; supported providers: ${builders.keys().join(", ")}`,
+            message: `unknown provider "${spec.provider}"; supported providers: ${supported_providers().join(", ")}`,
         };
     };
     ai.clients.Retry.new(inner = build(spec, resolve_settings(spec, defaults)), max_attempts = 3)
