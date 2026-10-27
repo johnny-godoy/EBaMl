@@ -1,0 +1,367 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.25.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "132347f962bfd7f5bc12c5d548ce9926",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "acf7942e9bcdb8ba7e53a6e8b50a960f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"choose-the-model\">Choose the model</h1>\n<span class=\"paragraph\">Every function of EBaMl that calls an LLM takes a <code>model</code> argument. This notebook sends the same request to\nseveral providers, so that you can compare the setup of each one and the text that each one writes.</span>\n<ul>\n<li>Everything outside the buttons runs without a key and sends no request.</li>\n<li>A button sends real requests (three turns for one graph) to the provider of its section. Press it only for a\n  provider that you have set up. A section shows the key that it needs, and whether the environment has it.</li>\n<li>The key never goes into <code>ModelOptions</code>. The options hold the <em>name</em> of the environment variable, and EBaMl reads\n  the variable when it sends a request. To set a key, start the notebook from a shell that has the variable.</li>\n</ul>\n<span class=\"paragraph\">The documentation page \"Choosing the model\" lists all providers and options.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "77976530320f7a8b4c3d3ded072fd7e5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"a-small-ebm-to-talk-about\">A small EBM to talk about</h2>\n<span class=\"paragraph\">The Titanic data and one feature, <code>sex</code>, whose graph has two bins. A short graph keeps each request cheap.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "a9b5f18a271d351001b34d486fee03a2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "/Users/johnny_replai/Projects/EBaMl/.venv/lib/python3.13/site-packages/interpret/glassbox/_ebm/_ebm.py:871: UserWarning: Missing values detected. Our visualizations do not currently display missing values. To retain the glassbox nature of the model you need to either set the missing values to an extreme value like -1000 that will be visible on the graphs, or manually examine the missing value score in ebm.term_scores_[term_index][0]\n  warn(\n",
+          "mimetype": "text/plain"
+        }
+      ]
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "a03362bb9b1728024567c3e2da2766a1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "9bce14242718bf02d9249caa5df7356a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "9f49bc012a2399ed91a30dc6b4bee370",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"the-shorthand-and-modeloptions\">The shorthand and <code>ModelOptions</code></h2>\n<span class=\"paragraph\">The shorthand <code>\"provider/model\"</code> selects a provider and a model. It splits at the first <code>/</code> only, so\n<code>\"openrouter/openai/gpt-4o-mini\"</code> is the provider <code>openrouter</code> with the model <code>openai/gpt-4o-mini</code>. <code>ModelOptions</code>\nsets more: the temperature, the output limit, the address of the server and extra headers.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "c1fff62d0030bf2f1f1a3548f737cec0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><div class=\"language-scdoc codehilite\"><pre><span></span><code>ModelOptions(provider='openrouter', model='openai/gpt-4o-mini', api_key_env=None, base_url=None, temperature=None, max_output_tokens=None, headers={})\n\nModelOptions(provider='anthropic', model='claude-haiku-4-5', api_key_env=None, base_url=None, temperature=0.2, max_output_tokens=8000, headers={})\n</code></pre></div></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "8ce50b4386cd2877fef1cae1bc36f030",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"openrouter\">OpenRouter</h2>\n<span class=\"paragraph\">One key reaches many models. The free router <code>openrouter/free</code> is the default of EBaMl, and it picks a new model for\neach request. A pinned model gives repeatable results.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "8fef14e12dd58fc60dd2dfb7acd937c3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-callout-output data-html='&quot;&#92;u003cspan&#92;u003e`OPENROUTER_API_KEY` is set.&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;success&quot;'></marimo-callout-output><marimo-ui-element object-id='RGSE-0' random-id='3439b243-25f7-c826-b806-2c66a6d7cb20'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe with OpenRouter&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "b23d25ceffcc954e427d7eae0c7f18e3",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to send the request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "e4cf513ef0be7e187c52aab690154cef",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"openai\">OpenAI</h2>\n<span class=\"paragraph\">The same call, with the provider <code>openai</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "99f224e9cc9726fc2405197a43b839b7",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-callout-output data-html='&quot;&#92;u003cspan&#92;u003e`OPENAI_API_KEY` is not set. Start the notebook from a shell that has it.&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;warn&quot;'></marimo-callout-output><marimo-ui-element object-id='Hstk-0' random-id='ba28d147-f97f-1594-9f4d-44423a20cc49'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe with OpenAI&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "fbc731abf06034309d2d1494dd8796ca",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to send the request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "bf541c75383824da278a06e33c67302e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"anthropic\">Anthropic</h2>\n<span class=\"paragraph\">This section uses <code>ModelOptions</code> to set the temperature and the output limit. A reasoning model counts its hidden\ntokens in <code>max_output_tokens</code>, so keep the limit large.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "3e99938cf72ef3fff5ae3cecbed8c8fa",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-callout-output data-html='&quot;&#92;u003cspan&#92;u003e`ANTHROPIC_API_KEY` is not set. Start the notebook from a shell that has it.&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;warn&quot;'></marimo-callout-output><marimo-ui-element object-id='ZHCJ-0' random-id='4fe06a36-340b-9d54-075c-bdf2ab1a5b1f'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe with Anthropic&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "200afb5e5477190fb98f98da10942bea",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to send the request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "6231a70dc35abe8b7988c3f5b3337e8b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"ollama-a-local-model\">Ollama, a local model</h2>\n<span class=\"paragraph\">The model runs on your machine and needs no key. Install <a href=\"https://ollama.com\" rel=\"noopener noreferrer\" target=\"_blank\">Ollama</a>, then run\n<code>ollama pull llama3.1</code> and keep the server running. <code>base_url</code> defaults to <code>http://localhost:11434/v1</code>. If the\nserver is not running, the section shows the error with its fix steps.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "7488248a3a49d986d861291d607f4495",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-callout-output data-html='&quot;&#92;u003cspan&#92;u003eThis provider needs no key.&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;'></marimo-callout-output><marimo-ui-element object-id='TqIu-0' random-id='e48b10f4-8c4a-5ccb-92a3-4ecb96589c22'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe with Ollama&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "ef8a43f7a1281c4a18657c1d3451a7c1",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to send the request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "DnEU",
+      "code_hash": "b4330658a2f0965b37fa729efcfb5a88",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"a-gateway-with-an-openai-compatible-api\">A gateway with an OpenAI-compatible API</h2>\n<span class=\"paragraph\">The provider <code>openai-generic</code> talks to any server that follows the OpenAI API: a company gateway, vLLM, LM Studio.\nIt needs <code>base_url</code>. <code>api_key_env</code> names the variable that holds the key of the gateway, and <code>headers</code> adds headers\nto each request. Fill the fields, then press the button.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ulZA",
+      "code_hash": "a7f5db17272e4a530594106d5fbb067a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='ulZA-0' random-id='0e89504b-6a3f-0f49-9080-1703b296b61b'><marimo-text data-initial-value='&quot;https://llm.example.com/v1&quot;' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003ebase_url&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-placeholder='&quot;&quot;' data-kind='&quot;text&quot;' data-full-width='true' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element><div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='ulZA-1' random-id='8c6ecb26-67a7-66d2-8d7e-c248f962be01'><marimo-text data-initial-value='&quot;my-model&quot;' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003emodel&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-placeholder='&quot;&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element><marimo-ui-element object-id='ulZA-2' random-id='45826939-0831-11b0-0a73-a97fadde1a91'><marimo-text data-initial-value='&quot;MY_GATEWAY_KEY&quot;' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eapi_key_env&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-placeholder='&quot;&quot;' data-kind='&quot;text&quot;' data-full-width='false' data-disabled='false' data-debounce='true'></marimo-text></marimo-ui-element></div><marimo-ui-element object-id='ulZA-3' random-id='382c6f17-a5db-5878-23f4-cbe456deae16'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe with the gateway&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ecfG",
+      "code_hash": "524d226c180b3325c28f412a7163683b",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-callout-output data-html='&quot;&#92;u003cspan&#92;u003e`MY_GATEWAY_KEY` is not set. Start the notebook from a shell that has it.&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;warn&quot;'></marimo-callout-output><span class=\"markdown prose dark:prose-invert contents\"><div class=\"language-scdoc codehilite\"><pre><span></span><code>ModelOptions(provider='openai-generic', model='my-model', api_key_env='MY_GATEWAY_KEY', base_url='https://llm.example.com/v1', temperature=None, max_output_tokens=None, headers={'x-team': 'ebm'})\n</code></pre></div></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Pvdt",
+      "code_hash": "7da88153a2b857347bc898377d4db0a0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the button to send the request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZBYS",
+      "code_hash": "76fb059849aa554786a575d637033322",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"other-providers\">Other providers</h2>\n<span class=\"paragraph\"><code>google</code>, <code>azure</code>, <code>vertex</code> and <code>bedrock</code> work the same way. Their keys and settings differ: the table in the\ndocumentation page \"Choosing the model\" lists them.</span>\n<h2 id=\"when-the-setup-is-wrong\">When the setup is wrong</h2>\n<span class=\"paragraph\">EBaMl checks the provider before the first paid request, and it turns the failures that you can fix into errors\nwith fix steps. The two cells below send no request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "aLJB",
+      "code_hash": "f8b2ea29add908c8bd5164ca4cfcb652",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nHfw",
+      "code_hash": "851fa16fa64f2160884fa2461079fead",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}
