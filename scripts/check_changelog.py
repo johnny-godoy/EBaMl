@@ -7,6 +7,7 @@ the release workflow raises the version, and ``scriv collect`` moves the fragmen
 - ``CHANGELOG.md`` has an ``[Unreleased]`` heading or lacks the scriv insert marker,
 - a heading is not a version with a date, or the versions do not decrease from top to bottom,
 - a fragment has no category, or a category that ``[tool.scriv]`` does not list,
+- ``[tool.scriv]`` does not take its version from ``project.version``,
 - the version in ``pyproject.toml`` is lower than the newest heading, or higher with no fragment to release.
 
 Run it from the repo root: ``uv run python -m scripts.check_changelog``.
@@ -21,6 +22,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INSERT_MARKER = "<!-- scriv-insert-here -->"
+# scriv stamps this version on the new heading, so it must follow the version that `uv version` writes
+SCRIV_VERSION = "literal: pyproject.toml: project.version"
 HEADING: re.Pattern[str] = re.compile(r"^## \[(?P<name>[^\]]+)\](?: - (?P<date>\S+))?\s*$", re.MULTILINE)
 CATEGORY: re.Pattern[str] = re.compile(r"^### (?P<name>.+?)\s*$", re.MULTILINE)
 COMMENT: re.Pattern[str] = re.compile(r"<!--.*?-->", re.DOTALL)
@@ -276,6 +279,30 @@ def changelog_problems(
     return problems + version_problems(version, newest, has_fragments=bool(fragments))
 
 
+def scriv_version_problems(scriv_version: str | None) -> list[str]:
+    """List the problems of the ``version`` setting of ``[tool.scriv]``.
+
+    Parameters
+    ----------
+    scriv_version: str | None
+        The ``version`` setting of ``[tool.scriv]``, or ``None`` if it is not set.
+
+    Returns
+    -------
+    list[str]
+        One message for each problem.
+
+    """
+    if scriv_version == SCRIV_VERSION:
+        return []
+    return [
+        (
+            f'[tool.scriv] version must be "{SCRIV_VERSION}": scriv names a release with this setting, and the release '
+            "workflow raises only project.version"
+        ),
+    ]
+
+
 def main() -> int:
     """Report every problem of the changelog.
 
@@ -292,7 +319,7 @@ def main() -> int:
         pyproject["project"]["version"],
         read_fragments(ROOT / scriv["fragment_directory"]),
         scriv["categories"],
-    )
+    ) + scriv_version_problems(scriv.get("version"))
     for problem in problems:
         sys.stderr.write(f"{problem}\n")
     return 1 if problems else 0
