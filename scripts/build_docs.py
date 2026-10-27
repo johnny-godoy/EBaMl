@@ -39,7 +39,11 @@ import typst
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
-NOTEBOOKS: tuple[Path, ...] = (ROOT / "notebooks" / "titanic.py", ROOT / "notebooks" / "local_explanations.py")
+NOTEBOOKS: tuple[Path, ...] = (
+    ROOT / "notebooks" / "titanic.py",
+    ROOT / "notebooks" / "local_explanations.py",
+    ROOT / "notebooks" / "model_providers.py",
+)
 EXPORT_DIR = ROOT / "docs" / "notebooks"
 # the notebooks run the package, so a change to any module makes the output stale
 PACKAGE: tuple[Path, ...] = tuple(sorted((ROOT / "src" / "ebaml").rglob("*.py")))
