@@ -27,6 +27,7 @@ def _run(
     graph: str,
     rebuild: Callable[[int], str],
     estimate: Callable[[str], int] = len,
+    on_truncated: Callable[[CutOffError], None] = lambda _error: None,
 ) -> str:
     return retry.call_with_shrinking_graph(
         call,
@@ -35,6 +36,7 @@ def _run(
         is_truncated=_is_cut_off,
         estimate_tokens=estimate,
         rebuild=rebuild,
+        on_truncated=on_truncated,
         label="f0",
     )
 
@@ -100,6 +102,31 @@ def test_stops_after_four_retries_and_logs_each() -> None:
     assert [(log["event"], log["feature"], log["retry"], log["log_level"]) for log in logs] == [
         ("truncated_reply", "f0", retry_number, "warning") for retry_number in (1, 2, 3, 4)
     ]
+
+
+def test_reports_every_truncated_attempt_even_the_last_one() -> None:
+    # regression: the cut-off attempts were not reported, so the caller counted only the attempt that succeeded
+    seen: list[CutOffError] = []
+
+    def call(_graph: str) -> str:
+        msg = "cut"
+        raise CutOffError(msg)
+
+    with pytest.raises(CutOffError):
+        _run(call, "g0", lambda _budget: "g", on_truncated=seen.append)
+    assert len(seen) == 5  # the first call and the four retries
+
+
+def test_does_not_report_an_error_that_is_not_a_truncation() -> None:
+    seen: list[CutOffError] = []
+
+    def call(_graph: str) -> str:
+        msg = "refused"
+        raise CutOffError(msg)
+
+    with pytest.raises(CutOffError):
+        _run(call, "g0", lambda _budget: "g", on_truncated=seen.append)
+    assert seen == []
 
 
 def test_raises_an_error_that_is_not_a_truncation_at_once() -> None:

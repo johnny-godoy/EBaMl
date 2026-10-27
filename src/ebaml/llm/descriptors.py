@@ -180,8 +180,11 @@ def _is_truncated(error: BamlError) -> bool:
     return error.class_name == "ai.errors.FinishReasonError" and getattr(value, "finish_reason", None) == "MaxTokens"
 
 
-def _log_usage(what: str, counted: baml_sdk.Counted) -> str:
+def _log_usage(what: str, counted: baml_sdk.Counted, *, truncated_attempts: int) -> str:
     """Log the token usage reported by the LLM provider and return the text.
+
+    The usage leaves out the attempts that were cut off by ``max_tokens``, because the provider error carries no token
+    count. ``truncated_attempts`` tells how many attempts the usage leaves out, so the usage is a lower bound.
 
     Parameters
     ----------
@@ -189,6 +192,8 @@ def _log_usage(what: str, counted: baml_sdk.Counted) -> str:
         A label identifying the call in the log message.
     counted: baml_sdk.Counted
         The LLM reply together with its token usage.
+    truncated_attempts: int
+        The number of attempts that were cut off, and that the usage does not count.
 
     Returns
     -------
@@ -197,8 +202,22 @@ def _log_usage(what: str, counted: baml_sdk.Counted) -> str:
 
     """
     usage = counted.usage
-    logger.info("usage", what=what, input_tokens=usage.input_tokens, output_tokens=usage.output_tokens)
+    logger.info(
+        "usage",
+        what=what,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        truncated_attempts=truncated_attempts,
+    )
     return counted.text
+
+
+@attrs.frozen
+class _Described:
+    """The description of one graph, with its token usage and the number of attempts that were cut off."""
+
+    counted: baml_sdk.Counted
+    truncated_attempts: int
 
 
 def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- the retry needs the EBM, the feature, the first text, and the two option sets
@@ -209,7 +228,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     graph_options: GraphOptions,
     prompt: PromptOptions,
     model: baml_sdk.ModelSpec | None,
-) -> baml_sdk.Counted:
+) -> _Described:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
     A failure that the user can fix raises an ``LLMRequestError`` (see ``ebaml.llm.provider_errors``). Any other failure
@@ -235,13 +254,15 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 
     Returns
     -------
-    baml_sdk.Counted
-        The description with its token usage.
+    _Described
+        The description with its token usage, and the number of attempts that were cut off. The usage counts the
+        attempt that succeeded only.
 
     """
     opts = _prompt_options(prompt)
+    truncated: list[BamlError] = []
     with provider_errors():
-        return call_with_shrinking_graph(
+        counted = call_with_shrinking_graph(
             lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
             graph,
             error_type=BamlError,
@@ -252,8 +273,10 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
                 feature_index,
                 attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
             ),
+            on_truncated=truncated.append,
             label=ebm.feature_names_in_[feature_index],
         )
+    return _Described(counted, len(truncated))
 
 
 def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the feature, the length, and three keyword-only option arguments
@@ -267,7 +290,9 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 ) -> str:
     """Ask the LLM to describe a graph. Uses chain-of-thought reasoning.
 
-    A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times.
+    A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times. The logged usage leaves out the
+    cut-off attempts, because the provider error carries no token count. It is a lower bound, and the ``usage`` log
+    event has the number of those attempts in ``truncated_attempts``.
 
     Parameters
     ----------
@@ -292,8 +317,20 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 
     """
     graph_text = _graph_text(ebm, feature_index, graph)
-    counted = _describe_graph_counted(ebm, feature_index, graph_text, num_sentences, graph, prompt, _model_spec(model))
-    return _log_usage(f"describe_graph({ebm.feature_names_in_[feature_index]})", counted)
+    described = _describe_graph_counted(
+        ebm,
+        feature_index,
+        graph_text,
+        num_sentences,
+        graph,
+        prompt,
+        _model_spec(model),
+    )
+    return _log_usage(
+        f"describe_graph({ebm.feature_names_in_[feature_index]})",
+        described.counted,
+        truncated_attempts=described.truncated_attempts,
+    )
 
 
 def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and three keyword-only option arguments
@@ -309,7 +346,8 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
-    descriptions.
+    descriptions. The logged usage leaves out the cut-off attempts, because the provider error carries no token count.
+    It is a lower bound, and the ``usage`` log event has the number of those attempts in ``truncated_attempts``.
 
     Parameters
     ----------
@@ -356,7 +394,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
             ),
         )
     graph_descriptions = "\n\n".join(
-        f"{name}: {item.text}"
+        f"{name}: {item.counted.text}"
         for name, item in zip(
             feature_names,
             described,
@@ -372,10 +410,14 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
             model=model_spec,
         )
     usage = baml_sdk.TokenUsage(
-        input_tokens=summary.usage.input_tokens + sum(item.usage.input_tokens for item in described),
-        output_tokens=summary.usage.output_tokens + sum(item.usage.output_tokens for item in described),
+        input_tokens=summary.usage.input_tokens + sum(item.counted.usage.input_tokens for item in described),
+        output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),
     )
-    return _log_usage("describe_ebm", baml_sdk.Counted(text=summary.text, usage=usage))
+    return _log_usage(
+        "describe_ebm",
+        baml_sdk.Counted(text=summary.text, usage=usage),
+        truncated_attempts=sum(item.truncated_attempts for item in described),
+    )
 
 
 @attrs.frozen

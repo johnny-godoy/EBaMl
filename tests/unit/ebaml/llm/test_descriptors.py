@@ -133,8 +133,10 @@ def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_log_usage(counted: baml_sdk.Counted) -> None:
     with capture_logs() as logs:
-        assert descriptors._log_usage("what", counted) == "answer"
-    assert [(log["what"], log["input_tokens"], log["output_tokens"]) for log in logs] == [("what", 3, 5)]
+        assert descriptors._log_usage("what", counted, truncated_attempts=2) == "answer"
+    assert [(log["what"], log["input_tokens"], log["output_tokens"], log["truncated_attempts"]) for log in logs] == [
+        ("what", 3, 5, 2),
+    ]
 
 
 def test_describe_graph(
@@ -354,6 +356,27 @@ def test_describe_graph_simplifies_after_truncated_reply(
     assert texts == [GraphOptions(), GraphOptions(max_tokens=225, overbudget_percent=0)]
 
 
+def test_describe_graph_logs_the_truncated_attempts_with_the_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    # regression: the usage showed the last attempt only, with no sign that cut-off attempts were left out
+    replies = [_finish_error("MaxTokens"), _finish_error("MaxTokens"), counted]
+
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        reply = replies.pop(0)
+        if isinstance(reply, BamlError):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    with capture_logs() as logs:
+        descriptors.describe_graph(fake_ebm, 0)
+    assert [log["truncated_attempts"] for log in logs if log["event"] == "usage"] == [2]
+
+
 def test_describe_graph_does_not_retry_other_errors(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
@@ -467,6 +490,32 @@ def test_describe_ebm_adds_the_usage_of_every_call(
     with capture_logs() as logs:
         descriptors.describe_ebm(fake_ebm)
     assert (logs[-1]["input_tokens"], logs[-1]["output_tokens"]) == (3 + 6 * 2, 5 + 7 * 2)
+
+
+def test_describe_ebm_adds_the_truncated_attempts_of_every_graph(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    # each of the two graphs is cut off once, and a third attempt succeeds
+    failures = {"g0": 1, "g1": 1}
+
+    def cot(*, graph: str, **_kw: object) -> baml_sdk.Counted:
+        if failures[graph]:
+            failures[graph] -= 1
+            reason = "MaxTokens"
+            raise _finish_error(reason)
+        return counted
+
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+        return f"g{idx}"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    with capture_logs() as logs:
+        descriptors.describe_ebm(fake_ebm)
+    assert [log["truncated_attempts"] for log in logs if log["event"] == "usage"] == [2]
 
 
 def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
