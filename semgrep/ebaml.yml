@@ -119,6 +119,18 @@ rules:
     paths:
       include: ["/tests/"]
 
+  - id: ebaml-asdict-recurse-false
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Pass the fields of an attrs class on with `attrs.asdict(x, recurse=False)`. Without `recurse=False`, a field that
+      holds an attrs class becomes a dict, and the `**` call no longer fits. See .claude/rules/types.md.
+    patterns:
+      - pattern: $F(..., **attrs.asdict(...), ...)
+      - pattern-not: $F(..., **attrs.asdict(..., recurse=False, ...), ...)
+    paths:
+      include: ["/src/ebaml/"]
+
   - id: ebaml-return-attrs-not-container
     languages: [python]
     severity: ERROR

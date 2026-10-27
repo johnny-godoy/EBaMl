@@ -130,3 +130,10 @@ def returns_list(x) -> list[float]:
 # ok: ebaml-return-attrs-not-container
 def returns_suppressed(x) -> dict[str, float]:  # nosemgrep: ebaml-return-attrs-not-container -- test of the opt-out
     return {"a": x}
+
+
+# ruleid: ebaml-asdict-recurse-false
+copy_nested = Fields(**attrs.asdict(fields))
+
+# ok: ebaml-asdict-recurse-false
+copy_flat = Fields(**attrs.asdict(fields, recurse=False))
