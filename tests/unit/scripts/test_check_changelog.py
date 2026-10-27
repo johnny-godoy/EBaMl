@@ -111,9 +111,16 @@ def test_format_version_writes_the_three_numbers() -> None:
     assert check_changelog.format_version((1, 10, 0)) == "1.10.0"
 
 
-def write_project(root: Path, version: str, changelog: str, fragments: dict[str, str]) -> None:
+def write_project(
+    root: Path,
+    version: str,
+    changelog: str,
+    fragments: dict[str, str],
+    scriv_version: str = check_changelog.SCRIV_VERSION,
+) -> None:
     (root / "pyproject.toml").write_text(
         f'[project]\nversion = "{version}"\n\n[tool.scriv]\nfragment_directory = "changelog.d"\n'
+        f'version = "{scriv_version}"\n'
         f"categories = {list(CATEGORIES)!r}\n".replace("'", '"'),
     )
     (root / "CHANGELOG.md").write_text(changelog)
@@ -137,3 +144,18 @@ def test_main_passes_for_a_consistent_project(tmp_path: Path, monkeypatch: pytes
     write_project(tmp_path, "0.0.3", RELEASED, {"a.md": FRAGMENT})
     monkeypatch.setattr(check_changelog, "ROOT", tmp_path)
     assert check_changelog.main() == 0
+
+
+def test_a_hardcoded_scriv_version_fails_because_the_release_never_raises_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    write_project(tmp_path, "0.0.3", RELEASED, {"a.md": FRAGMENT}, scriv_version="0.0.3")
+    monkeypatch.setattr(check_changelog, "ROOT", tmp_path)
+    assert check_changelog.main() == 1
+    assert "[tool.scriv] version must be" in capsys.readouterr().err
+
+
+def test_a_scriv_version_that_is_not_set_fails() -> None:
+    assert len(check_changelog.scriv_version_problems(None)) == 1
