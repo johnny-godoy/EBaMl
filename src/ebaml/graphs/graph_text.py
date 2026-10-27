@@ -19,7 +19,7 @@ _UPPER_LINE = re.compile(r"^[ \t]*Upper Bounds \(\d+(?:\.\d+)?%-Confidence Inter
 
 
 def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: Iterable[float | str]) -> str:
-    """Convert a sequence of x_vals and y_vals to a json string.
+    r"""Convert a sequence of x_vals and y_vals to a json string.
 
     Parameters
     ----------
@@ -31,16 +31,19 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
     Returns
     -------
     str
-        A json string representation of the x and y values.
+        A json string representation of the x and y values. The keys are escaped as JSON strings. The y values are
+        written as they are, to keep their exact digits.
 
     Examples
     --------
     >>> xy_to_json([("0.0", "1.5"), "red"], ["0.25", "-1.0"])
     '{"(0.0, 1.5)": 0.25, "red": -1.0}'
+    >>> print(xy_to_json(['Master "B"'], ["0.5"]))
+    {"Master \"B\"": 0.5}
 
     """
     keys = [f"({x[0]}, {x[1]})" if isinstance(x, tuple) else x for x in x_vals]
-    return "{" + ", ".join(f'"{key}": {y}' for key, y in zip(keys, y_vals, strict=True)) + "}"
+    return "{" + ", ".join(f"{orjson.dumps(key).decode()}: {y}" for key, y in zip(keys, y_vals, strict=True)) + "}"
 
 
 # nosemgrep: ebaml-return-attrs-not-container -- an interval is a homogeneous pair, like EBMGraph.x_vals

@@ -1,5 +1,6 @@
 """Tests for the textual representation of graphs."""
 
+import orjson
 import pytest
 
 from ebaml.core.exceptions import GraphTextError
@@ -39,3 +40,10 @@ def test_xy_to_jsonlength_mismatch(x_vals: list[str] | list[tuple[float, float]]
 def test_parse_str_tuple_to_float_tuple_rejects_a_text_that_is_not_two_numbers(text: str) -> None:
     with pytest.raises(GraphTextError, match="not an interval of two numbers"):
         parse_str_tuple_to_float_tuple(text)
+
+
+def test_xy_to_json_escapes_quotes_and_backslashes_in_keys() -> None:
+    # regression: a key with a quote or a backslash made the line invalid JSON
+    keys = ['Master "B"', "a\\b"]
+    text = xy_to_json(keys, ["0.1", "0.2"])
+    assert list(orjson.loads(text)) == keys

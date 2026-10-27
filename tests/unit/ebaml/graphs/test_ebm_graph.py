@@ -547,6 +547,16 @@ def test_from_text_inverts_to_text(confidence_level: float) -> None:
     assert parsed.stds == pytest.approx(graph.stds, abs=1e-5)
 
 
+def test_to_text_writes_valid_json_for_category_names_with_quotes_and_backslashes() -> None:
+    # regression: the Means and bounds lines were invalid JSON, so the LLM got malformed input
+    names = ['Master "B"', "a\\b"]
+    graph = EBMGraph("degree", "nominal", names, [0.5, -0.25], [0.1, 0.2])
+    lines = graph.to_text(y_axis_precision=6).splitlines()
+    json_lines = [line.split(": ", 1)[1] for line in lines if line.startswith(("Means", "Lower", "Upper"))]
+    assert len(json_lines) == 3
+    assert all(list(orjson.loads(line)) == names for line in json_lines)
+
+
 def test_from_text_reads_a_graph_inside_a_prompt() -> None:
     graph_text = round_trip_graph().to_text(y_axis_precision=6)
     indented = "\n".join(f"    {line}" for line in graph_text.splitlines())
