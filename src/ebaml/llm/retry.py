@@ -25,6 +25,7 @@ def call_with_shrinking_graph[R, E: Exception](  # ruff: ignore[too-many-argumen
     is_truncated: Callable[[E], bool],
     estimate_tokens: Callable[[str], int],
     rebuild: Callable[[int], str],
+    on_truncated: Callable[[E], None],
     label: str,
 ) -> R:
     """Call the LLM with a graph text. If the reply is cut off, ask again with a smaller graph, up to 4 times.
@@ -47,6 +48,9 @@ def call_with_shrinking_graph[R, E: Exception](  # ruff: ignore[too-many-argumen
     rebuild: Callable[[int], str]
         Returns the graph text again for a token budget. It raises ``EBMGraphSimplificationError`` or
         ``EBMGraphTokenLimitError`` when the graph cannot fit.
+    on_truncated: Callable[[E], None]
+        Called with the error of each attempt that was cut off, the last one included, before the retry or the raise.
+        The caller counts the attempts with it, because the error carries no token usage.
     label: str
         The name of the feature, for the log.
 
@@ -61,7 +65,10 @@ def call_with_shrinking_graph[R, E: Exception](  # ruff: ignore[too-many-argumen
         try:
             return call(graph)
         except error_type as error:
-            if not is_truncated(error) or not retries_left:
+            if not is_truncated(error):
+                raise
+            on_truncated(error)
+            if not retries_left:
                 raise
             retries_left -= 1
             # like TalkToEBM, answer a rejected prompt by simplifying the graph further and asking again
