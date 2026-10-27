@@ -448,7 +448,7 @@ def test_to_text_tries_every_simplification_level() -> None:
     calls: list[dict[str, Any]] = []
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
         cont_graph().to_text(check_budget=fake_sdk("check_token_budget", appending(calls, budget("over", 5))))
-    assert len(calls) == 102  # 0.0%, 0.1%, ..., 10.0% and one step beyond
+    assert len(calls) == 101  # 0.0%, 0.1%, ..., 10.0%
 
 
 @pytest.mark.parametrize(
@@ -514,7 +514,22 @@ def test_to_text_simplification_levels_grow_by_a_tenth_of_a_percent(monkeypatch:
     monkeypatch.setattr(EBMGraph, "simplify", spy)
     with pytest.raises(EBMGraphSimplificationError):
         cont_graph().to_text(check_budget=checker("over"))
-    assert levels == pytest.approx([step * 0.001 for step in range(102)])
+    assert levels == pytest.approx([step * 0.001 for step in range(101)])
+
+
+def test_to_text_stops_the_simplification_at_ten_per_cent(monkeypatch: pytest.MonkeyPatch) -> None:
+    # regression: level 10.1% was tried before the error, above the documented cap of 10%
+    levels = []
+    simplify = EBMGraph.simplify
+
+    def spy(self: EBMGraph, min_variation_per_cent: float = 0.0) -> EBMGraph:
+        levels.append(min_variation_per_cent)
+        return simplify(self, min_variation_per_cent)
+
+    monkeypatch.setattr(EBMGraph, "simplify", spy)
+    with pytest.raises(EBMGraphSimplificationError, match="10%"):
+        cont_graph().to_text(check_budget=checker("over"))
+    assert max(levels) == pytest.approx(0.1)
 
 
 def round_trip_graph() -> EBMGraph:
