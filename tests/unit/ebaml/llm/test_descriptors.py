@@ -530,6 +530,42 @@ def test_describe_ebm_adds_the_truncated_attempts_of_every_graph(
     assert [log["truncated_attempts"] for log in logs if log["event"] == "usage"] == [2]
 
 
+def test_describe_ebm_builds_the_prompt_options_once(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    # the two graphs and the summary share one set of prompt options, so BAML builds the defaults once
+    defaults: list[dict[str, Any]] = []
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(
+        baml_sdk,
+        "default_graph_options",
+        fake_sdk("default_graph_options", appending(defaults, baml_sdk.GraphPromptOptions(**DEFAULTS))),
+    )
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    descriptors.describe_ebm(fake_ebm)
+    assert len(defaults) == 1
+
+
+def test_describe_graph_builds_the_prompt_options_once(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    defaults: list[dict[str, Any]] = []
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(
+        baml_sdk,
+        "default_graph_options",
+        fake_sdk("default_graph_options", appending(defaults, baml_sdk.GraphPromptOptions(**DEFAULTS))),
+    )
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    descriptors.describe_graph(fake_ebm, 0)
+    assert len(defaults) == 1
+
+
 def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,

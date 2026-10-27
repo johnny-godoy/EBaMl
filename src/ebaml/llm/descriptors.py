@@ -227,7 +227,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     graph: str,
     num_sentences: int,
     graph_options: GraphOptions,
-    prompt: PromptOptions,
+    opts: baml_sdk.GraphPromptOptions,
     model: baml_sdk.ModelSpec | None,
 ) -> _Described:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
@@ -248,8 +248,8 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
         The desired number of sentences for the description.
     graph_options: GraphOptions
         The options of the graph text. A retry changes ``max_tokens`` and ``overbudget_percent``.
-    prompt: PromptOptions
-        The descriptions that the prompt uses.
+    opts: baml_sdk.GraphPromptOptions
+        The prompt options, as made by ``_prompt_options``.
     model: baml_sdk.ModelSpec | None
         The model of the requests, as made by ``_model_spec``. ``None`` selects the default clients.
 
@@ -260,7 +260,6 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
         attempt that succeeded only.
 
     """
-    opts = _prompt_options(prompt)
     truncated: list[BamlError] = []
     with provider_errors():
         counted = call_with_shrinking_graph(
@@ -318,14 +317,15 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 
     """
     graph_text = _graph_text(ebm, feature_index, graph)
+    model_spec = _model_spec(model)
     described = _describe_graph_counted(
         ebm,
         feature_index,
         graph_text,
         num_sentences,
         graph,
-        prompt,
-        _model_spec(model),
+        _prompt_options(prompt),
+        model_spec,
     )
     return _log_usage(
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
@@ -378,6 +378,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     feature_names = list(ebm.feature_names_in_)
     graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]
     model_spec = _model_spec(model)
+    opts = _prompt_options(prompt)
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
         described = list(
@@ -387,7 +388,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
                     ebm,
                     num_sentences=_GRAPH_SENTENCES,
                     graph_options=graph,
-                    prompt=prompt,
+                    opts=opts,
                     model=model_spec,
                 ),
                 range(len(graph_texts)),
@@ -407,7 +408,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
             feature_importances=feature_importances,
             graph_descriptions=graph_descriptions,
             num_sentences=num_sentences,
-            opts=_prompt_options(prompt),
+            opts=opts,
             model=model_spec,
         )
     usage = baml_sdk.TokenUsage(
