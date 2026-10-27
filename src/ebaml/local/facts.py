@@ -481,7 +481,7 @@ def _completions(
     for k in range(min(options.max_steps, len(order)) + 1):
         known = {f.name for f in order[:k]}
         logit = intercept + sum(current[n] if n in known else sampled[n] for n in current)
-        steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean(sign * logit > 0))))
+        steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean((logit > 0) == (sign == 1)))))
     return steps
 
 
