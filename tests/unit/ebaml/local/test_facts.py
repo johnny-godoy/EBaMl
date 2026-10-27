@@ -461,7 +461,7 @@ def _completion_shares(cur: float, sampled: float, *, intercept: float = 0.0, si
         (0.5, -0.5, -1, [1.0, 0.0]),
         (-0.5, 0.5, 1, [1.0, 0.0]),
         (0.0, 0.0, 1, [0.0, 0.0]),
-        (0.0, 0.0, -1, [0.0, 0.0]),
+        (0.0, 0.0, -1, [1.0, 1.0]),  # regression: a logit of 0 is the negative class, so it matches sign -1
     ],
 )
 def test_completions_share_the_samples_with_the_same_sign(
