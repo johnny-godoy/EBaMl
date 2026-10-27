@@ -200,6 +200,24 @@ def test_to_text_no_description_no_bounds_explicit_precisions() -> None:
     assert text == 'Feature Name: age\nFeature Type: continuous\nMeans: {"(0.0, 2.0)": 1.0, "(2.0, 3.0)": 5.0}\n'
 
 
+def test_to_text_x_axis_precision_keeps_category_names() -> None:
+    # regression: x_axis_precision unpacked every x value as an interval, so a category name raised ValueError
+    text = cat_graph().to_text(x_axis_precision=2, confidence_bounds=False, include_description=False)
+    assert text == 'Feature Name: color\nFeature Type: categorical\nMeans: {"red": 1.0, "blue": 3.0}\n'
+
+
+def test_to_body_text_x_axis_precision_rounds_the_intervals_of_a_mixed_sequence() -> None:
+    graph = EBMGraph("mixed", "continuous", [(0.123456, 1.0), "other"], [1.0, 2.0], [0.1, 0.1])  # pyrefly: ignore[bad-argument-type] -- a mixed sequence is the case under test
+    text = graph.to_body_text(
+        feature_format=FeatureType.CATEGORICAL,
+        x_axis_precision=2,
+        y_axis_precision=1,
+        confidence_bounds=False,
+        confidence_level=0.95,
+    )
+    assert 'Means: {"(0.12, 1.0)": 1.0, "other": 2.0}' in text
+
+
 def test_to_text_y_precision_large_variation_skips_auto_loop() -> None:
     text = cont_graph(scores=(0.0, 0.0, 500.0)).to_text(y_axis_precision="auto", confidence_bounds=False)
     assert '"(2.0, 3.0)": 500.0' in text

@@ -384,13 +384,16 @@ class EBMGraph:
         # (it can impact the accuracy). however, this is a necessary formatting feature because certain (old?)
         # versions of EBMs introduce trailing digits for the xbins (e.g. age as a floating point number with 10
         # significant digits)
+        # only an interval has ends to round: a category name stays as it is
         if x_axis_precision is not None:
             x_vals = [
                 (
-                    np.round(float(low), x_axis_precision).astype(str),
-                    np.round(float(high), x_axis_precision).astype(str),
+                    np.round(float(x[0]), x_axis_precision).astype(str),
+                    np.round(float(x[1]), x_axis_precision).astype(str),
                 )
-                for low, high in x_vals
+                if isinstance(x, tuple)
+                else x
+                for x in x_vals
             ]
         # formatting for boolean features
         match feature_format:
