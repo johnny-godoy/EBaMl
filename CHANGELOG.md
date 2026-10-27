@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.1.1'></a>
+## [0.1.1] - 2026-10-27
+
+### Fixed
+
+- `GraphOptions(x_axis_precision=...)` no longer fails on categorical features. The precision rounds interval ends only, and category names stay as they are.
+
+- The graph text escapes the keys as JSON. A category name with a quote or a backslash gave the LLM invalid JSON.
+
+- The simplification of a large graph stops at 10%. It tried 10.1% before it raised the error.
+
+- The completion share of a local explanation counts a completion at a logit of exactly 0 as the negative class. The share was too low for a negative prediction.
+
+- The `usage` log event of `describe_graph` and `describe_ebm` has `truncated_attempts`, the number of attempts that `max_tokens` cut off. The token usage leaves out those attempts, because the provider error carries no count, so it is a lower bound.
+
 <a id='changelog-0.1.0'></a>
 ## [0.1.0] - 2026-10-26
 
