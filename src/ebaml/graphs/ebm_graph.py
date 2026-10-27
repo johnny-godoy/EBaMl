@@ -533,7 +533,7 @@ class EBMGraph:
                             f" exceeds the token budget of {max_tokens}."
                         )
                         raise EBMGraphTokenLimitError(msg)
-                    if simplification_step > _MAX_SIMPLIFICATION_STEPS:
+                    if simplification_step >= _MAX_SIMPLIFICATION_STEPS:
                         msg = (
                             f"The graph for feature {self.feature_name} of type"
                             f" {self.feature_type} is estimated at {budget.estimated_tokens} tokens even at"
