@@ -50,8 +50,9 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
         str: Textual representation of the feature importances.
 
     """
+    importances = ebm.term_importances()
     return "\n".join(
-        f"{feature_name}: {ebm.term_importances()[feature_idx]:.2f}"
+        f"{feature_name}: {importances[feature_idx]:.2f}"
         for feature_idx, feature_name in enumerate(ebm.feature_names_in_)
     )
 

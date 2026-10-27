@@ -253,6 +253,18 @@ def test_feature_importances_to_text() -> None:
     assert descriptors._feature_importances_to_text(ebm) == "a: 1.23\nb: 0.50"
 
 
+def test_feature_importances_to_text_computes_the_importances_once() -> None:
+    calls = []
+
+    def term_importances() -> list[float]:
+        calls.append(1)
+        return [1.0, 2.0, 3.0]
+
+    ebm = fake_model(feature_names_in_=["a", "b", "c"], term_importances=term_importances)
+    descriptors._feature_importances_to_text(ebm)
+    assert len(calls) == 1
+
+
 def _facts() -> local.LocalFacts:
     prediction = local.Prediction(label=1, probability=0.8, lower=0.7, upper=0.9, logit=1.4, logit_std=0.2)
     return local.LocalFacts(prediction, [], None, None, [], 0.95)
