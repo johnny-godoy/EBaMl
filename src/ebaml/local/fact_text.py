@@ -117,9 +117,10 @@ class _LaypersonRenderer(_AudienceRenderer):
         contribution: Contribution,
         prediction: Prediction,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        # a score points towards the prediction if it has the sign of the logit; a logit of 0 is the negative class
+        # a score points towards the prediction if it has the sign of the score of the prediction (the logit); a logit
+        # of 0 is the negative class
         direction = (
-            "towards" if (contribution.score if prediction.logit > 0 else -contribution.score) > 0 else "against"
+            "towards" if (contribution.score if prediction.score > 0 else -contribution.score) > 0 else "against"
         )
         return {"effect": f"{_strength(contribution.score)} {direction} this prediction"}
 
@@ -129,7 +130,7 @@ class _LaypersonRenderer(_AudienceRenderer):
         prediction: Prediction,
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {"likelihood": _likelihood(prediction.probability)}
+        return {"likelihood": _likelihood(prediction.output)}
 
     @override
     def change(
@@ -146,7 +147,7 @@ class _LaypersonRenderer(_AudienceRenderer):
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             "flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0,
-            "likelihood_of_new_prediction": _likelihood(counterfactual.new_probability),
+            "likelihood_of_new_prediction": _likelihood(counterfactual.new_output),
         }
 
     @override
@@ -179,10 +180,10 @@ class _DataScientistRenderer(_AudienceRenderer):
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
-            "probability": _round(prediction.probability),
+            "probability": _round(prediction.output),
             "confidence_interval": [_round(prediction.lower), _round(prediction.upper)],
             "confidence_level": confidence_level,
-            "logit": _round(prediction.logit),
+            "logit": _round(prediction.score),
         }
 
     @override
@@ -200,7 +201,7 @@ class _DataScientistRenderer(_AudienceRenderer):
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             "flip_holds_at_confidence": confidence_level,
-            "probability_of_new_prediction": _round(counterfactual.new_probability),
+            "probability_of_new_prediction": _round(counterfactual.new_output),
         }
 
     @override
@@ -242,7 +243,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
     """
     renderer = _RENDERERS[audience]
     p = facts.prediction
-    prediction: dict[str, JSONValue] = {"predicted_class": p.label}
+    prediction: dict[str, JSONValue] = {"predicted_class": p.decision}
     prediction["contributions_largest_first"] = [
         {"feature": c.feature, "value": c.value} | renderer.contribution(c, p) for c in facts.contributions
     ]

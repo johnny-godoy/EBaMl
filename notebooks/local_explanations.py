@@ -199,7 +199,7 @@ def _(attrs, facts, mo) -> None:
         mo.md(f"""
     ### Prediction and contributions
 
-    The model predicts class **{prediction.label}** with probability **{prediction.probability:.2f}**, and a
+    The model predicts class **{prediction.decision}** with probability **{prediction.output:.2f}**, and a
     {facts.confidence_level:.0%} confidence interval of **[{prediction.lower:.2f}, {prediction.upper:.2f}]**. The
     interval comes from adding the variances of the effects of the features, which assumes they are independent.
 
@@ -225,7 +225,7 @@ def _(attrs, facts, mo) -> None:
             ### Counterfactual (minimum change required)
 
             **{len(counterfactual.changes)}** change(s) are enough to flip the prediction, and **no smaller set of
-            changes does**. After them the other class has probability **{counterfactual.new_probability:.2f}**.
+            changes does**. After them the other class has probability **{counterfactual.new_output:.2f}**.
             """),
             mo.ui.table([attrs.asdict(c) for c in counterfactual.changes], selection=None),
         ])
@@ -282,7 +282,7 @@ def _(mo) -> None:
 @app.cell
 def _(LocalOptions, compute_local_facts, complete, ebm, instance, mo, np):
     strict = compute_local_facts(ebm, instance, LocalOptions(confidence_level=0, min_support=0))
-    original = strict.prediction.label
+    original = strict.prediction.decision
     if strict.sufficient_reason is None:
         check_view = mo.md("No sufficient reason to check.")
     else:
@@ -296,7 +296,7 @@ def _(LocalOptions, compute_local_facts, complete, ebm, instance, mo, np):
                 name: value if name in strict.sufficient_reason.features else check_other[name]
                 for name, value in instance.items()
             }
-            check_same += int(compute_local_facts(ebm, check_mixed).prediction.label == original)
+            check_same += int(compute_local_facts(ebm, check_mixed).prediction.decision == original)
         check_view = mo.md(
             f"With **{', '.join(strict.sufficient_reason.features)}** fixed, **{check_same}** of "
             f"**{check_trials}** random completions kept the prediction ({original}). It should be all of them.",

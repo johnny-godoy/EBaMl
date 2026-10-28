@@ -99,14 +99,33 @@ class LocalOptions:
 
 @attrs.frozen
 class Prediction:
-    """The prediction to explain, with the confidence interval of its probability."""
+    """The prediction to explain, with the confidence interval of its output.
 
-    label: ClassLabel
-    probability: float
+    The fields fit every model kind. ``docs/local-explanations-proof.md`` defines them for each kind.
+
+    Attributes
+    ----------
+    decision: ClassLabel
+        What the explanations keep or change: the predicted class of a classifier.
+    output: float
+        The output of the model for the decision: the probability of the predicted class.
+    lower: float
+        The lower end of the confidence interval of ``output``.
+    upper: float
+        The upper end of the confidence interval of ``output``.
+    score: float
+        The sum of the intercept and the scores, on the scale of the link: the log-odds of the second class.
+    score_std: float
+        The standard deviation of ``score``.
+
+    """
+
+    decision: ClassLabel
+    output: float
     lower: float
     upper: float
-    logit: float
-    logit_std: float
+    score: float
+    score_std: float
 
 
 @attrs.frozen
@@ -131,18 +150,43 @@ class Change:
 
 @attrs.frozen
 class Counterfactual:
-    """The smallest set of changes that flips the prediction at the requested confidence."""
+    """The smallest set of changes after which the decision does not hold, at the requested confidence.
+
+    Attributes
+    ----------
+    changes: list[Change]
+        The changes.
+    new_decision: ClassLabel
+        The decision after the changes: the other class of a binary classifier.
+    new_output: float
+        The output of the model for the new decision: the probability of the other class.
+
+    """
 
     changes: list[Change]
-    new_probability: float  # probability of the class the prediction flips to
+    new_decision: ClassLabel
+    new_output: float
 
 
 @attrs.frozen
 class SufficientReason:
-    """A smallest set of inputs that fixes the prediction whatever the other inputs are."""
+    """A set of inputs that fixes the decision whatever the other inputs are.
+
+    Attributes
+    ----------
+    features: list[str]
+        The inputs.
+    guaranteed_margin: float
+        The worst case of the margin of the decision when these inputs keep their values.
+    minimum: bool
+        True if no smaller set fixes the decision. False if the set is only minimal: no input of the set can be
+        removed. The set of a binary classifier is always the minimum.
+
+    """
 
     features: list[str]
     guaranteed_margin: float
+    minimum: bool
 
 
 @attrs.frozen
@@ -348,7 +392,14 @@ def _robust_scores(
     return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
 
 
-def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z: float) -> Counterfactual | None:
+def _counterfactual(
+    features: Sequence[_Feature],
+    intercept: float,
+    sign: int,
+    z: float,
+    *,
+    new_decision: ClassLabel,
+) -> Counterfactual | None:
     """Minimum change required: the features with the largest possible drop in favour of the outcome, until it flips.
 
     Parameters
@@ -361,6 +412,8 @@ def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z
         ``1`` if the outcome is the positive class, ``-1`` otherwise.
     z : float
         Standard deviations to move the scores by.
+    new_decision : ClassLabel
+        The class that the prediction flips to.
 
     Returns
     -------
@@ -388,7 +441,8 @@ def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z
             Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current)
             for _, best, f in changes
         ],
-        new_probability=_sigmoid(-sign * new_logit),  # the class that the prediction flips to is the opposite one
+        new_decision=new_decision,
+        new_output=_sigmoid(-sign * new_logit),  # the class that the prediction flips to is the opposite one
     )
 
 
@@ -456,6 +510,7 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     return SufficientReason(
         features=[step.feature.name for step in order[:count]],
         guaranteed_margin=float(margins[count]),
+        minimum=True,  # the greedy set of a binary classifier is the smallest, as the paper proves
     )
 
 
@@ -544,12 +599,12 @@ def compute_local_facts(
     # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
     lower, upper = sorted((_sigmoid(sign * (logit - z * logit_std)), _sigmoid(sign * (logit + z * logit_std))))
     prediction = Prediction(
-        label=ebm.classes_[int(logit > 0)].item(),
-        probability=_sigmoid(sign * logit),
+        decision=ebm.classes_[int(logit > 0)].item(),
+        output=_sigmoid(sign * logit),
         lower=lower,
         upper=upper,
-        logit=logit,
-        logit_std=logit_std,
+        score=logit,
+        score_std=logit_std,
     )
     order = [step.feature for step in _fixing_order(features, sign, z)]
     return LocalFacts(
@@ -559,7 +614,7 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_counterfactual(features, intercept, sign, z),
+        counterfactual=_counterfactual(features, intercept, sign, z, new_decision=ebm.classes_[int(logit <= 0)].item()),
         sufficient_reason=_sufficient_reason(features, intercept, sign, z),
         completions=_completions(features, order, intercept, sign, options),
         confidence_level=options.confidence_level,
