@@ -56,6 +56,8 @@ def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> Exp
         # the second resolution level is a decoy: only the first one describes the graph
         bins_=[[np.array([1.0, 2.0]), np.array([5.0, 6.0, 7.0, 8.0])]],
         feature_bounds_=[(0.0, 3.0)],
+        link_="logit",
+        classes_=np.array([0, 1]),
     )
 
 
@@ -67,6 +69,8 @@ def nominal_ebm() -> ExplainableBoostingClassifier:
         standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.0])],
         # unordered on purpose, with the decoy second resolution level
         bins_=[[{"pink": 4, "red": 1, "green": 3, "blue": 2}, {"x": 1}]],
+        link_="logit",
+        classes_=np.array([0, 1]),
     )
 
 
@@ -730,7 +734,7 @@ def test_from_text_rejects_a_line_that_is_not_json(label: str) -> None:
 
 
 def multiclass_fake(
-    scores: tuple[tuple[float, float, float], ...] = (
+    scores: tuple[tuple[float, ...], ...] = (
         (9.0, 9.0, 9.0),
         (1.0, 2.0, 3.0),
         (4.0, 4.0, 1.0),
@@ -745,6 +749,7 @@ def multiclass_fake(
         standard_deviations_=[np.full((len(scores), 3), 0.1)],
         bins_=[[np.array([1.0, 2.0])]],
         feature_bounds_=[(0.0, 3.0)],
+        link_="mlogit",
         classes_=np.array(["high", "low", "mid"]),
     )
 
@@ -944,3 +949,58 @@ def test_from_text_inverts_a_multiclass_text_within_the_rounding(
     assert (parsed.x_vals, parsed.classes) == (graph.x_vals, names)
     assert np.asarray(parsed.scores) == pytest.approx(np.asarray(graph.scores), rel=1e-12, abs=step / 2 * (1 + 1e-9))
     assert np.asarray(parsed.stds) == pytest.approx(np.asarray(graph.stds), rel=1e-6, abs=step)
+
+
+def test_from_ebm_rejects_one_string_as_the_classes() -> None:
+    # a string is a sequence of strings, so "high" selected the classes "h", "i", "g" and "h" one letter at a time
+    with pytest.raises(InvalidOptionError, match=r"classes='high' \(pass a list of class names\)"):
+        EBMGraph.from_ebm(multiclass_fake(), 0, classes="high")
+
+
+def test_from_ebm_reads_the_outputs_from_the_model_kind() -> None:
+    ebm = multiclass_fake()
+    ebm.link_ = "probit"
+    with pytest.raises(UnsupportedModelError, match="EBaMl reads the links"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+@pytest.mark.parametrize(
+    ("ebm", "shape", "outputs"),
+    [(multiclass_fake(((1.0, 2.0),) * 5), r"\(3, 2\)", 3), (continuous_ebm(), r"\(3,\)", 3)],
+    ids=["two columns for three classes", "one column for three classes"],
+)
+def test_from_ebm_rejects_scores_that_do_not_fit_the_outputs(
+    ebm: ExplainableBoostingClassifier,
+    shape: str,
+    outputs: int,
+) -> None:
+    ebm.link_, ebm.classes_ = "mlogit", np.array(["a", "b", "c"])
+    with pytest.raises(EBMGraphShapeError, match=rf"have the shape {shape}, but the model has {outputs} outputs"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+def test_from_ebm_rejects_columns_of_scores_for_a_model_with_one_output() -> None:
+    ebm = multiclass_fake()
+    ebm.link_, ebm.classes_ = "logit", np.array([0, 1])
+    with pytest.raises(EBMGraphShapeError, match=r"have the shape \(3, 3\), but the model has 1 outputs"):
+        EBMGraph.from_ebm(ebm, 0)
+
+
+@pytest.mark.parametrize(
+    ("scores", "classes", "shape"),
+    [
+        ([[0.0, 1.0, 2.0], [0.0, 1.0, 2.0]], ["a", "b"], r"\(2, 3\) for 2 classes"),
+        ([0.0, 1.0], ["a", "b"], r"\(2,\) for 2 classes"),
+        ([[0.0, 1.0], [0.0, 1.0]], [], r"\(2, 2\) for 0 classes"),
+    ],
+    ids=["a column too many", "no columns", "columns without classes"],
+)
+def test_to_text_rejects_scores_that_do_not_fit_the_classes(
+    scores: list[list[float]] | list[float],
+    classes: list[str],
+    shape: str,
+) -> None:
+    stds = np.zeros_like(np.asarray(scores)).tolist()
+    graph = EBMGraph("age", "continuous", [(0.0, 1.0), (1.0, 2.0)], scores, stds, classes)
+    with pytest.raises(EBMGraphShapeError, match=rf"has scores of shape {shape}"):
+        graph.to_text()
