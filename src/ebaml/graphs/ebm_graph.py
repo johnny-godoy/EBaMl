@@ -417,23 +417,28 @@ class EBMGraph:
         # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
         x_vals = [(float(low), float(high)) for low, high in self.x_vals]
         scores, stds = np.asarray(self.scores, dtype=float), np.asarray(self.stds, dtype=float)
-        total_variation = np.max(scores) - np.min(scores)
+        threshold = float(np.max(scores) - np.min(scores)) * min_variation_per_cent
+        # Python floats, one row per bin, because NumPy calls on single bins are slow in this loop
+        rows = scores.reshape(len(x_vals), -1).tolist()
         # the bins of each merged bin; a bin joins the last group if no score moved more than the threshold
         groups = [[0]]
         later_bins = range(1, len(x_vals))  # pragma: no mutate -- the first bin compared with itself changes nothing
         for idx in later_bins:
-            if np.max(np.abs(scores[groups[-1][0]] - scores[idx])) <= total_variation * min_variation_per_cent:
+            first = rows[groups[-1][0]]
+            if max(abs(a - b) for a, b in zip(first, rows[idx], strict=True)) <= threshold:
                 groups[-1].append(idx)
             else:
                 groups.append([idx])
+        # the groups are runs of neighbouring bins, so reduceat over the first bin of each group reduces each run
+        firsts = [group[0] for group in groups]
         return type(self)(
             self.feature_name,
             self.feature_type,
             [(x_vals[group[0]][0], x_vals[group[-1]][1]) for group in groups],
-            [scores[group[0]].tolist() for group in groups],
+            scores[firsts].tolist(),
             # the largest std of a merged bin, so the confidence bands of the simplified graph cover the original graph
             # as well as its confidence bands
-            [np.max(stds[group], axis=0).tolist() for group in groups],
+            np.maximum.reduceat(stds, firsts, axis=0).tolist(),
             self.classes,
         )
 
