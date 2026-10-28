@@ -164,8 +164,9 @@ rules:
     message: >-
       Name the type instead of `object`. `object` accepts every value, so neither pyrefly nor beartype checks anything,
       as with `Any`. Use a named alias of `ebaml.core.custom_types` (`ClassLabel`, `FeatureValue`, `JSONValue`) or a
-      union of the real types. A parameter that exists to inspect a value of any type (a validator, a coercion) may
-      keep `object`: add `# nosemgrep: ebaml-no-object-type -- <reason>` to its line. See .claude/rules/types.md.
+      union of the real types. A parameter that exists to inspect a value of any type (a validator, a reader of an
+      untyped record) may keep `object`: add `# nosemgrep: ebaml-no-object-type -- <reason>` on the line of the
+      hint or on the line above it. See .claude/rules/types.md.
     patterns:
       - pattern-either:
           - pattern: |
@@ -175,14 +176,21 @@ rules:
               def $F(..., $P: $T = $D, ...):
                   ...
           - pattern: |
+              def $F(..., *$P: $T, ...):
+                  ...
+          - pattern: |
+              def $F(..., **$P: $T, ...):
+                  ...
+          - pattern: |
               def $F(...) -> $T:
                   ...
           - pattern: "$X: $T"
           - pattern: "$X: $T = $V"
           - pattern: "type $A = $T"
-      - metavariable-pattern:
+      # the text of the hint, so a string annotation such as "list[object]" matches too
+      - metavariable-regex:
           metavariable: $T
-          pattern: object
+          regex: '.*\bobject\b'
       - focus-metavariable: $T
     paths:
       include: ["/src/ebaml/"]
