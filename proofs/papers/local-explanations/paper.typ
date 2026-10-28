@@ -372,7 +372,7 @@ The proof does not cover the following points.
   same, but the named bin may differ. The proof does not model which one.
 - *Completions.* `_completions` samples the unknown features from the training weights. The result is an estimate,
   so there is nothing exact to prove.
-- *`new_probability`.* The counterfactual reports the probability of the new class from the mean scores, with no
+- *`new_output`.* The counterfactual reports the probability of the new class from the mean scores, with no
   deviation. It is a report and not an optimality claim.
 - *The docstring.* The module docstring says that every score moves by $z$ deviations in the direction that makes
   the claim harder to prove. This holds for the sufficient reason: the fixed and the unknown features both use $g$.

@@ -98,7 +98,37 @@ The EBM stores a standard deviation for every score. `confidence_level` (default
   free ones take their worst values, so it needs more features, or does not exist.
 
 `confidence_level=0` ignores the uncertainty. The probability of the prediction also gets a confidence interval from
-the variance of the sum of the effects (`logit_std`), which assumes the errors of the effects are independent.
+the variance of the sum of the effects (`score_std`), which assumes the errors of the effects are independent.
+
+## The facts
+
+`explanation.facts` is a `LocalFacts`. Its fields have names that fit every model kind:
+
+| Field | Meaning for a binary classifier |
+| --- | --- |
+| `prediction.decision` | The predicted class. |
+| `prediction.output`, `lower`, `upper` | The probability of the predicted class, and its confidence interval. |
+| `prediction.score`, `score_std` | The log-odds of the second class, and its standard deviation. |
+| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change)`. |
+| `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. |
+| `sufficient_reason.features` | The features that fix the prediction. |
+| `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. |
+| `sufficient_reason.minimum` | True: no smaller set fixes the prediction. |
+| `completions` | One `CompletionStep(fixed, share)` for each step. |
+
+<!-- invisible-code-block: python
+from ebaml.local.facts import compute_local_facts
+
+ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)
+instance = X.iloc[0].to_dict()
+-->
+
+```python
+facts = compute_local_facts(ebm, instance)
+print(facts.prediction.decision, round(facts.prediction.output, 2))
+if facts.counterfactual is not None:
+    print(facts.counterfactual.new_decision, [change.feature for change in facts.counterfactual.changes])
+```
 
 ## Audience
 
@@ -189,7 +219,9 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
 
 ## Limits
 
-- **Binary classifiers only.** Other tasks raise `ValueError`. A regressor has no "other outcome" to flip to.
+- **Binary classifiers only.** Other tasks raise `UnsupportedModelError`, which is a `ValueError`. The
+  [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind) say what the
+  explanations of regressors and multiclass classifiers will mean.
 - **No interactions.** Fit with `interactions=0`. With pairwise terms the effects no longer add up per feature, so the
   greedy solutions would not be exact; the function raises `ValueError` instead of answering approximately.
 - **Every input is needed.** A missing value, a feature name that is absent or a category not seen in training raises

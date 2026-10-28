@@ -99,9 +99,9 @@ def test_prediction_matches_model(continuous_ebm: tuple[ExplainableBoostingClass
     row = instance_of(data, 3)
     facts = local.compute_local_facts(ebm, row)
     logits: np.ndarray = ebm.decision_function(data.iloc[[3]])
-    assert facts.prediction.logit == pytest.approx(logits[0])
-    assert facts.prediction.lower <= facts.prediction.probability <= facts.prediction.upper
-    assert facts.prediction.label == ebm.predict(data.iloc[[3]])[0]
+    assert facts.prediction.score == pytest.approx(logits[0])
+    assert facts.prediction.lower <= facts.prediction.output <= facts.prediction.upper
+    assert facts.prediction.decision == ebm.predict(data.iloc[[3]])[0]
 
 
 def test_confidence_makes_claims_harder(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
@@ -140,7 +140,7 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoos
     for _ in range(50):
         other = data.iloc[int(rng.integers(len(data)))].to_dict()
         mixed = {**row, **{n: other[n] for n in free}}
-        assert ebm.predict(pd.DataFrame([mixed]))[0] == facts.prediction.label
+        assert ebm.predict(pd.DataFrame([mixed]))[0] == facts.prediction.decision
 
 
 @pytest.mark.parametrize(
@@ -191,12 +191,12 @@ def _feature(
 
 def test_counterfactual_is_none_when_no_change_flips() -> None:
     features = [_feature([1.0, 0.9], 0), _feature([1.0, 0.8], 0)]
-    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0) is None
+    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other") is None
 
 
 def test_counterfactual_skips_unplausible_bins() -> None:
     features = [_feature([1.0, -5.0], 0, plausible=[True, False]), _feature([1.0, -5.0], 0)]
-    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0)
+    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other")
     assert counterfactual is not None
     assert [c.feature for c in counterfactual.changes] == ["f"]
     assert len(counterfactual.changes) == 1
@@ -372,25 +372,25 @@ def test_robust_scores_move_by_z_standard_deviations() -> None:
 def test_counterfactual_changes_the_biggest_drop_first() -> None:
     features = [_hand("f1", [1.0, -2.0]), _hand("f2", [0.5, -0.25])]
     # the margin is 0.5 + 1 + 0.5 = 2; f1 can drop by 3, f2 by 0.75
-    counterfactual = local._counterfactual(features, intercept=0.5, sign=1, z=0.0)
+    counterfactual = local._counterfactual(features, intercept=0.5, sign=1, z=0.0, new_decision="other")
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", -3.0)]
     # the new logit is 0.5 + 1.5 - 3 = -1, so the new class (negative) has the probability sigmoid(1)
-    assert counterfactual.new_probability == pytest.approx(_sig(1.0))
+    assert counterfactual.new_output == pytest.approx(_sig(1.0))
 
 
 def test_counterfactual_of_the_negative_class() -> None:
     features = [_hand("f1", [-1.0, 2.0]), _hand("f2", [-0.5, 0.25])]
-    counterfactual = local._counterfactual(features, intercept=-0.5, sign=-1, z=0.0)
+    counterfactual = local._counterfactual(features, intercept=-0.5, sign=-1, z=0.0, new_decision="other")
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", 3.0)]
-    assert counterfactual.new_probability == pytest.approx(_sig(1.0))  # the new logit is +1
+    assert counterfactual.new_output == pytest.approx(_sig(1.0))  # the new logit is +1
 
 
 def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
     features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, 0.0]), _hand("f3", [0.5, -1.0])]
     # the margin is 2.5 and the drops are 1, 1 and 1.5: the margin is 1 and then 0 (a tie, not a flip) and then -1
-    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0)
+    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other")
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f3", "f1", "f2"]
 
@@ -398,31 +398,37 @@ def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
 def test_counterfactual_with_two_changes() -> None:
     features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, -0.5]), _hand("f3", [1.0, 0.5])]
     # the margin is 3 and the drops are 1, 1.5 and 0.5: after the two largest drops it is 0.5, so it is not yet flipped
-    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0) is None
+    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other") is None
     features[0] = _hand("f1", [1.0, -3.0])
     # the drops are now 4, 1.5 and 0.5, and the margin 3 flips after the first; with a margin of 4.5 it takes two
-    counterfactual = local._counterfactual(features, intercept=1.5, sign=1, z=0.0)
+    counterfactual = local._counterfactual(features, intercept=1.5, sign=1, z=0.0, new_decision="other")
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f1", "f2"]
 
 
 def test_counterfactual_probability_of_the_new_class() -> None:
     # the margin is 2.5 and the drop is 4, so the new logit is -1.5 and the new (negative) class has sigmoid(1.5)
-    counterfactual = local._counterfactual([_hand("f", [1.0, -3.0])], intercept=1.5, sign=1, z=0.0)
+    counterfactual = local._counterfactual(
+        [_hand("f", [1.0, -3.0])],
+        intercept=1.5,
+        sign=1,
+        z=0.0,
+        new_decision="other",
+    )
     assert counterfactual is not None
-    assert counterfactual.new_probability == pytest.approx(_sig(1.5))
+    assert counterfactual.new_output == pytest.approx(_sig(1.5))
 
 
 def test_counterfactual_is_none_for_a_tie() -> None:
-    assert local._counterfactual([_hand("f", [1.0, 0.0])], intercept=0.0, sign=1, z=0.0) is None
+    assert local._counterfactual([_hand("f", [1.0, 0.0])], intercept=0.0, sign=1, z=0.0, new_decision="other") is None
     # the margin counts the score of the feature itself, not just its sign
-    assert local._counterfactual([_hand("f", [2.0, 0.0])], intercept=0.0, sign=1, z=0.0) is None
+    assert local._counterfactual([_hand("f", [2.0, 0.0])], intercept=0.0, sign=1, z=0.0, new_decision="other") is None
 
 
 def test_counterfactual_asks_for_the_worst_case_of_the_other_class() -> None:
     feature = _hand("f", [1.0, -2.0], stds=[0.5, 0.5])
     # with z = 1 the scores are raised by 0.5, so the drop is 1 + 1.5 = 2.5, and the margin 2.8 is not enough
-    assert local._counterfactual([feature], intercept=1.8, sign=1, z=1.0) is None
+    assert local._counterfactual([feature], intercept=1.8, sign=1, z=1.0, new_decision="other") is None
 
 
 def test_fixing_order_counts_what_a_known_value_guarantees() -> None:
@@ -437,17 +443,25 @@ def test_sufficient_reason_fixes_the_largest_gains_first() -> None:
     features = [_hand("f3", [0.5, 0.0]), _hand("f1", [2.0, -1.0]), _hand("f2", [1.0, -0.5])]
     # the worst case is -1.5 (-1, -0.5 and 0); the gains are 3 (f1), 1.5 (f2) and 0.5 (f3)
     reason = local._sufficient_reason(features, intercept=0.0, sign=1, z=0.0)
-    assert reason == local.SufficientReason(["f1"], 1.5)
+    assert reason == local.SufficientReason(["f1"], 1.5, minimum=True)
 
 
 def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> None:
     # even the lowest score keeps the margin above 0, so no input has to be fixed
-    assert local._sufficient_reason([_hand("f", [1.0, 2.0])], 0.0, 1, 0.0) == local.SufficientReason([], 1.0)
+    assert local._sufficient_reason([_hand("f", [1.0, 2.0])], 0.0, 1, 0.0) == local.SufficientReason(
+        [],
+        1.0,
+        minimum=True,
+    )
 
 
 def test_sufficient_reason_needs_a_margin_above_zero() -> None:
     # the worst case is exactly 0: knowing the value gains 1, and the margin is 0 before and 1 after
-    assert local._sufficient_reason([_hand("f", [0.0, 1.0], 1)], 0.0, 1, 0.0) == local.SufficientReason(["f"], 1.0)
+    assert local._sufficient_reason([_hand("f", [0.0, 1.0], 1)], 0.0, 1, 0.0) == local.SufficientReason(
+        ["f"],
+        1.0,
+        minimum=True,
+    )
     # when the margin stays at 0, the outcome is not certain
     assert local._sufficient_reason([_hand("f", [0.0, 0.0])], 0.0, 1, 0.0) is None
 
@@ -508,16 +522,16 @@ def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     facts = local.compute_local_facts(_hand_model(), {})
     prediction = facts.prediction
     logit, std = 0.25 - 0.5 + 1.0, 0.5  # the standard deviation is sqrt(0.4**2 + 0.3**2)
-    assert prediction.label == "yes"
-    assert prediction.logit == pytest.approx(logit)
-    assert prediction.logit_std == pytest.approx(std)
-    assert prediction.probability == pytest.approx(_sig(logit))
+    assert prediction.decision == "yes"
+    assert prediction.score == pytest.approx(logit)
+    assert prediction.score_std == pytest.approx(std)
+    assert prediction.output == pytest.approx(_sig(logit))
     assert prediction.lower == pytest.approx(_sig(logit - Z95 * std))
     assert prediction.upper == pytest.approx(_sig(logit + Z95 * std))
     assert facts.confidence_level == pytest.approx(0.95)
     # the largest effect first
     assert facts.contributions == [local.Contribution("a", "a0", 1.0, 0.3), local.Contribution("b", "b0", -0.5, 0.4)]
-    assert facts.counterfactual == local._counterfactual(features, 0.25, 1, Z95)
+    assert facts.counterfactual == local._counterfactual(features, 0.25, 1, Z95, new_decision="no")
     assert facts.sufficient_reason == local._sufficient_reason(features, 0.25, 1, Z95)
 
 
@@ -527,21 +541,22 @@ def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     facts = local.compute_local_facts(_hand_model(-0.25), {}, local.LocalOptions(confidence_level=0.9, seed=3))
     prediction = facts.prediction
     logit, std, z = -0.25 - 1.0 - 0.5, math.hypot(0.3, 0.3), 1.6448536269514722
-    assert prediction.label == "no"
-    assert prediction.probability == pytest.approx(1 - _sig(logit))
+    assert prediction.decision == "no"
+    assert prediction.output == pytest.approx(1 - _sig(logit))
     assert prediction.lower == pytest.approx(1 - _sig(logit + z * std))
     assert prediction.upper == pytest.approx(1 - _sig(logit - z * std))
-    assert facts.counterfactual == local._counterfactual(features, -0.25, -1, z)
+    assert facts.counterfactual == local._counterfactual(features, -0.25, -1, z, new_decision="yes")
 
 
 def test_facts_of_a_prediction_on_the_edge(monkeypatch: pytest.MonkeyPatch) -> None:
     # a logit of exactly 0 belongs to the negative class
     _patch_features(monkeypatch, [_hand("a", [1.0, -1.0]), _hand("b", [-1.0, 1.0])])
     facts = local.compute_local_facts(_hand_model(0.0), {}, local.LocalOptions(confidence_level=0))
-    assert (facts.prediction.label, facts.prediction.probability) == ("no", 0.5)
+    assert (facts.prediction.decision, facts.prediction.output) == ("no", 0.5)
     # the negative class is the prediction, so only b can still move the logit up, and a cannot
     assert facts.counterfactual is not None
     assert [change.feature for change in facts.counterfactual.changes] == ["b"]
+    assert facts.counterfactual.new_decision == "yes"
 
 
 def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -607,7 +622,7 @@ def test_the_changes_of_a_counterfactual_flip_the_prediction(
 ) -> None:
     features = _build(parts)
     sign = _sign(features, intercept)
-    counterfactual = local._counterfactual(features, intercept, sign, z)
+    counterfactual = local._counterfactual(features, intercept, sign, z, new_decision="other")
     assume(counterfactual is not None)
     assert counterfactual is not None
     new_bins = {change.feature: int(change.to_value) for change in counterfactual.changes}
@@ -652,3 +667,12 @@ def test_a_decimal_value_falls_in_the_bin_of_its_float(
     as_float = local.compute_local_facts(ebm, {"a": 0.25, "b": -0.5, "c": "x"})
     as_decimal = local.compute_local_facts(ebm, {"a": Decimal("0.25"), "b": -0.5, "c": "x"})
     assert as_decimal.prediction == as_float.prediction
+
+
+def test_the_sufficient_reason_of_a_binary_classifier_is_the_minimum(
+    categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
+    ebm, data = categorical_ebm
+    reason = local.compute_local_facts(ebm, instance_of(data, 0)).sufficient_reason
+    assert reason is not None
+    assert reason.minimum is True
