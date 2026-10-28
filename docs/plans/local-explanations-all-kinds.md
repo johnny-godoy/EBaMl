@@ -25,15 +25,26 @@ computes the facts, Lean proves each exact claim, and the LLM only puts the fact
 - Put the code of each kind behind one interface, with one class per kind (SOLID O). The binary class wraps the code
   that exists, with no change to its results. `compute_local_facts` selects the class by the model kind and never
   tests the kind in an `if` chain.
-- Regressor (1.1.0): the decision is "the prediction is above the threshold" (or inside the interval) of the 0.2.0
-  definition. With the identity link, the margin is a sum of one score per feature, so reuse the binary sorting
-  algorithms on the shifted margin. Prove in Lean that the reduction is exact: state it as a theorem that maps the
-  regression problem onto the binary model of the existing topic, so the existing proofs do the work.
+- The user chose the definitions in the section "Definitions for every model kind" of
+  `docs/local-explanations-proof.md`. In short:
+  - every option below is a strategy object (SOLID O), and the default is named;
+  - a regressor accepts both decisions: a threshold `t`, and an interval `[lo, hi]` (below, inside, above);
+  - a multiclass counterfactual has two targets: "no longer class `c`" (the default) and "class `j`" (an option);
+  - a sufficient reason with several margins has two strategies: "minimal" (the default) and "exact search with a
+    fallback" to minimal above a feature limit. The user ruled out a plain exact search, because the fallback
+    strategy covers it. `SufficientReason.minimum` says which claim the result has.
+- Regressor (1.1.0): with the identity link, each margin is a sum of one score per feature. A threshold and an
+  interval decision of "below" or "above" have one margin, so reuse the binary sorting algorithms on the shifted
+  margin. Prove in Lean that the reduction is exact: state it as a theorem that maps the regression problem onto the
+  binary model of the existing topic, so the existing proofs do the work. The decision "inside" has two margins: its
+  counterfactual is the smaller of two binary answers, and its sufficient reason uses the strategies of multiclass.
 - Multiclass (1.2.0): implement the definitions of 0.2.0.
-  - Counterfactual "no longer class `c`": the minimum over the other classes of the binary problem on the margin
-    `s_c - s_j`. Prove that the minimum of the per-class answers is the answer.
-  - Sufficient reason: one linear condition for each other class. If 0.2.0 chose an exact search, prove it exact and
-    state its cost. If it chose the weaker "minimal" claim, prove that, and use only the word that the proof supports.
+  - Counterfactual "no longer class `c`" (default): the minimum over the other classes of the binary problem on the
+    margin `s_c - s_j`. Prove that the minimum of the per-class answers is the answer. The option "class `j`" needs
+    every margin of `j` at the same time: reuse the sufficient reason strategies, and say that it is not proved.
+  - Sufficient reason: one linear condition for each other class. Prove that the "minimal" strategy returns a set
+    from which no feature can be removed, and that the exact search returns the minimum. State the cost of the
+    search. Use only the word that each proof supports.
   - Count completions: sample as for binary. The share is an estimate, so it makes no exact claim.
 - Confidence: keep the rule of the module docstring. Each score moves by `z` standard deviations in the direction that
   makes the claim harder. For multiclass, define that direction for each margin, and write it in the paper.
