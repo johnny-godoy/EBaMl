@@ -130,10 +130,11 @@ test "summarize_ebm shortens only when num_sentences is set" {
 test "describe_ebm: one chain per graph plus the summary" {
     let scripted = ScriptedClient { calls: 0 };
     let result = describe_ebm(["age", "bmi"], ["G1", "G2"], "IMP", 30, 7, 2, default_graph_options(), client = scripted);
-    // 2 graphs x 3 turns + draft + shorten
-    assert.equal(scripted.calls, 8);
-    assert.equal(result.usage.input_tokens, 80);
-    assert.equal(result.usage.output_tokens, 40)
+    // 2 graphs x 3 turns + draft + shorten. The two chains run at the same time, so `self.calls += 1` of the
+    // scripted client can lose an increment; each call reports 10 input and 5 output tokens, so the usage counts the
+    // calls without a shared counter.
+    assert.equal(result.usage.input_tokens, 8 * 10);
+    assert.equal(result.usage.output_tokens, 8 * 5)
 }
 
 test "describe_ebm rejects mismatched names and graphs" {
