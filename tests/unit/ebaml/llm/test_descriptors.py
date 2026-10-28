@@ -983,3 +983,35 @@ def test_describe_ebm_does_not_warn_without_interactions(
     with capture_logs() as logs:
         descriptors.describe_ebm(fake_ebm)
     assert all(log["log_level"] != "warning" for log in logs)
+
+
+def test_describe_graph_of_a_multiclass_classifier_sends_one_series_per_class(
+    monkeypatch: pytest.MonkeyPatch,
+    multiclass_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", recording(calls, counted)))
+    options = GraphOptions(classes=["low", "high"], overbudget_percent=0)
+    assert descriptors.describe_graph(multiclass_ebm, 0, graph=options) == "answer"
+    graph = calls["graph"]
+    assert "The model is a multiclass classifier" in graph
+    assert [line for line in graph.splitlines() if line.startswith("Class:")] == ["Class: low", "Class: high"]
+
+
+def test_describe_ebm_of_a_multiclass_classifier_describes_every_feature(
+    monkeypatch: pytest.MonkeyPatch,
+    multiclass_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    graph_calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    assert descriptors.describe_ebm(multiclass_ebm, graph=GraphOptions(overbudget_percent=0)) == "answer"
+    assert len(graph_calls) == len(multiclass_ebm.feature_names_in_)
+    for call in graph_calls:
+        assert [line for line in call["graph"].splitlines() if line.startswith("Class:")] == [
+            "Class: high",
+            "Class: low",
+            "Class: mid",
+        ]
