@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from beartype.door import is_bearable
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
+from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
 
@@ -28,7 +28,7 @@ SDK_STUB: Path = Path(baml_sdk.__file__).with_suffix(".pyi")
 
 
 @pytest.fixture(scope="session")
-def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
+def fit_ebm() -> Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor]:
     """Return a function that fits an EBM, or reads the same fit from the cache directory.
 
     ``scripts/mutation.py`` sets ``EBAML_FIT_CACHE`` to a directory. Every mutant runs the tests in a new process, and
@@ -37,8 +37,9 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
 
     Returns
     -------
-    Callable[..., ExplainableBoostingClassifier]
-        The function. It takes the data, the target, and the ``interactions`` and ``random_state`` of the classifier.
+    Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor]
+        The function. It takes the data, the target, and the ``interactions`` and ``random_state`` of the model. With
+        ``regression=True`` it fits a regressor, else a classifier.
 
     """
     cache = os.environ.get("EBAML_FIT_CACHE")
@@ -49,9 +50,11 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
         *,
         interactions: int,
         random_state: int,
-    ) -> ExplainableBoostingClassifier:
-        params = {"interactions": interactions, "random_state": random_state}
-        ebm = ExplainableBoostingClassifier(interactions=interactions, random_state=random_state)
+        regression: bool = False,
+    ) -> ExplainableBoostingClassifier | ExplainableBoostingRegressor:
+        params = {"interactions": interactions, "random_state": random_state, "regression": regression}
+        model_class = ExplainableBoostingRegressor if regression else ExplainableBoostingClassifier
+        ebm = model_class(interactions=interactions, random_state=random_state)
         if not cache:
             return ebm.fit(data, target)
         digest = hashlib.sha256(interpret.__version__.encode())
@@ -62,7 +65,7 @@ def fit_ebm() -> Callable[..., ExplainableBoostingClassifier]:
         path = Path(cache) / f"{digest.hexdigest()}.joblib"
         if path.exists():
             cached = joblib.load(path)
-            assert isinstance(cached, ExplainableBoostingClassifier)
+            assert isinstance(cached, model_class)
             return cached
         ebm.fit(data, target)
         partial = path.with_suffix(f".{os.getpid()}.tmp")
@@ -82,6 +85,23 @@ def continuous_ebm(
     noise = rng.normal(size=600)
     target = ((2 * data["a"] + 0.3 * data["b"] + (data["c"] == "x") + noise) > 0).astype(int)
     return fit_ebm(data, target, interactions=0, random_state=0), data
+
+
+@pytest.fixture(scope="module")
+def regression_ebm(fit_ebm: Callable[..., ExplainableBoostingRegressor]) -> ExplainableBoostingRegressor:
+    rng = np.random.default_rng(3)
+    data = pd.DataFrame({"a": rng.normal(size=400), "c": rng.choice(["x", "y"], 400)})
+    target = 2 * data["a"] + (data["c"] == "x") + rng.normal(size=400)
+    return fit_ebm(data, target, interactions=0, random_state=0, regression=True)
+
+
+@pytest.fixture(scope="module")
+def multiclass_ebm(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> ExplainableBoostingClassifier:
+    rng = np.random.default_rng(4)
+    data = pd.DataFrame({"a": rng.normal(size=600), "c": rng.choice(["x", "y"], 600)})
+    signal = data["a"] + 0.5 * (data["c"] == "x") + rng.normal(scale=0.3, size=600)
+    target = np.where(signal > 0.7, "high", np.where(signal < -0.3, "low", "mid"))
+    return fit_ebm(data, target, interactions=0, random_state=0)
 
 
 # fake_model builds EBM instances with preset attributes, so tests can pass them where an EBM type is required.
