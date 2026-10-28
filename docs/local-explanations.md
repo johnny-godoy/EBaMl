@@ -109,6 +109,7 @@ the variance of the sum of the effects (`score_std`), which assumes the errors o
 | `prediction.decision` | The predicted class. |
 | `prediction.output`, `lower`, `upper` | The probability of the predicted class, and its confidence interval. |
 | `prediction.score`, `score_std` | The log-odds of the second class, and its standard deviation. |
+| `prediction.margin` | The log-odds of the predicted class. It is positive for every prediction. |
 | `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change)`. |
 | `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. |
 | `sufficient_reason.features` | The features that fix the prediction. |

@@ -12,6 +12,7 @@
 
 ### Added
 
+- `Prediction.margin` is the log-odds of the predicted class: the margin of the decision, which means the same for every model kind.
 - `Counterfactual.new_decision` holds the class that the prediction flips to.
 - `SufficientReason.minimum` tells whether no smaller set fixes the prediction. It is always true for a binary classifier.
 - The proof page of the local explanations defines the counterfactual, the sufficient reason and the completions of regressors and multiclass classifiers.

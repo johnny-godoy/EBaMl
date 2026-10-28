@@ -116,6 +116,9 @@ class Prediction:
         The sum of the intercept and the scores, on the scale of the link: the log-odds of the second class.
     score_std: float
         The standard deviation of ``score``.
+    margin: float
+        The margin of the decision, positive while the decision holds: the log-odds of the predicted class. The
+        margin means the same for every kind, and ``score`` keeps the scale of the link.
 
     """
 
@@ -125,6 +128,7 @@ class Prediction:
     upper: float
     score: float
     score_std: float
+    margin: float
 
 
 @attrs.frozen
@@ -634,6 +638,7 @@ def compute_local_facts(
         upper=upper,
         score=logit,
         score_std=logit_std,
+        margin=sign * logit,
     )
     order = [step.feature for step in _fixing_order(features, sign, z)]
     return LocalFacts(
