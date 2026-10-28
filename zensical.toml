@@ -15,6 +15,7 @@ nav = [
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
     { "Model providers" = "providers-notebook.md" },
+    { Multiclass = "multiclass-notebook.md" },
   ] },
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },
