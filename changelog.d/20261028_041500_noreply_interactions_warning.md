@@ -1,3 +1,3 @@
 ### Added
 
-- `describe_ebm` logs an `interactions_skipped` warning that names the interaction terms, because the descriptions cover the main effects only.
+- `describe_ebm` and `describe_graph` log an `interactions_skipped` warning that names the interaction terms they skip, because the descriptions cover the main effects only.

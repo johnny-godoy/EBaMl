@@ -982,7 +982,7 @@ def test_describe_ebm_does_not_warn_without_interactions(
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
     with capture_logs() as logs:
         descriptors.describe_ebm(fake_ebm)
-    assert all(log["log_level"] != "warning" for log in logs)
+    assert all(log["event"] != "interactions_skipped" for log in logs)
 
 
 def test_describe_graph_of_a_multiclass_classifier_sends_one_series_per_class(
@@ -1015,3 +1015,23 @@ def test_describe_ebm_of_a_multiclass_classifier_describes_every_feature(
             "Class: low",
             "Class: mid",
         ]
+
+
+@pytest.mark.parametrize(("feature_index", "terms"), [(0, ["f0 & f1"]), (2, ["f1 & f2"])])
+def test_describe_graph_warns_about_the_interaction_terms_of_its_feature(
+    monkeypatch: pytest.MonkeyPatch,
+    counted: baml_sdk.Counted,
+    feature_index: int,
+    terms: list[str],
+) -> None:
+    # describe_graph skipped the interaction terms of its feature without a word
+    ebm = fake_model(
+        feature_names_in_=["f0", "f1", "f2"],
+        term_names_=["f0", "f1", "f2", "f0 & f1", "f1 & f2"],
+        term_features_=[(0,), (1,), (2,), (0, 1), (1, 2)],
+    )
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    with capture_logs() as logs:
+        descriptors.describe_graph(ebm, feature_index)
+    assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [terms]

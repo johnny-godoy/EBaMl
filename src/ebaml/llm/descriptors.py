@@ -6,7 +6,7 @@ LLM of the call.
 """
 
 import functools
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from concurrent.futures import ThreadPoolExecutor
 
 import attrs
@@ -57,19 +57,24 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
     )
 
 
-def _warn_skipped_interactions(ebm: ExplainableBoostingModel) -> None:
-    """Log a warning that names the interaction terms of an EBM, because the descriptions cover the main effects only.
+def _warn_skipped_interactions(ebm: ExplainableBoostingModel, described: Collection[int]) -> None:
+    """Log a warning that names the interaction terms of the described features, which the descriptions skip.
 
     Parameters
     ----------
     ebm : ExplainableBoostingModel
         The EBM.
+    described : Collection[int]
+        The indices of the features that the call describes.
 
     """
     skipped = [
         name
         for name, features in zip(ebm.term_names_, ebm.term_features_, strict=True)
-        if len(features) > 1  # pragma: no mutate -- a term of zero features does not exist
+        if (
+            len(features) > 1  # pragma: no mutate -- a term of zero features does not exist
+            and any(feature in described for feature in features)
+        )
     ]
     if skipped:
         logger.warning("interactions_skipped", terms=skipped, reason="the descriptions cover the main effects only")
@@ -311,7 +316,8 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 
     A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times. The logged usage leaves out the
     cut-off attempts, because the provider error carries no token count. It is a lower bound, and the ``usage`` log
-    event has the number of those attempts in ``truncated_attempts``.
+    event has the number of those attempts in ``truncated_attempts``. The description covers the main effect of the
+    feature, and an ``interactions_skipped`` warning names the interaction terms of the feature.
 
     Parameters
     ----------
@@ -335,6 +341,7 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
         The description of the graph.
 
     """
+    _warn_skipped_interactions(ebm, {feature_index})
     graph_text = _graph_text(ebm, feature_index, graph)
     model_spec = _model_spec(model)
     described = _describe_graph_counted(
@@ -394,9 +401,9 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     """
     # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
     # processing one of the graphs or in the model surface before any LLM call is paid for.
-    _warn_skipped_interactions(ebm)
-    feature_importances = _feature_importances_to_text(ebm)
     feature_names = list(ebm.feature_names_in_)
+    _warn_skipped_interactions(ebm, range(len(feature_names)))
+    feature_importances = _feature_importances_to_text(ebm)
     graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]
     model_spec = _model_spec(model)
     opts = _prompt_options(prompt)
