@@ -110,8 +110,9 @@ class MulticlassClassifier(ModelKind):
     @override
     def score_meaning(self) -> str:
         return (
-            "Each bin has one score per class. A score is the change of the log-odds of its class, centred over the"
-            " classes of the bin: only the differences between the classes change the predicted probabilities."
+            "Each bin has one score per class. The difference between the scores of two classes is the change of the"
+            " log-odds of one class against the other, so only the differences between the classes change the"
+            " predicted probabilities."
         )
 
     @override
