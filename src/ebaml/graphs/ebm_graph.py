@@ -1,7 +1,7 @@
 """Graphs for EBM models."""
 
 import warnings
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import Literal, Protocol, Self, cast, runtime_checkable
 
 import attrs
@@ -26,6 +26,7 @@ from ebaml.core.exceptions import (
     UnsupportedModelError,
 )
 from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
+from ebaml.graphs.model_kinds import model_kind
 
 # nominal features are unordered categories
 _FORMAT_ALIASES = {FeatureType.NOMINAL: FeatureType.CATEGORICAL}
@@ -177,17 +178,80 @@ def _class_columns(names: Sequence[str], selected: Sequence[str] | None) -> list
     Raises
     ------
     InvalidOptionError
-        If a selected class is not a class of the model, or the selection is empty.
+        If a selected class is not a class of the model, the selection is empty, or it is one string.
 
     """
     if selected is None:
         return list(range(len(names)))
+    # a string is a sequence of strings too, so without this check "setosa" would select the classes "s", "e", ...
+    if isinstance(selected, str):
+        msg = f"classes={selected!r} (pass a list of class names)"
+        raise InvalidOptionError(msg, names)
     if not selected:
         raise InvalidOptionError(str(list(selected)), names)
     for name in selected:
         if name not in names:
             raise InvalidOptionError(name, names)
     return [names.index(name) for name in dict.fromkeys(selected)]
+
+
+@attrs.frozen
+class _Selected:
+    """The scores and the standard deviations of the selected outputs, with the names of the classes."""
+
+    scores: npt.NDArray[np.float64]
+    stds: npt.NDArray[np.float64]
+    classes: list[str]
+
+
+def _select_outputs(
+    outputs: Sequence[str],
+    feature_name: str,
+    scores: npt.NDArray[np.float64],
+    stds: npt.NDArray[np.float64],
+    classes: Sequence[str] | None,
+) -> _Selected:
+    """Centre the scores of a multiclass graph over the classes, and keep the selected classes.
+
+    Parameters
+    ----------
+    outputs: Sequence[str]
+        The names of the outputs of the model.
+    feature_name: str
+        The name of the feature, for the error messages.
+    scores: npt.NDArray[np.float64]
+        The scores of each bin: one per bin, or one row per bin with one column per output.
+    stds: npt.NDArray[np.float64]
+        The standard deviations, with the shape of the scores.
+    classes: Sequence[str], optional
+        The classes to keep. See ``EBMGraph.from_ebm``.
+
+    Returns
+    -------
+    _Selected
+        The scores and the standard deviations of the classes to show. A model with one output has no classes.
+
+    Raises
+    ------
+    EBMGraphShapeError
+        If the scores of a bin do not match the outputs of the model.
+    UnsupportedModelError
+        If ``classes`` is given for a model with one output.
+
+    """
+    # a model with several outputs (a multiclass classifier) has one column of scores per output
+    columns_per_bin = (len(outputs),) if len(outputs) > 1 else ()
+    if scores.shape[1:] != columns_per_bin:
+        msg = f"The scores of {feature_name} have the shape {scores.shape}, but the model has {len(outputs)} outputs."
+        raise EBMGraphShapeError(msg)
+    if not columns_per_bin:
+        if classes is not None:
+            msg = f"The option classes needs a multiclass classifier, but the graph of {feature_name} has one output."
+            raise UnsupportedModelError(msg)
+        return _Selected(scores, stds, [])
+    centred = scores - scores.mean(axis=1, keepdims=True)
+    columns = _class_columns(outputs, classes)
+    return _Selected(centred[:, columns], stds[:, columns], [outputs[column] for column in columns])
 
 
 @attrs.frozen
@@ -248,6 +312,8 @@ class EBMGraph:
         classes: Sequence[str], optional
             The classes to keep in the graph of a multiclass classifier, in the order to show them. If not provided,
             the graph has every class. The text of a model with many classes is long, so a subset keeps it short.
+            A model with one output raises ``UnsupportedModelError`` for this option, and so does a model of an
+            unknown kind for any call. Scores that do not match the outputs of the model raise ``EBMGraphShapeError``.
 
         Returns
         -------
@@ -262,8 +328,6 @@ class EBMGraph:
             If the normalization option is not valid.
         EBMGraphShapeError
             If the number of bins does not match the number of scores.
-        UnsupportedModelError
-            If ``classes`` is given for a model with one output.
 
         Notes
         -----
@@ -279,17 +343,8 @@ class EBMGraph:
         feature_type = ebm.feature_types_in_[feature_index]
         scores = np.array(ebm.term_scores_[feature_index][1:-1], dtype=float)  # Drop missing and unknown bins
         stds = np.asarray(ebm.standard_deviations_[feature_index][1:-1], dtype=float)
-        class_names: list[str] = []
-        # a multiclass classifier has one column of scores per class
-        if scores.ndim > 1:
-            scores -= scores.mean(axis=1, keepdims=True)
-            all_classes = [str(label) for label in np.asarray(ebm.classes_).tolist()]
-            columns = _class_columns(all_classes, classes)
-            scores, stds = scores[:, columns], stds[:, columns]
-            class_names = [all_classes[column] for column in columns]
-        elif classes is not None:
-            msg = f"The option classes needs a multiclass classifier, but the graph of {feature_name} has one output."
-            raise UnsupportedModelError(msg)
+        selected = _select_outputs(model_kind(ebm).outputs, feature_name, scores, stds, classes)
+        scores, stds = selected.scores, selected.stds
 
         # normalize the graph by one constant for all the classes, which keeps the differences between the classes
         match normalization:
@@ -325,7 +380,7 @@ class EBMGraph:
                 f" for feature {feature_name} of type {feature_type}."
             )
             raise EBMGraphShapeError(msg)
-        return cls(feature_name, feature_type, x_vals, scores, stds, class_names)
+        return cls(feature_name, feature_type, x_vals, scores, stds, selected.classes)
 
     def simplify(self, min_variation_per_cent: float = 0.0) -> Self:
         """Simplifies the graph. Removes redundant (flat) bins from the graph.
@@ -425,28 +480,34 @@ class EBMGraph:
                 msg = f"Requested a boolean format, but the feature has more than x-axis values: {self.x_vals}"
                 raise EBMGraphShapeError(msg)
 
-    def _series(self) -> Iterator[_Series]:
-        """Yield the scores of each output of the graph.
+    def _series(self) -> list[_Series]:
+        """Split the scores into one series for each output of the graph.
 
-        Yields
-        ------
-        _Series
+        Returns
+        -------
+        list[_Series]
             One series for a graph with one output, else one series per class.
 
         Raises
         ------
         EBMGraphShapeError
-            If the scores and the standard deviations do not have the same shape.
+            If the scores and the standard deviations do not have the same shape, or the scores do not have one column
+            per class.
 
         """
         scores, stds = np.asarray(self.scores, dtype=float), np.asarray(self.stds, dtype=float)
         if scores.shape != stds.shape:
             msg = f"The graph of {self.feature_name} has scores of shape {scores.shape} but stds of shape {stds.shape}."
             raise EBMGraphShapeError(msg)
+        columns_per_bin = (len(self.classes),) if self.classes else ()
+        if scores.shape[1:] != columns_per_bin:
+            msg = (
+                f"The graph of {self.feature_name} has scores of shape {scores.shape} for {len(self.classes)} classes."
+            )
+            raise EBMGraphShapeError(msg)
         if not self.classes:
-            yield _Series(None, scores, stds)
-        for column, label in enumerate(self.classes):
-            yield _Series(label, scores[:, column], stds[:, column])
+            return [_Series(None, scores, stds)]
+        return [_Series(label, scores[:, column], stds[:, column]) for column, label in enumerate(self.classes)]
 
     def to_body_text(
         self,
@@ -581,6 +642,8 @@ class EBMGraph:
             If the graph exceeds the max_tokens limit even after simplification.
 
         """
+        # check the shape before the simplification, which would hide or garble a shape that does not fit the classes
+        self._series()
         feature_format = self._resolve_format(feature_format)
         description_text = _describe_format(feature_format) + (_MULTICLASS_DESCRIPTION if self.classes else "")
         self._check_boolean_bins(feature_format)
