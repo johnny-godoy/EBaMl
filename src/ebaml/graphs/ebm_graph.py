@@ -53,8 +53,8 @@ _DESCRIPTIONS = {
 # the preamble that a graph of a multiclass classifier adds after the preamble of its format
 _MULTICLASS_DESCRIPTION = (
     "The model is a multiclass classifier, so the graph has one series of means and bounds for each class. A line"
-    " 'Class: <name>' starts the series of each class. The scores of each bin are centred over all the classes of"
-    " the model: only the differences between the classes change the predicted probabilities.\n\n"
+    " 'Class: <name>' starts the series of each class. In every bin, the scores have the same mean over all the"
+    " classes of the model, so only the differences between the classes change the predicted probabilities.\n\n"
 )
 
 
@@ -270,7 +270,8 @@ class EBMGraph:
         A multiclass classifier has one score per bin and per class. Softmax does not change when the same constant is
         added to the scores of all the classes of a bin, so the graph centres the scores of each bin over all the
         classes of the model, before it selects ``classes``. The standard deviations stay those of the EBM.
-        The normalization then shifts each class on its own, as the intercept of each class absorbs the shift.
+        The normalization then shifts all the scores by one constant, so the differences between the classes of a bin
+        do not change.
 
         """
         # read the variables from the ebm
@@ -290,12 +291,12 @@ class EBMGraph:
             msg = f"The option classes needs a multiclass classifier, but the graph of {feature_name} has one output."
             raise UnsupportedModelError(msg)
 
-        # normalize the graph, each class on its own
+        # normalize the graph by one constant for all the classes, which keeps the differences between the classes
         match normalization:
             case Normalization.Z_SCORE:
-                normalization_constant = np.mean(scores, axis=0)
+                normalization_constant = np.mean(scores)
             case Normalization.MIN_MAX:
-                normalization_constant = np.min(scores, axis=0)
+                normalization_constant = np.min(scores)
             case Normalization.NONE:
                 normalization_constant = 0
             case _:
