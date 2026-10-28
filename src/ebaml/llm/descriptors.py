@@ -149,6 +149,7 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: Grap
         feature_index,
         options.normalization,
         use_feature_bounds=options.use_feature_bounds,
+        classes=options.classes,
     )
     return graph.to_text(
         include_description=options.include_description,

@@ -1,6 +1,7 @@
 """Tests for the LLM descriptors."""
 
 import inspect
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -97,14 +98,16 @@ def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> No
         normalization: Normalization,
         *,
         use_feature_bounds: bool,
+        classes: Sequence[str] | None,
     ) -> FakeGraph:
-        seen["from_ebm"] = (ebm, feature_index, normalization, use_feature_bounds)
+        seen["from_ebm"] = (ebm, feature_index, normalization, use_feature_bounds, classes)
         return FakeGraph()
 
     monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(from_ebm))
     options = GraphOptions(
         normalization=Normalization.Z_SCORE,
         use_feature_bounds=False,
+        classes=("b", "a"),
         include_description=False,
         feature_format=FeatureType.BOOLEAN,
         x_axis_precision=2,
@@ -116,7 +119,7 @@ def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> No
     )
     assert descriptors._graph_text(FAKE_EBM, 4, options) == "text"
     assert seen == {
-        "from_ebm": (FAKE_EBM, 4, Normalization.Z_SCORE, False),
+        "from_ebm": (FAKE_EBM, 4, Normalization.Z_SCORE, False, ("b", "a")),
         "to_text": {
             "include_description": False,
             "feature_format": FeatureType.BOOLEAN,

@@ -17,7 +17,7 @@ def _defaults(function: Callable[..., object], names: set[str]) -> dict[str, obj
 
 
 def test_graph_options_default_to_the_defaults_of_the_graph_methods() -> None:
-    from_ebm = _defaults(EBMGraph.from_ebm, {"normalization", "use_feature_bounds"})
+    from_ebm = _defaults(EBMGraph.from_ebm, {"normalization", "use_feature_bounds", "classes"})
     to_text = _defaults(EBMGraph.to_text, set(attrs.fields_dict(GraphOptions)) - set(from_ebm))
     assert attrs.asdict(GraphOptions()) == {**from_ebm, **to_text}
 
