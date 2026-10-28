@@ -48,9 +48,19 @@ class _Feature:
     plausible: np.ndarray  # bins with enough training support to be offered as alternatives
 
     @property
+    def scores(self) -> npt.NDArray[np.float64]:
+        """Score of every bin. A binary classifier has one score per bin."""
+        return np.asarray(self.graph.scores, dtype=float)
+
+    @property
+    def stds(self) -> npt.NDArray[np.float64]:
+        """Standard deviation of the score of every bin."""
+        return np.asarray(self.graph.stds, dtype=float)
+
+    @property
     def current(self) -> float:
         """Score of the bin of the instance."""
-        return float(self.graph.scores[self.bin_index])
+        return float(self.scores[self.bin_index])
 
     @property
     def label(self) -> str:
@@ -333,8 +343,8 @@ def _robust_scores(
         The score of each bin.
 
     """
-    scores = sign * np.asarray(feature.graph.scores, dtype=float)
-    stds = z * np.asarray(feature.graph.stds, dtype=float)
+    scores = sign * feature.scores
+    stds = z * feature.stds
     return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
 
 
@@ -372,10 +382,10 @@ def _counterfactual(features: Sequence[_Feature], intercept: float, sign: int, z
     changes = ranked[: flips[0] + 1]
     new_logit = intercept + sum(f.current for f in features)
     for _, best, feature in changes:
-        new_logit += float(feature.graph.scores[best]) - feature.current
+        new_logit += float(feature.scores[best]) - feature.current
     return Counterfactual(
         changes=[
-            Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.graph.scores[best]) - f.current)
+            Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current)
             for _, best, f in changes
         ],
         new_probability=_sigmoid(-sign * new_logit),  # the class that the prediction flips to is the opposite one
@@ -481,7 +491,7 @@ def _completions(
     sampled = {}
     for f in features:
         bins = rng.choice(len(f.weights), size=options.n_samples, p=f.weights / f.weights.sum())
-        sampled[f.name] = np.asarray(f.graph.scores, dtype=float)[bins]
+        sampled[f.name] = f.scores[bins]
     current = {f.name: f.current for f in features}
     steps = []
     for k in range(min(options.max_steps, len(order)) + 1):
@@ -529,7 +539,7 @@ def compute_local_facts(
     features = _features(ebm, instance, options.min_support)
     intercept = float(np.ravel(ebm.intercept_)[0])
     logit = intercept + sum(f.current for f in features)
-    logit_std = math.sqrt(sum(float(f.graph.stds[f.bin_index]) ** 2 for f in features))
+    logit_std = math.sqrt(sum(float(f.stds[f.bin_index]) ** 2 for f in features))
     sign = 1 if logit > 0 else -1
     # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
     lower, upper = sorted((_sigmoid(sign * (logit - z * logit_std)), _sigmoid(sign * (logit + z * logit_std))))
@@ -545,7 +555,7 @@ def compute_local_facts(
     return LocalFacts(
         prediction=prediction,
         contributions=sorted(
-            (Contribution(f.name, f.label, f.current, float(f.graph.stds[f.bin_index])) for f in features),
+            (Contribution(f.name, f.label, f.current, float(f.stds[f.bin_index])) for f in features),
             key=lambda c: abs(c.score),
             reverse=True,
         ),
