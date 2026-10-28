@@ -225,8 +225,8 @@ def parse_graph_text(text: str) -> ParsedGraph:
     Raises
     ------
     GraphTextError
-        If a line of the graph is missing, is not valid JSON, or the means and the bounds do not share the same
-        intervals.
+        If a line of the graph is missing, is not valid JSON, the means and the bounds do not share the same
+        intervals, or a multiclass text has a series before its first ``Class:`` line.
     InvalidOptionError
         If the feature type is not continuous.
 
@@ -249,6 +249,9 @@ def parse_graph_text(text: str) -> ParsedGraph:
             stds=series.stds,
             classes=[],
         )
+    if _MEANS_LINE.search(text, 0, class_lines[0].start()):
+        msg = "The graph text has a series before its first 'Class' line."
+        raise GraphTextError(msg)
     # the series of a class runs from its Class line to the next one
     ends = [match.start() for match in class_lines[1:]] + [len(text)]
     by_class = [_parse_series(text[match.end() : end]) for match, end in zip(class_lines, ends, strict=True)]
@@ -261,5 +264,6 @@ def parse_graph_text(text: str) -> ParsedGraph:
         x_vals=[parse_str_tuple_to_float_tuple(interval) for interval in by_class[0].intervals],
         scores=[list(row) for row in zip(*(series.scores for series in by_class), strict=True)],
         stds=[list(row) for row in zip(*(series.stds for series in by_class), strict=True)],
-        classes=[match.group(1).strip() for match in class_lines],
+        # to_text writes each label as it is, so a space at either end belongs to the label
+        classes=[match.group(1) for match in class_lines],
     )

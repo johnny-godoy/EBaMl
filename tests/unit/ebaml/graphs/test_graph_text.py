@@ -69,7 +69,8 @@ def test_parse_graph_text_of_one_output_has_no_classes() -> None:
 def test_parse_graph_text_reads_one_column_per_class() -> None:
     text = HEADER + series('{"(0, 1)": 0.5, "(1, 2)": 1.0}', " a ") + series('{"(0, 1)": -0.5, "(1, 2)": 2.0}', "b")
     parsed = parse_graph_text(text)
-    assert parsed.classes == ["a", "b"]
+    # a label keeps its spaces, as to_text writes it
+    assert parsed.classes == [" a ", "b"]
     assert parsed.x_vals == [(0.0, 1.0), (1.0, 2.0)]
     assert parsed.scores == [[0.5, -0.5], [1.0, 2.0]]
     assert parsed.stds == [[0.0, 0.0], [0.0, 0.0]]
@@ -85,4 +86,11 @@ def test_parse_graph_text_reads_each_class_from_its_own_lines() -> None:
 def test_parse_graph_text_rejects_classes_with_other_intervals() -> None:
     text = HEADER + series('{"(0, 1)": 0.5}', "a") + series('{"(0, 2)": 0.5}', "b")
     with pytest.raises(GraphTextError, match="classes of the graph text do not have the same intervals"):
+        parse_graph_text(text)
+
+
+def test_parse_graph_text_rejects_a_series_before_the_first_class() -> None:
+    # a series of one output before the class series was dropped without a word
+    text = HEADER + series('{"(0, 1)": 0.5}') + series('{"(0, 1)": 0.5}', "a")
+    with pytest.raises(GraphTextError, match="a series before its first 'Class' line"):
         parse_graph_text(text)
