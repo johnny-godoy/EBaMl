@@ -39,6 +39,15 @@ function graph_system_msg(expert_description: string) -> string {
     `You are ${expert_description}. You interpret global explanations produced by a Generalized Additive Model (GAM). Base every answer on the graph from the user, on any other information you are given, and on your knowledge of the real world. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
+// How to read the series of the classes. Only the graph of a multiclass classifier has "Class: " lines, so the prompt
+// of a binary classifier or a regressor gets no text about classes.
+function multiclass_format(graph: string) -> string {
+    if (graph.includes("Class: ")) {
+        return "\nA graph of a multiclass classifier repeats items 3 to 5 once for each class, after a line \"Class: <name>\". In every bin, the scores have the same mean over all the classes of the model, including classes that the graph leaves out. Only the differences between the classes change the predicted probabilities, so compare the classes with each other within each bin.";
+    };
+    ""
+}
+
 function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
     let msg = `
         <graph_format>
@@ -48,8 +57,7 @@ function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
         2. The type of the feature (continuous, categorical, or boolean).
         3. The mean values.
         4. The lower bounds of the confidence interval (optional).
-        5. The upper bounds of the confidence interval (optional).
-        A graph of a multiclass classifier repeats items 3 to 5 once for each class, after a line "Class: <name>". The scores of each bin are centred over the classes, and only the differences between the classes change the predicted probabilities, so compare the classes with each other within each bin.
+        5. The upper bounds of the confidence interval (optional).${multiclass_format(graph)}
         </graph_format>
 
         <graph>

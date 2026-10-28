@@ -90,10 +90,21 @@ test "describe_graph_msg includes optional sections only when set" {
 }
 
 test "describe_graph_msg says how to read the classes of a multiclass graph" {
-    let msg = describe_graph_msg("GRAPH", default_graph_options());
-    assert.is_true(msg.includes("once for each class, after a line \"Class: <name>\""));
-    assert.is_true(msg.includes("compare the classes with each other within each bin"));
+    let msg = describe_graph_msg("Feature Name: a\nClass: high\nMeans: {}", default_graph_options());
+    assert.is_true(
+        msg.includes("(optional).\nA graph of a multiclass classifier repeats items 3 to 5"),
+    );
+    assert.is_true(msg.includes("including classes that the graph leaves out"));
+    assert.is_true(msg.includes("compare the classes with each other within each bin."));
     assert.is_true(position_of(msg, "Class: <name>") < position_of(msg, "</graph_format>"))
+}
+
+test "describe_graph_msg of a graph with one output says nothing about classes" {
+    let msg = describe_graph_msg("Feature Name: a\nMeans: {}", default_graph_options());
+    assert.is_true(!msg.includes("multiclass"));
+    assert.is_true(
+        msg.includes("5. The upper bounds of the confidence interval (optional).\n</graph_format>"),
+    )
 }
 
 test "describe_graph_cot makes three calls and sums usage" {
