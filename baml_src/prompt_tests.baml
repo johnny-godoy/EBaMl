@@ -99,6 +99,15 @@ testset "Live" {
         assert.is_true(result.usage.input_tokens > 0)
     }
 
+    test "describe_graph_cot: a multiclass graph is read class against class" {
+        // "young" leads at low ages and "old" at high ages; a good answer names both classes and the change of lead
+        let graph = "Feature Name: age\nFeature Type: continuous\nClass: young\nMeans: {\"(18, 30)\": 1.5, \"(30, 50)\": 0.0, \"(50, 90)\": -1.5}\nClass: middle\nMeans: {\"(18, 30)\": 0.0, \"(30, 50)\": 0.5, \"(50, 90)\": 0.0}\nClass: old\nMeans: {\"(18, 30)\": -1.5, \"(30, 50)\": -0.5, \"(50, 90)\": 1.5}";
+        let result = describe_graph_cot(graph, 4, default_graph_options());
+        let text = result.text.to_lower_case();
+        assert.is_true(text.includes("young") && text.includes("old"));
+        assert.is_true(count_sentences(result.text) <= 5)
+    }
+
     test "describe_graph_cot: a ModelSpec sends the requests to the chosen model" {
         let graph = "{\"feature_name\": \"age\", \"type\": \"continuous\", \"mean\": {\"18-30\": 0.8, \"30-50\": 0.0, \"50-90\": -0.6}}";
         let model = ModelSpec {
