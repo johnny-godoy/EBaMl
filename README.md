@@ -150,9 +150,14 @@ print(describe_ebm(ebm, num_sentences=30, prompt=PromptOptions(dataset_descripti
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
 
+Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
+`EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
+(`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
+"Choosing the model". The classes are in `ebaml.llm.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
+
 A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
-because the text of a model with many classes is long. The scores of each bin are centred over the classes, because
-only the differences between the classes change the predicted probabilities.
+because the text of a model with many classes is long. In every bin, the scores have the same mean over all the classes
+of the model. Only the differences between the classes change the predicted probabilities.
 
 <!-- invisible-code-block: python
 import numpy as np
@@ -166,11 +171,6 @@ from ebaml.llm.options import GraphOptions
 multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 print(describe_graph(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"])))
 ```
-
-Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
-`EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
-(`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
-"Choosing the model". The classes are in `ebaml.llm.options`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
 
 ### Explaining one prediction
 
