@@ -15,3 +15,7 @@
 - `Counterfactual.new_decision` holds the class that the prediction flips to.
 - `SufficientReason.minimum` tells whether no smaller set fixes the prediction. It is always true for a binary classifier.
 - The proof page of the local explanations defines the counterfactual, the sufficient reason and the completions of regressors and multiclass classifiers.
+
+### Fixed
+
+- The local explanations reject an EBM with two classes whose link is not `logit` with `UnsupportedModelError`, because it is not a binary classifier. Every rejection starts with "Local explanations need a binary classifier."

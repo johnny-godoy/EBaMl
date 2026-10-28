@@ -305,6 +305,39 @@ def _plausible_bins(
     return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
+def _binary_kind(ebm: ExplainableBoostingModel) -> BinaryClassifier:
+    """Read the kind of an EBM, which must be a binary classifier.
+
+    The model kind is the one place that reads ``link_`` and ``classes_``.
+
+    Parameters
+    ----------
+    ebm: ExplainableBoostingModel
+        The EBM.
+
+    Returns
+    -------
+    BinaryClassifier
+        The kind, with the two classes.
+
+    Raises
+    ------
+    UnsupportedModelError
+        If the model is not a binary classifier, or its kind is unknown.
+
+    """
+    message = "Local explanations need a binary classifier."
+    try:
+        kind = model_kind(ebm)
+    except UnsupportedModelError as error:
+        msg = f"{message} {error}"
+        raise UnsupportedModelError(msg) from error
+    if not isinstance(kind, BinaryClassifier):
+        msg = f"{message} Got a {type(kind).__name__}."
+        raise UnsupportedModelError(msg)
+    return kind
+
+
 def _features(
     ebm: ExplainableBoostingModel,
     instance: Mapping[str, FeatureValue],
@@ -329,7 +362,7 @@ def _features(
     Raises
     ------
     UnsupportedModelError
-        If the model is not a binary classifier without interactions.
+        If the model has interactions.
     InvalidInstanceError
         If the instance lacks a feature, a value is missing, or a category was not seen in training.
 
@@ -337,10 +370,6 @@ def _features(
     # one term of one feature per feature; comparing the lists also rejects a missing term and an interaction term
     if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
-        raise UnsupportedModelError(msg)
-    # the model kind is the one place that reads link_ and classes_
-    if not isinstance(model_kind(ebm), BinaryClassifier):
-        msg = "Local explanations need a binary classifier."
         raise UnsupportedModelError(msg)
     features = []
     for index, name in enumerate(ebm.feature_names_in_):
@@ -590,6 +619,7 @@ def compute_local_facts(
         msg = f"confidence_level must be in [0, 1). Got {options.confidence_level}."
         raise OptionRangeError(msg)
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
+    classes = _binary_kind(ebm).classes
     features = _features(ebm, instance, options.min_support)
     intercept = float(np.ravel(ebm.intercept_)[0])
     logit = intercept + sum(f.current for f in features)
@@ -598,7 +628,7 @@ def compute_local_facts(
     # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
     lower, upper = sorted((_sigmoid(sign * (logit - z * logit_std)), _sigmoid(sign * (logit + z * logit_std))))
     prediction = Prediction(
-        decision=ebm.classes_[int(logit > 0)].item(),
+        decision=classes[int(logit > 0)],
         output=_sigmoid(sign * logit),
         lower=lower,
         upper=upper,
@@ -613,7 +643,7 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_counterfactual(features, intercept, sign, z, new_decision=ebm.classes_[int(logit <= 0)].item()),
+        counterfactual=_counterfactual(features, intercept, sign, z, new_decision=classes[int(logit <= 0)]),
         sufficient_reason=_sufficient_reason(features, intercept, sign, z),
         completions=_completions(features, order, intercept, sign, options),
         confidence_level=options.confidence_level,
