@@ -931,7 +931,7 @@ def multiclass_graph_parts(draw: st.DrawFn) -> MulticlassParts:
     std_row = st.lists(st.floats(min_value=0, max_value=100), min_size=n_classes, max_size=n_classes)
     scores = draw(st.lists(row, min_size=len(x_vals), max_size=len(x_vals)))
     stds = draw(st.lists(std_row, min_size=len(x_vals), max_size=len(x_vals)))
-    name = st.text("abcxyz _-", min_size=1, max_size=6).map(str.strip).filter(bool)
+    name = st.text("abcxyz _-", min_size=1, max_size=6)
     names = draw(st.lists(name, min_size=n_classes, max_size=n_classes, unique=True))
     return x_vals, scores, stds, names
 
