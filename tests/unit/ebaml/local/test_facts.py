@@ -83,6 +83,8 @@ def test_matches_brute_force(
         assert len(facts.counterfactual.changes) == flip
     assert facts.sufficient_reason is not None
     assert len(facts.sufficient_reason.features) == sufficient
+    # the brute force shows that no smaller set is sufficient, which is what minimum claims
+    assert facts.sufficient_reason.minimum
 
 
 def test_counterfactual_really_flips(categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
@@ -332,19 +334,19 @@ def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> N
 
 
 @pytest.mark.parametrize(
-    ("classes", "link", "message"),
+    ("classes", "link", "detail"),
     [
-        (["only"], "logit", "logit link needs two classes"),
-        (["a", "b", "c"], "mlogit", "need a binary classifier"),
-        # two classes_ with another link once passed the check of this module, which read classes_ itself
-        (["a", "b"], "identity", "need a binary classifier"),
+        (["only"], "logit", "An EBM with the logit link needs two classes"),
+        (["a", "b", "c"], "mlogit", "Got a MulticlassClassifier"),
+        # a model with two classes_ and the identity link is a regressor, not a binary classifier
+        (["a", "b"], "identity", "Got a Regressor"),
         (["a", "b"], "probit", "EBaMl reads the links"),
     ],
 )
-def test_features_reject_other_than_a_binary_classifier(classes: list[str], link: str, message: str) -> None:
+def test_facts_reject_other_than_a_binary_classifier(classes: list[str], link: str, detail: str) -> None:
     model = _model_features(term_features=[(0,), (1,)], classes=classes, link=link)
-    with pytest.raises(UnsupportedModelError, match=message):
-        local._features(model, {}, 0.01)
+    with pytest.raises(UnsupportedModelError, match=rf"^Local explanations need a binary classifier\. {detail}"):
+        local.compute_local_facts(model, {})
 
 
 @pytest.mark.parametrize(
@@ -531,7 +533,7 @@ def _patch_features(monkeypatch: pytest.MonkeyPatch, features: list[local._Featu
 
 
 def _hand_model(intercept: float = 0.25) -> ExplainableBoostingClassifier:
-    return fake_model(intercept_=np.array([intercept, 9.0]), classes_=np.array(["no", "yes"]))
+    return fake_model(intercept_=np.array([intercept, 9.0]), classes_=np.array(["no", "yes"]), link_="logit")
 
 
 Z95 = 1.959963984540054
@@ -688,12 +690,3 @@ def test_a_decimal_value_falls_in_the_bin_of_its_float(
     as_float = local.compute_local_facts(ebm, {"a": 0.25, "b": -0.5, "c": "x"})
     as_decimal = local.compute_local_facts(ebm, {"a": Decimal("0.25"), "b": -0.5, "c": "x"})
     assert as_decimal.prediction == as_float.prediction
-
-
-def test_the_sufficient_reason_of_a_binary_classifier_is_the_minimum(
-    categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
-) -> None:
-    ebm, data = categorical_ebm
-    reason = local.compute_local_facts(ebm, instance_of(data, 0)).sufficient_reason
-    assert reason is not None
-    assert reason.minimum is True
