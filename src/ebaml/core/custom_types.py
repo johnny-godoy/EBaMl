@@ -1,9 +1,10 @@
 """Types for EBM models, and the coercion of options to them."""
 
 import enum
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 
+import numpy as np
 from interpret.glassbox import (
     ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
     ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
@@ -12,6 +13,13 @@ from interpret.glassbox import (
 from ebaml.core.exceptions import InvalidOptionError
 
 ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRegressor
+
+# A label of a class, as NumPy's tolist() and item() return it. The numeric tower lets float cover int and bool.
+type ClassLabel = str | float
+# A value of one feature of an instance. A row of a pandas DataFrame gives NumPy scalars, and None is a missing value.
+type FeatureValue = str | float | np.generic | None
+# A value that orjson writes as JSON. Abstract containers keep a list[str] or a dict[str, float] assignable.
+type JSONValue = str | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
 
 
 class Normalization(enum.StrEnum):
@@ -63,14 +71,14 @@ def normalize_feature_type(feature_type: str) -> FeatureType:
     raise InvalidOptionError.from_enum(feature_type, FeatureType)
 
 
-def coerce_enum[E: enum.Enum](enum_class: type[E], value: object) -> E:
+def coerce_enum[E: enum.Enum](enum_class: type[E], value: E | str) -> E:
     """Convert a value (a member or its string value) to a member of an enum.
 
     Parameters
     ----------
     enum_class : type[E]
         The enum class.
-    value : object
+    value : E | str
         The member or the value to convert.
 
     Returns

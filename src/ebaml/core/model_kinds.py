@@ -14,7 +14,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel
 from ebaml.core.exceptions import UnsupportedModelError
 
 _BINARY_CLASSES = 2
@@ -65,7 +65,7 @@ class BinaryClassifier(ModelKind):
 
     """
 
-    classes: tuple[object, object]
+    classes: tuple[ClassLabel, ClassLabel]
 
     @property
     @override
@@ -99,7 +99,7 @@ class MulticlassClassifier(ModelKind):
 
     """
 
-    classes: tuple[object, ...]
+    classes: tuple[ClassLabel, ...]
 
     @property
     @override
@@ -147,7 +147,7 @@ class Regressor(ModelKind):
         return np.asarray(scores, dtype=np.float64)
 
 
-def _classes(ebm: ExplainableBoostingModel) -> tuple[object, ...]:
+def _classes(ebm: ExplainableBoostingModel) -> tuple[ClassLabel, ...]:
     """Read the class labels of a classifier as Python values.
 
     Parameters
@@ -157,7 +157,7 @@ def _classes(ebm: ExplainableBoostingModel) -> tuple[object, ...]:
 
     Returns
     -------
-    tuple[object, ...]
+    tuple[ClassLabel, ...]
         The labels, in the order of the scores.
 
     Raises

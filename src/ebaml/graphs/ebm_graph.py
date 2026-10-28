@@ -83,12 +83,12 @@ _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
 _BOOLEAN_KEYS = ["False", "True"]
 
 
-def _is_boolean(x_vals: Sequence[object]) -> bool:
+def _is_boolean(x_vals: Sequence[tuple[float, float]] | Sequence[str]) -> bool:
     """Whether the x-axis values are exactly the keys ``False`` and ``True`` (case-insensitive).
 
     Parameters
     ----------
-    x_vals: Sequence[object]
+    x_vals: Sequence[tuple[float, float]] | Sequence[str]
         The values of the x-axis.
 
     Returns
