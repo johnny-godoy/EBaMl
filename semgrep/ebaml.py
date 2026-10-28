@@ -137,3 +137,47 @@ copy_nested = Fields(**attrs.asdict(fields))
 
 # ok: ebaml-asdict-recurse-false
 copy_flat = Fields(**attrs.asdict(fields, recurse=False))
+
+
+# ruleid: ebaml-no-object-type
+def takes_object(value: object) -> str:
+    return str(value)
+
+
+# ruleid: ebaml-no-object-type
+def returns_object(value: str) -> object:
+    return value
+
+
+# ruleid: ebaml-no-object-type
+def takes_nested_object(values: Mapping[str, list[object]]) -> int:
+    return len(values)
+
+
+# ruleid: ebaml-no-object-type
+def takes_object_union(value: str | object = "a") -> str:
+    return str(value)
+
+
+class Holder:
+    # ruleid: ebaml-no-object-type
+    labels: tuple[object, ...]
+
+
+# ruleid: ebaml-no-object-type
+type Loose = list[object]
+
+
+# ok: ebaml-no-object-type
+def takes_named(value: str | float | None) -> str:
+    return str(value)
+
+
+# ok: ebaml-no-object-type
+def calls_object() -> object_count:
+    return isinstance(1, object)
+
+
+# ok: ebaml-no-object-type
+def takes_suppressed(value: object) -> str:  # nosemgrep: ebaml-no-object-type -- test of the opt-out
+    return str(value)

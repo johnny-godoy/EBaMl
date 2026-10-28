@@ -32,6 +32,7 @@ _KEY_PAGES: Mapping[str, str] = {
 _VARIABLE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
 
 
+# nosemgrep: ebaml-no-object-type -- the BAML runtime record has no static type; each caller narrows the value
 def _field(error: BamlError, name: str) -> object:
     """Read a field of the failure record that the error wraps.
 

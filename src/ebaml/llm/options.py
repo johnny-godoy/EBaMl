@@ -79,12 +79,14 @@ class PromptOptions:
     task_description: str | None = None
 
 
+# nosemgrep: ebaml-no-object-type -- attrs passes the instance and the field; the validator reads only the value
 def _check_temperature(_instance: object, _attribute: object, value: float | None) -> None:
     if value is not None and value < 0:
         msg = f"temperature must not be negative, got {value}"
         raise OptionRangeError(msg)
 
 
+# nosemgrep: ebaml-no-object-type -- attrs passes the instance and the field; the validator reads only the value
 def _check_max_output_tokens(_instance: object, _attribute: object, value: int | None) -> None:
     if value is not None and value < 1:
         msg = f"max_output_tokens must be at least 1, got {value}"
