@@ -17,8 +17,8 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 <!-- --8<-- [start:supported-models] -->
 | Feature | Binary classifier | Regressor | Multiclass classifier | Interactions |
 | --- | :---: | :---: | :---: | :---: |
-| Graph descriptions (`describe_graph`) | ✅ | ✅ | ❌ | ⚠️ |
-| Model summary (`describe_ebm`) | ✅ | ✅ | ❌ | ⚠️ |
+| Graph descriptions (`describe_graph`) | ✅ | ✅ | ✅ | ⚠️ |
+| Model summary (`describe_ebm`) | ✅ | ✅ | ✅ | ⚠️ |
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
 
@@ -150,6 +150,23 @@ print(describe_ebm(ebm, num_sentences=30, prompt=PromptOptions(dataset_descripti
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
 
+A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
+because the text of a model with many classes is long. The scores of each bin are centred over the classes, because
+only the differences between the classes change the predicted probabilities.
+
+<!-- invisible-code-block: python
+import numpy as np
+
+y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "old")
+-->
+
+```python
+from ebaml.llm.options import GraphOptions
+
+multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
+print(describe_graph(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"])))
+```
+
 Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
 `EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
 (`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
@@ -187,10 +204,10 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
 | `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
 | `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
-| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier. |
+| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
 | `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
 | `EBMGraphError` | no | The base class of the errors of a graph. |
-| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, or a boolean format gets more than two bins. |
+| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |
 | `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
 | `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
 | `SDKUnavailableError` | no | `baml_sdk` is missing, and `ebaml` cannot run `baml generate`. The error also derives from `ImportError`. |
