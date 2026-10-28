@@ -3,6 +3,7 @@
 import itertools
 import math
 from collections.abc import Callable, Iterator, Sequence
+from decimal import Decimal
 
 import numpy as np
 import pandas as pd
@@ -147,6 +148,9 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoos
     [
         ({"a": 1.0, "b": 0.0}, "no value"),
         ({"a": float("nan"), "b": 0, "c": "x"}, "missing"),
+        # a NaN of NumPy and the pd.NA of a nullable column were not seen as missing, so they got a bin or a TypeError
+        ({"a": np.float32("nan"), "b": 0, "c": "x"}, "missing"),
+        ({"a": 0, "b": 0, "c": pd.NA}, "missing"),
         ({"a": 0, "b": 0, "c": "?"}, "Unknown"),
     ],
 )
@@ -640,3 +644,12 @@ def test_the_features_of_a_sufficient_reason_fix_the_outcome_for_every_completio
             for f, b in zip(features, completion, strict=True)
         )
         assert margin > -TOLERANCE
+
+
+def test_a_decimal_value_falls_in_the_bin_of_its_float(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
+    ebm, _ = continuous_ebm
+    as_float = local.compute_local_facts(ebm, {"a": 0.25, "b": -0.5, "c": "x"})
+    as_decimal = local.compute_local_facts(ebm, {"a": Decimal("0.25"), "b": -0.5, "c": "x"})
+    assert as_decimal.prediction == as_float.prediction
