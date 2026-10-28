@@ -617,7 +617,7 @@ def test_the_changes_of_a_counterfactual_flip_the_prediction(
         if feature.name in new_bins:
             new = new_bins[feature.name]
             assert feature.plausible[new]
-            margin += sign * float(feature.graph.scores[new]) + z * float(feature.graph.stds[new])
+            margin += sign * float(feature.scores[new]) + z * float(feature.stds[new])
         else:
             margin += sign * feature.current
     assert margin < TOLERANCE
@@ -640,8 +640,7 @@ def test_the_features_of_a_sufficient_reason_fix_the_outcome_for_every_completio
     ]
     for completion in itertools.product(*choices):
         margin = sign * intercept + sum(
-            sign * float(f.graph.scores[b]) - z * float(f.graph.stds[b])
-            for f, b in zip(features, completion, strict=True)
+            sign * float(f.scores[b]) - z * float(f.stds[b]) for f, b in zip(features, completion, strict=True)
         )
         assert margin > -TOLERANCE
 
