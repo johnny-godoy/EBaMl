@@ -49,6 +49,7 @@ function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
         3. The mean values.
         4. The lower bounds of the confidence interval (optional).
         5. The upper bounds of the confidence interval (optional).
+        A graph of a multiclass classifier repeats items 3 to 5 once for each class, after a line "Class: <name>". The scores of each bin are centred over the classes, and only the differences between the classes change the predicted probabilities, so compare the classes with each other within each bin.
         </graph_format>
 
         <graph>

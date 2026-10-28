@@ -89,6 +89,13 @@ test "describe_graph_msg includes optional sections only when set" {
     assert.is_true(describe_graph_msg("GRAPH", opts).includes("A pneumonia dataset"))
 }
 
+test "describe_graph_msg says how to read the classes of a multiclass graph" {
+    let msg = describe_graph_msg("GRAPH", default_graph_options());
+    assert.is_true(msg.includes("once for each class, after a line \"Class: <name>\""));
+    assert.is_true(msg.includes("compare the classes with each other within each bin"));
+    assert.is_true(position_of(msg, "Class: <name>") < position_of(msg, "</graph_format>"))
+}
+
 test "describe_graph_cot makes three calls and sums usage" {
     let scripted = ScriptedClient { calls: 0 };
     let result = describe_graph_cot("GRAPH", 7, default_graph_options(), client = scripted);
