@@ -46,12 +46,13 @@ nothing at run time. A hint of `object` also hides from the reader what the valu
 
 - Use a named alias of `ebaml.core.custom_types` when one fits: `ClassLabel` for a class label, `FeatureValue` for a
   value of a feature of an instance, `JSONValue` for a value that `orjson` writes. Add an alias there when a new kind
-  of value recurs.
+  of value recurs. The rule also covers `*args`, `**kwargs` and string annotations.
 - Else write the union of the real types (`tuple[float, float] | str` for a bin), or a `Protocol` for an object that
   the code only calls.
 - A hint may keep `object` only when the function exists to inspect a value of any type: an attrs validator that
   ignores the instance, or a reader of an untyped record whose callers narrow the value. Add
-  `# nosemgrep: ebaml-no-object-type -- <reason>` to the line above the `def`.
+  `# nosemgrep: ebaml-no-object-type -- <reason>` on the line of the hint, or on the line above it when the line is
+  long. For a one-line `def`, the line above is the line above the `def`.
 - A precise hint can expose a test that passes values the code never produces. Fix the test, not the hint.
 - The semgrep rule `ebaml-no-object-type` in `semgrep/ebaml.yml` enforces this in `src/ebaml/`. Its test is in
   `semgrep/ebaml.py`.

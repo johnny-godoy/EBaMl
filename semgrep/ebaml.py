@@ -168,6 +168,42 @@ class Holder:
 type Loose = list[object]
 
 
+# ruleid: ebaml-no-object-type
+def takes_object_args(*values: object) -> int:
+    return len(values)
+
+
+# ruleid: ebaml-no-object-type, ebaml-no-kwargs-bag
+def takes_object_kwargs(**values: object) -> int:
+    return len(values)
+
+
+# ruleid: ebaml-no-object-type
+def takes_string_object(values: "list[object]") -> int:
+    return len(values)
+
+
+# ok: ebaml-no-object-type
+def takes_string_named(values: "list[objects]") -> int:
+    return len(values)
+
+
+def takes_object_in_a_long_signature(
+    first: str,
+    # ruleid: ebaml-no-object-type
+    second: object,
+) -> str:
+    return first
+
+
+def suppresses_in_a_long_signature(
+    first: str,
+    # ok: ebaml-no-object-type
+    second: object,  # nosemgrep: ebaml-no-object-type -- test of the opt-out on the line of the hint
+) -> str:
+    return first
+
+
 # ok: ebaml-no-object-type
 def takes_named(value: str | float | None) -> str:
     return str(value)
