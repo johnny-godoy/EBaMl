@@ -3,12 +3,14 @@
 import enum
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
+from decimal import Decimal
 
 import numpy as np
 from interpret.glassbox import (
     ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
     ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 )
+from pandas.api.typing import NAType
 
 from ebaml.core.exceptions import InvalidOptionError
 
@@ -16,9 +18,12 @@ ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRe
 
 # A label of a class, as NumPy's tolist() and item() return it. The numeric tower lets float cover int and bool.
 type ClassLabel = str | float
-# A value of one feature of an instance. A row of a pandas DataFrame gives NumPy scalars, and None is a missing value.
-type FeatureValue = str | float | np.generic | None
-# A value that orjson writes as JSON. Abstract containers keep a list[str] or a dict[str, float] assignable.
+# A value of one feature of an instance. A row of a pandas DataFrame gives NumPy scalars, a nullable column gives pd.NA,
+# and None, NaN and pd.NA are missing values.
+type FeatureValue = str | float | Decimal | np.generic | NAType | None
+# A JSON value of the texts for the prompts. The abstract containers keep a list[str] or a dict[str, float] assignable,
+# so the hint also accepts a Sequence or a Mapping that orjson cannot write (a range, a MappingProxyType). orjson raises
+# for those when it writes the text.
 type JSONValue = str | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
 
 
