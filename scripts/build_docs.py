@@ -43,6 +43,7 @@ NOTEBOOKS: tuple[Path, ...] = (
     ROOT / "notebooks" / "titanic.py",
     ROOT / "notebooks" / "local_explanations.py",
     ROOT / "notebooks" / "model_providers.py",
+    ROOT / "notebooks" / "multiclass.py",
 )
 EXPORT_DIR = ROOT / "docs" / "notebooks"
 # the notebooks run the package, so a change to any module makes the output stale

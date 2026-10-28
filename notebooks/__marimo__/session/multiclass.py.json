@@ -1,0 +1,269 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.25.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "4344d59e5af32ad4b88b094b618c2158",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "811f23f2509e00ec897f753682d01127",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"multiclass-classifiers\">Multiclass classifiers</h1>\n<span class=\"paragraph\">This notebook shows how EBaMl reads an EBM with three or more classes: the kind of the model, the graph with one\nseries per class, the options that select and shift the classes, and the description by the LLM.</span>\n<ul>\n<li>You need no data download: the iris data comes with scikit-learn.</li>\n<li>Everything outside the buttons runs without a key and sends no request.</li>\n<li>The buttons at the end send real requests. The default model needs <code>OPENROUTER_API_KEY</code>. Pass <code>model=</code> to use\n  another model, as the documentation page \"Choosing the model\" shows.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "e69f07d2dc06a1d336adfff55b89057f",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"a-multiclass-ebm\">A multiclass EBM</h2>\n<span class=\"paragraph\">The iris data has three classes of flower and four features. <code>model_kind</code> reads the kind of the fitted EBM.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "0c780af377678988121395a7809e2dca",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\"><code>model_kind(ebm)</code> is <code>MulticlassClassifier(classes=('setosa', 'versicolor', 'virginica'))</code>, with the outputs <code>['setosa', 'versicolor', 'virginica']</code>.</span>\n<span class=\"paragraph\">Each bin has one score per class. The difference between the scores of two classes is the change of the log-odds of one class against the other, so only the differences between the classes change the predicted probabilities.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "f1245c688741b0c0292881cd62069195",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"one-series-per-class\">One series per class</h2>\n<span class=\"paragraph\">The graph of a feature has one score per bin and per class. Softmax gives the same probabilities when the same\nnumber is added to the scores of all the classes of a bin. So <code>EBMGraph.from_ebm</code> centres each bin: the mean of\nits scores over the classes is zero. The text has one series of means and bounds for each class, after a\n<code>Class:</code> line.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "d5519cc8628d56eafa182d773eea71bb",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: column;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">The largest mean of a bin over the classes is <code>1.5e-16</code>.</span></span><span class=\"markdown prose dark:prose-invert contents\"><div class=\"language-scdoc codehilite\"><pre><span></span><code>This graph represents a continuous-valued feature. The keys are intervals that represent ranges where the function predicts the same value.\n\nThe model is a multiclass classifier, so the graph has one series of means and bounds for each class. A line 'Class: &lt;name&gt;' starts the series of each class. In every bin, the scores have the same mean over all the classes of the model, so only the differences between the classes change the predicted probabilities.\n\nFeature Name: petal_length\nFeature Type: continuous\nClass: setosa\nMeans: {\"(1.0, 1.05)\": 2.67, \"(1.05, 1.15)\": 2.64, \"(1.15, 1.25)\": 2.6, \"(1.25, 1.35)\": 2.56, \"(1.35, 1.45)\": 2.53, \"(1.45, 1.55)\": 2.49, \"(1.55, 1.65)\": 2.43, \"(1.65, 1.7999999999999998)\": 2.37, \"(1.7999999999999998, 2.45)\": 2.31, \"(2.45, 3.15)\": 0.58, \"(3.15, 3.4)\": 0.2, \"(3.4, 3.55)\": 0.13, \"(3.55, 3.6500000000000004)\": 0.07, \"(3.6500000000000004, 3.75)\": 0.04, \"(3.75, 3.8499999999999996)\": -0.01, \"(3.8499999999999996, 3.95)\": -0.06, \"(3.95, 4.05)\": -0.11, \"(4.05, 4.15)\": -0.26, \"(4.15, 4.25)\": -0.3, \"(4.25, 4.35)\": -0.33, \"(4.35, 4.45)\": -0.37, \"(4.45, 4.55)\": -0.62, \"(4.55, 4.65)\": -0.65, \"(4.65, 4.75)\": -0.77, \"(4.75, 4.85)\": -0.94, \"(4.85, 4.95)\": -1.3, \"(4.95, 5.05)\": -1.67, \"(5.05, 5.15)\": -1.77, \"(5.15, 5.25)\": -2.23, \"(5.25, 5.35)\": -2.25, \"(5.35, 5.45)\": -2.27, \"(5.45, 5.55)\": -2.29, \"(5.55, 5.65)\": -2.31, \"(5.65, 5.75)\": -2.33, \"(5.75, 5.85)\": -2.34, \"(5.85, 5.95)\": -2.36, \"(5.95, 6.05)\": -2.37, \"(6.05, 6.199999999999999)\": -2.39, \"(6.199999999999999, 6.35)\": -2.4, \"(6.35, 6.5)\": -2.42, \"(6.5, 6.65)\": -2.43, \"(6.65, 6.800000000000001)\": -2.45, \"(6.800000000000001, 6.9)\": -2.46}\nClass: versicolor\nMeans: {\"(1.0, 1.05)\": -0.48, \"(1.05, 1.15)\": -0.46, \"(1.15, 1.25)\": -0.44, \"(1.25, 1.35)\": -0.42, \"(1.35, 1.45)\": -0.41, \"(1.45, 1.55)\": -0.38, \"(1.55, 1.65)\": -0.35, \"(1.65, 1.7999999999999998)\": -0.31, \"(1.7999999999999998, 2.45)\": -0.28, \"(2.45, 3.15)\": 0.68, \"(3.15, 3.4)\": 0.89, \"(3.4, 3.55)\": 0.92, \"(3.55, 3.6500000000000004)\": 0.94, \"(3.6500000000000004, 3.75)\": 0.96, \"(3.75, 3.8499999999999996)\": 0.98, \"(3.8499999999999996, 3.95)\": 0.99, \"(3.95, 4.05)\": 1.01, \"(4.05, 4.15)\": 1.0, \"(4.15, 4.25)\": 1.0, \"(4.25, 4.35)\": 1.0, \"(4.35, 4.45)\": 1.0, \"(4.45, 4.55)\": 0.91, \"(4.55, 4.65)\": 0.9, \"(4.65, 4.75)\": 0.88, \"(4.75, 4.85)\": 0.77, \"(4.85, 4.95)\": 0.41, \"(4.95, 5.05)\": 0.07, \"(5.05, 5.15)\": -0.07, \"(5.15, 5.25)\": -0.69, \"(5.25, 5.35)\": -0.71, \"(5.35, 5.45)\": -0.74, \"(5.45, 5.55)\": -0.77, \"(5.55, 5.65)\": -0.8, \"(5.65, 5.75)\": -0.82, \"(5.75, 5.85)\": -0.84, \"(5.85, 5.95)\": -0.86, \"(5.95, 6.05)\": -0.88, \"(6.05, 6.199999999999999)\": -0.9, \"(6.199999999999999, 6.35)\": -0.92, \"(6.35, 6.5)\": -0.93, \"(6.5, 6.65)\": -0.95, \"(6.65, 6.800000000000001)\": -0.97, \"(6.800000000000001, 6.9)\": -0.98}\nClass: virginica\nMeans: {\"(1.0, 1.05)\": -2.19, \"(1.05, 1.15)\": -2.18, \"(1.15, 1.25)\": -2.16, \"(1.25, 1.35)\": -2.14, \"(1.35, 1.45)\": -2.13, \"(1.45, 1.55)\": -2.11, \"(1.55, 1.65)\": -2.08, \"(1.65, 1.7999999999999998)\": -2.05, \"(1.7999999999999998, 2.45)\": -2.03, \"(2.45, 3.15)\": -1.26, \"(3.15, 3.4)\": -1.09, \"(3.4, 3.55)\": -1.04, \"(3.55, 3.6500000000000004)\": -1.01, \"(3.6500000000000004, 3.75)\": -1.0, \"(3.75, 3.8499999999999996)\": -0.97, \"(3.8499999999999996, 3.95)\": -0.94, \"(3.95, 4.05)\": -0.9, \"(4.05, 4.15)\": -0.74, \"(4.15, 4.25)\": -0.7, \"(4.25, 4.35)\": -0.67, \"(4.35, 4.45)\": -0.63, \"(4.45, 4.55)\": -0.29, \"(4.55, 4.65)\": -0.25, \"(4.65, 4.75)\": -0.12, \"(4.75, 4.85)\": 0.17, \"(4.85, 4.95)\": 0.9, \"(4.95, 5.05)\": 1.6, \"(5.05, 5.15)\": 1.84, \"(5.15, 5.25)\": 2.91, \"(5.25, 5.35)\": 2.96, \"(5.35, 5.45)\": 3.01, \"(5.45, 5.55)\": 3.05, \"(5.55, 5.65)\": 3.11, \"(5.65, 5.75)\": 3.15, \"(5.75, 5.85)\": 3.19, \"(5.85, 5.95)\": 3.22, \"(5.95, 6.05)\": 3.25, \"(6.05, 6.199999999999999)\": 3.29, \"(6.199999999999999, 6.35)\": 3.32, \"(6.35, 6.5)\": 3.35, \"(6.5, 6.65)\": 3.38, \"(6.65, 6.800000000000001)\": 3.41, \"(6.800000000000001, 6.9)\": 3.44}\n</code></pre></div></span></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "1326dd4c977900e85f02f3c5d322b13a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"the-centring-keeps-the-predictions\">The centring keeps the predictions</h2>\n<span class=\"paragraph\">The intercept plus the centred score of each feature gives the same probabilities as the EBM, because the centring\nonly adds one number per bin to all the classes. The cell compares them for the first five flowers.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "464a14c9e7e16407c0e83c5292930f1c",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">The largest difference from <code>ebm.predict_proba</code> is <code>2.7e-20</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "5e46c4ae49b73e2b6146da053be1a692",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"select-the-classes\">Select the classes</h2>\n<span class=\"paragraph\">The text of a model with many classes is long. <code>classes</code> keeps some classes, in the order that you give. The\nscores stay centred over all the classes of the model, so a bin of the selected classes need not have a mean of\nzero. <code>describe_graph</code> and <code>describe_ebm</code> take the same option as <code>GraphOptions(classes=[...])</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "2f72ed0d2018ac963f51b2dfd7d83dd9",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><div class=\"language-scdoc codehilite\"><pre><span></span><code>Feature Name: petal_length\nFeature Type: continuous\nClass: virginica\nMeans: {\"(1.0, 1.05)\": -2.19, \"(1.05, 1.15)\": -2.18, \"(1.15, 1.25)\": -2.16, \"(1.25, 1.35)\": -2.14, \"(1.35, 1.45)\": -2.13, \"(1.45, 1.55)\": -2.11, \"(1.55, 1.65)\": -2.08, \"(1.65, 1.7999999999999998)\": -2.05, \"(1.7999999999999998, 2.45)\": -2.03, \"(2.45, 3.15)\": -1.26, \"(3.15, 3.4)\": -1.09, \"(3.4, 3.55)\": -1.04, \"(3.55, 3.6500000000000004)\": -1.01, \"(3.6500000000000004, 3.75)\": -1.0, \"(3.75, 3.8499999999999996)\": -0.97, \"(3.8499999999999996, 3.95)\": -0.94, \"(3.95, 4.05)\": -0.9, \"(4.05, 4.15)\": -0.74, \"(4.15, 4.25)\": -0.7, \"(4.25, 4.35)\": -0.67, \"(4.35, 4.45)\": -0.63, \"(4.45, 4.55)\": -0.29, \"(4.55, 4.65)\": -0.25, \"(4.65, 4.75)\": -0.12, \"(4.75, 4.85)\": 0.17, \"(4.85, 4.95)\": 0.9, \"(4.95, 5.05)\": 1.6, \"(5.05, 5.15)\": 1.84, \"(5.15, 5.25)\": 2.91, \"(5.25, 5.35)\": 2.96, \"(5.35, 5.45)\": 3.01, \"(5.45, 5.55)\": 3.05, \"(5.55, 5.65)\": 3.11, \"(5.65, 5.75)\": 3.15, \"(5.75, 5.85)\": 3.19, \"(5.85, 5.95)\": 3.22, \"(5.95, 6.05)\": 3.25, \"(6.05, 6.199999999999999)\": 3.29, \"(6.199999999999999, 6.35)\": 3.32, \"(6.35, 6.5)\": 3.35, \"(6.5, 6.65)\": 3.38, \"(6.65, 6.800000000000001)\": 3.41, \"(6.800000000000001, 6.9)\": 3.44}\nClass: setosa\nMeans: {\"(1.0, 1.05)\": 2.67, \"(1.05, 1.15)\": 2.64, \"(1.15, 1.25)\": 2.6, \"(1.25, 1.35)\": 2.56, \"(1.35, 1.45)\": 2.53, \"(1.45, 1.55)\": 2.49, \"(1.55, 1.65)\": 2.43, \"(1.65, 1.7999999999999998)\": 2.37, \"(1.7999999999999998, 2.45)\": 2.31, \"(2.45, 3.15)\": 0.58, \"(3.15, 3.4)\": 0.2, \"(3.4, 3.55)\": 0.13, \"(3.55, 3.6500000000000004)\": 0.07, \"(3.6500000000000004, 3.75)\": 0.04, \"(3.75, 3.8499999999999996)\": -0.01, \"(3.8499999999999996, 3.95)\": -0.06, \"(3.95, 4.05)\": -0.11, \"(4.05, 4.15)\": -0.26, \"(4.15, 4.25)\": -0.3, \"(4.25, 4.35)\": -0.33, \"(4.35, 4.45)\": -0.37, \"(4.45, 4.55)\": -0.62, \"(4.55, 4.65)\": -0.65, \"(4.65, 4.75)\": -0.77, \"(4.75, 4.85)\": -0.94, \"(4.85, 4.95)\": -1.3, \"(4.95, 5.05)\": -1.67, \"(5.05, 5.15)\": -1.77, \"(5.15, 5.25)\": -2.23, \"(5.25, 5.35)\": -2.25, \"(5.35, 5.45)\": -2.27, \"(5.45, 5.55)\": -2.29, \"(5.55, 5.65)\": -2.31, \"(5.65, 5.75)\": -2.33, \"(5.75, 5.85)\": -2.34, \"(5.85, 5.95)\": -2.36, \"(5.95, 6.05)\": -2.37, \"(6.05, 6.199999999999999)\": -2.39, \"(6.199999999999999, 6.35)\": -2.4, \"(6.35, 6.5)\": -2.42, \"(6.5, 6.65)\": -2.43, \"(6.65, 6.800000000000001)\": -2.45, \"(6.800000000000001, 6.9)\": -2.46}\n</code></pre></div></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "af3ac49f7d5eda9473c4ede100b5d344",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"shift-the-scores\">Shift the scores</h2>\n<span class=\"paragraph\"><code>Normalization.MIN_MAX</code> and <code>Normalization.Z_SCORE</code> shift all the scores of the graph by one number. The\ndifferences between the classes of a bin, which carry the meaning, do not change. Here the smallest score becomes\nzero.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "86df126a03413b824c3ca452ce1fd86e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">The smallest score is <code>0.00</code>. The largest change of a gap between two classes is <code>8.9e-16</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "86528d5fe7a9eba86210489a21f2b681",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"when-the-options-are-wrong\">When the options are wrong</h2>\n<span class=\"paragraph\">The cells below show the errors for an unknown class, for one string in place of a list, and for <code>classes</code> on a\nmodel with one output. They send no request.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "a85e51bb8c4cb4e161002b22275b8608",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003ccode&#92;u003eInvalidOptionError&#92;u003c/code&#92;u003e: Invalid option: rose. Valid options are [&#x27;setosa&#x27;, &#x27;versicolor&#x27;, &#x27;virginica&#x27;].&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;danger&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "a5bc5217e456dc08c77015267c966a44",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003ccode&#92;u003eInvalidOptionError&#92;u003c/code&#92;u003e: Invalid option: classes=&#x27;setosa&#x27; (pass a list of class names). Valid options are [&#x27;setosa&#x27;, &#x27;versicolor&#x27;, &#x27;virginica&#x27;].&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;danger&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "738cc88afa0c933a6285ecf2045c78d8",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<marimo-callout-output data-html='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003e&#92;u003ccode&#92;u003eUnsupportedModelError&#92;u003c/code&#92;u003e: The option classes needs a multiclass classifier, but the graph of petal_length has one output.&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;danger&quot;'></marimo-callout-output>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "71ad8bc8ed5fb1b7a2efc03ce7c101d6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"put-it-in-words\">Put it in words</h2>\n<span class=\"paragraph\">Each button sends real requests. <code>describe_graph</code> makes three requests for one graph. <code>describe_ebm</code> makes three\nfor each feature and two for the summary.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "f3b759e0bf840733c613f67ba1185500",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/html": "<div style='display: flex;flex: 1;flex-direction: row;justify-content: flex-start;align-items: normal;flex-wrap: nowrap;gap: 0.5rem'><marimo-ui-element object-id='qnkX-0' random-id='0ab6dee0-188c-620e-318d-eb6bae588e09'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe the petal length graph&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element><marimo-ui-element object-id='qnkX-1' random-id='71589ed4-dc93-ed2f-ff29-bb8e62bc6e97'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eDescribe the whole model&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></div>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "TqIu",
+      "code_hash": "1d7d17c4228b57aed21afec1cf8bfdbf",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the first button to describe the graph.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Vxnm",
+      "code_hash": "c1969db7ac0d16e5dbeb5199aa1073ad",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Press the second button to describe the model.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    }
+  ]
+}

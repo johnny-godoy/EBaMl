@@ -158,6 +158,7 @@ Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the
 A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
 because the text of a model with many classes is long. In every bin, the scores have the same mean over all the classes
 of the model. Only the differences between the classes change the predicted probabilities.
+`notebooks/multiclass.py` shows each option on the iris data.
 
 <!-- invisible-code-block: python
 import numpy as np
