@@ -57,6 +57,24 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
     )
 
 
+def _warn_skipped_interactions(ebm: ExplainableBoostingModel) -> None:
+    """Log a warning that names the interaction terms of an EBM, because the descriptions cover the main effects only.
+
+    Parameters
+    ----------
+    ebm : ExplainableBoostingModel
+        The EBM.
+
+    """
+    skipped = [
+        name
+        for name, features in zip(ebm.term_names_, ebm.term_features_, strict=True)
+        if len(features) > 1  # pragma: no mutate -- a term of zero features does not exist
+    ]
+    if skipped:
+        logger.warning("interactions_skipped", terms=skipped, reason="the descriptions cover the main effects only")
+
+
 def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
     """Build the BAML prompt options from the prompt options, falling back to the BAML defaults.
 
@@ -348,8 +366,9 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
-    descriptions. The logged usage leaves out the cut-off attempts, because the provider error carries no token count.
-    It is a lower bound, and the ``usage`` log event has the number of those attempts in ``truncated_attempts``.
+    descriptions. The descriptions skip the interaction terms, and an ``interactions_skipped`` warning names them.
+    The logged usage leaves out the cut-off attempts, because the provider error carries no token count. It is a lower
+    bound, and the ``usage`` log event has the number of those attempts in ``truncated_attempts``.
 
     Parameters
     ----------
@@ -375,6 +394,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     """
     # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
     # processing one of the graphs or in the model surface before any LLM call is paid for.
+    _warn_skipped_interactions(ebm)
     feature_importances = _feature_importances_to_text(ebm)
     feature_names = list(ebm.feature_names_in_)
     graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]

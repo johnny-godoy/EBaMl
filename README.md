@@ -22,8 +22,8 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
 
-✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped without a
-warning. ❌ not supported yet. Full support is on the
+✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
+`describe_ebm` logs an `interactions_skipped` warning that names them. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
 ## Setup
