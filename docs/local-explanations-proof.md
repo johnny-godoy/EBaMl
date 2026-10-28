@@ -30,8 +30,9 @@ the *gains*.
 ## Definitions for every model kind
 
 `explain_instance` accepts binary classifiers only. The definitions below set what the explanations of the other
-kinds will mean. The result types of `ebaml.local` can hold all of them. Each definition says whether sorting solves it
-exactly. Only the binary case has a proof now.
+kinds will mean. The result types of `ebaml.local` can hold all of them. Only the binary case has a proof. For the other
+kinds, the words "exact" and "smallest" below state the claims that the proofs of 1.1.0 and 1.2.0 must check. They are
+not proved.
 
 ### Notation
 
@@ -86,7 +87,8 @@ only a test of the decision. It is an estimate, so it makes no exact claim.
 
 Each margin moves by `z` standard deviations against the claim, as for the binary case. EBMs store no covariance
 between the scores of two classes. The standard deviation of a margin `s_c - s_j` therefore uses the sum of the two
-standard deviations, which is never smaller than the true value.
+standard deviations. For any correlation, the sum is an upper bound of the true value. The proofs of 1.2.0 must check
+this bound.
 
 ### Result types
 
@@ -94,7 +96,8 @@ standard deviations, which is never smaller than the true value.
 | --- | --- | --- | --- |
 | `Prediction.decision` | The predicted class. | The decision, for example "above `t`". | The predicted class. |
 | `Prediction.output`, `lower`, `upper` | The probability of the class, and its interval. | The predicted value, and its interval. | The probability of the class, and its interval. |
-| `Prediction.score`, `score_std` | The log-odds of the second class. | The predicted value. | The smallest margin. |
+| `Prediction.score`, `score_std` | The log-odds of the second class. | The predicted value. | The score of the predicted class. |
+| `Prediction.margin` | The log-odds of the predicted class. | The margin of the decision. | The smallest margin. |
 | `Counterfactual.new_decision` | The other class. | The other decision. | The new predicted class. |
 | `Counterfactual.new_output` | The probability of the new class. | The new predicted value. | The probability of the new class. |
 | `SufficientReason.guaranteed_margin` | The worst case of the margin. | The worst case of the margin. | The smallest worst case over the margins. |

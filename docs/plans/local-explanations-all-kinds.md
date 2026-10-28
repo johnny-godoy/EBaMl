@@ -48,7 +48,11 @@ computes the facts, Lean proves each exact claim, and the LLM only puts the fact
   - Count completions: sample as for binary. The share is an estimate, so it makes no exact claim.
 - Confidence: keep the rule of the module docstring. Each score moves by `z` standard deviations in the direction that
   makes the claim harder. For multiclass, define that direction for each margin, and write it in the paper.
-- Text and prompts: extend `ebaml.local.fact_text` with the text for each kind, for both audiences. Change
+- Text and prompts: extend `ebaml.local.fact_text` with the text for each kind, for both audiences. The renderers of
+  0.2.0 read binary facts only: they take the direction of a contribution from the sign of `Prediction.score`, and they
+  pass neither `SufficientReason.minimum` nor `Counterfactual.new_decision` to the prompts. The sufficient reason prompt
+  says "a smallest set". Pass both fields, and let the prompt say "minimal" when `minimum` is false, because the LLM
+  must not make an exact claim that the result does not have. Change
   `baml_src/local_explanations.baml` only as much as the new texts need, and follow the prompt rules of
   `.claude/rules/writing-style.md`.
 </design>
