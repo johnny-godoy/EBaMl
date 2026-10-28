@@ -826,11 +826,17 @@ def test_from_ebm_rejects_classes_for_a_model_with_one_output() -> None:
 @pytest.mark.parametrize(
     ("normalization", "expected"),
     [
-        (Normalization.MIN_MAX, [[0.0, 0.0, 3.0], [2.0, 1.0, 0.0], [0.0, 2.0, 1.0]]),
-        (Normalization.Z_SCORE, [[-2 / 3, -1.0, 5 / 3], [4 / 3, 0.0, -4 / 3], [-2 / 3, 1.0, -1 / 3]]),
+        (Normalization.MIN_MAX, [[1.0, 2.0, 3.0], [3.0, 3.0, 0.0], [1.0, 4.0, 1.0]]),
+        # the centred scores have a mean of zero, so the z-score shifts nothing
+        (Normalization.Z_SCORE, [[-1.0, 0.0, 1.0], [1.0, 1.0, -2.0], [-1.0, 2.0, -1.0]]),
     ],
 )
-def test_from_ebm_normalizes_each_class_on_its_own(normalization: Normalization, expected: list[list[float]]) -> None:
+def test_from_ebm_normalizes_all_classes_by_one_constant(
+    normalization: Normalization,
+    expected: list[list[float]],
+) -> None:
+    # a shift of each class on its own changed the differences between the classes of a bin, which the text says carry
+    # the meaning
     g = EBMGraph.from_ebm(multiclass_fake(), 0, normalization)
     assert np.asarray(g.scores) == pytest.approx(np.array(expected))
 
@@ -860,8 +866,8 @@ def test_to_text_of_a_multiclass_graph_has_one_series_per_class() -> None:
         "This graph represents a continuous-valued feature. The keys are intervals that represent ranges where the"
         " function predicts the same value.\n\n"
         "The model is a multiclass classifier, so the graph has one series of means and bounds for each class. A line"
-        " 'Class: <name>' starts the series of each class. The scores of each bin are centred over all the classes of"
-        " the model: only the differences between the classes change the predicted probabilities.\n\n"
+        " 'Class: <name>' starts the series of each class. In every bin, the scores have the same mean over all the"
+        " classes of the model, so only the differences between the classes change the predicted probabilities.\n\n"
         "Feature Name: age\n"
         "Feature Type: continuous\n"
         "Class: high\n"
