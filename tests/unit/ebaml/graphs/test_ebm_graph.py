@@ -1004,3 +1004,9 @@ def test_to_text_rejects_scores_that_do_not_fit_the_classes(
     graph = EBMGraph("age", "continuous", [(0.0, 1.0), (1.0, 2.0)], scores, stds, classes)
     with pytest.raises(EBMGraphShapeError, match=rf"has scores of shape {shape}"):
         graph.to_text()
+
+
+def test_to_text_without_bounds_ignores_the_confidence_level() -> None:
+    # the factor of the bounds was computed for every text, so a level that only the bounds use raised without them
+    text = cont_graph().to_text(confidence_bounds=False, confidence_level=95)
+    assert "Bounds" not in text
