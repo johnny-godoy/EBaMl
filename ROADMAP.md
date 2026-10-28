@@ -30,10 +30,9 @@ EBaMl will reach three goals:
 | 1.5.0 | GAM Changer parity: business constraints, the effect of an edit on data, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 1.4.0 | Planned |
 | 1.6.0 | Stable editing. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 1.2.0, 1.5.0 | Planned |
 
-0.1.0 and 0.2.0 do not depend on each other. Two contributors can do them at the same time.
-
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
-model that has them. The [model-kinds](docs/plans/model-kinds.md) plan says what full support needs.
+model that has them. The README table "Supported models" shows the state of each feature, and the
+[model-kinds](docs/plans/model-kinds.md) plan says what full support needs.
 
 ## Versions
 
