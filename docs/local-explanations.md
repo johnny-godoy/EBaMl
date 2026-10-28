@@ -229,3 +229,21 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
   `ValueError`. Impute, or drop the row.
 - **The words are not guaranteed.** The facts are exact; the LLM can still misread them. The prompts forbid inventing
   values and tell it which claims are guarantees and which are estimates, and `explanation.facts` lets you check.
+
+A multiclass classifier gets the error before any LLM call:
+
+<!-- invisible-code-block: python
+import numpy as np
+
+y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "old")
+-->
+
+```python
+from ebaml.core.exceptions import UnsupportedModelError
+
+multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
+try:
+    compute_local_facts(multiclass, X.iloc[0].to_dict())
+except UnsupportedModelError as error:
+    print(error)  # Local explanations need a binary classifier. Got a MulticlassClassifier.
+```
