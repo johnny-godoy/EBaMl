@@ -89,20 +89,28 @@ def continuous_ebm(
 
 
 @pytest.fixture(scope="module")
-def regression_ebm(fit_ebm: Callable[..., ExplainableBoostingRegressor]) -> ExplainableBoostingRegressor:
+def regression_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
+) -> ExplainableBoostingRegressor:
     rng = np.random.default_rng(3)
     data = pd.DataFrame({"a": rng.normal(size=400), "c": rng.choice(["x", "y"], 400)})
     target = 2 * data["a"] + (data["c"] == "x") + rng.normal(size=400)
-    return fit_ebm(data, target, interactions=0, random_state=0, regression=True)
+    ebm = fit_ebm(data, target, interactions=0, random_state=0, regression=True)
+    assert isinstance(ebm, ExplainableBoostingRegressor)
+    return ebm
 
 
 @pytest.fixture(scope="module")
-def multiclass_ebm(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> ExplainableBoostingClassifier:
+def multiclass_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
+) -> ExplainableBoostingClassifier:
     rng = np.random.default_rng(4)
     data = pd.DataFrame({"a": rng.normal(size=600), "c": rng.choice(["x", "y"], 600)})
     signal = data["a"] + 0.5 * (data["c"] == "x") + rng.normal(scale=0.3, size=600)
     target = np.where(signal > 0.7, "high", np.where(signal < -0.3, "low", "mid"))
-    return fit_ebm(data, target, interactions=0, random_state=0)
+    ebm = fit_ebm(data, target, interactions=0, random_state=0)
+    assert isinstance(ebm, ExplainableBoostingClassifier)
+    return ebm
 
 
 # fake_model builds EBM instances with preset attributes, so tests can pass them where an EBM type is required.
