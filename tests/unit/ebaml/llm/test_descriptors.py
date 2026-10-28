@@ -47,7 +47,12 @@ def counted() -> baml_sdk.Counted:
 
 @pytest.fixture
 def fake_ebm() -> ExplainableBoostingClassifier:
-    return fake_model(feature_names_in_=["f0", "f1"], term_importances=lambda: [1.0, 2.0])
+    return fake_model(
+        feature_names_in_=["f0", "f1"],
+        term_names_=["f0", "f1"],
+        term_features_=[(0,), (1,)],
+        term_importances=lambda: [1.0, 2.0],
+    )
 
 
 @pytest.fixture
@@ -939,3 +944,42 @@ def test_explain_instance_explains_a_missing_key(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", explain))
     with pytest.raises(MissingAPIKeyError):
         descriptors.explain_instance(FAKE_EBM, {}, "G")
+
+
+def test_describe_ebm_warns_about_the_skipped_interaction_terms(
+    monkeypatch: pytest.MonkeyPatch,
+    counted: baml_sdk.Counted,
+) -> None:
+    # the descriptions skipped the interaction terms without a word, so a user could not know they were left out
+    ebm = fake_model(
+        feature_names_in_=["f0", "f1"],
+        term_names_=["f0", "f1", "f0 & f1"],
+        term_features_=[(0,), (1,), (0, 1)],
+        term_importances=lambda: [1.0, 2.0, 0.5],
+    )
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    with capture_logs() as logs:
+        descriptors.describe_ebm(ebm)
+    assert [log for log in logs if log["log_level"] == "warning"] == [
+        {
+            "event": "interactions_skipped",
+            "terms": ["f0 & f1"],
+            "reason": "the descriptions cover the main effects only",
+            "log_level": "warning",
+        },
+    ]
+
+
+def test_describe_ebm_does_not_warn_without_interactions(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    with capture_logs() as logs:
+        descriptors.describe_ebm(fake_ebm)
+    assert all(log["log_level"] != "warning" for log in logs)
