@@ -565,13 +565,13 @@ class EBMGraph:
 
         prompt = f"Feature Name: {self.feature_name}\n"
         prompt += f"Feature Type: {feature_format}\n"
-        # confidence bounds via normal approximation
-        factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
         for series in self._series():
             if series.label is not None:
                 prompt += f"Class: {series.label}\n"
             prompt += f"Means: {xy_to_json(x_vals, np.round(series.scores, y_axis_precision).astype(str))}\n"
             if confidence_bounds:
+                # confidence bounds via normal approximation
+                factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
                 for label, sign in (("Lower", -1), ("Upper", 1)):
                     bounds = series.scores + sign * factor * series.stds
                     prompt += (
