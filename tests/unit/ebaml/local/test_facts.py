@@ -307,8 +307,18 @@ def test_plausible_bins_of_a_continuous_feature_trim_the_tails() -> None:
     assert local._plausible_bins(weights, continuous=True, min_support=0.125).tolist() == [False, True, False]
 
 
-def _model_features(*, term_features: list[tuple[int, ...]], classes: list[str]) -> ExplainableBoostingClassifier:
-    return fake_model(feature_names_in_=["a", "b"], term_features_=term_features, classes_=np.array(classes))
+def _model_features(
+    *,
+    term_features: list[tuple[int, ...]],
+    classes: list[str],
+    link: str = "logit",
+) -> ExplainableBoostingClassifier:
+    return fake_model(
+        feature_names_in_=["a", "b"],
+        term_features_=term_features,
+        classes_=np.array(classes),
+        link_=link,
+    )
 
 
 @pytest.mark.parametrize(
@@ -321,10 +331,20 @@ def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> N
         local._features(_model_features(term_features=term_features, classes=["n", "y"]), {}, 0.01)
 
 
-@pytest.mark.parametrize("classes", [["only"], ["a", "b", "c"]])
-def test_features_reject_other_than_two_classes(classes: list[str]) -> None:
-    with pytest.raises(UnsupportedModelError, match="binary"):
-        local._features(_model_features(term_features=[(0,), (1,)], classes=classes), {}, 0.01)
+@pytest.mark.parametrize(
+    ("classes", "link", "message"),
+    [
+        (["only"], "logit", "logit link needs two classes"),
+        (["a", "b", "c"], "mlogit", "need a binary classifier"),
+        # two classes_ with another link once passed the check of this module, which read classes_ itself
+        (["a", "b"], "identity", "need a binary classifier"),
+        (["a", "b"], "probit", "EBaMl reads the links"),
+    ],
+)
+def test_features_reject_other_than_a_binary_classifier(classes: list[str], link: str, message: str) -> None:
+    model = _model_features(term_features=[(0,), (1,)], classes=classes, link=link)
+    with pytest.raises(UnsupportedModelError, match=message):
+        local._features(model, {}, 0.01)
 
 
 @pytest.mark.parametrize(
@@ -349,6 +369,7 @@ def test_features_trim_by_the_type_of_the_feature(
         feature_names_in_=["a"],
         term_features_=[(0,)],
         classes_=np.array(["n", "y"]),
+        link_="logit",
         bins_=[[np.array([1.0, 2.0])]],
         bin_weights_=[np.array([0.0, 2.0, 2.0, 4.0, 0.0])],
     )

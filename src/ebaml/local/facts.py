@@ -32,8 +32,7 @@ from pandas.api.typing import NAType
 from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
-
-_N_CLASSES = 2
+from ebaml.graphs.model_kinds import BinaryClassifier, model_kind
 
 
 @attrs.frozen
@@ -339,8 +338,8 @@ def _features(
     if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
         raise UnsupportedModelError(msg)
-    # a regressor has no classes_
-    if not hasattr(ebm, "classes_") or np.shape(ebm.classes_) != (_N_CLASSES,):
+    # the model kind is the one place that reads link_ and classes_
+    if not isinstance(model_kind(ebm), BinaryClassifier):
         msg = "Local explanations need a binary classifier."
         raise UnsupportedModelError(msg)
     features = []
