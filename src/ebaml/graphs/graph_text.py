@@ -16,6 +16,7 @@ _TYPE_LINE = re.compile(r"^[ \t]*Feature Type: (.*)$", re.MULTILINE)
 _MEANS_LINE = re.compile(r"^[ \t]*Means: (.*)$", re.MULTILINE)
 _LOWER_LINE = re.compile(r"^[ \t]*Lower Bounds \((\d+(?:\.\d+)?)%-Confidence Interval\): (.*)$", re.MULTILINE)
 _UPPER_LINE = re.compile(r"^[ \t]*Upper Bounds \(\d+(?:\.\d+)?%-Confidence Interval\): (.*)$", re.MULTILINE)
+_CLASS_LINE = re.compile(r"^[ \t]*Class: (.*)$", re.MULTILINE)
 
 
 def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: Iterable[float | str]) -> str:
@@ -144,14 +145,60 @@ def _load_line(line: str, what: str) -> dict[str, float]:
 
 
 @attrs.frozen
+class _Series:
+    """The intervals, the means and the standard deviations of one series of a graph text."""
+
+    intervals: list[str]
+    scores: list[float]
+    stds: list[float]
+
+
+def _parse_series(text: str) -> _Series:
+    """Read the means and the confidence bounds of one series of a graph text.
+
+    Parameters
+    ----------
+    text: str
+        The text of the series: the means line and both bounds lines.
+
+    Returns
+    -------
+    _Series
+        The intervals, the means and the standard deviations estimated from the bounds.
+
+    Raises
+    ------
+    GraphTextError
+        If a line is missing, is not valid JSON, or the means and the bounds do not share the same intervals.
+
+    """
+    means = _load_line(_search_line(_MEANS_LINE, text, "Means").group(1), "Means")
+    lower_match = _search_line(_LOWER_LINE, text, "Lower Bounds")
+    lower = _load_line(lower_match.group(2), "Lower Bounds")
+    upper = _load_line(_search_line(_UPPER_LINE, text, "Upper Bounds").group(1), "Upper Bounds")
+    if not means.keys() == lower.keys() == upper.keys():
+        msg = "The means and the confidence bounds of the graph text do not have the same intervals."
+        raise GraphTextError(msg)
+    confidence_level = float(lower_match.group(1)) / 100
+    factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
+    return _Series(
+        intervals=list(means),
+        scores=list(means.values()),
+        stds=[(upper[interval] - lower[interval]) / 2 / factor for interval in means],
+    )
+
+
+@attrs.frozen
 class ParsedGraph:
     """The fields of a graph that ``parse_graph_text`` reads from a text. They are the fields of ``EBMGraph``."""
 
     feature_name: str
     feature_type: str
     x_vals: list[tuple[float, float]]
-    scores: list[float]
-    stds: list[float]
+    # one score per bin, or one row per bin with one score per class
+    scores: list[float] | list[list[float]]
+    stds: list[float] | list[list[float]]
+    classes: list[str]
 
 
 def parse_graph_text(text: str) -> ParsedGraph:
@@ -162,6 +209,9 @@ def parse_graph_text(text: str) -> ParsedGraph:
     deviations are estimated from the bounds with the normal approximation, at the confidence level that the
     bounds are labeled with, so they are only as precise as the rounding of the text.
 
+    A graph of a multiclass classifier has one series per class: a ``Class:`` line, then the means and the bounds of
+    that class. The scores and the standard deviations then have one row per bin and one column per class.
+
     Parameters
     ----------
     text: str
@@ -170,7 +220,7 @@ def parse_graph_text(text: str) -> ParsedGraph:
     Returns
     -------
     ParsedGraph
-        The feature name, the feature type, the x-axis intervals, the scores and the standard deviations.
+        The feature name, the feature type, the x-axis intervals, the scores, the standard deviations and the classes.
 
     Raises
     ------
@@ -188,19 +238,28 @@ def parse_graph_text(text: str) -> ParsedGraph:
             pass
         case _:
             raise InvalidOptionError(feature_type, ["continuous"])
-    means = _load_line(_search_line(_MEANS_LINE, text, "Means").group(1), "Means")
-    lower_match = _search_line(_LOWER_LINE, text, "Lower Bounds")
-    lower = _load_line(lower_match.group(2), "Lower Bounds")
-    upper = _load_line(_search_line(_UPPER_LINE, text, "Upper Bounds").group(1), "Upper Bounds")
-    if not means.keys() == lower.keys() == upper.keys():
-        msg = "The means and the confidence bounds of the graph text do not have the same intervals."
+    class_lines = list(_CLASS_LINE.finditer(text))
+    if not class_lines:
+        series = _parse_series(text)
+        return ParsedGraph(
+            feature_name=feature_name,
+            feature_type=feature_type,
+            x_vals=[parse_str_tuple_to_float_tuple(interval) for interval in series.intervals],
+            scores=series.scores,
+            stds=series.stds,
+            classes=[],
+        )
+    # the series of a class runs from its Class line to the next one
+    ends = [match.start() for match in class_lines[1:]] + [len(text)]
+    by_class = [_parse_series(text[match.end() : end]) for match, end in zip(class_lines, ends, strict=True)]
+    if any(series.intervals != by_class[0].intervals for series in by_class):
+        msg = "The classes of the graph text do not have the same intervals."
         raise GraphTextError(msg)
-    confidence_level = float(lower_match.group(1)) / 100
-    factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
     return ParsedGraph(
         feature_name=feature_name,
         feature_type=feature_type,
-        x_vals=[parse_str_tuple_to_float_tuple(interval) for interval in means],
-        scores=list(means.values()),
-        stds=[(upper[interval] - lower[interval]) / 2 / factor for interval in means],
+        x_vals=[parse_str_tuple_to_float_tuple(interval) for interval in by_class[0].intervals],
+        scores=[list(row) for row in zip(*(series.scores for series in by_class), strict=True)],
+        stds=[list(row) for row in zip(*(series.stds for series in by_class), strict=True)],
+        classes=[match.group(1).strip() for match in class_lines],
     )

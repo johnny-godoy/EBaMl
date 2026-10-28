@@ -4,7 +4,7 @@ import orjson
 import pytest
 
 from ebaml.core.exceptions import GraphTextError
-from ebaml.graphs.graph_text import parse_str_tuple_to_float_tuple, xy_to_json
+from ebaml.graphs.graph_text import parse_graph_text, parse_str_tuple_to_float_tuple, xy_to_json
 
 
 def test_xy_to_jsoncontinuous() -> None:
@@ -47,3 +47,42 @@ def test_xy_to_json_escapes_quotes_and_backslashes_in_keys() -> None:
     keys = ['Master "B"', "a\\b"]
     text = xy_to_json(keys, ["0.1", "0.2"])
     assert list(orjson.loads(text)) == keys
+
+
+def series(means: str, label: str | None = None) -> str:
+    head = f"Class: {label}\n" if label is not None else ""
+    return (
+        f"{head}Means: {means}\n"
+        f"Lower Bounds (95%-Confidence Interval): {means}\n"
+        f"Upper Bounds (95%-Confidence Interval): {means}\n"
+    )
+
+
+HEADER = "Feature Name: age\nFeature Type: continuous\n"
+
+
+def test_parse_graph_text_of_one_output_has_no_classes() -> None:
+    parsed = parse_graph_text(HEADER + series('{"(0, 1)": 0.5}'))
+    assert (parsed.scores, parsed.stds, parsed.classes) == ([0.5], [0.0], [])
+
+
+def test_parse_graph_text_reads_one_column_per_class() -> None:
+    text = HEADER + series('{"(0, 1)": 0.5, "(1, 2)": 1.0}', " a ") + series('{"(0, 1)": -0.5, "(1, 2)": 2.0}', "b")
+    parsed = parse_graph_text(text)
+    assert parsed.classes == ["a", "b"]
+    assert parsed.x_vals == [(0.0, 1.0), (1.0, 2.0)]
+    assert parsed.scores == [[0.5, -0.5], [1.0, 2.0]]
+    assert parsed.stds == [[0.0, 0.0], [0.0, 0.0]]
+
+
+def test_parse_graph_text_reads_each_class_from_its_own_lines() -> None:
+    # the second class lacks its bounds, so the bounds of the first class must not stand in for them
+    text = HEADER + series('{"(0, 1)": 0.5}', "a") + 'Class: b\nMeans: {"(0, 1)": 1.0}\n'
+    with pytest.raises(GraphTextError, match="no 'Lower Bounds' line"):
+        parse_graph_text(text)
+
+
+def test_parse_graph_text_rejects_classes_with_other_intervals() -> None:
+    text = HEADER + series('{"(0, 1)": 0.5}', "a") + series('{"(0, 2)": 0.5}', "b")
+    with pytest.raises(GraphTextError, match="classes of the graph text do not have the same intervals"):
+        parse_graph_text(text)

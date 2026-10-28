@@ -6,6 +6,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any, Literal
 
+import attrs
 import numpy as np
 import orjson
 import pytest
@@ -22,8 +23,10 @@ from ebaml.core.exceptions import (
     GraphTextError,
     InvalidOptionError,
     OptionRangeError,
+    UnsupportedModelError,
 )
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
+from ebaml.graphs.model_kinds import MulticlassClassifier
 from tests.unit.ebaml.conftest import appending, call_mismatches, fake_model, fake_sdk, protocol_mismatches
 
 INF = float("inf")
@@ -640,7 +643,7 @@ def test_from_text_accepts_bounds_with_the_same_intervals_in_any_order() -> None
 def test_to_text_rejects_more_stds_than_scores() -> None:
     # more stds than scores: only the pairing of the bounds notices (the means have as many scores as bins)
     graph = EBMGraph("color", "nominal", ["a", "b"], [0.1, 0.2], [0.1, 0.1, 0.1])
-    with pytest.raises(ValueError, match="longer"):
+    with pytest.raises(EBMGraphShapeError, match=r"scores of shape \(2,\) but stds of shape \(3,\)"):
         graph.to_text()
 
 
@@ -721,3 +724,217 @@ def test_from_text_rejects_a_line_that_is_not_json(label: str) -> None:
     with pytest.raises(GraphTextError, match=f"'{label}' line of the graph text is not valid JSON") as caught:
         EBMGraph.from_text(broken)
     assert isinstance(caught.value.__cause__, orjson.JSONDecodeError)
+
+
+# multiclass graphs
+
+
+def multiclass_fake(
+    scores: tuple[tuple[float, float, float], ...] = (
+        (9.0, 9.0, 9.0),
+        (1.0, 2.0, 3.0),
+        (4.0, 4.0, 1.0),
+        (0.0, 3.0, 0.0),
+        (9.0, 9.0, 9.0),
+    ),
+) -> ExplainableBoostingClassifier:
+    return fake_model(
+        feature_names_in_=["age"],
+        feature_types_in_=["continuous"],
+        term_scores_=[np.array(scores)],
+        standard_deviations_=[np.full((len(scores), 3), 0.1)],
+        bins_=[[np.array([1.0, 2.0])]],
+        feature_bounds_=[(0.0, 3.0)],
+        classes_=np.array(["high", "low", "mid"]),
+    )
+
+
+def multiclass_graph() -> EBMGraph:
+    return EBMGraph(
+        "age",
+        "continuous",
+        [(0.0, 1.0), (1.0, 2.0)],
+        [[-1.0, 0.0, 1.0], [0.5, 0.5, -1.0]],
+        [[0.1, 0.2, 0.3], [0.1, 0.1, 0.1]],
+        ["high", "low", "mid"],
+    )
+
+
+def test_from_ebm_of_a_multiclass_classifier_centres_each_bin() -> None:
+    g = EBMGraph.from_ebm(multiclass_fake(), 0)
+    assert g.classes == ["high", "low", "mid"]
+    assert np.asarray(g.scores).tolist() == [[-1.0, 0.0, 1.0], [1.0, 1.0, -2.0], [-1.0, 2.0, -1.0]]
+    assert np.asarray(g.stds).shape == (3, 3)
+
+
+def test_from_ebm_of_a_fitted_multiclass_classifier(multiclass_ebm: ExplainableBoostingClassifier) -> None:
+    g = EBMGraph.from_ebm(multiclass_ebm, 0)
+    assert g.classes == ["high", "low", "mid"]
+    assert np.asarray(g.scores).shape == (len(g.x_vals), 3)
+    assert np.asarray(g.scores).sum(axis=1) == pytest.approx(0, abs=1e-9)
+
+
+def test_from_ebm_of_a_one_output_model_has_no_classes() -> None:
+    assert EBMGraph.from_ebm(continuous_ebm(), 0).classes == []
+
+
+@given(
+    raw=st.lists(
+        st.tuples(*[st.floats(-10, 10)] * 3),
+        min_size=3,
+        max_size=6,
+    ),
+    intercept=st.tuples(*[st.floats(-5, 5)] * 3),
+    bin_index=st.integers(0, 3),
+)
+def test_centring_keeps_the_softmax_of_every_bin(
+    raw: list[tuple[float, float, float]],
+    intercept: tuple[float, float, float],
+    bin_index: int,
+) -> None:
+    ebm = multiclass_fake(((0.0, 0.0, 0.0), *raw, (0.0, 0.0, 0.0)))
+    ebm.bins_ = [[np.arange(len(raw) - 1, dtype=float)]]
+    graph = EBMGraph.from_ebm(ebm, 0, use_feature_bounds=False)
+    row = bin_index % len(raw)
+    kind = MulticlassClassifier(("high", "low", "mid"))
+    centred = np.asarray(graph.scores)[row]
+    assert kind.predict(np.add(intercept, centred)) == pytest.approx(kind.predict(np.add(intercept, raw[row])))
+
+
+def test_from_ebm_selects_classes_in_the_given_order() -> None:
+    g = EBMGraph.from_ebm(multiclass_fake(), 0, classes=["mid", "high", "mid"])
+    assert g.classes == ["mid", "high"]
+    # the scores are centred over every class before the selection
+    assert np.asarray(g.scores).tolist() == [[1.0, -1.0], [-2.0, 1.0], [-1.0, -1.0]]
+    assert np.asarray(g.stds).shape == (3, 2)
+
+
+@pytest.mark.parametrize(("classes", "bad"), [(["low", "medium"], "medium"), ([], r"\[\]")])
+def test_from_ebm_rejects_a_class_that_the_model_lacks(classes: list[str], bad: str) -> None:
+    with pytest.raises(
+        InvalidOptionError,
+        match=rf"Invalid option: {bad}\. Valid options are \['high', 'low', 'mid'\]",
+    ):
+        EBMGraph.from_ebm(multiclass_fake(), 0, classes=classes)
+
+
+def test_from_ebm_rejects_classes_for_a_model_with_one_output() -> None:
+    with pytest.raises(UnsupportedModelError, match="classes needs a multiclass classifier, but the graph of age"):
+        EBMGraph.from_ebm(continuous_ebm(), 0, classes=["1"])
+
+
+@pytest.mark.parametrize(
+    ("normalization", "expected"),
+    [
+        (Normalization.MIN_MAX, [[0.0, 0.0, 3.0], [2.0, 1.0, 0.0], [0.0, 2.0, 1.0]]),
+        (Normalization.Z_SCORE, [[-2 / 3, -1.0, 5 / 3], [4 / 3, 0.0, -4 / 3], [-2 / 3, 1.0, -1 / 3]]),
+    ],
+)
+def test_from_ebm_normalizes_each_class_on_its_own(normalization: Normalization, expected: list[list[float]]) -> None:
+    g = EBMGraph.from_ebm(multiclass_fake(), 0, normalization)
+    assert np.asarray(g.scores) == pytest.approx(np.array(expected))
+
+
+def test_simplify_merges_a_multiclass_bin_only_if_every_class_is_flat() -> None:
+    graph = EBMGraph(
+        "age",
+        "continuous",
+        [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)],
+        [[0.0, 0.0], [0.0, 0.1], [0.0, 2.0], [0.1, 2.0]],
+        [[0.1, 0.3], [0.2, 0.1], [0.1, 0.1], [0.1, 0.4]],
+        ["a", "b"],
+    )
+    # the threshold is 5% of the range 2.0: the second bin moves class b by 0.1, which stays within it
+    g = graph.simplify(0.05)
+    assert g.x_vals == [(0.0, 2.0), (2.0, 4.0)]
+    assert g.scores == [[0.0, 0.0], [0.0, 2.0]]
+    assert g.stds == [[0.2, 0.3], [0.1, 0.4]]
+    assert g.classes == ["a", "b"]
+    # with no tolerance, a change in one class keeps the bins apart
+    assert graph.simplify().x_vals == graph.x_vals
+
+
+def test_to_text_of_a_multiclass_graph_has_one_series_per_class() -> None:
+    text = multiclass_graph().to_text(y_axis_precision=1)
+    assert text == (
+        "This graph represents a continuous-valued feature. The keys are intervals that represent ranges where the"
+        " function predicts the same value.\n\n"
+        "The model is a multiclass classifier, so the graph has one series of means and bounds for each class. A line"
+        " 'Class: <name>' starts the series of each class. The scores of each bin are centred over all the classes of"
+        " the model: only the differences between the classes change the predicted probabilities.\n\n"
+        "Feature Name: age\n"
+        "Feature Type: continuous\n"
+        "Class: high\n"
+        'Means: {"(0.0, 1.0)": -1.0, "(1.0, 2.0)": 0.5}\n'
+        'Lower Bounds (95%-Confidence Interval): {"(0.0, 1.0)": -1.2, "(1.0, 2.0)": 0.3}\n'
+        'Upper Bounds (95%-Confidence Interval): {"(0.0, 1.0)": -0.8, "(1.0, 2.0)": 0.7}\n'
+        "Class: low\n"
+        'Means: {"(0.0, 1.0)": 0.0, "(1.0, 2.0)": 0.5}\n'
+        'Lower Bounds (95%-Confidence Interval): {"(0.0, 1.0)": -0.4, "(1.0, 2.0)": 0.3}\n'
+        'Upper Bounds (95%-Confidence Interval): {"(0.0, 1.0)": 0.4, "(1.0, 2.0)": 0.7}\n'
+        "Class: mid\n"
+        'Means: {"(0.0, 1.0)": 1.0, "(1.0, 2.0)": -1.0}\n'
+        'Lower Bounds (95%-Confidence Interval): {"(0.0, 1.0)": 0.4, "(1.0, 2.0)": -1.2}\n'
+        'Upper Bounds (95%-Confidence Interval): {"(0.0, 1.0)": 1.6, "(1.0, 2.0)": -0.8}\n'
+    )
+
+
+def test_to_text_of_a_multiclass_graph_without_bounds_or_preamble() -> None:
+    text = multiclass_graph().to_text(y_axis_precision=1, confidence_bounds=False, include_description=False)
+    assert text.splitlines() == [
+        "Feature Name: age",
+        "Feature Type: continuous",
+        "Class: high",
+        'Means: {"(0.0, 1.0)": -1.0, "(1.0, 2.0)": 0.5}',
+        "Class: low",
+        'Means: {"(0.0, 1.0)": 0.0, "(1.0, 2.0)": 0.5}',
+        "Class: mid",
+        'Means: {"(0.0, 1.0)": 1.0, "(1.0, 2.0)": -1.0}',
+    ]
+
+
+def test_to_text_rejects_multiclass_stds_of_another_shape() -> None:
+    graph = attrs.evolve(multiclass_graph(), stds=[[0.1, 0.1], [0.1, 0.1]])
+    with pytest.raises(EBMGraphShapeError, match=r"scores of shape \(2, 3\) but stds of shape \(2, 2\)"):
+        graph.to_text()
+
+
+def test_from_text_inverts_the_text_of_a_multiclass_graph() -> None:
+    graph = multiclass_graph()
+    parsed = EBMGraph.from_text(graph.to_text(y_axis_precision=6))
+    assert parsed.classes == ["high", "low", "mid"]
+    assert parsed.x_vals == graph.x_vals
+    assert np.asarray(parsed.scores) == pytest.approx(np.asarray(graph.scores))
+    assert np.asarray(parsed.stds) == pytest.approx(np.asarray(graph.stds), abs=1e-5)
+
+
+type MulticlassParts = tuple[list[tuple[float, float]], list[list[float]], list[list[float]], list[str]]
+
+
+@st.composite
+def multiclass_graph_parts(draw: st.DrawFn) -> MulticlassParts:
+    x_vals, _, _ = draw(continuous_graph_parts())
+    n_classes = draw(st.integers(min_value=1, max_value=4))
+    finite = st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_subnormal=False)
+    row = st.lists(finite, min_size=n_classes, max_size=n_classes)
+    std_row = st.lists(st.floats(min_value=0, max_value=100), min_size=n_classes, max_size=n_classes)
+    scores = draw(st.lists(row, min_size=len(x_vals), max_size=len(x_vals)))
+    stds = draw(st.lists(std_row, min_size=len(x_vals), max_size=len(x_vals)))
+    name = st.text("abcxyz _-", min_size=1, max_size=6).map(str.strip).filter(bool)
+    names = draw(st.lists(name, min_size=n_classes, max_size=n_classes, unique=True))
+    return x_vals, scores, stds, names
+
+
+@given(parts=multiclass_graph_parts(), precision=st.integers(min_value=0, max_value=8))
+def test_from_text_inverts_a_multiclass_text_within_the_rounding(
+    parts: MulticlassParts,
+    precision: int,
+) -> None:
+    graph = EBMGraph("age", "continuous", *parts)
+    names = parts[3]
+    parsed = EBMGraph.from_text(graph.to_text(y_axis_precision=precision))
+    graph = graph.simplify()
+    step = 10.0**-precision
+    assert (parsed.x_vals, parsed.classes) == (graph.x_vals, names)
+    assert np.asarray(parsed.scores) == pytest.approx(np.asarray(graph.scores), rel=1e-12, abs=step / 2 * (1 + 1e-9))
+    assert np.asarray(parsed.stds) == pytest.approx(np.asarray(graph.stds), rel=1e-6, abs=step)

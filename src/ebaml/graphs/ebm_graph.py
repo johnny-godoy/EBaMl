@@ -1,7 +1,7 @@
 """Graphs for EBM models."""
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Literal, Protocol, Self, cast, runtime_checkable
 
 import attrs
@@ -23,6 +23,7 @@ from ebaml.core.exceptions import (
     EBMGraphTokenLimitError,
     InvalidOptionError,
     OptionRangeError,
+    UnsupportedModelError,
 )
 from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
 
@@ -47,6 +48,14 @@ _DESCRIPTIONS = {
         " the two possible values of the feature.\n\n"
     ),
 }
+
+
+# the preamble that a graph of a multiclass classifier adds after the preamble of its format
+_MULTICLASS_DESCRIPTION = (
+    "The model is a multiclass classifier, so the graph has one series of means and bounds for each class. A line"
+    " 'Class: <name>' starts the series of each class. The scores of each bin are centred over all the classes of"
+    " the model: only the differences between the classes change the predicted probabilities.\n\n"
+)
 
 
 @runtime_checkable
@@ -125,13 +134,13 @@ def _describe_format(feature_format: FeatureType) -> str:
         raise InvalidOptionError.from_enum(feature_format, FeatureType) from None
 
 
-def _auto_y_precision(scores: Sequence[float] | npt.NDArray[np.floating]) -> int:
+def _auto_y_precision(scores: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating]) -> int:
     """Compute the y-axis precision that keeps at least 3 significant digits of the variation of the scores.
 
     Parameters
     ----------
-    scores: Sequence[float] | npt.NDArray[np.floating]
-        The scores of the graph.
+    scores: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating]
+        The scores of the graph, of every class.
 
     Returns
     -------
@@ -150,17 +159,63 @@ def _auto_y_precision(scores: Sequence[float] | npt.NDArray[np.floating]) -> int
     return precision
 
 
+def _class_columns(names: Sequence[str], selected: Sequence[str] | None) -> list[int]:
+    """Find the columns of the selected classes.
+
+    Parameters
+    ----------
+    names: Sequence[str]
+        The names of all the classes, in the order of the columns.
+    selected: Sequence[str], optional
+        The classes to keep, in the order to show them. If not provided, every class is kept.
+
+    Returns
+    -------
+    list[int]
+        The column of each selected class, without repeats.
+
+    Raises
+    ------
+    InvalidOptionError
+        If a selected class is not a class of the model, or the selection is empty.
+
+    """
+    if selected is None:
+        return list(range(len(names)))
+    if not selected:
+        raise InvalidOptionError(str(list(selected)), names)
+    for name in selected:
+        if name not in names:
+            raise InvalidOptionError(name, names)
+    return [names.index(name) for name in dict.fromkeys(selected)]
+
+
+@attrs.frozen
+class _Series:
+    """The scores of one output of a graph, with the name of its class (``None`` for a graph with one output)."""
+
+    label: str | None
+    scores: npt.NDArray[np.float64]
+    stds: npt.NDArray[np.float64]
+
+
 @attrs.define
 class EBMGraph:
-    """A datastructure for the graphs of Explainable Boosting Machines."""
+    """A datastructure for the graphs of Explainable Boosting Machines.
+
+    A graph of a binary classifier or a regressor has one score per bin, and ``classes`` is empty. A graph of a
+    multiclass classifier has one row per bin with one score per class, and ``classes`` names the columns.
+    """
 
     feature_name: str = attrs.field()
     feature_type: str = attrs.field()
     # intervals for continuous features, categories for nominal ones
     x_vals: Sequence[tuple[float, float]] | Sequence[str] = attrs.field()
-    # from_ebm stores NumPy arrays here
-    scores: Sequence[float] | npt.NDArray[np.floating] = attrs.field()
-    stds: Sequence[float] | npt.NDArray[np.floating] = attrs.field()
+    # from_ebm stores NumPy arrays here; shape (n_bins,), or (n_bins, n_classes) for a multiclass classifier
+    scores: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating] = attrs.field()
+    stds: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating] = attrs.field()
+    # the class of each column of scores and stds; empty for a graph with one output
+    classes: Sequence[str] = attrs.field(default=())
 
     @classmethod
     def from_ebm(
@@ -170,6 +225,7 @@ class EBMGraph:
         normalization: Normalization | str = Normalization.NONE,
         *,
         use_feature_bounds: bool = True,
+        classes: Sequence[str] | None = None,
     ) -> Self:
         """Extract the graph of a feature from an Explainable Boosting Machine.
 
@@ -189,6 +245,9 @@ class EBMGraph:
         use_feature_bounds: bool, default=True
             If True, the first and last x-axis bins are the min and max values of the feature stored in the EBM.
             If false, the first and last value are -inf and inf.
+        classes: Sequence[str], optional
+            The classes to keep in the graph of a multiclass classifier, in the order to show them. If not provided,
+            the graph has every class. The text of a model with many classes is long, so a subset keeps it short.
 
         Returns
         -------
@@ -203,20 +262,40 @@ class EBMGraph:
             If the normalization option is not valid.
         EBMGraphShapeError
             If the number of bins does not match the number of scores.
+        UnsupportedModelError
+            If ``classes`` is given for a model with one output.
+
+        Notes
+        -----
+        A multiclass classifier has one score per bin and per class. Softmax does not change when the same constant is
+        added to the scores of all the classes of a bin, so the graph centres the scores of each bin over all the
+        classes of the model, before it selects ``classes``. The standard deviations stay those of the EBM.
+        The normalization then shifts each class on its own, as the intercept of each class absorbs the shift.
 
         """
         # read the variables from the ebm
         feature_name = ebm.feature_names_in_[feature_index]
         feature_type = ebm.feature_types_in_[feature_index]
-        scores = ebm.term_scores_[feature_index][1:-1].copy()  # Drop missing and unknown bins
-        stds = ebm.standard_deviations_[feature_index][1:-1]
+        scores = np.array(ebm.term_scores_[feature_index][1:-1], dtype=float)  # Drop missing and unknown bins
+        stds = np.asarray(ebm.standard_deviations_[feature_index][1:-1], dtype=float)
+        class_names: list[str] = []
+        # a multiclass classifier has one column of scores per class
+        if scores.ndim > 1:
+            scores -= scores.mean(axis=1, keepdims=True)
+            all_classes = [str(label) for label in np.asarray(ebm.classes_).tolist()]
+            columns = _class_columns(all_classes, classes)
+            scores, stds = scores[:, columns], stds[:, columns]
+            class_names = [all_classes[column] for column in columns]
+        elif classes is not None:
+            msg = f"The option classes needs a multiclass classifier, but the graph of {feature_name} has one output."
+            raise UnsupportedModelError(msg)
 
-        # normalize the graph
+        # normalize the graph, each class on its own
         match normalization:
             case Normalization.Z_SCORE:
-                normalization_constant = np.mean(scores)
+                normalization_constant = np.mean(scores, axis=0)
             case Normalization.MIN_MAX:
-                normalization_constant = np.min(scores)
+                normalization_constant = np.min(scores, axis=0)
             case Normalization.NONE:
                 normalization_constant = 0
             case _:
@@ -245,7 +324,7 @@ class EBMGraph:
                 f" for feature {feature_name} of type {feature_type}."
             )
             raise EBMGraphShapeError(msg)
-        return cls(feature_name, feature_type, x_vals, scores, stds)
+        return cls(feature_name, feature_type, x_vals, scores, stds, class_names)
 
     def simplify(self, min_variation_per_cent: float = 0.0) -> Self:
         """Simplifies the graph. Removes redundant (flat) bins from the graph.
@@ -256,7 +335,7 @@ class EBMGraph:
             Parameter that controlls the degree of simplification.
             If min_variation_per_cent>0, the function simplifies the graph by removing bins that correspond to a less
             that min_variation_per_cent change in the score, considering the overal min/max difference of score for the
-            feature as 100%.
+            feature as 100%. A bin of a multiclass graph merges only if the score of every class changes that little.
 
         Returns
         -------
@@ -281,28 +360,25 @@ class EBMGraph:
             raise OptionRangeError(msg)
         # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
         x_vals = [(float(low), float(high)) for low, high in self.x_vals]
-        scores, stds = self.scores, self.stds
+        scores, stds = np.asarray(self.scores, dtype=float), np.asarray(self.stds, dtype=float)
         total_variation = np.max(scores) - np.min(scores)
-        new_x_vals, new_scores, new_stds = [x_vals[0]], [scores[0]], [stds[0]]
+        # the bins of each merged bin; a bin joins the last group if no score moved more than the threshold
+        groups = [[0]]
         later_bins = range(1, len(x_vals))  # pragma: no mutate -- the first bin compared with itself changes nothing
         for idx in later_bins:
-            b0, b1 = x_vals[idx]
-            if np.abs(float(new_scores[-1]) - float(scores[idx])) <= total_variation * min_variation_per_cent:
-                # extend the previous bin to b1
-                new_x_vals[-1] = (new_x_vals[-1][0], b1)
-                # guarantee that the the confidence bands of the simplified graph cover the original graph as well as
-                # its confidence bands
-                new_stds[-1] = max(new_stds[-1], stds[idx])
+            if np.max(np.abs(scores[groups[-1][0]] - scores[idx])) <= total_variation * min_variation_per_cent:
+                groups[-1].append(idx)
             else:
-                new_x_vals.append((b0, b1))
-                new_scores.append(scores[idx])
-                new_stds.append(stds[idx])
+                groups.append([idx])
         return type(self)(
             self.feature_name,
             self.feature_type,
-            new_x_vals,
-            new_scores,
-            new_stds,
+            [(x_vals[group[0]][0], x_vals[group[-1]][1]) for group in groups],
+            [scores[group[0]].tolist() for group in groups],
+            # the largest std of a merged bin, so the confidence bands of the simplified graph cover the original graph
+            # as well as its confidence bands
+            [np.max(stds[group], axis=0).tolist() for group in groups],
+            self.classes,
         )
 
     def _resolve_format(self, feature_format: FeatureType | str | None) -> FeatureType:
@@ -348,6 +424,29 @@ class EBMGraph:
                 msg = f"Requested a boolean format, but the feature has more than x-axis values: {self.x_vals}"
                 raise EBMGraphShapeError(msg)
 
+    def _series(self) -> Iterator[_Series]:
+        """Yield the scores of each output of the graph.
+
+        Yields
+        ------
+        _Series
+            One series for a graph with one output, else one series per class.
+
+        Raises
+        ------
+        EBMGraphShapeError
+            If the scores and the standard deviations do not have the same shape.
+
+        """
+        scores, stds = np.asarray(self.scores, dtype=float), np.asarray(self.stds, dtype=float)
+        if scores.shape != stds.shape:
+            msg = f"The graph of {self.feature_name} has scores of shape {scores.shape} but stds of shape {stds.shape}."
+            raise EBMGraphShapeError(msg)
+        if not self.classes:
+            yield _Series(None, scores, stds)
+        for column, label in enumerate(self.classes):
+            yield _Series(label, scores[:, column], stds[:, column])
+
     def to_body_text(
         self,
         *,  # pragma: no mutate -- a positional-only self still lets the callers pass the other options by keyword
@@ -375,10 +474,10 @@ class EBMGraph:
         Returns
         -------
         str
-            The textual representation of the graph, without the preamble.
+            The textual representation of the graph, without the preamble. A multiclass graph has a ``Class:`` line
+            before the means and the bounds of each class.
 
         """
-        scores = self.scores
         x_vals = self.x_vals
         # adjust the precision on the x-axis. this can be dangerous if we don't know the distribution of the data
         # (it can impact the accuracy). however, this is a necessary formatting feature because certain (old?)
@@ -404,16 +503,19 @@ class EBMGraph:
 
         prompt = f"Feature Name: {self.feature_name}\n"
         prompt += f"Feature Type: {feature_format}\n"
-        prompt += f"Means: {xy_to_json(x_vals, np.round(scores, y_axis_precision).astype(str))}\n"
-        if confidence_bounds:
-            # confidence bounds via normal approximation
-            factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
-            for label, sign in (("Lower", -1), ("Upper", 1)):
-                bounds = [score + sign * factor * std for score, std in zip(scores, self.stds, strict=True)]
-                prompt += (
-                    f"{label} Bounds ({confidence_level * 100:.10g}%-Confidence Interval):"
-                    f" {xy_to_json(x_vals, np.round(bounds, y_axis_precision).astype(str))}\n"
-                )
+        # confidence bounds via normal approximation
+        factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
+        for series in self._series():
+            if series.label is not None:
+                prompt += f"Class: {series.label}\n"
+            prompt += f"Means: {xy_to_json(x_vals, np.round(series.scores, y_axis_precision).astype(str))}\n"
+            if confidence_bounds:
+                for label, sign in (("Lower", -1), ("Upper", 1)):
+                    bounds = series.scores + sign * factor * series.stds
+                    prompt += (
+                        f"{label} Bounds ({confidence_level * 100:.10g}%-Confidence Interval):"
+                        f" {xy_to_json(x_vals, np.round(bounds, y_axis_precision).astype(str))}\n"
+                    )
         return prompt
 
     def to_text(  # ruff: ignore[too-many-arguments] -- keyword-only options that descriptors.py forwards by name
@@ -437,7 +539,8 @@ class EBMGraph:
         Parameters
         ----------
         include_description: bool, default=True
-            Whether to include a short descriptive preamble that describes the graph to the LLM.
+            Whether to include a short descriptive preamble that describes the graph to the LLM. The preamble of a
+            multiclass graph also says how to read the series of the classes.
         feature_format: FeatureType | str, optional
             The format of the feature (continuous, categorical, boolean).
             If not provided, auto-detection is attempted based on the feature type and the x-axis values.
@@ -478,7 +581,7 @@ class EBMGraph:
 
         """
         feature_format = self._resolve_format(feature_format)
-        description_text = _describe_format(feature_format)
+        description_text = _describe_format(feature_format) + (_MULTICLASS_DESCRIPTION if self.classes else "")
         self._check_boolean_bins(feature_format)
         simplifiable = feature_format in _SIMPLIFIABLE
         # the precision is fixed by the full graph, so that every simplification level is rounded alike

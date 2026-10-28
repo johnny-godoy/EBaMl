@@ -6,7 +6,7 @@ default of an option is the default of the function that reads it, so a call wit
 does alone.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 import attrs
@@ -25,6 +25,8 @@ class GraphOptions:
         See ``EBMGraph.from_ebm``.
     use_feature_bounds: bool
         See ``EBMGraph.from_ebm``.
+    classes: Sequence[str] | None
+        See ``EBMGraph.from_ebm``. Only a multiclass classifier accepts it.
     include_description: bool
         See ``EBMGraph.to_text``.
     feature_format: FeatureType | str | None
@@ -46,6 +48,7 @@ class GraphOptions:
 
     normalization: Normalization | str = Normalization.NONE
     use_feature_bounds: bool = True
+    classes: Sequence[str] | None = None
     include_description: bool = True
     feature_format: FeatureType | str | None = None
     x_axis_precision: int | None = None
