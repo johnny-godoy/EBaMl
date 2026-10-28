@@ -274,7 +274,7 @@ def test_feature_importances_to_text_computes_the_importances_once() -> None:
 
 
 def _facts() -> local.LocalFacts:
-    prediction = local.Prediction(decision=1, output=0.8, lower=0.7, upper=0.9, score=1.4, score_std=0.2)
+    prediction = local.Prediction(decision=1, output=0.8, lower=0.7, upper=0.9, score=1.4, score_std=0.2, margin=1.4)
     return local.LocalFacts(prediction, [], None, None, [], 0.95)
 
 

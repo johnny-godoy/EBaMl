@@ -549,6 +549,7 @@ def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     assert prediction.score == pytest.approx(logit)
     assert prediction.score_std == pytest.approx(std)
     assert prediction.output == pytest.approx(_sig(logit))
+    assert prediction.margin == pytest.approx(logit)
     assert prediction.lower == pytest.approx(_sig(logit - Z95 * std))
     assert prediction.upper == pytest.approx(_sig(logit + Z95 * std))
     assert facts.confidence_level == pytest.approx(0.95)
@@ -566,6 +567,8 @@ def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     logit, std, z = -0.25 - 1.0 - 0.5, math.hypot(0.3, 0.3), 1.6448536269514722
     assert prediction.decision == "no"
     assert prediction.output == pytest.approx(1 - _sig(logit))
+    # the margin is the log-odds of the predicted class, so it is positive for the negative class too
+    assert prediction.margin == pytest.approx(-logit)
     assert prediction.lower == pytest.approx(1 - _sig(logit + z * std))
     assert prediction.upper == pytest.approx(1 - _sig(logit - z * std))
     assert facts.counterfactual == local._counterfactual(features, -0.25, -1, z, new_decision="yes")

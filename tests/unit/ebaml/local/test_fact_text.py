@@ -48,7 +48,7 @@ def test_strength_words(score: float, word: str) -> None:
 
 
 def test_texts_without_counterfactual_or_sufficient_reason() -> None:
-    prediction = local.Prediction(decision=0, output=0.7, lower=0.6, upper=0.8, score=-0.8, score_std=0.1)
+    prediction = local.Prediction(decision=0, output=0.7, lower=0.6, upper=0.8, score=-0.8, score_std=0.1, margin=0.8)
     facts = local.LocalFacts(prediction, [], None, None, [], 0.95)
     texts = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
     assert orjson.loads(texts.counterfactual) == {"flip_possible": False}
@@ -85,7 +85,15 @@ def test_round_keeps_three_decimals() -> None:
 
 def _text_facts(logit: float, scores: list[float], confidence_level: float = 0.95) -> local.LocalFacts:
     contributions = [local.Contribution(f"f{i}", str(i), score, 0.1) for i, score in enumerate(scores)]
-    prediction = local.Prediction(decision="y", output=0.7, lower=0.6, upper=0.8, score=logit, score_std=0.1)
+    prediction = local.Prediction(
+        decision="y",
+        output=0.7,
+        lower=0.6,
+        upper=0.8,
+        score=logit,
+        score_std=0.1,
+        margin=abs(logit),
+    )
     return local.LocalFacts(prediction, contributions, None, None, [], confidence_level)
 
 
