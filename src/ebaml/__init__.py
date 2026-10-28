@@ -29,14 +29,14 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     SDKUnavailableError,
     UnsupportedModelError,
 )
-from ebaml.core.model_kinds import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.graphs.model_kinds import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
     BinaryClassifier,
     ModelKind,
     MulticlassClassifier,
     Regressor,
     model_kind,
 )
-from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
 __version__: str = version("ebaml")
 

@@ -12,7 +12,7 @@ from interpret.glassbox import (
 
 import ebaml
 from ebaml.core.exceptions import UnsupportedModelError
-from ebaml.core.model_kinds import BinaryClassifier, MulticlassClassifier, Regressor, model_kind
+from ebaml.graphs.model_kinds import BinaryClassifier, MulticlassClassifier, Regressor, model_kind
 from tests.unit.ebaml.conftest import fake_model
 
 
