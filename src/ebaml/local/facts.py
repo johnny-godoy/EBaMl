@@ -28,7 +28,7 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 
@@ -43,7 +43,7 @@ class _Feature:
     graph: EBMGraph
     weights: np.ndarray
     bin_index: int
-    value: object
+    value: FeatureValue
     plausible: np.ndarray  # bins with enough training support to be offered as alternatives
 
     @property
@@ -90,7 +90,7 @@ class LocalOptions:
 class Prediction:
     """The prediction to explain, with the confidence interval of its probability."""
 
-    label: object
+    label: ClassLabel
     probability: float
     lower: float
     upper: float
@@ -103,7 +103,7 @@ class Contribution:
     """The effect of one input on the prediction."""
 
     feature: str
-    value: object
+    value: str
     score: float
     std: float
 
@@ -113,7 +113,7 @@ class Change:
     """One input to change in a counterfactual."""
 
     feature: str
-    from_value: object
+    from_value: str
     to_value: str
     score_change: float
 
@@ -154,12 +154,12 @@ class LocalFacts:
     confidence_level: float
 
 
-def _bin_label(x_val: object) -> str:
+def _bin_label(x_val: tuple[float, float] | str) -> str:
     """Render a bin: ``[lo, hi)`` for continuous features, the category otherwise.
 
     Parameters
     ----------
-    x_val: object
+    x_val: tuple[float, float] | str
         An interval ``(lo, hi)`` or a category.
 
     Returns
@@ -170,14 +170,14 @@ def _bin_label(x_val: object) -> str:
     """
     if isinstance(x_val, tuple):
         return f"[{x_val[0]:.4g}, {x_val[1]:.4g})"
-    return str(x_val)
+    return x_val
 
 
 def _sigmoid(logit: float) -> float:
     return 1.0 / (1.0 + math.exp(-logit))
 
 
-def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGraph, value: object) -> int:
+def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGraph, value: FeatureValue) -> int:
     """Find the bin of ``value`` in the graph of a feature.
 
     Parameters
@@ -188,7 +188,7 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
         The index of the feature.
     graph: EBMGraph
         The graph of the feature.
-    value: object
+    value: FeatureValue
         The value of the instance.
 
     Returns
@@ -250,14 +250,18 @@ def _plausible_bins(
     return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
-def _features(ebm: ExplainableBoostingModel, instance: Mapping[str, object], min_support: float) -> list[_Feature]:
+def _features(
+    ebm: ExplainableBoostingModel,
+    instance: Mapping[str, FeatureValue],
+    min_support: float,
+) -> list[_Feature]:
     """Read the graph, the training weights and the bin of the instance of every feature.
 
     Parameters
     ----------
     ebm: ExplainableBoostingModel
         The EBM.
-    instance: Mapping[str, object]
+    instance: Mapping[str, FeatureValue]
         The value of every feature.
     min_support: float
         See ``LocalOptions.min_support``.
@@ -487,7 +491,7 @@ def _completions(
 
 def compute_local_facts(
     ebm: ExplainableBoostingModel,
-    instance: Mapping[str, object],
+    instance: Mapping[str, FeatureValue],
     options: LocalOptions | None = None,
 ) -> LocalFacts:
     """Compute the three local explanations of one prediction of a binary EBM without interactions.
@@ -499,7 +503,7 @@ def compute_local_facts(
     ----------
     ebm: ExplainableBoostingModel
         The fitted EBM.
-    instance: Mapping[str, object]
+    instance: Mapping[str, FeatureValue]
         The value of every feature, by feature name.
     options: LocalOptions, optional
         Confidence level, sampling and support options.

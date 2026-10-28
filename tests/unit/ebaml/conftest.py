@@ -21,6 +21,7 @@ from beartype.door import is_bearable
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
+from ebaml.core.custom_types import FeatureValue
 
 # `baml generate` writes the signatures of the SDK functions only to this stub. At run time each function takes
 # (*args, **kwargs), so inspect.signature cannot see the parameters.
@@ -119,12 +120,12 @@ def fake_model(**attributes: Any) -> ExplainableBoostingClassifier:  # ruff: ign
     return model
 
 
-def instance_of(data: pd.DataFrame, index: int) -> dict[str, object]:
+def instance_of(data: pd.DataFrame, index: int) -> dict[str, FeatureValue]:
     """Read one row of ``data`` as the instance of a local explanation, with the column names as keys.
 
     Returns
     -------
-    dict[str, object]
+    dict[str, FeatureValue]
         The value of every feature, by feature name.
 
     """

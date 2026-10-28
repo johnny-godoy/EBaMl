@@ -13,7 +13,7 @@ import attrs
 import structlog
 from baml_bridge.errors import BamlError
 
-from ebaml.core.custom_types import Audience, ExplainableBoostingModel, coerce_enum
+from ebaml.core.custom_types import Audience, ExplainableBoostingModel, FeatureValue, coerce_enum
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
@@ -434,7 +434,7 @@ class LocalExplanation:
 
 def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the instance, three settings of the explanation, and two option sets
     ebm: ExplainableBoostingModel,
-    instance: Mapping[str, object],
+    instance: Mapping[str, FeatureValue],
     global_explanation: str,
     audience: Audience | str = Audience.LAYPERSON,
     num_sentences: int = 5,
@@ -454,7 +454,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     ----------
     ebm: ExplainableBoostingModel
         The EBM: a binary classifier without interactions.
-    instance: Mapping[str, object]
+    instance: Mapping[str, FeatureValue]
         The value of every feature, by feature name.
     global_explanation: str
         The explanation of the whole model, computed once.

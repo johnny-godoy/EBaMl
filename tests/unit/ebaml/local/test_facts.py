@@ -11,6 +11,7 @@ from hypothesis import assume, given
 from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
+from ebaml.core.custom_types import FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
@@ -151,7 +152,7 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoos
 )
 def test_bad_instances(
     continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
-    instance: dict[str, object],
+    instance: dict[str, FeatureValue],
     message: str,
 ) -> None:
     with pytest.raises(InvalidInstanceError, match=message):

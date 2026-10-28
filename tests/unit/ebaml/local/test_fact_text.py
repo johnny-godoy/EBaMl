@@ -84,7 +84,7 @@ def test_round_keeps_three_decimals() -> None:
 
 
 def _text_facts(logit: float, scores: list[float], confidence_level: float = 0.95) -> local.LocalFacts:
-    contributions = [local.Contribution(f"f{i}", i, score, 0.1) for i, score in enumerate(scores)]
+    contributions = [local.Contribution(f"f{i}", str(i), score, 0.1) for i, score in enumerate(scores)]
     prediction = local.Prediction(label="y", probability=0.7, lower=0.6, upper=0.8, logit=logit, logit_std=0.1)
     return local.LocalFacts(prediction, contributions, None, None, [], confidence_level)
 
@@ -112,7 +112,7 @@ def test_layperson_text_of_a_prediction() -> None:
     texts = local_text.facts_to_texts(_text_facts(1.4, [0.6]))
     assert orjson.loads(texts.prediction) == {
         "predicted_class": "y",
-        "contributions_largest_first": [{"feature": "f0", "value": 0, "effect": "strongly towards this prediction"}],
+        "contributions_largest_first": [{"feature": "f0", "value": "0", "effect": "strongly towards this prediction"}],
         "likelihood": "likely",
     }
 
@@ -121,7 +121,7 @@ def test_data_scientist_text_of_a_prediction() -> None:
     texts = local_text.facts_to_texts(_text_facts(1.4, [0.6123]), Audience.DATA_SCIENTIST)
     assert orjson.loads(texts.prediction) == {
         "predicted_class": "y",
-        "contributions_largest_first": [{"feature": "f0", "value": 0, "score": 0.612, "std": 0.1}],
+        "contributions_largest_first": [{"feature": "f0", "value": "0", "score": 0.612, "std": 0.1}],
         "probability": 0.7,
         "confidence_interval": [0.6, 0.8],
         "confidence_level": 0.95,
@@ -130,7 +130,7 @@ def test_data_scientist_text_of_a_prediction() -> None:
 
 
 def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
-    change = local.Change("f0", 1.0, "[2, 3)", -0.1234)
+    change = local.Change("f0", "1", "[2, 3)", -0.1234)
     steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
     return attrs.evolve(
         _text_facts(1.4, [0.6, 0.1], confidence_level),
@@ -144,7 +144,7 @@ def test_layperson_text_of_the_explanations() -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(0.95))
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
-        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)"}],
+        "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)"}],
         "minimum_number_of_changes": 1,
         "flip_holds_even_if_the_model_is_somewhat_off": True,
         "likelihood_of_new_prediction": "unlikely",
@@ -166,7 +166,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(0.95), Audience.DATA_SCIENTIST)
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
-        "changes": [{"feature": "f0", "from": 1.0, "to": "[2, 3)", "score_change": -0.123}],
+        "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
         "minimum_number_of_changes": 1,
         "flip_holds_at_confidence": 0.95,
         "probability_of_new_prediction": 0.3,
