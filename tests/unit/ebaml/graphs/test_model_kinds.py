@@ -46,7 +46,8 @@ def test_binary_predicts_the_sigmoid() -> None:
 def test_multiclass_outputs_name_every_class() -> None:
     kind = MulticlassClassifier((1, 2, 3))
     assert kind.outputs == ["1", "2", "3"]
-    assert "centred over the classes" in kind.score_meaning
+    # a softmax score alone is not a log-odds: only the difference of two classes is
+    assert "difference between the scores of two classes is the change of the log-odds" in kind.score_meaning
 
 
 def test_multiclass_predicts_the_softmax_of_the_last_axis() -> None:
