@@ -19,6 +19,7 @@ nav = [
   ] },
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },
+    { "Multiclass scores" = "multiclass-scores-proof.md" },
   ] },
   { Benchmark = "benchmark.md" },
   { "API reference" = "api.md" },

@@ -336,6 +336,7 @@ class EBMGraph:
         classes of the model, before it selects ``classes``. The standard deviations stay those of the EBM.
         The normalization then shifts all the scores by one constant, so the differences between the classes of a bin
         do not change.
+        ``proofs/papers/multiclass-scores/paper.typ`` proves that these graphs keep the predictions of the EBM.
 
         """
         # read the variables from the ebm
