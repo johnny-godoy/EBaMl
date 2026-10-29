@@ -1,0 +1,22 @@
+nori2019:
+  type: web
+  title: "InterpretML: A Unified Framework for Machine Learning Interpretability"
+  author: ["Nori, Harsha", "Jenkins, Samuel", "Koch, Paul", "Caruana, Rich"]
+  date: 2019
+  url: https://arxiv.org/abs/1909.09223
+  note: "arXiv:1909.09223."
+
+mathlib2020:
+  type: web
+  title: "The Lean Mathematical Library"
+  author: ["The mathlib Community"]
+  date: 2020
+  url: https://arxiv.org/abs/1910.09336
+  note: "arXiv:1910.09336. Source: https://github.com/leanprover-community/mathlib4."
+
+lean4:
+  type: web
+  title: "The Lean 4 Theorem Prover and Programming Language"
+  author: ["de Moura, Leonardo", "Ullrich, Sebastian"]
+  date: 2021
+  url: https://lean-lang.org
