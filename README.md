@@ -277,6 +277,14 @@ compare what the LLM reads for a layperson and a data scientist, and (with a key
 uv run marimo edit notebooks/local_explanations.py
 ```
 
+[`notebooks/model_providers.py`](notebooks/model_providers.py) sends the same request to OpenRouter, OpenAI, Anthropic,
+Ollama and a gateway with an OpenAI-compatible API, one section for each provider. It shows the key that each provider
+needs, and the errors for an unknown provider and a missing key. Each button sends real requests to one provider.
+
+```bash
+uv run marimo edit notebooks/model_providers.py
+```
+
 ## Benchmark
 
 The benchmark follows [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
