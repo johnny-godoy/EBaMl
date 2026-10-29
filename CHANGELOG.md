@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.0'></a>
+## [0.2.0] - 2026-10-29
+
+### Added
+
+- `model_kind(ebm)` reads the kind of a fitted EBM as a `BinaryClassifier`, `MulticlassClassifier` or `Regressor`. Each kind gives the names of the outputs, the meaning of a score and the conversion of scores to the output.
+
+- `EBMGraph.from_ebm` reads the graph of a multiclass classifier: one score per bin and per class, centred over the classes of each bin. `EBMGraph.classes` names the classes, and `to_text` writes one series per class after a `Class:` line. `from_text` reads that text back.
+- `GraphOptions.classes` and the `classes` argument of `EBMGraph.from_ebm` select the classes of a multiclass graph, because the text of a model with many classes is long.
+
+- `describe_ebm` and `describe_graph` log an `interactions_skipped` warning that names the interaction terms they skip, because the descriptions cover the main effects only.
+
+- `describe_graph` and `describe_ebm` describe multiclass classifiers. `GraphOptions(classes=[...])` selects the classes to describe.
+
+- `Prediction.margin` is the log-odds of the predicted class: the margin of the decision, which means the same for every model kind.
+- `Counterfactual.new_decision` holds the class that the prediction flips to.
+- `SufficientReason.minimum` tells whether no smaller set fixes the prediction. It is always true for a binary classifier.
+- The proof page of the local explanations defines the counterfactual, the sufficient reason and the completions of regressors and multiclass classifiers.
+
+### Changed
+
+- `EBMGraph.to_text` raises `EBMGraphShapeError` when the scores and the standard deviations do not have the same shape.
+
+- The prompt of `describe_graph` and `describe_ebm` says how to read the graph of a multiclass classifier: one series per class, where only the differences between the classes of a bin change the predicted probabilities. The prompts of binary classifiers and regressors do not change.
+
+- **BREAKING:** The result types of the local explanations have field names that fit every model kind, so the explanations of regressors and multiclass classifiers can come later with no breaking change. The JSON texts for the prompts, and so the explanations of binary classifiers, do not change.
+
+  | Type | Old field | New field |
+  | --- | --- | --- |
+  | `Prediction` | `label` | `decision` |
+  | `Prediction` | `probability` | `output` |
+  | `Prediction` | `logit` | `score` |
+  | `Prediction` | `logit_std` | `score_std` |
+  | `Counterfactual` | `new_probability` | `new_output` |
+
+- The type hints name the real types instead of `object`, so pyrefly and beartype check them: class labels are `ClassLabel`, the values of an instance are `FeatureValue`, and `Contribution.value` and `Change.from_value` are `str`. `ebaml.core.custom_types` defines the aliases.
+
+### Fixed
+
+- The local explanations reject an EBM with two classes whose link is not `logit` with `UnsupportedModelError`, because it is not a binary classifier. Every rejection starts with "Local explanations need a binary classifier."
+
+- A local explanation raises `InvalidInstanceError` for a NaN of a NumPy float type and for `pd.NA`. A NumPy NaN got the last bin, and `pd.NA` raised a `TypeError`. A `Decimal` value is accepted.
+
 <a id='changelog-0.1.1'></a>
 ## [0.1.1] - 2026-10-27
 
