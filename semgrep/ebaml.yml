@@ -201,21 +201,45 @@ rules:
     message: >-
       Check against the abstract type that the code needs, not the concrete class: `Mapping` instead of `dict`,
       `Sequence` instead of `list`, `collections.abc.Set` instead of `set` or `frozenset`. A check of the concrete
-      class rejects a fitting object (a `MappingProxyType`, a `pandas` index), as a too narrow hint does. See
-      .claude/rules/types.md.
-    patterns:
-      - pattern-either:
-          - pattern: isinstance($X, $T)
-          - pattern: issubclass($X, $T)
-          - pattern: type($X) is $T
-          - pattern: type($X) is not $T
-          - pattern: type($X) == $T
-          - pattern: type($X) != $T
-      # the text of the type, so a tuple of types or a union such as `str | dict` matches too
-      - metavariable-regex:
-          metavariable: $T
-          regex: '.*(?<![\w.])(dict|list|set|frozenset)\b'
-      - focus-metavariable: $T
+      class rejects a fitting object (a `MappingProxyType`, a `pandas` index), as a too narrow hint does. In a `match`,
+      use a mapping pattern (`case {...}:`) or a sequence pattern (`case [...]:`). See .claude/rules/types.md.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: isinstance($X, $T)
+              - pattern: issubclass($X, $T)
+              - pattern: is_bearable($X, $T)
+              - pattern: die_if_unbearable($X, $T)
+              - pattern: $M.is_bearable($X, $T)
+              - pattern: $M.die_if_unbearable($X, $T)
+              - pattern: type($X) is $T
+              - pattern: type($X) is not $T
+              - pattern: type($X) == $T
+              - pattern: type($X) != $T
+              - pattern: type($X) in $T
+              - pattern: type($X) not in $T
+              - pattern: $X.__class__ is $T
+              - pattern: $X.__class__ is not $T
+              - pattern: $X.__class__ == $T
+              - pattern: $X.__class__ != $T
+              - pattern: $X.__class__ in $T
+              - pattern: $X.__class__ not in $T
+              - pattern: type($X).__name__ == $T
+              - pattern: type($X).__name__ != $T
+              - pattern: type($X).__name__ in $T
+              - pattern: type($X).__name__ not in $T
+              - pattern: $X.__class__.__name__ == $T
+              - pattern: $X.__class__.__name__ != $T
+              - pattern: $X.__class__.__name__ in $T
+              - pattern: $X.__class__.__name__ not in $T
+          # the text of the type, so a tuple of types, a union such as `str | dict`, a hint such as `dict[str, int]`
+          # and a name string such as "dict" match too
+          - metavariable-regex:
+              metavariable: $T
+              regex: '.*(?<![\w.])(dict|list|set|frozenset)\b'
+          - focus-metavariable: $T
+      # semgrep cannot parse every class pattern in a case, so a regex finds a concrete class before the guard
+      - pattern-regex: '(?m)^[ \t]*case[ \t]+(?:(?![ \t]if[ \t])[^:\n])*?(?<![\w.])(dict|list|set|frozenset)\('
     paths:
       include: ["/src/ebaml/"]
 
