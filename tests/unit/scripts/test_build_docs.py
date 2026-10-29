@@ -242,6 +242,18 @@ def test_export_papers_without_a_paper_creates_nothing(tmp_path: Path, compiled:
     assert not (tmp_path / "docs" / "proofs").exists()
 
 
+@pytest.mark.parametrize(
+    "paper",
+    sorted(build_docs.PAPERS_ROOT.glob("*/paper.typ")),
+    ids=lambda paper: paper.parent.name,
+)
+def test_every_proof_page_embeds_its_paper(paper: Path) -> None:
+    """The multiclass scores page linked its PDF but did not embed it, as the local explanations page does."""
+    topic = paper.parent.name
+    page = (build_docs.ROOT / "docs" / f"{topic}-proof.md").read_text(encoding="utf-8")
+    assert f'<iframe\n  src="proofs/{topic}.pdf"' in page
+
+
 @pytest.mark.parametrize("command", ["build", "serve"])
 def test_build_and_serve_export_the_papers_before_the_site(
     command: str,
