@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.1'></a>
+## [0.2.1] - 2026-10-29
+
+### Added
+
+- A proof page shows that only the differences between the classes of a bin change the predicted probabilities of a multiclass classifier, and that its graphs keep the predictions of the EBM. A Lean proof checks the claims.
+
 <a id='changelog-0.2.0'></a>
 ## [0.2.0] - 2026-10-29
 

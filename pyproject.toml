@@ -1,6 +1,6 @@
 [project]
 name = "ebaml"
-version = "0.2.0"
+version = "0.2.1"
 description = "BAML for Explainable Boosting Machines: talk to your EBM."
 readme = "README.md"
 license = "MIT"
