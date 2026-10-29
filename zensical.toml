@@ -16,6 +16,7 @@ nav = [
     { "Local explanations" = "local-notebook.md" },
     { "Model providers" = "providers-notebook.md" },
     { Multiclass = "multiclass-notebook.md" },
+    { "Model kinds" = "model-kinds-notebook.md" },
   ] },
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },

@@ -15,6 +15,7 @@
 - [Notebook](notebook.md): a worked example on the Titanic data, with its output.
 - [Local explanations notebook](local-notebook.md): the same, one passenger at a time, with its output.
 - [Multiclass notebook](multiclass-notebook.md): the graphs and the descriptions of an EBM with three classes.
+- [Model kinds notebook](model-kinds-notebook.md): a binary classifier, a multiclass classifier and a regressor side by side.
 - [Benchmark](benchmark.md): how well does a model read EBM graphs?
 - [API reference](api.md): every public function and class.
 
