@@ -230,7 +230,19 @@ def checks_concrete(value, other):
     d = issubclass(type(value), set)
     # ruleid: ebaml-isinstance-abstract-type
     e = type(other) is dict
-    return a, b, c, d, e
+    # ruleid: ebaml-isinstance-abstract-type
+    f = type(other) in (list, tuple)
+    # ruleid: ebaml-isinstance-abstract-type
+    g = other.__class__ is set
+    # ruleid: ebaml-isinstance-abstract-type
+    h = type(other).__name__ == "dict"
+    # ruleid: ebaml-isinstance-abstract-type
+    i = other.__class__.__name__ in ("list", "str")
+    # ruleid: ebaml-isinstance-abstract-type
+    j = is_bearable(value, dict[str, int])
+    # ruleid: ebaml-isinstance-abstract-type
+    k = beartype.door.die_if_unbearable(value, list[str])
+    return a, b, c, d, e, f, g, h, i, j, k
 
 
 def checks_abstract(value, other):
@@ -242,7 +254,36 @@ def checks_abstract(value, other):
     c = isinstance(value, OrderedDict | tuple)
     # ok: ebaml-isinstance-abstract-type
     d = isinstance(other, typing.Sequence)
-    return a, b, c, d
+    # ok: ebaml-isinstance-abstract-type
+    e = type(other).__name__ == "dictionary"
+    # ok: ebaml-isinstance-abstract-type
+    f = is_bearable(value, Mapping[str, int])
+    return a, b, c, d, e, f
+
+
+def matches_concrete(value):
+    match value:
+        # ruleid: ebaml-isinstance-abstract-type, ebaml-polymorphism-not-type-branches
+        case dict():
+            return 1
+        # ruleid: ebaml-isinstance-abstract-type
+        case str() | list():
+            return 2
+    return 0
+
+
+def matches_abstract(value):
+    match value:
+        # ok: ebaml-isinstance-abstract-type
+        case {"a": a}:
+            return a
+        # ok: ebaml-isinstance-abstract-type
+        case [first, *_]:
+            return first
+        # ok: ebaml-isinstance-abstract-type
+        case str(text) if text in list(KNOWN):
+            return text
+    return 0
 
 
 def branches_with_elif(shape):

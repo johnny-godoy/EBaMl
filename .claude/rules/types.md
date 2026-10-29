@@ -34,8 +34,22 @@ does: `isinstance(x, dict)` is false for a `MappingProxyType`, and `isinstance(x
 | Items in order | `isinstance(x, Sequence)` | `list` |
 | Membership tests | `isinstance(x, collections.abc.Set)` | `set`, `frozenset` |
 
-- The same applies to `issubclass` and to `type(x) is ...`. Prefer `isinstance` to `type(x) is ...`, because a
-  subclass keeps the promise of its base (`solid.md`, L).
+- The same applies to every other form of a type check:
+
+  | Form | Example |
+  | --- | --- |
+  | Subclass test | `issubclass(cls, dict)` |
+  | Exact type | `type(x) is dict`, `type(x) in (dict, list)`, `x.__class__ is dict` |
+  | Name of the type | `type(x).__name__ == "dict"` |
+  | Hint test of beartype | `is_bearable(x, dict[str, int])`, `die_if_unbearable(x, list[str])` |
+  | Class pattern | `case dict():` |
+
+- Prefer `isinstance` to an exact type, because a subclass keeps the promise of its base (`solid.md`, L). Do not
+  compare the name of a type: a rename or a subclass breaks the check, and no tool sees it.
+- In a `match`, use a mapping pattern (`case {"a": a}:`), which matches any `Mapping`, or a sequence pattern
+  (`case [a, b]:`), which matches any `Sequence` except `str`, `bytes` and `bytearray`.
+- A library predicate is a type check too (`inspect.isclass`, `attrs.has`, `np.issubdtype`,
+  `pd.api.types.is_dict_like`). Use it only where `isinstance` cannot do the check. No guard covers it.
 - A `str` is a `Sequence` too. If a string must not count as a sequence, test `str` first, as `_class_columns` in
   `graphs/ebm_graph.py` does.
 - `tuple` may stay: the hints of this project use a tuple for a fixed shape, such as a bin `tuple[float, float]`.
