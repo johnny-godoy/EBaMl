@@ -247,23 +247,56 @@ rules:
     languages: [python]
     severity: ERROR
     message: >-
-      Tell, don't ask: give each class a method and call it, instead of branches on the type of one value. Each new
-      class otherwise needs an edit of every branch (SOLID: O). For classes that ebaml does not own, use
-      `functools.singledispatch`. A check that narrows one union at the edge of the code (a parsed record) may stay:
-      add `# nosemgrep: ebaml-polymorphism-not-type-branches -- <reason>` on the line of the first branch. See
+      Tell, don't ask: give each class a method and call it, instead of branches on the type or the attributes of one
+      value. Each new class otherwise needs an edit of every branch (SOLID: O). For classes that ebaml does not own,
+      use `functools.singledispatch`. A check that narrows one union at the edge of the code (a parsed record) may
+      stay: add `# nosemgrep: ebaml-polymorphism-not-type-branches -- <reason>` on the line of the first branch. See
       .claude/rules/solid.md.
     pattern-either:
-      - pattern: |
-          if isinstance($X, $A):
-              ...
-          elif isinstance($X, $B):
-              ...
-      - pattern: |
-          if isinstance($X, $A):
-              ...
-          ...
-          if isinstance($X, $B):
-              ...
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  if $C1:
+                      ...
+                  elif $C2:
+                      ...
+              - pattern: |
+                  if $C1:
+                      ...
+                  ...
+                  if $C2:
+                      ...
+          # semgrep does not unify a metavariable across two sibling metavariable-pattern blocks, so the test of $C2
+          # sits inside the test of $C1, where $X is bound
+          - metavariable-pattern:
+              metavariable: $C1
+              patterns:
+                - pattern-either:
+                    - pattern: isinstance($X, $A)
+                    - pattern: issubclass($X, $A)
+                    - pattern: type($X) is $A
+                    - pattern: type($X) == $A
+                    - pattern: type($X) in $A
+                    - pattern: $X.__class__ is $A
+                    - pattern: $X.__class__ == $A
+                    - pattern: $X.__class__ in $A
+                    - pattern: type($X).__name__ == $A
+                    - pattern: $X.__class__.__name__ == $A
+                    - pattern: hasattr($X, $A)
+                - metavariable-pattern:
+                    metavariable: $C2
+                    pattern-either:
+                      - pattern: isinstance($X, $B)
+                      - pattern: issubclass($X, $B)
+                      - pattern: type($X) is $B
+                      - pattern: type($X) == $B
+                      - pattern: type($X) in $B
+                      - pattern: $X.__class__ is $B
+                      - pattern: $X.__class__ == $B
+                      - pattern: $X.__class__ in $B
+                      - pattern: type($X).__name__ == $B
+                      - pattern: $X.__class__.__name__ == $B
+                      - pattern: hasattr($X, $B)
       # semgrep cannot parse a class pattern with arguments in a case, so a regex finds two class patterns in one match
       - pattern-regex: '(?m)^[ \t]*case[ \t]+[A-Za-z_][\w.]*\(.*\n(?:(?![ \t]*match\b).*\n)*?[ \t]*case[ \t]+[A-Za-z_][\w.]*\('
     paths:
