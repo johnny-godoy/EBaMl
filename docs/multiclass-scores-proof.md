@@ -28,3 +28,18 @@ predictions do not change. The centring and the normalization of `EBMGraph.from_
 - The prediction of `interpret`. The proof assumes that the EBM predicts the softmax of its scores. It does not check
   the code of `interpret`.
 - The text. The LLM reads rounded scores. The proof is about the numbers before the rounding.
+
+## How the proof is checked
+
+A Lean 4 library checks each statement with the Mathlib library. The paper names the Lean theorem of each statement.
+Its appendix gives the commands to repeat the check. A CI job repeats it when the Lean files change.
+
+- [Lean files](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/EBaMlProofs/MulticlassScores)
+- [Typst source of the paper](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/papers/multiclass-scores)
+
+<iframe
+  src="proofs/multiclass-scores.pdf"
+  title="The proof of the multiclass scores, as a PDF"
+  loading="lazy"
+  style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lightest, #ccc);"
+></iframe>
