@@ -79,7 +79,7 @@ jobs:
         # Zensical ignores a `hooks` setting without a warning, and an iframe target is raw HTML that no link
         # check reads. A missing export would publish empty notebook pages.
         run: |
-          for name in titanic local_explanations multiclass model_kinds; do
+          for name in titanic local_explanations model_providers multiclass model_kinds; do
             test -s "site/notebooks/${name}.html" || { echo "::error::site/notebooks/${name}.html is missing or empty"; exit 1; }
           done
           test -s site/proofs/local-explanations.pdf || { echo "::error::site/proofs/local-explanations.pdf is missing or empty"; exit 1; }

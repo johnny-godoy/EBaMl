@@ -14,6 +14,7 @@
 - [Local explanations](local-explanations.md): why did the model predict this for this input? A counterfactual, a sufficient reason and the share of completions, computed exactly and put in words for a layperson or a data scientist.
 - [Notebook](notebook.md): a worked example on the Titanic data, with its output.
 - [Local explanations notebook](local-notebook.md): the same, one passenger at a time, with its output.
+- [Model providers notebook](providers-notebook.md): the same request sent to OpenRouter, OpenAI, Anthropic, Ollama and a gateway, side by side.
 - [Multiclass notebook](multiclass-notebook.md): the graphs and the descriptions of an EBM with three classes.
 - [Model kinds notebook](model-kinds-notebook.md): a binary classifier, a multiclass classifier and a regressor side by side.
 - [Benchmark](benchmark.md): how well does a model read EBM graphs?
