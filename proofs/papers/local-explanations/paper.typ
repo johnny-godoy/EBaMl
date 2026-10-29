@@ -137,7 +137,7 @@ that computes each symbol.
   [$b$], [`intercept = float(np.ravel(ebm.intercept_)[0])`], [`compute_local_facts`],
   [$L$], [`logit = intercept + sum(f.current ...)`], [`compute_local_facts`],
   [$epsilon$], [`sign = 1 if logit > 0 else -1`], [`compute_local_facts`],
-  [$t_i (v)$], [`scores = sign * np.asarray(feature.graph.scores)`], [`_robust_scores`],
+  [$t_i (v)$], [`scores = sign * feature.scores`], [`_robust_scores`],
   [$P_i$, $c_i in P_i$], [`_plausible_bins`, then `plausible[bin_index] = True`], [`_plausible_bins, _features`],
   [$p_i$, $g_i$], [`scores + stds` and `scores - stds`, with `np.inf` outside $P_i$], [`_robust_scores`],
   [$M$], [`margin = sign * intercept + sum(sign * f.current ...)`], [`_counterfactual`],
