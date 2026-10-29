@@ -1,3 +1,6 @@
 import EBaMlProofs.LocalExplanations.Greedy
 import EBaMlProofs.LocalExplanations.Model
 import EBaMlProofs.LocalExplanations.Axioms
+import EBaMlProofs.MulticlassScores.Softmax
+import EBaMlProofs.MulticlassScores.Model
+import EBaMlProofs.MulticlassScores.Axioms
