@@ -31,7 +31,7 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 | --- | --- | --- |
 | import-linter | `[tool.importlinter]` in `pyproject.toml` | Layer order and the limits on `baml_sdk`. Run it alone with `uv run lint-imports`. |
 | Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree. |
-| semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, banned libraries, a bare `raise ValueError`, an `object` type hint, an SDK fake without `fake_sdk` in the tests. |
+| semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, banned libraries, a bare `raise ValueError`, an `object` type hint, an `isinstance` check of a concrete container, branches on the type of one value, an SDK fake without `fake_sdk` in the tests. |
 | Claude rules | `.claude/rules/` | The design judgment that no tool can check: one job per unit, small interfaces. |
 
 - Fix the code when a guard fails. Do not add an exception to a guard to make it pass.

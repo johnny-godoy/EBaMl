@@ -217,3 +217,98 @@ def calls_object() -> object_count:
 # ok: ebaml-no-object-type
 def takes_suppressed(value: object) -> str:  # nosemgrep: ebaml-no-object-type -- test of the opt-out
     return str(value)
+
+
+def checks_concrete(value, other):
+    # ruleid: ebaml-isinstance-abstract-type
+    a = isinstance(value, dict)
+    # ruleid: ebaml-isinstance-abstract-type
+    b = isinstance(value, (str, list))
+    # ruleid: ebaml-isinstance-abstract-type
+    c = isinstance(value, str | frozenset)
+    # ruleid: ebaml-isinstance-abstract-type
+    d = issubclass(type(value), set)
+    # ruleid: ebaml-isinstance-abstract-type
+    e = type(other) is dict
+    return a, b, c, d, e
+
+
+def checks_abstract(value, other):
+    # ok: ebaml-isinstance-abstract-type
+    a = isinstance(value, Mapping)
+    # ok: ebaml-isinstance-abstract-type
+    b = isinstance(value, (str, collections.abc.Set))
+    # ok: ebaml-isinstance-abstract-type
+    c = isinstance(value, OrderedDict | tuple)
+    # ok: ebaml-isinstance-abstract-type
+    d = isinstance(other, typing.Sequence)
+    return a, b, c, d
+
+
+def branches_with_elif(shape):
+    # ruleid: ebaml-polymorphism-not-type-branches
+    if isinstance(shape, Circle):
+        return shape.radius
+    elif isinstance(shape, Square):
+        return shape.side
+    return 0
+
+
+def branches_with_returns(shape):
+    # ruleid: ebaml-polymorphism-not-type-branches
+    if isinstance(shape, Circle):
+        return shape.radius
+    size = 0
+    if isinstance(shape, Square):
+        size = shape.side
+    return size
+
+
+def branches_with_match(shape):
+    match shape:
+        # ruleid: ebaml-polymorphism-not-type-branches
+        case Circle():
+            return shape.radius
+        case Square(side=side):
+            return side
+    return 0
+
+
+def narrows_a_record(value):
+    # ok: ebaml-polymorphism-not-type-branches
+    if isinstance(value, str):  # nosemgrep: ebaml-polymorphism-not-type-branches -- test of the opt-out
+        return value
+    elif isinstance(value, float):
+        return str(value)
+    return ""
+
+
+def tells(shape):
+    # ok: ebaml-polymorphism-not-type-branches
+    return shape.size()
+
+
+def narrows_once(selected):
+    # ok: ebaml-polymorphism-not-type-branches
+    if isinstance(selected, str):
+        raise InvalidOptionError(selected)
+    return list(selected)
+
+
+def narrows_two_values(left, right):
+    # ok: ebaml-polymorphism-not-type-branches
+    if isinstance(left, str):
+        return left
+    if isinstance(right, str):
+        return right
+    return ""
+
+
+def matches_values(kind):
+    # ok: ebaml-polymorphism-not-type-branches
+    match kind:
+        case "a":
+            return 1
+        case "b":
+            return 2
+    return 0

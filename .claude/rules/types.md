@@ -22,6 +22,28 @@ for a valid call.
 - An `attrs` field is both an input and stored state. Give it the abstract type that the class reads.
 - Put an `Optional` or union in the hint when the function accepts plain strings for an enum (`Normalization | str`).
 
+## Check the abstract type in `isinstance`
+
+A run-time type check is a hint that the code reads at run time, so the same rule applies: check against the most
+general type that the next lines need. A check of the concrete class rejects a fitting object, as a too narrow hint
+does: `isinstance(x, dict)` is false for a `MappingProxyType`, and `isinstance(x, list)` is false for a tuple.
+
+| The next lines need | Check | Not |
+| --- | --- | --- |
+| Key-value pairs that they only read | `isinstance(x, Mapping)` | `dict` |
+| Items in order | `isinstance(x, Sequence)` | `list` |
+| Membership tests | `isinstance(x, collections.abc.Set)` | `set`, `frozenset` |
+
+- The same applies to `issubclass` and to `type(x) is ...`. Prefer `isinstance` to `type(x) is ...`, because a
+  subclass keeps the promise of its base (`solid.md`, L).
+- A `str` is a `Sequence` too. If a string must not count as a sequence, test `str` first, as `_class_columns` in
+  `graphs/ebm_graph.py` does.
+- `tuple` may stay: the hints of this project use a tuple for a fixed shape, such as a bin `tuple[float, float]`.
+- Check the type at the edge, where the value enters `ebaml`. Inside, the hints and `beartype` give the type. To pick
+  the behavior from the type, use a method of the class (`solid.md`, "Tell, don't ask").
+- The semgrep rule `ebaml-isinstance-abstract-type` in `semgrep/ebaml.yml` enforces this in `src/ebaml/`. Its test is
+  in `semgrep/ebaml.py`.
+
 ## Return an attrs class for named values
 
 A `dict` or a `tuple` of fields hides the names and the types of the fields: a type checker cannot see a wrong key or a
