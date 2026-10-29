@@ -25,8 +25,12 @@ Tell an object what to do, and let its class decide how. Do not ask for its type
 - Why: a branch on the type (`if isinstance(x, A): ... elif isinstance(x, B): ...`) is a chain on one value. Each new
   class needs an edit of every such branch, and a missed branch fails only at run time.
 - Apply: give the classes a common method, abstract in the base class, and call it (`kind.describe()`). If ebaml does
-  not own the classes, register one function per class with `functools.singledispatch`. A `match` with two or more
-  class patterns on one value is the same branch.
+  not own the classes, register one function per class with `functools.singledispatch`.
+- Every way to ask makes the same branch: `isinstance`, `issubclass`, `type(x) is`, `type(x) in`, `x.__class__`,
+  `type(x).__name__`, `hasattr(x, ...)` (a duck check asks too), and a `match` with two or more class patterns.
+- A table keyed by type (`HANDLERS[type(x)](x)`) is a hand-made `singledispatch` that ignores subclasses. A
+  `try`/`except AttributeError` around a call that some classes lack is a branch that hides in an exception. Use a
+  method or `singledispatch` instead. No guard covers these two forms, so look for them in review.
 - One check that narrows a union where a value enters ebaml (a string or a list for `classes=`) is not a branch on the
   type. Keep it, and give it a comment if the reason is not clear.
 - The semgrep rule `ebaml-polymorphism-not-type-branches` in `semgrep/ebaml.yml` enforces this in `src/ebaml/`. If a

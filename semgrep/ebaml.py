@@ -305,6 +305,42 @@ def branches_with_returns(shape):
     return size
 
 
+def branches_on_type_is(shape):
+    # ruleid: ebaml-polymorphism-not-type-branches
+    if type(shape) is Circle:
+        return shape.radius
+    elif shape.__class__ == Square:
+        return shape.side
+    return 0
+
+
+def branches_on_names(shape):
+    # ruleid: ebaml-polymorphism-not-type-branches
+    if type(shape).__name__ == "Circle":
+        return shape.radius
+    if type(shape) in (Square, Rectangle):
+        return shape.side
+    return 0
+
+
+def branches_on_attributes(shape):
+    # ruleid: ebaml-polymorphism-not-type-branches
+    if hasattr(shape, "radius") and shape.radius:
+        return shape.radius
+    elif hasattr(shape, "side"):
+        return shape.side
+    return 0
+
+
+def branches_on_two_values(left, right):
+    # ok: ebaml-polymorphism-not-type-branches
+    if type(left) is Circle:
+        return left.radius
+    if hasattr(right, "side"):
+        return right.side
+    return 0
+
+
 def branches_with_match(shape):
     match shape:
         # ruleid: ebaml-polymorphism-not-type-branches
