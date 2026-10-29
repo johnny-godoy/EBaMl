@@ -18,6 +18,21 @@ Adding a case (an audience, a feature format, a task) must not need an edit in a
 - Why: each edit of working code can break the cases that exist.
 - Apply: put the cases in a table (`_DESCRIPTIONS`) or in one class per case, and look the case up by key. A chain that tests the same flag in many places (`if expert:`) is the sign to use classes.
 
+### Tell, don't ask
+
+Tell an object what to do, and let its class decide how. Do not ask for its type and decide in the caller.
+
+- Why: a branch on the type (`if isinstance(x, A): ... elif isinstance(x, B): ...`) is a chain on one value. Each new
+  class needs an edit of every such branch, and a missed branch fails only at run time.
+- Apply: give the classes a common method, abstract in the base class, and call it (`kind.describe()`). If ebaml does
+  not own the classes, register one function per class with `functools.singledispatch`. A `match` with two or more
+  class patterns on one value is the same branch.
+- One check that narrows a union where a value enters ebaml (a string or a list for `classes=`) is not a branch on the
+  type. Keep it, and give it a comment if the reason is not clear.
+- The semgrep rule `ebaml-polymorphism-not-type-branches` in `semgrep/ebaml.yml` enforces this in `src/ebaml/`. If a
+  type branch must stay (a parsed record of an untyped format), add
+  `# nosemgrep: ebaml-polymorphism-not-type-branches -- <reason>` on the line of the first branch.
+
 ## L: a subtype keeps the promise of its base
 
 A subclass or a fake works wherever its base works: same argument types, same result type, no new errors.

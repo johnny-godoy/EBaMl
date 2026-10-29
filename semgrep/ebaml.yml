@@ -194,3 +194,53 @@ rules:
       - focus-metavariable: $T
     paths:
       include: ["/src/ebaml/"]
+
+  - id: ebaml-isinstance-abstract-type
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Check against the abstract type that the code needs, not the concrete class: `Mapping` instead of `dict`,
+      `Sequence` instead of `list`, `collections.abc.Set` instead of `set` or `frozenset`. A check of the concrete
+      class rejects a fitting object (a `MappingProxyType`, a `pandas` index), as a too narrow hint does. See
+      .claude/rules/types.md.
+    patterns:
+      - pattern-either:
+          - pattern: isinstance($X, $T)
+          - pattern: issubclass($X, $T)
+          - pattern: type($X) is $T
+          - pattern: type($X) is not $T
+          - pattern: type($X) == $T
+          - pattern: type($X) != $T
+      # the text of the type, so a tuple of types or a union such as `str | dict` matches too
+      - metavariable-regex:
+          metavariable: $T
+          regex: '.*(?<![\w.])(dict|list|set|frozenset)\b'
+      - focus-metavariable: $T
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-polymorphism-not-type-branches
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Tell, don't ask: give each class a method and call it, instead of branches on the type of one value. Each new
+      class otherwise needs an edit of every branch (SOLID: O). For classes that ebaml does not own, use
+      `functools.singledispatch`. A check that narrows one union at the edge of the code (a parsed record) may stay:
+      add `# nosemgrep: ebaml-polymorphism-not-type-branches -- <reason>` on the line of the first branch. See
+      .claude/rules/solid.md.
+    pattern-either:
+      - pattern: |
+          if isinstance($X, $A):
+              ...
+          elif isinstance($X, $B):
+              ...
+      - pattern: |
+          if isinstance($X, $A):
+              ...
+          ...
+          if isinstance($X, $B):
+              ...
+      # semgrep cannot parse a class pattern with arguments in a case, so a regex finds two class patterns in one match
+      - pattern-regex: '(?m)^[ \t]*case[ \t]+[A-Za-z_][\w.]*\(.*\n(?:(?![ \t]*match\b).*\n)*?[ \t]*case[ \t]+[A-Za-z_][\w.]*\('
+    paths:
+      include: ["/src/ebaml/"]
