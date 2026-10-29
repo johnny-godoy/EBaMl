@@ -9,6 +9,7 @@ directory are in `.claude/rules/proofs.md`.
 | Topic | Claim | Lean | Paper |
 | --- | --- | --- | --- |
 | `LocalExplanations` | The sorting rules of `src/ebaml/local/facts.py` solve the minimum change required and the minimum sufficient reason exactly. | `EBaMlProofs/LocalExplanations/` | `papers/local-explanations/paper.typ` |
+| `MulticlassScores` | Softmax depends only on the differences between the scores of the classes, and the graphs of a multiclass EBM keep its predictions. | `EBaMlProofs/MulticlassScores/` | `papers/multiclass-scores/paper.typ` |
 
 ## Layout
 
