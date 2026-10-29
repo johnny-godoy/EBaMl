@@ -146,7 +146,9 @@ def annotate(file: str, line: int | str, message: str) -> None:
 
     """
     message = message.replace("\n", " ").replace("%", "%25")
-    sys.stdout.write(f"::error file={file},line={line}::{message}\n")
+    safe_file = file if re.fullmatch(r"[\w./-]+", file) else "?"
+    safe_line = int(line) if str(line).isdigit() else 1
+    sys.stdout.write(f"::error file={safe_file},line={safe_line}::{message}\n")
 
 
 def prek() -> str:
@@ -210,7 +212,7 @@ def trufflehog() -> str:
     rows = ["| Detector | Verified | File | Line | Commit |", "|---|---|---|---|---|"]
     for detector, verified, file, line, commit in findings:
         rows.append(f"| {detector} | {'yes (live!)' if verified else 'unverified'} | `{file}` | {line} | `{commit}` |")
-        annotate(file, line or 1, f"trufflehog: possible {detector} secret")
+        annotate(file, line or 1, "trufflehog: possible secret, see the job summary")
     fix = (
         "**Fix:**\n"
         "1. Treat every verified hit as leaked: **rotate the credential now**."
@@ -281,7 +283,7 @@ def trivy() -> str:
             rows.append(
                 f"| secret | `{target}:{secret.get('StartLine', '?')}` | {secret['Title']} | remove and rotate |",
             )
-            annotate(target, secret.get("StartLine", 1), f"trivy: {secret['Title']}")
+            annotate(target, secret.get("StartLine", 1), "trivy: possible secret, see the job summary")
         rows.extend(
             f"| {misconf['Severity']} misconfig | `{target}` | {misconf['ID']}: {misconf['Title']} |"
             f" {misconf.get('Resolution', '')} |"
