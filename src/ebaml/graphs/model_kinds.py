@@ -88,6 +88,7 @@ class MulticlassClassifier(ModelKind):
 
     Softmax does not change when the same constant is added to the scores of all classes, so only the differences
     between the classes of a bin carry meaning.
+    The proof is in ``proofs/papers/multiclass-scores/paper.typ``.
 
     Examples
     --------
