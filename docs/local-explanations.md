@@ -222,7 +222,8 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
 
 - **Binary classifiers only.** Other tasks raise `UnsupportedModelError`, which is a `ValueError`. The
   [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind) say what the
-  explanations of regressors and multiclass classifiers will mean.
+  explanations of regressors and multiclass classifiers will mean. The [model kinds notebook](model-kinds-notebook.md)
+  shows the fields of the result types and the error for the other kinds.
 - **No interactions.** Fit with `interactions=0`. With pairwise terms the effects no longer add up per feature, so the
   greedy solutions would not be exact; the function raises `ValueError` instead of answering approximately.
 - **Every input is needed.** A missing value, a feature name that is absent or a category not seen in training raises
