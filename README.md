@@ -285,6 +285,23 @@ needs, and the errors for an unknown provider and a missing key. Each button sen
 uv run marimo edit notebooks/model_providers.py
 ```
 
+[`notebooks/multiclass.py`](notebooks/multiclass.py) reads an EBM of the iris data, which has three classes. It shows the
+graph with one series per class, the centring that keeps the predictions, the `classes` and `normalization` options, and
+the errors of wrong options. Two buttons describe a graph and the whole model.
+
+```bash
+uv run marimo edit notebooks/multiclass.py
+```
+
+[`notebooks/model_kinds.py`](notebooks/model_kinds.py) fits a binary classifier, a multiclass classifier and a regressor
+on the same iris features. It compares the kind that `model_kind` reads, the graph text of each kind, the fields of the
+local explanations and the error for the kinds that they do not accept. One button for each model describes the same
+graph.
+
+```bash
+uv run marimo edit notebooks/model_kinds.py
+```
+
 ## Benchmark
 
 The benchmark follows [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
