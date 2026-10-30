@@ -28,6 +28,10 @@
 
 ::: ebaml.graphs.terms
 
+## Token budget
+
+::: ebaml.graphs.token_budget
+
 ## Text of the graphs
 
 ::: ebaml.graphs.graph_text

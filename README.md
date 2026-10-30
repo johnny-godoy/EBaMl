@@ -253,8 +253,8 @@ them too.
 - **Token budget:** there is no tokenizer before a call, so the check uses a rough estimate (about 3 characters per
   token). Going a little over `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes
   `to_text` simplify the graph, or raise if it cannot. The provider's own error is the real limit. The functions in
-  `ebaml.llm.descriptors` pass the BAML check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass
-  `check_budget`, for example `baml_sdk.check_token_budget`.
+  `ebaml.llm.descriptors` pass the check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass
+  `check_budget`, for example `ebaml.graphs.token_budget.check_token_budget`. That check needs no LLM and no key.
 
 <!-- --8<-- [end:behaviour] -->
 ## Notebook

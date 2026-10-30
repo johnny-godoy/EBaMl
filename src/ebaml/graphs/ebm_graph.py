@@ -79,7 +79,7 @@ class TokenBudget(Protocol):
 class BudgetCheck(Protocol):
     """A function that estimates the tokens of a text and compares them with a budget.
 
-    ``baml_sdk.check_token_budget`` is such a function.
+    ``ebaml.graphs.token_budget.check_token_budget`` is such a function.
     """
 
     def __call__(self, *, text: str, max_tokens: int, overbudget_percent: int) -> TokenBudget:
@@ -639,8 +639,9 @@ class EBMGraph:
             The LLM provider's own error remains the real limit.
         check_budget: BudgetCheck, optional
             Estimates the tokens of a text and compares them with ``max_tokens`` and ``overbudget_percent``, for
-            example ``baml_sdk.check_token_budget``. If not provided, the text is not checked: the function writes it
-            once, at the first simplification level, and ``max_tokens`` and ``overbudget_percent`` have no effect.
+            example ``ebaml.graphs.token_budget.check_token_budget``. If not provided, the text is not checked: the
+            function writes it once, at the first simplification level, and ``max_tokens`` and ``overbudget_percent``
+            have no effect.
 
         Returns
         -------
