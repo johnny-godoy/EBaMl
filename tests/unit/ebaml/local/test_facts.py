@@ -2,6 +2,7 @@
 
 import itertools
 import math
+import re
 from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
 
@@ -325,12 +326,43 @@ def _model_features(
 
 @pytest.mark.parametrize(
     "term_features",
-    [[(0,)], [(0,), (1,), (0, 1)], [(0, 1), (1,)], [(), (0,)]],
-    ids=["missing term", "extra term", "interaction", "empty term"],
+    [[(0,), (1,), (0, 1)], [(0, 1), (1,)]],
+    ids=["extra term", "interaction"],
 )
 def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> None:
     with pytest.raises(UnsupportedModelError, match="interactions"):
         local._features(_model_features(term_features=term_features, classes=["n", "y"]), {}, 0.01)
+
+
+@pytest.mark.parametrize(
+    ("term_features", "missing"),
+    [([(0,)], "['b']"), ([(1,)], "['a']"), ([(), (0,)], "['b']"), ([], "['a', 'b']")],
+    ids=["last feature", "first feature", "empty term", "no term"],
+)
+def test_features_name_the_features_without_a_main_effect_term(
+    term_features: list[tuple[int, ...]],
+    missing: str,
+) -> None:
+    # a model fit with exclude, or after remove_terms, was rejected with a message about interactions it did not have
+    model = _model_features(term_features=term_features, classes=["n", "y"])
+    expected = rf"main-effect term for every feature\. These features have none: {re.escape(missing)}\.$"
+    with pytest.raises(UnsupportedModelError, match=expected):
+        local._features(model, {}, 0.01)
+
+
+def test_features_read_the_bin_weights_of_the_term_of_each_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    # the terms are in another order than the features, so the weights of feature "a" are those of the second term
+    graph = EBMGraph("a", "nominal", ["p", "q"], [0.0, 0.0], [0.0, 0.0])
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(returning(graph)))
+    ebm = fake_model(
+        feature_names_in_=["a", "b"],
+        term_features_=[(1,), (0,)],
+        classes_=np.array(["n", "y"]),
+        link_="logit",
+        bin_weights_=[np.array([0.0, 9.0, 9.0, 0.0]), np.array([0.0, 1.0, 3.0, 0.0])],
+    )
+    features = local._features(ebm, {"a": "p", "b": "p"}, 0.01)
+    assert features[0].weights.tolist() == [1.0, 3.0]
 
 
 @pytest.mark.parametrize(

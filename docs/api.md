@@ -24,6 +24,10 @@
 
 ::: ebaml.graphs.ebm_graph
 
+## Terms of the features
+
+::: ebaml.graphs.terms
+
 ## Text of the graphs
 
 ::: ebaml.graphs.graph_text

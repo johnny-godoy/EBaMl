@@ -16,6 +16,7 @@ from baml_bridge.errors import BamlError
 from ebaml.core.custom_types import Audience, ExplainableBoostingModel, FeatureValue, coerce_enum
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
@@ -38,7 +39,7 @@ _DEFAULT_PROMPT_OPTIONS = PromptOptions()
 
 
 def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
-    """Convert the feature importances of an EBM to text.
+    """Convert the importances of the main-effect terms of an EBM to text, one line per feature.
 
     Parameters
     ----------
@@ -50,10 +51,11 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
         str: Textual representation of the feature importances.
 
     """
+    # the importances are kept by term, and term i is not always feature i
     importances = ebm.term_importances()
     return "\n".join(
-        f"{feature_name}: {importances[feature_idx]:.2f}"
-        for feature_idx, feature_name in enumerate(ebm.feature_names_in_)
+        f"{ebm.feature_names_in_[feature_idx]}: {importances[main_term(ebm, feature_idx)]:.2f}"
+        for feature_idx in main_effect_features(ebm)
     )
 
 
@@ -374,6 +376,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
     descriptions. The descriptions skip the interaction terms, and an ``interactions_skipped`` warning names them.
+    They also skip a feature that ``exclude`` or ``remove_terms`` left out, because it has no graph.
     The logged usage leaves out the cut-off attempts, because the provider error carries no token count. It is a lower
     bound, and the ``usage`` log event has the number of those attempts in ``truncated_attempts``.
 
@@ -401,10 +404,12 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     """
     # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
     # processing one of the graphs or in the model surface before any LLM call is paid for.
-    feature_names = list(ebm.feature_names_in_)
-    _warn_skipped_interactions(ebm, range(len(feature_names)))
+    # a feature that exclude or remove_terms left out has no graph to describe
+    features = main_effect_features(ebm)
+    feature_names = [ebm.feature_names_in_[feature_index] for feature_index in features]
+    _warn_skipped_interactions(ebm, features)
     feature_importances = _feature_importances_to_text(ebm)
-    graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in range(len(feature_names))]
+    graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in features]
     model_spec = _model_spec(model)
     opts = _prompt_options(prompt)
 
@@ -419,7 +424,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
                     opts=opts,
                     model=model_spec,
                 ),
-                range(len(graph_texts)),
+                features,
                 graph_texts,
             ),
         )
