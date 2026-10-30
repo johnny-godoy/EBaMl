@@ -1,7 +1,8 @@
 // Live prompt tests: real requests to the default Router clients, so they need a real OPENROUTER_API_KEY.
 // They check properties that a good answer must have (no model numbers for a layperson, a sentence limit, the
-// requested answer format), not exact wording, because the free router is not deterministic. A failure on one run can
-// be noise: rerun it before you change a prompt. Offline runs exclude them: `baml test -x root::Live`.
+// requested answer format), not exact wording, because the free router is not deterministic. Each test logs the reply
+// of the model. If a test fails, read the reply and rerun the test before you change a prompt, because one failure can
+// be noise. Offline runs exclude them: `baml test -x root::Live`.
 
 // Number of sentences in `text`: a run of closing punctuation followed by a space or the end of the text ends a sentence.
 // The period of a decimal (0.62) and the abbreviations "e.g." and "i.e." do not end a sentence.
@@ -53,6 +54,12 @@ function live_data_scientist_facts() -> LocalFactTexts {
     }
 }
 
+// Prints the reply of a live test. An assertion reports only "expected true", so the log is how a failed run shows
+// whether the model or the check is wrong.
+function log_reply(reply: string) -> null {
+    log.info({ "reply": reply }, event_name = "live_reply")
+}
+
 testset "Live" {
     test "layperson counterfactual: no model numbers, within the sentence limit, names the input" {
         let text = LocalCounterfactual(
@@ -62,6 +69,7 @@ testset "Live" {
             3,
             default_graph_options(),
         );
+        log_reply(text);
         assert.is_true(text.includes("income"));
         assert.is_true(!text.includes("0.83") && !text.includes("1.37") && !text.includes("2.91"));
         assert.is_true(!text.includes("%"));
@@ -76,6 +84,7 @@ testset "Live" {
             3,
             default_graph_options(),
         );
+        log_reply(text);
         assert.is_true(text.to_lower_case().includes("income"));
         assert.is_true(text.to_lower_case().includes("age"));
         assert.is_true(!text.includes("0.04"));
@@ -90,6 +99,7 @@ testset "Live" {
             3,
             default_graph_options(),
         );
+        log_reply(text);
         assert.is_true(!text.includes("71") && !text.includes("%"));
         assert.is_true(count_sentences(text) <= 3)
     }
@@ -102,6 +112,7 @@ testset "Live" {
             3,
             default_graph_options(),
         );
+        log_reply(text);
         // the target bin "[4.5e+04, 5e+04)" may be written as "45,000", "45 000" or "45k"
         assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text))
     }
@@ -114,6 +125,9 @@ testset "Live" {
             3,
             default_graph_options(),
         );
+        log_reply(result.counterfactual);
+        log_reply(result.sufficient_reason);
+        log_reply(result.completions);
         assert.is_true(result.counterfactual.length() > 0);
         assert.is_true(result.sufficient_reason.length() > 0);
         assert.is_true(result.completions.length() > 0);
@@ -124,6 +138,7 @@ testset "Live" {
     test "describe_graph_cot: names the feature and respects the sentence limit" {
         let graph = "{\"feature_name\": \"age\", \"type\": \"continuous\", \"mean\": {\"18-30\": 0.8, \"30-50\": 0.0, \"50-90\": -0.6}}";
         let result = describe_graph_cot(graph, 3, default_graph_options());
+        log_reply(result.text);
         assert.is_true(result.text.to_lower_case().includes("age"));
         assert.is_true(count_sentences(result.text) <= 4);
         assert.is_true(result.usage.input_tokens > 0)
@@ -133,6 +148,7 @@ testset "Live" {
         // "young" leads at low ages and "old" at high ages; a good answer names both classes and the change of lead
         let graph = "Feature Name: age\nFeature Type: continuous\nClass: young\nMeans: {\"(18, 30)\": 1.5, \"(30, 50)\": 0.0, \"(50, 90)\": -1.5}\nClass: middle\nMeans: {\"(18, 30)\": 0.0, \"(30, 50)\": 0.5, \"(50, 90)\": 0.0}\nClass: old\nMeans: {\"(18, 30)\": -1.5, \"(30, 50)\": -0.5, \"(50, 90)\": 1.5}";
         let result = describe_graph_cot(graph, 4, default_graph_options());
+        log_reply(result.text);
         let text = result.text.to_lower_case();
         assert.is_true(text.includes("young") && text.includes("old"));
         assert.is_true(count_sentences(result.text) <= 5)
@@ -150,6 +166,7 @@ testset "Live" {
             headers: null,
         };
         let result = describe_graph_cot(graph, 3, default_graph_options(), model = model);
+        log_reply(result.text);
         assert.is_true(result.text.to_lower_case().includes("age"));
         assert.is_true(result.usage.output_tokens > 0)
     }
@@ -157,6 +174,7 @@ testset "Live" {
     test "answer_benchmark_question: the final turn follows the requested format" {
         let question = "A model's graph for feature x has mean value 2.0 for x < 5 and -1.0 for x >= 5. Is the function decreasing in x? Think step by step.";
         let result = answer_benchmark_question(question, "'yes' or 'no'");
+        log_reply(result.text);
         let answer = result.text.trim().to_lower_case();
         assert.is_true(answer.includes("yes"));
         assert.is_true(answer.length() < 20)
