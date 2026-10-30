@@ -3,16 +3,34 @@
 // requested answer format), not exact wording, because the free router is not deterministic. A failure on one run can
 // be noise: rerun it before you change a prompt. Offline runs exclude them: `baml test -x root::Live`.
 
-// Number of sentences in `text`, counted by their closing punctuation.
+// Number of sentences in `text`: a run of closing punctuation followed by a space or the end of the text ends a sentence.
+// The period of a decimal (0.62) and the abbreviations "e.g." and "i.e." do not end a sentence.
 function count_sentences(text: string) -> int {
-    let count = 0;
-    for (let ch in text.split("")) {
-        if (ch == "." || ch == "!" || ch == "?") {
-            count = count + 1;
-        }
+    let ends = baml.regex.new("[.!?]+[\"')\\]]*(\\s|$)").match_all(text.trim()).length();
+    let abbreviations = baml.regex.new("(?i)\\b(e\\.g|i\\.e)\\.\\s").match_all(text).length();
+    ends - abbreviations
+}
+
+testset "PromptChecks" {
+    test "count_sentences: the period of a decimal does not end a sentence" {
+        assert.equal(count_sentences("The debt ratio is 0.62. Income is low."), 2)
     }
-    ;
-    count
+
+    test "count_sentences: an abbreviation does not end a sentence" {
+        assert.equal(
+            count_sentences("Young people, e.g. those under 30, score higher. Older people score lower!"),
+            2,
+        )
+    }
+
+    test "count_sentences: a closing quote or bracket after the end counts once" {
+        assert.equal(count_sentences("He said \"no.\" Then (later.) she left..."), 3)
+    }
+
+    test "count_sentences: text with no closing punctuation has no sentence end" {
+        assert.equal(count_sentences("Income matters most"), 0);
+        assert.equal(count_sentences(""), 0)
+    }
 }
 
 function live_local_facts() -> LocalFactTexts {
