@@ -2,6 +2,7 @@
 
 import itertools
 import math
+import re
 from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
 
@@ -285,6 +286,75 @@ def test_bin_index_of_a_category_is_its_position() -> None:
     assert local._bin_index(fake_model(), 0, graph, "b") == 1
 
 
+@pytest.mark.parametrize(
+    ("value", "category"),
+    [
+        (2, "2"),
+        (2.0, "2"),
+        (np.int64(3), "3"),
+        (0.5, "0.5"),
+        (np.float32(1.5), "1.5"),
+        (True, "1"),
+        (np.False_, "0"),
+        ("x", "x"),
+        (np.str_("y"), "y"),
+    ],
+)
+def test_category_writes_a_value_as_interpret_writes_its_categories(value: FeatureValue, category: str) -> None:
+    assert local._category(value, "f") == category
+
+
+def test_category_rejects_a_value_that_cannot_be_a_category() -> None:
+    with pytest.raises(
+        InvalidInstanceError,
+        match=r"^The value np.complex128\(1j\) of feature 'f' cannot be a category\.$",
+    ):
+        local._category(np.complex128(1j), "f")
+
+
+def test_bin_index_of_a_number_finds_its_category() -> None:
+    # interpret keeps the categories 1, 2 and 3 as text, so the integer 2 was an unknown category
+    graph = EBMGraph("f", "nominal", ["1", "2", "3"], [0.0] * 3, [0.0] * 3)
+    assert local._bin_index(fake_model(), 0, graph, np.int64(2)) == 1
+
+
+def test_bin_index_names_the_value_of_an_unknown_category() -> None:
+    graph = EBMGraph("f", "nominal", ["1", "2"], [0.0] * 2, [0.0] * 2)
+    with pytest.raises(InvalidInstanceError, match=r"^Unknown category 7 for feature 'f'\.$"):
+        local._bin_index(fake_model(), 0, graph, 7)
+
+
+@pytest.fixture(scope="module")
+def coded_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+    rng = np.random.default_rng(5)
+    size = 600
+    data = pd.DataFrame(
+        {
+            "a": rng.normal(size=size),
+            "grade": pd.Categorical(rng.choice([1, 2, 3], size)),
+            "flag": pd.Categorical(rng.choice([True, False], size)),
+            "share": pd.Categorical(rng.choice([0.5, 1.0], size)),
+        },
+    )
+    signal = data["a"] + data["grade"].astype(int) - 2 + 0.8 * data["flag"].astype(bool) + rng.normal(size=size)
+    return fit_ebm(data, (signal > 0.3).astype(int), interactions=0, random_state=0), data
+
+
+def test_facts_of_training_rows_with_number_and_boolean_categories_agree_with_the_ebm(
+    coded_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
+    # a row of the training data has NumPy integers, booleans and floats for the categories that interpret keeps as
+    # text, so every such row raised "Unknown category"
+    ebm, data = coded_ebm
+    for index in range(20):
+        facts = local.compute_local_facts(ebm, instance_of(data, index))
+        probabilities = ebm.predict_proba(data.iloc[[index]])[0]
+        assert facts.prediction.decision == ebm.predict(data.iloc[[index]])[0]
+        assert facts.prediction.output == pytest.approx(probabilities.max())
+
+
 def test_bin_index_of_a_number_uses_the_first_cuts_and_the_right_side() -> None:
     graph = EBMGraph("f", "continuous", [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)], [0.0] * 3, [0.0] * 3)
     # the second array stands for a finer resolution that the function must not use
@@ -325,12 +395,43 @@ def _model_features(
 
 @pytest.mark.parametrize(
     "term_features",
-    [[(0,)], [(0,), (1,), (0, 1)], [(0, 1), (1,)], [(), (0,)]],
-    ids=["missing term", "extra term", "interaction", "empty term"],
+    [[(0,), (1,), (0, 1)], [(0, 1), (1,)]],
+    ids=["extra term", "interaction"],
 )
 def test_features_reject_interactions(term_features: list[tuple[int, ...]]) -> None:
     with pytest.raises(UnsupportedModelError, match="interactions"):
         local._features(_model_features(term_features=term_features, classes=["n", "y"]), {}, 0.01)
+
+
+@pytest.mark.parametrize(
+    ("term_features", "missing"),
+    [([(0,)], "['b']"), ([(1,)], "['a']"), ([(), (0,)], "['b']"), ([], "['a', 'b']")],
+    ids=["last feature", "first feature", "empty term", "no term"],
+)
+def test_features_name_the_features_without_a_main_effect_term(
+    term_features: list[tuple[int, ...]],
+    missing: str,
+) -> None:
+    # a model fit with exclude, or after remove_terms, was rejected with a message about interactions it did not have
+    model = _model_features(term_features=term_features, classes=["n", "y"])
+    expected = rf"main-effect term for every feature\. These features have none: {re.escape(missing)}\.$"
+    with pytest.raises(UnsupportedModelError, match=expected):
+        local._features(model, {}, 0.01)
+
+
+def test_features_read_the_bin_weights_of_the_term_of_each_feature(monkeypatch: pytest.MonkeyPatch) -> None:
+    # the terms are in another order than the features, so the weights of feature "a" are those of the second term
+    graph = EBMGraph("a", "nominal", ["p", "q"], [0.0, 0.0], [0.0, 0.0])
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(returning(graph)))
+    ebm = fake_model(
+        feature_names_in_=["a", "b"],
+        term_features_=[(1,), (0,)],
+        classes_=np.array(["n", "y"]),
+        link_="logit",
+        bin_weights_=[np.array([0.0, 9.0, 9.0, 0.0]), np.array([0.0, 1.0, 3.0, 0.0])],
+    )
+    features = local._features(ebm, {"a": "p", "b": "p"}, 0.01)
+    assert features[0].weights.tolist() == [1.0, 3.0]
 
 
 @pytest.mark.parametrize(

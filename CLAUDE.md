@@ -50,7 +50,8 @@ The boundary between the two languages is the generated `baml_sdk` package.
 - `baml_src/local_explanations.baml` and `src/ebaml/local/` produce local (per-prediction) explanations. Python
   computes the facts exactly from EBM scores and confidence intervals (counterfactual, sufficient reason, completions;
   arXiv:2010.12265). The LLM only puts them in words. Only binary classifiers without interactions work.
-- `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text. The
+- `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text.
+  `terms.py` finds the term of each feature: index the term attributes (`term_scores_`, `bin_weights_`) through it. The
   token budget is an estimate of about 3 characters per token. `llm/descriptors.py` connects this code to `baml_sdk`
   (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
 - `src/ebaml/benchmark.py` and `benchmark/` follow the TalkToEBM benchmark. `is_correct` parses and compares

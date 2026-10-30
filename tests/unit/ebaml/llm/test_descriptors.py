@@ -257,8 +257,18 @@ def test_describe_ebm_defaults(
 
 
 def test_feature_importances_to_text() -> None:
-    ebm = fake_model(feature_names_in_=["a", "b"], term_importances=lambda: [1.234, 0.5])
+    ebm = fake_model(feature_names_in_=["a", "b"], term_features_=[(0,), (1,)], term_importances=lambda: [1.234, 0.5])
     assert descriptors._feature_importances_to_text(ebm) == "a: 1.23\nb: 0.50"
+
+
+def test_feature_importances_to_text_pairs_each_feature_with_its_own_term() -> None:
+    # "a" has no term, so the first importance is that of "b"; the text gave it to "a" and left out "c"
+    ebm = fake_model(
+        feature_names_in_=["a", "b", "c"],
+        term_features_=[(1,), (2,), (1, 2)],
+        term_importances=lambda: [1.0, 2.0, 0.5],
+    )
+    assert descriptors._feature_importances_to_text(ebm) == "b: 1.00\nc: 2.00"
 
 
 def test_feature_importances_to_text_computes_the_importances_once() -> None:
@@ -268,7 +278,11 @@ def test_feature_importances_to_text_computes_the_importances_once() -> None:
         calls.append(1)
         return [1.0, 2.0, 3.0]
 
-    ebm = fake_model(feature_names_in_=["a", "b", "c"], term_importances=term_importances)
+    ebm = fake_model(
+        feature_names_in_=["a", "b", "c"],
+        term_features_=[(0,), (1,), (2,)],
+        term_importances=term_importances,
+    )
     descriptors._feature_importances_to_text(ebm)
     assert len(calls) == 1
 
@@ -1035,3 +1049,29 @@ def test_describe_graph_warns_about_the_interaction_terms_of_its_feature(
     with capture_logs() as logs:
         descriptors.describe_graph(ebm, feature_index)
     assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [terms]
+
+
+def test_describe_ebm_skips_a_feature_without_a_term(
+    monkeypatch: pytest.MonkeyPatch,
+    counted: baml_sdk.Counted,
+) -> None:
+    # a model fit with exclude=["f0"] made describe_ebm read the graph of "f0", which has no term
+    ebm = fake_model(
+        feature_names_in_=["f0", "f1"],
+        term_names_=["f1"],
+        term_features_=[(1,)],
+        term_importances=lambda: [2.0],
+    )
+
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+        return f"graph{idx}"
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
+    descriptors.describe_ebm(ebm)
+    assert [call["graph"] for call in graph_calls] == ["graph1"]
+    assert summary_calls["feature_importances"] == "f1: 2.00"
+    assert summary_calls["graph_descriptions"] == "f1: answer"

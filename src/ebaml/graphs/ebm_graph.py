@@ -27,6 +27,7 @@ from ebaml.core.exceptions import (
 )
 from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
 from ebaml.graphs.model_kinds import model_kind
+from ebaml.graphs.terms import main_term
 
 # nominal features are unordered categories
 _FORMAT_ALIASES = {FeatureType.NOMINAL: FeatureType.CATEGORICAL}
@@ -265,7 +266,7 @@ class _Series:
 
 @attrs.define
 class EBMGraph:
-    """A datastructure for the graphs of Explainable Boosting Machines.
+    """A data structure for the graphs of Explainable Boosting Machines.
 
     A graph of a binary classifier or a regressor has one score per bin, and ``classes`` is empty. A graph of a
     multiclass classifier has one row per bin with one score per class, and ``classes`` names the columns.
@@ -295,7 +296,7 @@ class EBMGraph:
 
         This is a low-level function. It does not return the final format in which the graph is presented to the LLM.
 
-        The purpose of this function is to extract the graph from the interals of the EBM and return it in a format
+        The purpose of this function is to extract the graph from the internals of the EBM and return it in a format
         that is easy to work with.
 
         Parameters
@@ -303,7 +304,8 @@ class EBMGraph:
         ebm: ExplainableBoostingModel
             The EBM model.
         feature_index: int
-            The index of the feature in the EBM.
+            The index of the feature in the EBM. A feature that ``exclude`` or ``remove_terms`` left out has no
+            main-effect term, and raises ``UnsupportedModelError``.
         normalization: Normalization | str, default=Normalization.NONE
             How to normalize the graph (shift on the y-axis).
         use_feature_bounds: bool, default=True
@@ -342,8 +344,10 @@ class EBMGraph:
         # read the variables from the ebm
         feature_name = ebm.feature_names_in_[feature_index]
         feature_type = ebm.feature_types_in_[feature_index]
-        scores = np.array(ebm.term_scores_[feature_index][1:-1], dtype=float)  # Drop missing and unknown bins
-        stds = np.asarray(ebm.standard_deviations_[feature_index][1:-1], dtype=float)
+        # the scores are kept by term, and term i is not always feature i
+        term = main_term(ebm, feature_index)
+        scores = np.array(ebm.term_scores_[term][1:-1], dtype=float)  # Drop missing and unknown bins
+        stds = np.asarray(ebm.standard_deviations_[term][1:-1], dtype=float)
         selected = _select_outputs(model_kind(ebm).outputs, feature_name, scores, stds, classes)
         scores, stds = selected.scores, selected.stds
 
@@ -384,14 +388,14 @@ class EBMGraph:
         return cls(feature_name, feature_type, x_vals, scores, stds, selected.classes)
 
     def simplify(self, min_variation_per_cent: float = 0.0) -> Self:
-        """Simplifies the graph. Removes redundant (flat) bins from the graph.
+        """Simplify the graph: remove the redundant (flat) bins.
 
         Parameters
         ----------
         min_variation_per_cent: float, default=0.0
-            Parameter that controlls the degree of simplification.
+            The degree of simplification.
             If min_variation_per_cent>0, the function simplifies the graph by removing bins that correspond to a less
-            that min_variation_per_cent change in the score, considering the overal min/max difference of score for the
+            than min_variation_per_cent change in the score, considering the overall min/max difference of score for the
             feature as 100%. A bin of a multiclass graph merges only if the score of every class changes that little.
 
         Returns
@@ -483,7 +487,10 @@ class EBMGraph:
             case FeatureType.BOOLEAN, [_, _]:
                 pass
             case FeatureType.BOOLEAN, _:
-                msg = f"Requested a boolean format, but the feature has more than x-axis values: {self.x_vals}"
+                msg = (
+                    f"Requested a boolean format, which needs exactly two x-axis values, but the feature has"
+                    f" {len(self.x_vals)}: {self.x_vals}"
+                )
                 raise EBMGraphShapeError(msg)
 
     def _series(self) -> list[_Series]:
@@ -620,11 +627,11 @@ class EBMGraph:
             The precision of the values on the y-axis.
             If not provided or "auto", the precision is auto-detected based on the range of the y-axis
         confidence_bounds: bool, default=True
-            Whether to inlcude confidence bounds.
+            Whether to include confidence bounds.
         confidence_level: float, default=0.95
             The desired confidence level of the bounds.
         max_tokens: int, default=3000
-            The token budget of the textual description of the self. The token count is a rough estimate
+            The token budget of the text of the graph. The token count is a rough estimate
             (there is no tokenizer before the LLM call), so exceeding the budget only emits a warning.
         overbudget_percent: int, default=50
             How far above max_tokens (in percent) the estimate may go before the graph is considered obviously
@@ -638,7 +645,7 @@ class EBMGraph:
         Returns
         -------
         str
-            The textual representation of the self.
+            The textual representation of the graph.
 
         Raises
         ------

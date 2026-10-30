@@ -51,6 +51,7 @@ def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> Exp
     return fake_model(
         feature_names_in_=["age"],
         feature_types_in_=["continuous"],
+        term_features_=[(0,)],
         term_scores_=[np.array(scores)],
         standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.3, 0.0])],
         # the second resolution level is a decoy: only the first one describes the graph
@@ -65,6 +66,7 @@ def nominal_ebm() -> ExplainableBoostingClassifier:
     return fake_model(
         feature_names_in_=["color"],
         feature_types_in_=["nominal"],
+        term_features_=[(0,)],
         term_scores_=[np.array([9.0, 1.0, 3.0, 5.0, 7.0, 9.0])],
         standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.0])],
         # unordered on purpose, with the decoy second resolution level
@@ -261,9 +263,15 @@ def test_to_text_flat_categorical_graph_terminates() -> None:
     assert '"blue": 1.0' in g.to_text()
 
 
-def test_to_text_boolean_wrong_number_of_values() -> None:
-    g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
-    with pytest.raises(EBMGraphShapeError, match="boolean format"):
+@pytest.mark.parametrize(
+    ("x_vals", "count"),
+    [(["a", "b", "c"], 3), (["a"], 1)],
+)
+def test_to_text_boolean_wrong_number_of_values(x_vals: list[str], count: int) -> None:
+    # the message said "more than x-axis values", without the number, and was wrong for one value
+    g = EBMGraph("flag", "nominal", x_vals, [0.0] * count, [0.1] * count)
+    expected = rf"^Requested a boolean format, which needs exactly two x-axis values, but the feature has {count}: \["
+    with pytest.raises(EBMGraphShapeError, match=expected):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
@@ -745,6 +753,7 @@ def multiclass_fake(
     return fake_model(
         feature_names_in_=["age"],
         feature_types_in_=["continuous"],
+        term_features_=[(0,)],
         term_scores_=[np.array(scores)],
         standard_deviations_=[np.full((len(scores), 3), 0.1)],
         bins_=[[np.array([1.0, 2.0])]],
@@ -1010,3 +1019,27 @@ def test_to_text_without_bounds_ignores_the_confidence_level() -> None:
     # the factor of the bounds was computed for every text, so a level that only the bounds use raised without them
     text = cont_graph().to_text(confidence_bounds=False, confidence_level=95)
     assert "Bounds" not in text
+
+
+# terms that are not in the order of the features
+
+
+def test_from_ebm_reads_the_term_of_the_feature_when_another_feature_has_no_term() -> None:
+    # with exclude or remove_terms, term 0 is the feature "b"; the graph of "b" read term 1, which does not exist
+    ebm = fake_model(
+        feature_names_in_=["a", "b"],
+        feature_types_in_=["continuous", "nominal"],
+        term_features_=[(1,)],
+        term_scores_=[np.array([0.0, 1.0, 3.0, 0.0])],
+        standard_deviations_=[np.array([0.0, 0.1, 0.2, 0.0])],
+        bins_=[[], [{"x": 1, "y": 2}]],
+        link_="logit",
+        classes_=np.array([0, 1]),
+    )
+    graph = EBMGraph.from_ebm(ebm, 1)
+    assert graph.feature_name == "b"
+    assert graph.x_vals == ["x", "y"]
+    assert np.asarray(graph.scores).tolist() == [1.0, 3.0]
+    assert np.asarray(graph.stds).tolist() == [0.1, 0.2]
+    with pytest.raises(UnsupportedModelError, match="'a' has no main-effect term"):
+        EBMGraph.from_ebm(ebm, 0)
