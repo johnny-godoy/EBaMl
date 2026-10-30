@@ -175,8 +175,9 @@ testset "Live" {
         let question = "A model's graph for feature x has mean value 2.0 for x < 5 and -1.0 for x >= 5. Is the function decreasing in x? Think step by step.";
         let result = answer_benchmark_question(question, "'yes' or 'no'");
         log_reply(result.text);
+        // The step function is decreasing but not strictly, so a careful model may answer either way. The LiveBenchmark
+        // tests check the answers; this test checks only that the final turn is the bare answer.
         let answer = result.text.trim().to_lower_case();
-        assert.is_true(answer.includes("yes"));
-        assert.is_true(answer.length() < 20)
+        assert.is_true(baml.regex.new("^\\W*(yes|no)\\W*$").has_match(answer))
     }
 }
