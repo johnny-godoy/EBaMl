@@ -45,15 +45,27 @@ jobs:
         if: env.HAS_KEY == 'true'
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        # The model is not deterministic, so one failed attempt is retried once. A low concurrency keeps the free
-        # router below its rate limit.
+        # The model is not deterministic, so each failed test is retried on its own, up to two more times. A rerun of
+        # the whole suite would need every test to pass in the same attempt, which grows unlikely with each new test.
+        # A low concurrency keeps the free router below its rate limit.
         run: |
           mkdir -p logs
-          for attempt in 1 2; do
-            if baml test -i root::Live --max-concurrency 2 2>&1 | tee "logs/prompt-tests-$attempt.log"; then
+          selectors=(-i root::Live)
+          for attempt in 1 2 3; do
+            log="logs/prompt-tests-$attempt.log"
+            if baml test "${selectors[@]}" --max-concurrency 2 --color never 2>&1 | tee "$log"; then
               exit 0
             fi
-            echo "::warning::live prompt tests failed on attempt $attempt"
+            mapfile -t failed < <(sed -nE 's/^FAIL (root::Live::.*) \([^)]*\)$/\1/p' "$log")
+            if [ "${#failed[@]}" -eq 0 ]; then
+              echo "::error::baml test failed, but its output names no failed test; see $log"
+              exit 1
+            fi
+            echo "::warning::attempt $attempt: ${#failed[@]} live prompt tests failed"
+            selectors=()
+            for id in "${failed[@]}"; do
+              selectors+=(-i "$id")
+            done
           done
           exit 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
