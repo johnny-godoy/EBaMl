@@ -21,9 +21,11 @@ The agent is the LLM. The read and explain tools return the output of the determ
 - The MCP tool names and their argument schemas become part of the stable API at 1.0.0
   (`.claude/rules/changelog-and-versioning.md`). Design them with care: after 1.0.0, a renamed tool or argument needs a
   new MAJOR version.
-- The official Python SDK is the `mcp` package (`mcp.server.fastmcp.FastMCP`). It is in `uv.lock` only as a dependency
-  of `semgrep` today. Make it a direct dependency of an optional extra, so a user who does not need the server does not
-  install it.
+- The official Python SDK is the `mcp` package (`mcp.server.fastmcp.FastMCP`). `uv.lock` holds it as a dependency of
+  `semgrep`, and `override-dependencies` in `pyproject.toml` forces `mcp>=1.30.0,<2`, because older releases have known
+  CVEs. The override applies to the whole resolution, so it also bounds the extra. Make `mcp` a direct dependency of an
+  optional extra with the same lower bound (`mcp>=1.30.0`), so a user who does not need the server does not install it,
+  and the extra keeps the fixed release after the override goes away. Read the `reason:` block of the override first.
 </context>
 
 <design>
