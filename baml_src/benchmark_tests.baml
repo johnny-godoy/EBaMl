@@ -41,6 +41,16 @@ function benchmark_monotonicity(answer: string) -> string? {
     null
 }
 
+// The answer of the model to one question, or "" if the model stops without a finished answer, for example when a
+// reasoning model uses up the token limit. The question then counts as wrong, as an answer that the benchmark cannot
+// parse does, and the other questions of the sample still count. Other errors (a missing key, a rate limit) still fail
+// the test, because they say nothing about the answers.
+function benchmark_answer(question: string, answer_format: string, client: ai.Client?) -> string {
+    answer_benchmark_question(question, answer_format, client = client).text catch (e) {
+        ai.errors.FinishReasonError => ""
+    }
+}
+
 // Asks every question of `sample`, two at a time to stay below the rate limit of the free router, and returns the
 // number of answers that `parse` reads as the solution. `client` serves the offline test; the live tests omit it.
 function benchmark_correct(
@@ -53,10 +63,10 @@ function benchmark_correct(
     let i = 0;
     while (i < sample.length()) {
         let batch = sample.slice(i, i + 2);
-        let replies: Counted[] = await baml.future.all(batch.map((pair) => { spawn { answer_benchmark_question(pair[0], answer_format, client = client) } }));
+        let replies: string[] = await baml.future.all(batch.map((pair) => { spawn { benchmark_answer(pair[0], answer_format, client) } }));
         let j = 0;
         while (j < batch.length()) {
-            let answer = replies[j].text;
+            let answer = replies[j];
             let ok = parse(answer) == parse(batch[j][1]);
             log.info(
                 { "answer": answer, "solution": batch[j][1], "correct": ok },
@@ -123,6 +133,39 @@ testset "BenchmarkChecks" {
             client = ConstantClient { answer: "Decreasing." },
         );
         assert.equal(correct, 2)
+    }
+    test "benchmark_correct counts an answer that runs out of tokens as wrong" {
+        let sample = benchmark_sample("monotonicity", [17, 37]);
+        let correct = benchmark_correct(
+            sample,
+            "'Increasing', 'Decreasing' or 'Not monotone'",
+            benchmark_monotonicity,
+            client = ExhaustedClient {},
+        );
+        assert.equal(correct, 0)
+    }
+}
+
+// Ends every call at the token limit with no text, as a reasoning model does when its reasoning uses up the limit.
+class ExhaustedClient {
+    implements ai.Client {
+        function provider(self) -> string {
+            "exhausted"
+        }
+
+        function requested_model(self) -> string {
+            "exhausted"
+        }
+
+        function render(self, input: ai.ModelTurnInput) -> baml.http.Request {
+            baml.http.Request.from_url("http://exhausted.invalid")
+        }
+
+        function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
+            let turn = scripted_turn("", 1, 1);
+            turn.stop_reason = ai.content.StopReason.MaxTokens;
+            turn
+        }
     }
 }
 
