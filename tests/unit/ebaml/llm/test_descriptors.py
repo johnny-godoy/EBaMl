@@ -13,6 +13,7 @@ import baml_sdk
 from ebaml.core.custom_types import Audience, FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.token_budget import check_token_budget
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local import facts as local
@@ -134,7 +135,7 @@ def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> No
             "confidence_level": 0.8,
             "max_tokens": 11,
             "overbudget_percent": 7,
-            "check_budget": baml_sdk.check_token_budget,
+            "check_budget": check_token_budget,
         },
     }
 

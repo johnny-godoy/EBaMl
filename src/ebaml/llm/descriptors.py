@@ -17,6 +17,7 @@ from ebaml.core.custom_types import Audience, ExplainableBoostingModel, FeatureV
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
+from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
@@ -152,7 +153,7 @@ def _model_spec(model: ModelOptions | str | None) -> baml_sdk.ModelSpec | None:
 
 
 def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: GraphOptions) -> str:
-    """Convert an EBM graph to text, with the BAML token budget check.
+    """Convert an EBM graph to text, with the token budget check.
 
     Parameters
     ----------
@@ -185,7 +186,7 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: Grap
         confidence_level=options.confidence_level,
         max_tokens=options.max_tokens,
         overbudget_percent=options.overbudget_percent,
-        check_budget=baml_sdk.check_token_budget,
+        check_budget=check_token_budget,
     )
 
 
@@ -293,7 +294,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
             graph,
             error_type=BamlError,
             is_truncated=_is_truncated,
-            estimate_tokens=lambda text: baml_sdk.estimate_tokens(text=text),
+            estimate_tokens=estimate_tokens,
             rebuild=lambda budget: _graph_text(
                 ebm,
                 feature_index,
