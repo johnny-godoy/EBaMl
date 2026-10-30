@@ -487,7 +487,10 @@ class EBMGraph:
             case FeatureType.BOOLEAN, [_, _]:
                 pass
             case FeatureType.BOOLEAN, _:
-                msg = f"Requested a boolean format, but the feature has more than x-axis values: {self.x_vals}"
+                msg = (
+                    f"Requested a boolean format, which needs exactly two x-axis values, but the feature has"
+                    f" {len(self.x_vals)}: {self.x_vals}"
+                )
                 raise EBMGraphShapeError(msg)
 
     def _series(self) -> list[_Series]:
