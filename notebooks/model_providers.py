@@ -15,9 +15,7 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import fetch_openml
 
-    from ebaml.core.exceptions import InvalidOptionError, LLMRequestError, MissingAPIKeyError
-    from ebaml.llm.descriptors import describe_graph
-    from ebaml.llm.options import ModelOptions
+    from ebaml import InvalidOptionError, LLMRequestError, MissingAPIKeyError, ModelOptions, describe_graph
 
     return (
         ExplainableBoostingClassifier,
