@@ -33,6 +33,7 @@ from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, Featur
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import BinaryClassifier, model_kind
+from ebaml.graphs.terms import main_effect_features, main_term
 
 
 @attrs.frozen
@@ -366,14 +367,19 @@ def _features(
     Raises
     ------
     UnsupportedModelError
-        If the model has interactions.
+        If the model has interactions, or a feature has no main-effect term.
     InvalidInstanceError
         If the instance lacks a feature, a value is missing, or a category was not seen in training.
 
     """
-    # one term of one feature per feature; comparing the lists also rejects a missing term and an interaction term
-    if [len(term) for term in ebm.term_features_] != [1] * len(ebm.feature_names_in_):
+    if any(len(term) > 1 for term in ebm.term_features_):
         msg = "Local explanations need an EBM without interactions (fit with interactions=0)."
+        raise UnsupportedModelError(msg)
+    # a feature that exclude or remove_terms left out has no score, so the prediction cannot be split by feature
+    with_term = main_effect_features(ebm)
+    if with_term != list(range(len(ebm.feature_names_in_))):
+        missing = [name for index, name in enumerate(ebm.feature_names_in_) if index not in with_term]
+        msg = f"Local explanations need a main-effect term for every feature. These features have none: {missing}."
         raise UnsupportedModelError(msg)
     features = []
     for index, name in enumerate(ebm.feature_names_in_):
@@ -381,7 +387,7 @@ def _features(
             msg = f"The instance has no value for feature {name!r}."
             raise InvalidInstanceError(msg)
         graph = EBMGraph.from_ebm(ebm, index)
-        weights = np.asarray(ebm.bin_weights_[index][1:-1], dtype=float)
+        weights = np.asarray(ebm.bin_weights_[main_term(ebm, index)][1:-1], dtype=float)
         bin_index = _bin_index(ebm, index, graph, instance[name])
         plausible = _plausible_bins(weights, continuous=graph.feature_type == "continuous", min_support=min_support)
         plausible[bin_index] = True

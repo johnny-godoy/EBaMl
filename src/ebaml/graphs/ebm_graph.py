@@ -27,6 +27,7 @@ from ebaml.core.exceptions import (
 )
 from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
 from ebaml.graphs.model_kinds import model_kind
+from ebaml.graphs.terms import main_term
 
 # nominal features are unordered categories
 _FORMAT_ALIASES = {FeatureType.NOMINAL: FeatureType.CATEGORICAL}
@@ -303,7 +304,8 @@ class EBMGraph:
         ebm: ExplainableBoostingModel
             The EBM model.
         feature_index: int
-            The index of the feature in the EBM.
+            The index of the feature in the EBM. A feature that ``exclude`` or ``remove_terms`` left out has no
+            main-effect term, and raises ``UnsupportedModelError``.
         normalization: Normalization | str, default=Normalization.NONE
             How to normalize the graph (shift on the y-axis).
         use_feature_bounds: bool, default=True
@@ -342,8 +344,10 @@ class EBMGraph:
         # read the variables from the ebm
         feature_name = ebm.feature_names_in_[feature_index]
         feature_type = ebm.feature_types_in_[feature_index]
-        scores = np.array(ebm.term_scores_[feature_index][1:-1], dtype=float)  # Drop missing and unknown bins
-        stds = np.asarray(ebm.standard_deviations_[feature_index][1:-1], dtype=float)
+        # the scores are kept by term, and term i is not always feature i
+        term = main_term(ebm, feature_index)
+        scores = np.array(ebm.term_scores_[term][1:-1], dtype=float)  # Drop missing and unknown bins
+        stds = np.asarray(ebm.standard_deviations_[term][1:-1], dtype=float)
         selected = _select_outputs(model_kind(ebm).outputs, feature_name, scores, stds, classes)
         scores, stds = selected.scores, selected.stds
 
