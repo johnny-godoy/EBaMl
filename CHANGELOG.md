@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.3'></a>
+## [0.2.3] - 2026-10-30
+
+### Fixed
+
+- A local explanation accepts a row of the training data whose categories are numbers or booleans, such as a `pd.Categorical` of `1, 2, 3` or of `True, False`. interpret keeps these categories as text, so such a row raised `InvalidInstanceError: Unknown category`. A value that cannot be a category, such as a complex number, raises `InvalidInstanceError`.
+
+- A local explanation raises `InvalidInstanceError` when the value of a continuous feature is not a number, such as `"abc"`. It raised a bare `ValueError` or `TypeError`, which `except EBaMlError` did not catch.
+
+- `EBMGraph.to_text` with a boolean format says how many x-axis values the feature has, and that the format needs exactly two. The message said "more than x-axis values", which was also wrong for a feature with one value.
+
 <a id='changelog-0.2.2'></a>
 ## [0.2.2] - 2026-10-30
 
