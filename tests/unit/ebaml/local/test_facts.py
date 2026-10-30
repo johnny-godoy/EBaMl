@@ -363,6 +363,22 @@ def test_bin_index_of_a_number_uses_the_first_cuts_and_the_right_side() -> None:
     assert local._bin_index(ebm, 0, graph, 2.0) == 2  # a value on a cut belongs to the bin on its right
 
 
+@pytest.mark.parametrize("value", ["abc", "", np.str_("1,5"), np.datetime64("2020-01-01")])
+def test_bin_index_of_a_continuous_feature_rejects_a_value_that_is_not_a_number(value: FeatureValue) -> None:
+    # float() raised a bare ValueError or TypeError, which is not an EBaMlError, so a caller could not catch it as one
+    graph = EBMGraph("f", "continuous", [(0.0, 1.0), (1.0, 2.0)], [0.0] * 2, [0.0] * 2)
+    ebm = fake_model(bins_=[[np.array([1.0])]])
+    with pytest.raises(InvalidInstanceError, match=r"^Feature 'f' is continuous, but its value .* is not a number\.$"):
+        local._bin_index(ebm, 0, graph, value)
+
+
+@pytest.mark.parametrize(("value", "expected"), [("1.5", 1), (np.str_("0.5"), 0), (True, 1), (Decimal("0.5"), 0)])
+def test_bin_index_of_a_continuous_feature_accepts_a_value_that_float_reads(value: FeatureValue, expected: int) -> None:
+    graph = EBMGraph("f", "continuous", [(0.0, 1.0), (1.0, 2.0)], [0.0] * 2, [0.0] * 2)
+    ebm = fake_model(bins_=[[np.array([1.0])]])
+    assert local._bin_index(ebm, 0, graph, value) == expected
+
+
 def test_plausible_categories_need_the_support() -> None:
     weights = np.array([1.0, 6.0, 1.0])  # the shares are 0.125, 0.75 and 0.125
     plausible = local._plausible_bins(weights, continuous=False, min_support=0.2)
