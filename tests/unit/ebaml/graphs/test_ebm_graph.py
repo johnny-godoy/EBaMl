@@ -261,9 +261,15 @@ def test_to_text_flat_categorical_graph_terminates() -> None:
     assert '"blue": 1.0' in g.to_text()
 
 
-def test_to_text_boolean_wrong_number_of_values() -> None:
-    g = EBMGraph("flag", "nominal", ["a", "b", "c"], [0.0, 1.0, 2.0], [0.1, 0.1, 0.1])
-    with pytest.raises(EBMGraphShapeError, match="boolean format"):
+@pytest.mark.parametrize(
+    ("x_vals", "count"),
+    [(["a", "b", "c"], 3), (["a"], 1)],
+)
+def test_to_text_boolean_wrong_number_of_values(x_vals: list[str], count: int) -> None:
+    # the message said "more than x-axis values", without the number, and was wrong for one value
+    g = EBMGraph("flag", "nominal", x_vals, [0.0] * count, [0.1] * count)
+    expected = rf"^Requested a boolean format, which needs exactly two x-axis values, but the feature has {count}: \["
+    with pytest.raises(EBMGraphShapeError, match=expected):
         g.to_text(feature_format=FeatureType.BOOLEAN)
 
 
