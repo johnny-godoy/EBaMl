@@ -33,12 +33,23 @@ testset "PromptChecks" {
     }
 }
 
-function live_local_facts() -> LocalFactTexts {
+// The facts of one loan prediction, as ebaml.local.fact_text.facts_to_texts renders them for each audience. A layperson
+// gets words in place of the model numbers, so the layperson prompts see no score, probability or share.
+function live_layperson_facts() -> LocalFactTexts {
     LocalFactTexts {
-        prediction: "The model predicts 'loan denied' with probability 0.83 (log-odds +1.37).",
-        counterfactual: "Smallest change that flips the prediction: income from 21000 to 48000 (score change -2.91 log-odds). The flip holds at the unfavourable edge of the confidence interval.",
-        sufficient_reason: "Sufficient reason: income = 21000 and debt_ratio = 0.62 fix the prediction. Age (score +0.04) cannot change it.",
-        completions: "Share of people with the same prediction: knowing only income 21000: 71%; income 21000 and debt_ratio 0.62: 100%.",
+        prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "effect": "strongly towards this prediction"}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "effect": "moderately towards this prediction"}, {"feature": "age", "value": "[35, 42)", "effect": "slightly towards this prediction"}], "likelihood": "very likely"}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "flip_holds_even_if_the_model_is_somewhat_off": true, "likelihood_of_new_prediction": "very unlikely"}`,
+        sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"]}`,
+        completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": "likely"}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": "almost certain"}]}`,
+    }
+}
+
+function live_data_scientist_facts() -> LocalFactTexts {
+    LocalFactTexts {
+        prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "score": 1.12, "std": 0.15}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "score": 0.31, "std": 0.08}, {"feature": "age", "value": "[35, 42)", "score": 0.04, "std": 0.03}], "probability": 0.83, "confidence_interval": [0.74, 0.89], "confidence_level": 0.95, "logit": 1.37}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "flip_holds_at_confidence": 0.95, "probability_of_new_prediction": 0.18}`,
+        sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42}`,
+        completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}]}`,
     }
 }
 
@@ -46,7 +57,7 @@ testset "Live" {
     test "layperson counterfactual: no model numbers, within the sentence limit, names the input" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",
-            live_local_facts(),
+            live_layperson_facts(),
             "layperson",
             3,
             default_graph_options(),
@@ -60,7 +71,7 @@ testset "Live" {
     test "layperson sufficient reason: says the other inputs cannot change the outcome" {
         let text = LocalSufficientReason(
             "The model denies loans mainly because of low income and a high debt ratio.",
-            live_local_facts(),
+            live_layperson_facts(),
             "layperson",
             3,
             default_graph_options(),
@@ -74,7 +85,7 @@ testset "Live" {
     test "layperson completions: approximate wording and no percentages" {
         let text = LocalCompletions(
             "The model denies loans mainly because of low income and a high debt ratio.",
-            live_local_facts(),
+            live_layperson_facts(),
             "layperson",
             3,
             default_graph_options(),
@@ -86,18 +97,19 @@ testset "Live" {
     test "data scientist counterfactual: keeps the figures from the facts" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",
-            live_local_facts(),
+            live_data_scientist_facts(),
             "data_scientist",
             3,
             default_graph_options(),
         );
-        assert.is_true(text.includes("48000") || text.includes("2.91"))
+        // the target bin "[4.5e+04, 5e+04)" may be written as "45,000", "45 000" or "45k"
+        assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text))
     }
 
     test "explain_local: three explanations, each non-empty, usage reported" {
         let result = explain_local(
             "The model denies loans mainly because of low income and a high debt ratio.",
-            live_local_facts(),
+            live_layperson_facts(),
             "layperson",
             3,
             default_graph_options(),
