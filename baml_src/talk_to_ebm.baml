@@ -1,17 +1,18 @@
 // Port of TalkToEBM's t2ebm/prompts.py and t2ebm/llm.py: prompts, chat clients, CoT pipelines, token accounting.
 
 // Some models behind `openrouter/free` reason mandatorily (reasoning cannot be disabled), and the hidden reasoning tokens
-// count against `max_tokens`, so the caps are generous.
+// count against `max_tokens`, so the caps are generous. 16000 stays below the output cap of 16384 tokens of common OpenAI
+// models, because these limits are also the defaults of a ModelSpec for any provider.
 // Transient failures (rate limits, network, 5xx) are retried; rejected requests are not.
-client RouterBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 6000);
+client RouterBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 12000);
 
 // First assistant turn of each conversation allows a longer answer.
-client RouterLongBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 8000);
+client RouterLongBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 16000);
 
 client Router = ai.clients.Retry.new(inner = RouterBase, max_attempts = 3);
 
 // The benchmark is scored on one answer per question, so it samples greedily, as TalkToEBM's benchmark does.
-client RouterBenchmarkBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.0, max_tokens = 8000);
+client RouterBenchmarkBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.0, max_tokens = 16000);
 
 client RouterBenchmark = ai.clients.Retry.new(inner = RouterBenchmarkBase, max_attempts = 3);
 
