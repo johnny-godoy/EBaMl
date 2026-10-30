@@ -27,6 +27,7 @@ from collections.abc import Mapping, Sequence
 import attrs
 import numpy as np
 import numpy.typing as npt
+from interpret.utils._clean_x import _densify_categorical  # ruff: ignore[import-private-name] -- interpret has no public function that writes a value as the text of its category
 from pandas.api.typing import NAType
 
 from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue
@@ -270,10 +271,44 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
         cuts = typing.cast("npt.NDArray[np.float64]", ebm.bins_[feature_index][0])
         # a value of a continuous feature is a number or a numeric text, and float() raises for anything else
         return int(np.searchsorted(cuts, float(typing.cast("typing.SupportsFloat | str", value)), side="right"))
-    if value not in graph.x_vals:
+    category = _category(value, graph.feature_name)
+    if category not in graph.x_vals:
         msg = f"Unknown category {value!r} for feature {graph.feature_name!r}."
         raise InvalidInstanceError(msg)
-    return graph.x_vals.index(value)
+    return graph.x_vals.index(category)
+
+
+def _category(value: FeatureValue, feature_name: str) -> str:
+    """Write a value of a nominal feature as interpret writes its categories.
+
+    interpret keeps the categories as text: ``2`` and ``2.0`` become ``"2"``, and ``True`` becomes ``"1"``. So a row of
+    the training data, with its numbers and booleans, finds the bins of its categories.
+
+    Parameters
+    ----------
+    value: FeatureValue
+        The value of the instance.
+    feature_name: str
+        The name of the feature, for the error message.
+
+    Returns
+    -------
+    str
+        The category, as the bins of the EBM name it.
+
+    Raises
+    ------
+    InvalidInstanceError
+        If interpret cannot write the value as a category, as for a complex number.
+
+    """
+    try:
+        # interpret has no type hints, but the function returns one text per value
+        categories = typing.cast("npt.NDArray[np.str_]", _densify_categorical(np.array([value], dtype=object)))
+    except TypeError as error:
+        msg = f"The value {value!r} of feature {feature_name!r} cannot be a category."
+        raise InvalidInstanceError(msg) from error
+    return str(categories[0])
 
 
 def _plausible_bins(
