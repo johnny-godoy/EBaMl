@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["baml_src/**", ".github/workflows/prompt-tests.yml"]
+    paths: ["baml_src/**", "benchmark/data/**", ".github/workflows/prompt-tests.yml"]
   pull_request:
-    paths: ["baml_src/**", ".github/workflows/prompt-tests.yml"]
+    paths: ["baml_src/**", "benchmark/data/**", ".github/workflows/prompt-tests.yml"]
 
 concurrency:
   group: prompt-tests-${{ github.ref }}
