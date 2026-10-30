@@ -56,7 +56,7 @@ jobs:
             if baml test "${selectors[@]}" --max-concurrency 2 --color never 2>&1 | tee "$log"; then
               exit 0
             fi
-            mapfile -t failed < <(sed -nE 's/^FAIL (root::Live::.*) \([^)]*\)$/\1/p' "$log")
+            mapfile -t failed < <(sed -nE 's/^FAIL (root::.*) \([^)]*\)$/\1/p' "$log")
             if [ "${#failed[@]}" -eq 0 ]; then
               echo "::error::baml test failed, but its output names no failed test; see $log"
               exit 1
