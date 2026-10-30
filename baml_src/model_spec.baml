@@ -20,16 +20,16 @@ class CallDefaults {
 // These three must equal the `temperature` and `max_tokens` of `RouterBase`, `RouterLongBase` and
 // `RouterBenchmarkBase` in talk_to_ebm.baml.
 function short_defaults() -> CallDefaults {
-    CallDefaults { temperature: 0.7, max_output_tokens: 6000 }
+    CallDefaults { temperature: 0.7, max_output_tokens: 12000 }
 }
 
 // The first turn of each conversation allows a longer answer.
 function long_defaults() -> CallDefaults {
-    CallDefaults { temperature: 0.7, max_output_tokens: 8000 }
+    CallDefaults { temperature: 0.7, max_output_tokens: 16000 }
 }
 
 function benchmark_defaults() -> CallDefaults {
-    CallDefaults { temperature: 0.0, max_output_tokens: 8000 }
+    CallDefaults { temperature: 0.0, max_output_tokens: 16000 }
 }
 
 // A field that the user set wins. Otherwise the default of the call applies.

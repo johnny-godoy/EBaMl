@@ -70,12 +70,15 @@ test "resolve_settings lets the user values win over the defaults of the call" {
 test "resolve_settings takes the defaults of the call for null fields" {
     let settings = resolve_settings(spec_for("openai"), benchmark_defaults());
     assert.equal(settings.temperature, 0.0);
-    assert.equal(settings.max_output_tokens, 8000)
+    assert.equal(settings.max_output_tokens, 16000)
 }
 
+// A reasoning model counts its hidden reasoning in the output limit. At 8000 tokens, live runs ended at the limit with
+// no answer, so the limits are 12000 and 16000.
 test "the call defaults differ by call as the declared clients do" {
-    assert.equal(short_defaults().max_output_tokens, 6000);
-    assert.equal(long_defaults().max_output_tokens, 8000);
+    assert.equal(short_defaults().max_output_tokens, 12000);
+    assert.equal(long_defaults().max_output_tokens, 16000);
+    assert.equal(benchmark_defaults().max_output_tokens, 16000);
     assert.equal(short_defaults().temperature, 0.7);
     assert.equal(benchmark_defaults().temperature, 0.0)
 }
