@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.6'></a>
+## [0.2.6] - 2026-10-31
+
+### Changed
+
+- The counterfactual facts that the local explanation prompts read put the class after the changes and its likelihood (or probability, for a data scientist) in one object, `after_the_changes`, with the same field names as the prediction. With the probability in a key of its own, a model read it as the probability of the old class.
+
 <a id='changelog-0.2.5'></a>
 ## [0.2.5] - 2026-10-31
 
