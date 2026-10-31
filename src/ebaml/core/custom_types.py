@@ -45,13 +45,6 @@ class FeatureType(enum.StrEnum):
     BOOLEAN = "boolean"
 
 
-class Audience(enum.StrEnum):
-    """Who reads a local explanation."""
-
-    LAYPERSON = "layperson"
-    DATA_SCIENTIST = "data_scientist"
-
-
 def normalize_feature_type(feature_type: str) -> FeatureType:
     """Normalize a feature type to the FeatureType enum.
 

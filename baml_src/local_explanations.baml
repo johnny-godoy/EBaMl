@@ -22,20 +22,14 @@ function local_system_msg(expert_description: string) -> string {
     `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
-// The audience decides the vocabulary. The facts of a "layperson" carry no model numbers, but the instruction repeats it.
-function audience_guidance(audience: "layperson" | "data_scientist") -> string {
-    if (audience == "data_scientist") {
-        return "The reader is a data scientist, so be precise. Quote the scores (log-odds contributions), probabilities and confidence intervals from the facts. Say how uncertain a statement is when the facts show wide confidence intervals.";
-    };
-    "The reader is not technical and knows no statistics, so write in everyday words. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. Mention only values of the person's own inputs (for example their age), because model numbers (scores, log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader."
-}
-
+// The guidance comes from the Audience of the Python caller (ebaml.local.audience), so a user can add an audience
+// without an edit here. It tells the model how to write for the reader, and why.
 function local_user_msg(
     global_explanation: string,
     prediction: string,
     question: string,
     facts: string,
-    audience: "layperson" | "data_scientist",
+    audience_guidance: string,
     dataset_description: string,
 ) -> string {
     let msg = `
@@ -58,7 +52,7 @@ function local_user_msg(
             </facts>
 
             <audience>
-            ${audience_guidance(audience)}
+            ${audience_guidance}
             </audience>
 
             <question>
@@ -101,7 +95,7 @@ function completions_question(num_sentences: int) -> string {
 function LocalCounterfactual(
     global_explanation: string,
     facts: LocalFactTexts,
-    audience: "layperson" | "data_scientist",
+    audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
 ) -> string {
@@ -110,14 +104,14 @@ function LocalCounterfactual(
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, counterfactual_question(num_sentences), facts.counterfactual, audience, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, counterfactual_question(num_sentences), facts.counterfactual, audience_guidance, opts.dataset_description)}
     `
 }
 
 function LocalSufficientReason(
     global_explanation: string,
     facts: LocalFactTexts,
-    audience: "layperson" | "data_scientist",
+    audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
 ) -> string {
@@ -126,14 +120,14 @@ function LocalSufficientReason(
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, sufficient_reason_question(num_sentences), facts.sufficient_reason, audience, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, sufficient_reason_question(num_sentences), facts.sufficient_reason, audience_guidance, opts.dataset_description)}
     `
 }
 
 function LocalCompletions(
     global_explanation: string,
     facts: LocalFactTexts,
-    audience: "layperson" | "data_scientist",
+    audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
 ) -> string {
@@ -142,7 +136,7 @@ function LocalCompletions(
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, completions_question(num_sentences), facts.completions, audience, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, completions_question(num_sentences), facts.completions, audience_guidance, opts.dataset_description)}
     `
 }
 
@@ -150,7 +144,7 @@ function LocalCompletions(
 function explain_local(
     global_explanation: string,
     facts: LocalFactTexts,
-    audience: "layperson" | "data_scientist",
+    audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
@@ -159,19 +153,19 @@ function explain_local(
     let selected = select_client(client, model, short_defaults());
     let counterfactual = spawn {
         run_counted(
-            LocalCounterfactual@spec(global_explanation, facts, audience, num_sentences, opts),
+            LocalCounterfactual@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
             client = selected,
         )
     };
     let sufficient = spawn {
         run_counted(
-            LocalSufficientReason@spec(global_explanation, facts, audience, num_sentences, opts),
+            LocalSufficientReason@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
             client = selected,
         )
     };
     let completions = spawn {
         run_counted(
-            LocalCompletions@spec(global_explanation, facts, audience, num_sentences, opts),
+            LocalCompletions@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
             client = selected,
         )
     };
