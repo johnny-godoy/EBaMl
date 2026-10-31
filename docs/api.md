@@ -16,6 +16,10 @@
 
 ::: ebaml.local.facts
 
+## Audiences of the local explanations
+
+::: ebaml.local.audience
+
 ## Text of the local explanations
 
 ::: ebaml.local.fact_text
