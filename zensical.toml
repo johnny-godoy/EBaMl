@@ -14,6 +14,7 @@ nav = [
   { Notebooks = [
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
+    { "Custom audiences" = "audiences-notebook.md" },
     { "Model providers" = "providers-notebook.md" },
     { Multiclass = "multiclass-notebook.md" },
     { "Model kinds" = "model-kinds-notebook.md" },
