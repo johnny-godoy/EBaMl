@@ -191,7 +191,8 @@ print(explanation.completions)         # how certain the outcome is as inputs be
 The facts are computed exactly from the scores and confidence intervals of the EBM (`ebaml.local`); the LLM only puts
 them in words. They are the three queries of [arXiv:2010.12265](https://arxiv.org/abs/2010.12265): minimum change
 required, minimum sufficient reason and count completions. `audience="layperson"` (default) gives no model numbers;
-`audience="data_scientist"` quotes scores, probabilities and confidence intervals. It supports binary classifiers
+`audience="data_scientist"` quotes scores, probabilities and confidence intervals. Subclass `ebaml.Audience` to add a
+reader with its own rules. It supports binary classifiers
 without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
 and `notebooks/local_explanations.py` walks through them on the Titanic data.
 

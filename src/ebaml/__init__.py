@@ -10,7 +10,7 @@ from beartype.claw import beartype_this_package
 # Checking annotated variables is off, because structlog's lazy logger proxy does not match its own logger type.
 beartype_this_package(conf=BeartypeConf(is_pep484_tower=True, claw_is_pep526=False))  # ruff: ignore[non-empty-init-module] -- the hook must run before the submodule imports below
 
-from ebaml.core.custom_types import Audience, FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.core.custom_types import FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
     APIKeyRejectedError,
     EBaMlError,
@@ -37,6 +37,7 @@ from ebaml.graphs.model_kinds import (  # ruff: ignore[module-import-not-at-top-
     Regressor,
     model_kind,
 )
+from ebaml.local.audience import Audience, DataScientist, Layperson  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
 __version__: str = version("ebaml")
 
@@ -44,6 +45,7 @@ __all__ = [
     "APIKeyRejectedError",
     "Audience",
     "BinaryClassifier",
+    "DataScientist",
     "EBMGraph",
     "EBMGraphError",
     "EBMGraphShapeError",
@@ -55,6 +57,7 @@ __all__ = [
     "InvalidInstanceError",
     "InvalidOptionError",
     "LLMRequestError",
+    "Layperson",
     "MissingAPIKeyError",
     "ModelKind",
     "MulticlassClassifier",
