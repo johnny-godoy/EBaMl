@@ -18,15 +18,16 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
-    from ebaml.core.custom_types import Audience
+    from ebaml import DataScientist, Layperson
     from ebaml.llm.descriptors import describe_ebm, explain_instance
     from ebaml.llm.options import PromptOptions
     from ebaml.local.fact_text import facts_to_texts
     from ebaml.local.facts import LocalOptions, compute_local_facts
 
     return (
-        Audience,
+        DataScientist,
         ExplainableBoostingClassifier,
+        Layperson,
         LocalOptions,
         PromptOptions,
         attrs,
@@ -317,18 +318,20 @@ def _(mo) -> None:
       jargon.
     - A **data scientist** gets the scores, the probabilities, the confidence interval and the confidence level, and is
       told to quote them.
+
+    Both are subclasses of `Audience`. The notebook `audiences.py` shows how to write your own.
     """)
 
 
 @app.cell
-def _(Audience, facts, facts_to_texts, mo) -> None:
-    audience_texts = {audience: facts_to_texts(facts, audience) for audience in Audience}
+def _(DataScientist, Layperson, facts, facts_to_texts, mo) -> None:
+    audience_texts = {
+        "layperson": facts_to_texts(facts, Layperson()),
+        "data_scientist": facts_to_texts(facts, DataScientist()),
+    }
     mo.ui.tabs({
         kind: mo.hstack(
-            [
-                mo.md(f"**{audience.value}**\n```json\n{getattr(audience_texts[audience], kind)}\n```")
-                for audience in Audience
-            ],
+            [mo.md(f"**{name}**\n```json\n{getattr(texts, kind)}\n```") for name, texts in audience_texts.items()],
             align="start",
             justify="start",
         )
@@ -375,12 +378,8 @@ def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
 
 
 @app.cell
-def _(Audience, mo):
-    audience = mo.ui.dropdown(
-        options={a.value: a for a in Audience},
-        value=Audience.LAYPERSON.value,
-        label="Audience",
-    )
+def _(mo):
+    audience = mo.ui.dropdown(options=["layperson", "data_scientist"], value="layperson", label="Audience")
     explain_button = mo.ui.run_button(label="Explain this prediction")
     mo.hstack([audience, explain_button], justify="start")
     return audience, explain_button
