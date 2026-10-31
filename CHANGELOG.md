@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.4'></a>
+## [0.2.4] - 2026-10-31
+
+### Changed
+
+- The default output limit of a call is 12000 tokens, and 16000 for the first turn of a conversation and for the benchmark. A reasoning model counts its hidden reasoning in this limit, and at 6000 and 8000 tokens some replies ended at the limit with no answer.
+
+- The counterfactual facts that the local explanation prompts read name the class that the prediction changes to (`new_predicted_class`), and the likelihood of that class is `likelihood_of_new_predicted_class` (`probability_of_new_predicted_class` for a data scientist). The LLM no longer has to guess which class the likelihood is about.
+
 <a id='changelog-0.2.3'></a>
 ## [0.2.3] - 2026-10-30
 
