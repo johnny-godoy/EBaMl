@@ -164,8 +164,9 @@ print(texts.counterfactual)
     {"feature": "sex", "from": "male", "to": "female", "score_change": 2.437}
   ],
   "minimum_number_of_changes": 1,
+  "new_predicted_class": 1,
   "flip_holds_at_confidence": 0.95,
-  "probability_of_new_prediction": 0.589
+  "probability_of_new_predicted_class": 0.589
 }
 ```
 
@@ -176,8 +177,9 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
   "flip_possible": true,
   "changes": [{"feature": "sex", "from": "male", "to": "female"}],
   "minimum_number_of_changes": 1,
+  "new_predicted_class": 1,
   "flip_holds_even_if_the_model_is_somewhat_off": true,
-  "likelihood_of_new_prediction": "about as likely as not"
+  "likelihood_of_new_predicted_class": "about as likely as not"
 }
 ```
 
