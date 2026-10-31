@@ -12,6 +12,20 @@ function count_sentences(text: string) -> int {
     ends - abbreviations
 }
 
+// True when one clause of `text` holds both `figure` and a word for the denial of the loan. A clause ends at a comma, a
+// semicolon or the end of a sentence. The probability of the class after the flip (0.82 for "loan approved") read as
+// the probability of a denial is the error this catches.
+function ties_figure_to_denial(text: string, figure: string) -> bool {
+    let denial = baml.regex.new("(?i)\\bdeni");
+    for (let clause in baml.regex.new("[,;]|[.!?](\\s|$)").split(text)) {
+        if (clause.includes(figure) && denial.has_match(clause)) {
+            return true;
+        }
+    }
+    ;
+    false
+}
+
 testset "PromptChecks" {
     test "count_sentences: the period of a decimal does not end a sentence" {
         assert.equal(count_sentences("The debt ratio is 0.62. Income is low."), 2)
@@ -32,6 +46,29 @@ testset "PromptChecks" {
         assert.equal(count_sentences("Income matters most"), 0);
         assert.equal(count_sentences(""), 0)
     }
+
+    test "ties_figure_to_denial: catches the probability of the new class read as a denial" {
+        // the reply of a live run with the facts of the counterfactual in separate keys
+        assert.is_true(
+            ties_figure_to_denial(
+                "subtracting 2.91 log-odds from the model and reducing the denial probability to 0.82 (95% CI [0.74, 0.89]).",
+                "0.82",
+            ),
+        );
+        assert.is_true(ties_figure_to_denial("a 0.82 chance of being denied", "0.82"))
+    }
+
+    test "ties_figure_to_denial: accepts the probability given to the new class" {
+        assert.is_true(
+            !ties_figure_to_denial(
+                "The loan would be approved with probability 0.82, so the denial is overturned.",
+                "0.82",
+            ),
+        );
+        assert.is_true(
+            !ties_figure_to_denial("The prediction flips to loan approved (probability 0.82).", "0.82"),
+        )
+    }
 }
 
 // The facts of one loan prediction, as ebaml.local.fact_text.facts_to_texts renders them for each audience. A layperson
@@ -39,7 +76,7 @@ testset "PromptChecks" {
 function live_layperson_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "effect": "strongly towards this prediction"}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "effect": "moderately towards this prediction"}, {"feature": "age", "value": "[35, 42)", "effect": "slightly towards this prediction"}], "likelihood": "very likely"}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "new_predicted_class": "loan approved", "flip_holds_even_if_the_model_is_somewhat_off": true, "likelihood_of_new_predicted_class": "very likely"}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "after_the_changes": {"predicted_class": "loan approved", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"]}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": "likely"}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": "almost certain"}]}`,
     }
@@ -48,7 +85,7 @@ function live_layperson_facts() -> LocalFactTexts {
 function live_data_scientist_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "score": 1.12, "std": 0.15}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "score": 0.31, "std": 0.08}, {"feature": "age", "value": "[35, 42)", "score": 0.04, "std": 0.03}], "probability": 0.83, "confidence_interval": [0.74, 0.89], "confidence_level": 0.95, "logit": 1.37}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "new_predicted_class": "loan approved", "flip_holds_at_confidence": 0.95, "probability_of_new_predicted_class": 0.82}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}]}`,
     }
@@ -104,7 +141,7 @@ testset "Live" {
         assert.is_true(count_sentences(text) <= 3)
     }
 
-    test "data scientist counterfactual: keeps the figures from the facts" {
+    test "data scientist counterfactual: keeps the figures from the facts and gives 0.82 to the new class" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_data_scientist_facts(),
@@ -114,7 +151,9 @@ testset "Live" {
         );
         log_reply(text);
         // the target bin "[4.5e+04, 5e+04)" may be written as "45,000", "45 000" or "45k"
-        assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text))
+        assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text));
+        // 0.82 is the probability of "loan approved", the class after the changes
+        assert.is_true(!ties_figure_to_denial(text, "0.82"))
     }
 
     test "explain_local: three explanations, each non-empty, usage reported" {
