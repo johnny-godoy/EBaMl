@@ -13,7 +13,7 @@ import attrs
 import orjson
 
 from ebaml.core.custom_types import Audience, JSONValue
-from ebaml.local.facts import Change, Contribution, Counterfactual, LocalFacts, Prediction, SufficientReason
+from ebaml.local.facts import Change, Contribution, LocalFacts, Prediction, SufficientReason
 
 _LIKELIHOOD_WORDS = (
     (0.95, "almost certain"),
@@ -91,10 +91,16 @@ class _AudienceRenderer(abc.ABC):
     @abc.abstractmethod
     def flip(
         self,
-        counterfactual: Counterfactual,
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell how sure the flip of the counterfactual is."""
+
+    @abc.abstractmethod
+    def class_output(
+        self,
+        output: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        """Return the key that tells how likely a class is, from its probability ``output``."""
 
     @abc.abstractmethod
     def margin(
@@ -142,13 +148,16 @@ class _LaypersonRenderer(_AudienceRenderer):
     @override
     def flip(
         self,
-        counterfactual: Counterfactual,
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {
-            "flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0,
-            "likelihood_of_new_predicted_class": _likelihood(counterfactual.new_output),
-        }
+        return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
+
+    @override
+    def class_output(
+        self,
+        output: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"likelihood": _likelihood(output)}
 
     @override
     def margin(
@@ -196,13 +205,16 @@ class _DataScientistRenderer(_AudienceRenderer):
     @override
     def flip(
         self,
-        counterfactual: Counterfactual,
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {
-            "flip_holds_at_confidence": confidence_level,
-            "probability_of_new_predicted_class": _round(counterfactual.new_output),
-        }
+        return {"flip_holds_at_confidence": confidence_level}
+
+    @override
+    def class_output(
+        self,
+        output: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"probability": _round(output)}
 
     @override
     def margin(
@@ -256,9 +268,12 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = Audience.LAYPERSON) -
             {"feature": c.feature, "from": c.from_value, "to": c.to_value} | renderer.change(c) for c in cf.changes
         ]
         counterfactual["minimum_number_of_changes"] = len(cf.changes)
-        # name the class after the changes, so the LLM does not have to guess which class the likelihood is about
-        counterfactual["new_predicted_class"] = cf.new_decision
-        counterfactual |= renderer.flip(cf, facts.confidence_level)
+        # the class after the changes and its probability share one object, so the LLM cannot read the probability
+        # as one of the old class
+        counterfactual["after_the_changes"] = {"predicted_class": cf.new_decision} | renderer.class_output(
+            cf.new_output,
+        )
+        counterfactual |= renderer.flip(facts.confidence_level)
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason

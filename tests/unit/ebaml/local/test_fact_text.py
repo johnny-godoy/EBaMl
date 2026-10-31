@@ -154,9 +154,8 @@ def test_layperson_text_of_the_explanations() -> None:
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)"}],
         "minimum_number_of_changes": 1,
+        "after_the_changes": {"predicted_class": 1, "likelihood": "likely"},
         "flip_holds_even_if_the_model_is_somewhat_off": True,
-        "new_predicted_class": 1,
-        "likelihood_of_new_predicted_class": "likely",
     }
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
@@ -177,9 +176,8 @@ def test_data_scientist_text_of_the_explanations() -> None:
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
         "minimum_number_of_changes": 1,
+        "after_the_changes": {"predicted_class": 1, "probability": 0.7},
         "flip_holds_at_confidence": 0.95,
-        "new_predicted_class": 1,
-        "probability_of_new_predicted_class": 0.7,
     }
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
@@ -196,8 +194,8 @@ def test_data_scientist_text_of_the_explanations() -> None:
 
 
 @pytest.mark.parametrize("audience", list(Audience))
-def test_counterfactual_text_names_the_class_that_the_likelihood_is_about(audience: Audience) -> None:
-    # without the class, the LLM must guess which class the likelihood is about
+def test_counterfactual_text_puts_the_new_class_and_its_probability_together(audience: Audience) -> None:
+    # with the probability in a key of its own, a live reply read 0.82 as the probability of the old class
     facts = attrs.evolve(
         _text_facts_with_everything(0.95),
         counterfactual=local.Counterfactual(
@@ -207,7 +205,9 @@ def test_counterfactual_text_names_the_class_that_the_likelihood_is_about(audien
         ),
     )
     counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
-    assert counterfactual["new_predicted_class"] == "loan approved"
+    after = counterfactual["after_the_changes"]
+    assert after["predicted_class"] == "loan approved"
+    assert set(after) == {"predicted_class", "likelihood" if audience is Audience.LAYPERSON else "probability"}
 
 
 @pytest.mark.parametrize(("confidence_level", "holds"), [(-0.5, False), (0.0, False), (0.5, True), (2.0, True)])
