@@ -155,16 +155,16 @@ test "answer_benchmark_question reasons, then extracts the answer" {
     assert.equal(result.usage.output_tokens, 10)
 }
 
-test "local_user_msg prepends the global explanation and follows the audience" {
-    let layperson = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "layperson", "");
-    assert.is_true(layperson.includes("GLOBAL"));
-    assert.is_true(layperson.includes("FACTS"));
-    assert.is_true(layperson.includes("model numbers"));
-    assert.is_true(!layperson.includes("<dataset_description>"));
+test "local_user_msg prepends the global explanation and puts in the guidance of the audience" {
+    let plain = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "");
+    assert.is_true(plain.includes("GLOBAL"));
+    assert.is_true(plain.includes("FACTS"));
+    assert.is_true(plain.includes("<audience>"));
+    assert.is_true(plain.includes("GUIDANCE"));
+    assert.is_true(!plain.includes("<dataset_description>"));
 
-    let expert = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "data_scientist", "A bank dataset");
-    assert.is_true(expert.includes("confidence intervals"));
-    assert.is_true(expert.includes("A bank dataset"))
+    let described = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "A bank dataset");
+    assert.is_true(described.includes("A bank dataset"))
 }
 
 test "explain_local makes three calls and sums usage" {
@@ -175,7 +175,7 @@ test "explain_local makes three calls and sums usage" {
         sufficient_reason: "S",
         completions: "K",
     };
-    let result = explain_local("GLOBAL", facts, "layperson", 5, default_graph_options(), client = scripted);
+    let result = explain_local("GLOBAL", facts, "GUIDANCE", 5, default_graph_options(), client = scripted);
     assert.equal(scripted.calls, 3);
     assert.equal(result.counterfactual, "R");
     assert.equal(result.sufficient_reason, "R");
@@ -221,23 +221,14 @@ test "local_system_msg names the expert and forbids invented facts" {
     assert.is_true(msg.includes("invented number"))
 }
 
-test "audience_guidance differs per audience" {
-    let layperson = audience_guidance("layperson");
-    let expert = audience_guidance("data_scientist");
-    assert.is_true(layperson.includes("not technical"));
-    assert.is_true(!layperson.includes("data scientist"));
-    assert.is_true(expert.includes("data scientist"));
-    assert.is_true(!expert.includes("not technical"))
-}
-
 test "local_user_msg orders the global explanation, dataset, prediction, facts, guidance and question" {
-    let msg = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "layperson", "DATASET");
+    let msg = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "DATASET");
     let positions = [
         position_of(msg, "GLOBAL"),
         position_of(msg, "DATASET"),
         position_of(msg, "PRED"),
         position_of(msg, "FACTS"),
-        position_of(msg, "not technical"),
+        position_of(msg, "GUIDANCE"),
         position_of(msg, "QUESTION"),
     ];
     assert.is_true(positions[0] >= 0);
@@ -266,9 +257,9 @@ test "each local function gets its own facts, question and system role" {
     };
     let opts = GraphPromptOptions { ...default_graph_options(), expert_description: "an EXPERT" };
 
-    let cf = LocalCounterfactual@spec("GLOBAL", facts, "layperson", 3, opts).prompt().text();
-    let sr = LocalSufficientReason@spec("GLOBAL", facts, "layperson", 4, opts).prompt().text();
-    let co = LocalCompletions@spec("GLOBAL", facts, "layperson", 6, opts).prompt().text();
+    let cf = LocalCounterfactual@spec("GLOBAL", facts, "GUIDANCE", 3, opts).prompt().text();
+    let sr = LocalSufficientReason@spec("GLOBAL", facts, "GUIDANCE", 4, opts).prompt().text();
+    let co = LocalCompletions@spec("GLOBAL", facts, "GUIDANCE", 6, opts).prompt().text();
 
     for (let prompt in [cf, sr, co]) {
         assert.is_true(prompt.includes("You are an EXPERT."));
@@ -304,7 +295,7 @@ test "explain_local routes each answer to its own field" {
         sufficient_reason: "SR-FACT",
         completions: "CO-FACT",
     };
-    let result = explain_local("GLOBAL", facts, "data_scientist", 5, default_graph_options(), client = EchoClient {});
+    let result = explain_local("GLOBAL", facts, "GUIDANCE", 5, default_graph_options(), client = EchoClient {});
     assert.is_true(result.counterfactual.includes("CF-FACT"));
     assert.is_true(
         !result.counterfactual.includes("SR-FACT") && !result.counterfactual.includes("CO-FACT"),

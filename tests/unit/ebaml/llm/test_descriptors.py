@@ -2,7 +2,7 @@
 
 import inspect
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, override
 
 import pytest
 from baml_bridge.errors import BamlError
@@ -10,12 +10,13 @@ from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[
 from structlog.testing import capture_logs
 
 import baml_sdk
-from ebaml.core.custom_types import Audience, FeatureType, Normalization
+from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local import facts as local
+from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (
     appending,
@@ -302,7 +303,7 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(descriptors, "compute_local_facts", compute)
 
     def facts_to_texts(_facts: local.LocalFacts, audience: Audience) -> FactTexts:
-        return FactTexts("p", f"c-{audience}", "s", "k")
+        return FactTexts("p", f"c-{audience.guidance()}", "s", "k")
 
     monkeypatch.setattr(descriptors, "facts_to_texts", facts_to_texts)
     text = baml_sdk.LocalExplanationText(
@@ -324,9 +325,9 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     assert (result.counterfactual, result.sufficient_reason, result.completions) == ("cf", "sr", "cc")
     assert seen["compute"] == (FAKE_EBM, {"a": 1}, local.LocalOptions(confidence_level=0.9))
-    assert calls["audience"] == "data_scientist"
+    assert calls["audience_guidance"] == DataScientist().guidance()
     assert calls["global_explanation"] == "GLOBAL"
-    assert calls["facts"].counterfactual == "c-data_scientist"
+    assert calls["facts"].counterfactual == f"c-{DataScientist().guidance()}"
     assert calls["num_sentences"] == 5
     assert calls["opts"].expert_description == "E"
     assert [(log["what"], log["input_tokens"], log["output_tokens"]) for log in logs] == [("explain_instance", 1, 2)]
@@ -350,8 +351,28 @@ def test_explain_instance_defaults_to_layperson(monkeypatch: pytest.MonkeyPatch)
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
     descriptors.explain_instance(FAKE_EBM, {}, "G")
-    assert calls["audience"] == "layperson"
-    assert audiences == [Audience.LAYPERSON]
+    assert calls["audience_guidance"] == Layperson().guidance()
+    assert [type(audience) for audience in audiences] == [Layperson]
+
+
+def test_explain_instance_uses_a_custom_audience(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Regulator(DataScientist):
+        @override
+        def guidance(self) -> str:
+            return "REGULATOR"
+
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    text = baml_sdk.LocalExplanationText(
+        counterfactual="",
+        sufficient_reason="",
+        completions="",
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+    )
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
+    descriptors.explain_instance(FAKE_EBM, {}, "G", audience=Regulator())
+    assert calls["audience_guidance"] == "REGULATOR"
+    assert "probability" in calls["facts"].prediction
 
 
 def test_explain_instance_rejects_unknown_audience() -> None:

@@ -16,7 +16,7 @@ explanation = explain_instance(
     ebm,
     X.iloc[0].to_dict(),      # the value of every feature, by name
     global_explanation,
-    audience="layperson",     # or "data_scientist"
+    audience="layperson",     # or "data_scientist", or your own Audience
 )
 print(explanation.counterfactual)
 print(explanation.sufficient_reason)
@@ -133,13 +133,66 @@ if facts.counterfactual is not None:
 
 ## Audience
 
+An audience is an instance of a subclass of `Audience`. Two audiences ship with the package. Pass one as an object, or
+pass its name as a string:
+
 | `audience` | What the LLM is given | What it is told |
 | --- | --- | --- |
-| `"layperson"` (default) | Words instead of model numbers: effects are `strongly`/`moderately`/`slightly` `towards`/`against`, probabilities are `very likely`, `unlikely`, ... Values of the person's own inputs (their age) stay. | No numbers that describe the model, no jargon. |
-| `"data_scientist"` | Scores, standard deviations, the probability and its confidence interval, the logit, the confidence level. | Quote the numbers, and say how uncertain a claim is. |
+| `"layperson"` or `Layperson()` (default) | Words instead of model numbers: effects are `strongly`/`moderately`/`slightly` `towards`/`against`, probabilities are `very likely`, `unlikely`, ... Values of the person's own inputs (their age) stay. | No numbers that describe the model, no jargon. |
+| `"data_scientist"` or `DataScientist()` | Scores, standard deviations, the probability and its confidence interval, the logit, the confidence level. | Quote the numbers, and say how uncertain a claim is. |
 
 Removing the numbers *before* the prompt is deliberate: an instruction not to repeat a number is weaker than not
-having the number. The choice is validated, so `audience="child"` raises `InvalidOptionError` before any LLM call.
+having the number. The name is validated, so `audience="child"` raises `InvalidOptionError` before any LLM call.
+
+### Your own audience
+
+An audience has two jobs, and the base class `Audience` has one method for each part of them:
+
+- `guidance()` returns the instruction that tells the LLM how to write for this reader, and why.
+- `contribution`, `prediction`, `change`, `flip`, `margin` and `share` return the keys that the audience adds to one
+  kind of fact. `facts_to_texts` builds the keys that all audiences share (the names of the features, their values).
+
+All seven methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
+subclass it and override that method. This audience keeps the words of the layperson and asks for French:
+
+```python
+from typing import override
+
+from ebaml.local.audience import Layperson
+
+
+class French(Layperson):
+    @override
+    def guidance(self) -> str:
+        return "The reader speaks French and is not technical, so answer in French, in everyday words."
+```
+
+An audience with new rules overrides the methods of the facts. This one is for a loan officer: it gives the probability
+as a percentage in place of the probability, the confidence interval and the logit, and it drops the scores of the
+contributions. The changes, the flip and the margin keep the numbers of the data scientist.
+
+```python
+from ebaml.core.custom_types import JSONValue
+from ebaml.local.audience import DataScientist, round_value
+
+
+class LoanOfficer(DataScientist):
+    @override
+    def guidance(self) -> str:
+        return "The reader is a loan officer, so quote percentages and skip the statistics of the model."
+
+    @override
+    def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+        return {}
+
+    @override
+    def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
+        return {"percent": round_value(100 * prediction.output)}
+```
+
+The module `ebaml.local.audience` also has the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
+`round_value` and `points_towards`. Pass the object to `explain_instance(..., audience=LoanOfficer())`. The
+[custom audiences notebook](audiences-notebook.md) walks through three audiences and shows their facts side by side.
 
 You can see exactly what the LLM reads, without calling it:
 
@@ -148,12 +201,12 @@ instance = X.iloc[0].to_dict()
 -->
 
 ```python
-from ebaml.core.custom_types import Audience
+from ebaml.local.audience import DataScientist
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.fact_text import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
-texts = facts_to_texts(facts, Audience.DATA_SCIENTIST)
+texts = facts_to_texts(facts, DataScientist())
 print(texts.counterfactual)
 ```
 
@@ -191,7 +244,7 @@ The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions`
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
-| `audience` | `"layperson"` | `"layperson"` or `"data_scientist"` (or an `Audience`). |
+| `audience` | `"layperson"` | An `Audience`, or the name `"layperson"` or `"data_scientist"`. See [Audience](#audience). |
 | `num_sentences` | `5` | The most sentences in each of the three explanations. |
 | `local.confidence_level` | `0.95` | See [Confidence](#confidence). In `[0, 1)`. |
 | `local.min_support` | `0.01` | Share of the training data a value needs to be offered as an alternative. A category needs this share; for a continuous feature the lowest and highest `min_support` of the data are trimmed. It keeps freak values with extreme scores out of the counterfactual and out of the worst case of the sufficient reason. `0` allows every value. |

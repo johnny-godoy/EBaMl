@@ -1,22 +1,33 @@
 """Tests for the texts of the local facts."""
 
+from typing import override
+
 import attrs
 import orjson
 import pandas as pd
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
-from ebaml.core.custom_types import Audience
+from ebaml.core.custom_types import JSONValue
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
-from tests.unit.ebaml.conftest import instance_of, returning
+from ebaml.local.audience import DataScientist, Layperson
+from tests.unit.ebaml.conftest import instance_of
+
+
+def test_the_default_audience_is_a_layperson(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
+    ebm, data = continuous_ebm
+    facts = local.compute_local_facts(ebm, instance_of(data, 0))
+    assert local_text.facts_to_texts(facts) == local_text.facts_to_texts(facts, Layperson())
 
 
 def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     ebm, data = continuous_ebm
     facts = local.compute_local_facts(ebm, instance_of(data, 0))
     layperson = local_text.facts_to_texts(facts)
-    expert = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
+    expert = local_text.facts_to_texts(facts, DataScientist())
     for text in attrs.astuple(layperson):
         for key in ("score", "std", "probability", "logit", "confidence"):
             assert key not in text
@@ -26,61 +37,12 @@ def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple[ExplainableBoos
     assert orjson.loads(expert.completions)["steps"][0]["share_with_same_prediction"] <= 1
 
 
-@pytest.mark.parametrize(
-    ("probability", "word"),
-    [
-        (0.99, "almost certain"),
-        (0.85, "very likely"),
-        (0.7, "likely"),
-        (0.5, "about as likely as not"),
-        (0.3, "unlikely"),
-        (0.1, "very unlikely"),
-        (0.01, "almost impossible"),
-    ],
-)
-def test_likelihood_words(probability: float, word: str) -> None:
-    assert local_text._likelihood(probability) == word
-
-
-@pytest.mark.parametrize(("score", "word"), [(-0.6, "strongly"), (0.3, "moderately"), (0.1, "slightly")])
-def test_strength_words(score: float, word: str) -> None:
-    assert local_text._strength(score) == word
-
-
 def test_texts_without_counterfactual_or_sufficient_reason() -> None:
     prediction = local.Prediction(decision=0, output=0.7, lower=0.6, upper=0.8, score=-0.8, score_std=0.1, margin=0.8)
     facts = local.LocalFacts(prediction, [], None, None, [], 0.95)
-    texts = local_text.facts_to_texts(facts, Audience.DATA_SCIENTIST)
+    texts = local_text.facts_to_texts(facts, DataScientist())
     assert orjson.loads(texts.counterfactual) == {"flip_possible": False}
     assert orjson.loads(texts.sufficient_reason) == {"exists": False}
-
-
-@pytest.mark.parametrize(
-    ("probability", "word"),
-    [
-        (0.95, "almost certain"),
-        (0.8, "very likely"),
-        (0.6, "likely"),
-        (0.4, "about as likely as not"),
-        (0.2, "unlikely"),
-        (0.05, "very unlikely"),
-    ],
-)
-def test_likelihood_words_start_at_their_threshold(probability: float, word: str) -> None:
-    assert local_text._likelihood(probability) == word
-
-
-@pytest.mark.parametrize(
-    ("score", "word"),
-    [(0.5, "strongly"), (-0.5, "strongly"), (0.2, "moderately"), (-0.2, "moderately")],
-)
-def test_strength_words_start_at_their_threshold(score: float, word: str) -> None:
-    assert local_text._strength(score) == word
-
-
-def test_round_keeps_three_decimals() -> None:
-    assert local_text._round(0.12351) == pytest.approx(0.124, abs=1e-12)
-    assert local_text._round(0.12349) == pytest.approx(0.123, abs=1e-12)
 
 
 def _text_facts(logit: float, scores: list[float], confidence_level: float = 0.95) -> local.LocalFacts:
@@ -125,8 +87,63 @@ def test_layperson_text_of_a_prediction() -> None:
     }
 
 
+def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
+    class Marker(Layperson):
+        @override
+        def contribution(self, contribution: local.Contribution, prediction: local.Prediction) -> dict[str, JSONValue]:
+            return {"c": contribution.feature, "of": prediction.decision}
+
+        @override
+        def prediction(self, prediction: local.Prediction, confidence_level: float) -> dict[str, JSONValue]:
+            return {"p": prediction.decision, "level": confidence_level}
+
+        @override
+        def change(self, change: local.Change) -> dict[str, JSONValue]:
+            return {"ch": change.feature}
+
+        @override
+        def flip(self, counterfactual: local.Counterfactual, confidence_level: float) -> dict[str, JSONValue]:
+            return {"fl": counterfactual.new_decision, "level": confidence_level}
+
+        @override
+        def margin(self, reason: local.SufficientReason) -> dict[str, JSONValue]:
+            return {"m": reason.features}
+
+        @override
+        def share(self, share: float) -> str:
+            return f"s{share}"
+
+    texts = local_text.facts_to_texts(_text_facts_with_everything(0.95), Marker())
+    assert orjson.loads(texts.prediction) == {
+        "predicted_class": "y",
+        "contributions_largest_first": [
+            {"feature": "f0", "value": "0", "c": "f0", "of": "y"},
+            {"feature": "f1", "value": "1", "c": "f1", "of": "y"},
+        ],
+        "p": "y",
+        "level": 0.95,
+    }
+    assert orjson.loads(texts.counterfactual) == {
+        "flip_possible": True,
+        "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "ch": "f0"}],
+        "minimum_number_of_changes": 1,
+        "fl": 1,
+        "level": 0.95,
+    }
+    assert orjson.loads(texts.sufficient_reason) == {
+        "exists": True,
+        "features": ["f0"],
+        "features_not_needed": ["f1"],
+        "m": ["f0"],
+    }
+    assert [step["share_with_same_prediction"] for step in orjson.loads(texts.completions)["steps"]] == [
+        "s0.5",
+        "s0.12351",
+    ]
+
+
 def test_data_scientist_text_of_a_prediction() -> None:
-    texts = local_text.facts_to_texts(_text_facts(1.4, [0.6123]), Audience.DATA_SCIENTIST)
+    texts = local_text.facts_to_texts(_text_facts(1.4, [0.6123]), DataScientist())
     assert orjson.loads(texts.prediction) == {
         "predicted_class": "y",
         "contributions_largest_first": [{"feature": "f0", "value": "0", "score": 0.612, "std": 0.1}],
@@ -171,7 +188,7 @@ def test_layperson_text_of_the_explanations() -> None:
 
 
 def test_data_scientist_text_of_the_explanations() -> None:
-    texts = local_text.facts_to_texts(_text_facts_with_everything(0.95), Audience.DATA_SCIENTIST)
+    texts = local_text.facts_to_texts(_text_facts_with_everything(0.95), DataScientist())
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
@@ -197,21 +214,3 @@ def test_data_scientist_text_of_the_explanations() -> None:
 def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(confidence_level))
     assert orjson.loads(texts.counterfactual)["flip_holds_even_if_the_model_is_somewhat_off"] is holds
-
-
-RENDERER_METHODS = ["contribution", "prediction", "change", "flip", "margin", "share"]
-
-
-@pytest.mark.parametrize("missing", RENDERER_METHODS)
-def test_a_renderer_must_define_every_method(missing: str) -> None:
-    others = {name: returning(None) for name in RENDERER_METHODS if name != missing}
-    incomplete = type("Incomplete", (local_text._AudienceRenderer,), others)
-    with pytest.raises(TypeError, match=missing):
-        incomplete()
-
-
-@pytest.mark.parametrize("name", RENDERER_METHODS)
-@pytest.mark.parametrize("audience", list(Audience))
-def test_renderers_mark_the_methods_they_override(audience: Audience, name: str) -> None:
-    method = type(local_text._RENDERERS[audience]).__dict__[name]
-    assert method.__override__ is True

@@ -34,6 +34,16 @@ testset "PromptChecks" {
     }
 }
 
+// The guidance of the two built-in audiences. A test in tests/unit/ebaml/local/test_audience.py checks that these texts
+// equal Layperson.guidance() and DataScientist.guidance(), so the live tests run the prompts that users get.
+function live_layperson_guidance() -> string {
+    "The reader is not technical and knows no statistics, so write in everyday words. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. Mention only values of the person's own inputs (for example their age), because model numbers (scores, log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader."
+}
+
+function live_data_scientist_guidance() -> string {
+    "The reader is a data scientist, so be precise. Quote the scores (log-odds contributions), probabilities and confidence intervals from the facts. Say how uncertain a statement is when the facts show wide confidence intervals."
+}
+
 // The facts of one loan prediction, as ebaml.local.fact_text.facts_to_texts renders them for each audience. A layperson
 // gets words in place of the model numbers, so the layperson prompts see no score, probability or share.
 function live_layperson_facts() -> LocalFactTexts {
@@ -65,7 +75,7 @@ testset "Live" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_layperson_facts(),
-            "layperson",
+            live_layperson_guidance(),
             3,
             default_graph_options(),
         );
@@ -80,7 +90,7 @@ testset "Live" {
         let text = LocalSufficientReason(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_layperson_facts(),
-            "layperson",
+            live_layperson_guidance(),
             3,
             default_graph_options(),
         );
@@ -95,7 +105,7 @@ testset "Live" {
         let text = LocalCompletions(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_layperson_facts(),
-            "layperson",
+            live_layperson_guidance(),
             3,
             default_graph_options(),
         );
@@ -108,7 +118,7 @@ testset "Live" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_data_scientist_facts(),
-            "data_scientist",
+            live_data_scientist_guidance(),
             3,
             default_graph_options(),
         );
@@ -121,7 +131,7 @@ testset "Live" {
         let result = explain_local(
             "The model denies loans mainly because of low income and a high debt ratio.",
             live_layperson_facts(),
-            "layperson",
+            live_layperson_guidance(),
             3,
             default_graph_options(),
         );

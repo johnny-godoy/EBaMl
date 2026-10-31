@@ -13,7 +13,7 @@ import attrs
 import structlog
 from baml_bridge.errors import BamlError
 
-from ebaml.core.custom_types import Audience, ExplainableBoostingModel, FeatureValue, coerce_enum
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
@@ -21,6 +21,7 @@ from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
+from ebaml.local.audience import Audience, resolve_audience
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
 
@@ -469,7 +470,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     ebm: ExplainableBoostingModel,
     instance: Mapping[str, FeatureValue],
     global_explanation: str,
-    audience: Audience | str = Audience.LAYPERSON,
+    audience: Audience | str = "layperson",
     num_sentences: int = 5,
     *,
     local: LocalOptions = _DEFAULT_LOCAL_OPTIONS,
@@ -491,9 +492,10 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         The value of every feature, by feature name.
     global_explanation: str
         The explanation of the whole model, computed once.
-    audience: Audience | str, default=Audience.LAYPERSON
-        Who reads the explanation. A layperson gets no model numbers; a data scientist gets scores, probabilities and
-        confidence intervals.
+    audience: Audience | str, default="layperson"
+        Who reads the explanation: an ``Audience`` or the name of a built-in one. A layperson gets no model numbers; a
+        data scientist gets scores, probabilities and confidence intervals. A subclass of ``Audience`` sets the facts
+        and the instruction for any other reader.
     num_sentences: int, default=5
         The most sentences of each explanation.
     local: LocalOptions, default=LocalOptions()
@@ -511,7 +513,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         The three explanations and the facts they come from.
 
     """
-    audience = coerce_enum(Audience, audience)
+    audience = resolve_audience(audience)
     facts = compute_local_facts(ebm, instance, local)
     texts = facts_to_texts(facts, audience)
     model_spec = _model_spec(model)
@@ -519,7 +521,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         result = baml_sdk.explain_local(
             global_explanation=global_explanation,
             facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts, recurse=False)),
-            audience=audience.value,
+            audience_guidance=audience.guidance(),
             num_sentences=num_sentences,
             opts=_prompt_options(prompt),
             model=model_spec,
