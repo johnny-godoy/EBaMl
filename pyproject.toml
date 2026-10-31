@@ -210,8 +210,17 @@ forbidden_modules = ["baml_sdk", "baml_bridge"]
 [[tool.importlinter.contracts]]
 name = "Only llm.descriptors imports the BAML SDK"
 type = "forbidden"
-source_modules = ["ebaml.llm.options", "ebaml.llm.retry"]
+# The contract covers all of ebaml.llm, so a new module of the layer is guarded without an edit here.
+source_modules = ["ebaml.llm"]
 forbidden_modules = ["baml_sdk", "baml_bridge"]
+# reason: the allowed imports of the BAML runtime: descriptors.py is the one module that calls baml_sdk, and
+# provider_errors.py needs BamlError from baml_bridge to read the errors of the provider. import-linter sees an
+# external package only at its top level, so each entry names baml_bridge, not baml_bridge.errors.
+ignore_imports = [
+    "ebaml.llm.descriptors -> baml_sdk",
+    "ebaml.llm.descriptors -> baml_bridge",
+    "ebaml.llm.provider_errors -> baml_bridge",
+]
 
 [[tool.importlinter.contracts]]
 name = "The benchmark stands alone"

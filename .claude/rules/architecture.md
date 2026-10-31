@@ -14,6 +14,9 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
 | `ebaml.benchmark` | The TalkToEBM benchmark. It stands alone. | Nothing from `ebaml`. |
 
 - Only `llm/descriptors.py` imports `baml_sdk`. The reason: domain code then runs in a plain unit test (SOLID: D).
+- The import-linter contract covers every module of `ebaml.llm`, and its `ignore_imports` list names the allowed
+  imports of `baml_sdk` and `baml_bridge`. Add an entry only with a reason in the `reason:` block above the list.
+  `llm/sdk_setup.py` imports `baml_sdk` through `importlib`, which import-linter cannot see.
 - A lower layer never imports a higher one. If `graphs` needs a service, take it as a `Callable` or `Protocol`
   parameter and let `llm` pass the real one.
 - Add a new feature as a new module in the layer that fits. Add a new layer only with a new entry in the import-linter
