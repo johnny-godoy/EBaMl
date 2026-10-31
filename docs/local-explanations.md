@@ -6,8 +6,8 @@ model predict this for this one input?**
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml.llm.descriptors import describe_ebm, explain_instance
-from ebaml.llm.options import PromptOptions
+from ebaml import describe_ebm, explain_instance
+from ebaml import PromptOptions
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
 global_explanation = describe_ebm(ebm, prompt=PromptOptions(dataset_description="..."))  # once per model
@@ -118,7 +118,7 @@ the variance of the sum of the effects (`score_std`), which assumes the errors o
 | `completions` | One `CompletionStep(fixed, share)` for each step. |
 
 <!-- invisible-code-block: python
-from ebaml.local.facts import compute_local_facts
+from ebaml import compute_local_facts
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)
 instance = X.iloc[0].to_dict()
@@ -148,9 +148,9 @@ instance = X.iloc[0].to_dict()
 -->
 
 ```python
-from ebaml.core.custom_types import Audience
-from ebaml.local.facts import compute_local_facts
-from ebaml.local.fact_text import facts_to_texts
+from ebaml import Audience
+from ebaml import compute_local_facts
+from ebaml import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
 texts = facts_to_texts(facts, Audience.DATA_SCIENTIST)
@@ -240,7 +240,7 @@ y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "o
 -->
 
 ```python
-from ebaml.core.exceptions import UnsupportedModelError
+from ebaml import UnsupportedModelError
 
 multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 try:

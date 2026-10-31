@@ -138,8 +138,8 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml.llm.descriptors import describe_ebm, describe_graph
-from ebaml.llm.options import PromptOptions
+from ebaml import describe_ebm, describe_graph
+from ebaml import PromptOptions
 
 ebm = ExplainableBoostingClassifier().fit(X, y)
 
@@ -168,7 +168,7 @@ y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "o
 -->
 
 ```python
-from ebaml.llm.options import GraphOptions
+from ebaml import GraphOptions
 
 multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 print(describe_graph(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"])))
@@ -177,7 +177,7 @@ print(describe_graph(multiclass, feature_index=0, graph=GraphOptions(classes=["y
 ### Explaining one prediction
 
 ```python
-from ebaml.llm.descriptors import describe_ebm, explain_instance
+from ebaml import describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
 global_explanation = describe_ebm(ebm)  # computed once, prepended to every local prompt
@@ -327,7 +327,7 @@ request of that call to that model. You do not change the package.
 Pass the shorthand `"provider/model"`:
 
 ```python
-from ebaml.llm.descriptors import describe_ebm
+from ebaml import describe_ebm
 
 print(describe_ebm(ebm, model="anthropic/claude-haiku-4-5"))
 ```
@@ -335,7 +335,7 @@ print(describe_ebm(ebm, model="anthropic/claude-haiku-4-5"))
 Pass `ModelOptions` to set more:
 
 ```python
-from ebaml.llm.options import ModelOptions
+from ebaml import ModelOptions
 
 model = ModelOptions(provider="anthropic", model="claude-haiku-4-5", temperature=0.2, max_output_tokens=8000)
 print(describe_ebm(ebm, model=model))

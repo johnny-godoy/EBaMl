@@ -1,5 +1,8 @@
 # API reference
 
+Import the public names from the package, for example `from ebaml import describe_ebm, GraphOptions`. The
+sections below list each name in the module that defines it. A name that `ebaml` does not export is internal.
+
 ## Describing graphs and models
 
 ::: ebaml.llm.descriptors
