@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.2.5'></a>
+## [0.2.5] - 2026-10-31
+
+### Added
+
+- `ebaml.graphs.token_budget.check_token_budget` checks the token budget of a graph text in Python, with no LLM and no key. Pass it as `check_budget` to `EBMGraph.to_text`, which then simplifies a graph that is too large. `estimate_tokens` gives the estimate alone. Both follow the rule of the BAML functions of the same name, so you do not need to import the generated `baml_sdk`.
+
 <a id='changelog-0.2.4'></a>
 ## [0.2.4] - 2026-10-31
 
