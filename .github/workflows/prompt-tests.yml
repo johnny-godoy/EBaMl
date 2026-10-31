@@ -28,7 +28,7 @@ jobs:
     # Fork PRs get no secrets, so skip them instead of failing.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       HAS_KEY: ${{ secrets.OPENROUTER_API_KEY != '' }}
     steps:
@@ -47,13 +47,14 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         # The model is not deterministic, so each failed test is retried on its own, up to two more times. A rerun of
         # the whole suite would need every test to pass in the same attempt, which grows unlikely with each new test.
-        # A low concurrency keeps the free router below its rate limit.
+        # A low concurrency keeps the free router below its rate limit. A reasoning model may use most of the output
+        # limit of each call, so a test that makes several calls in a row gets 10 minutes, not the default 5.
         run: |
           mkdir -p logs
           selectors=(-i root::Live)
           for attempt in 1 2 3; do
             log="logs/prompt-tests-$attempt.log"
-            if baml test "${selectors[@]}" --max-concurrency 2 --color never 2>&1 | tee "$log"; then
+            if baml test "${selectors[@]}" --max-concurrency 2 --test-timeout 10m --color never 2>&1 | tee "$log"; then
               exit 0
             fi
             mapfile -t failed < <(sed -nE 's/^FAIL (root::.*) \([^)]*\)$/\1/p' "$log")

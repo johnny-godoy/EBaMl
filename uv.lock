@@ -14,7 +14,6 @@ exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
 baml-bridge = false
-certifi = false
 
 [manifest]
 overrides = [
@@ -956,7 +955,7 @@ wheels = [
 
 [[package]]
 name = "ebaml"
-version = "0.2.2"
+version = "0.2.3"
 source = { editable = "." }
 dependencies = [
     { name = "attrs" },

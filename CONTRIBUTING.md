@@ -24,9 +24,9 @@ The default sits in the `*Base` lines at the top of `baml_src/talk_to_ebm.baml`:
 
 | Client | Used by | Default settings |
 | --- | --- | --- |
-| `RouterBase` | Turns 2 and 3 of a graph description, the shortening of the summary, and the local explanations | `temperature = 0.7`, `max_tokens = 6000` |
-| `RouterLongBase` | Turn 1 of a graph description, and the draft of the summary | `temperature = 0.7`, `max_tokens = 8000` |
-| `RouterBenchmarkBase` | The benchmark | `temperature = 0.0`, `max_tokens = 8000` |
+| `RouterBase` | Turns 2 and 3 of a graph description, the shortening of the summary, and the local explanations | `temperature = 0.7`, `max_tokens = 12000` |
+| `RouterLongBase` | Turn 1 of a graph description, and the draft of the summary | `temperature = 0.7`, `max_tokens = 16000` |
+| `RouterBenchmarkBase` | The benchmark | `temperature = 0.0`, `max_tokens = 16000` |
 
 1. Edit the `*Base` lines only. The clients `Router`, `RouterLong` and `RouterBenchmark` wrap them in
    `ai.clients.Retry`, so they keep their retry policy.

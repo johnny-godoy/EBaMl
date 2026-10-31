@@ -117,8 +117,8 @@ class ModelOptions:
     temperature: float | None
         The sampling temperature. ``None`` selects 0.7, or 0.0 for the benchmark.
     max_output_tokens: int | None
-        The most tokens of one reply. A reasoning model counts its hidden tokens in this limit. ``None`` selects 6000,
-        or 8000 for the first turn of a conversation and for the benchmark.
+        The most tokens of one reply. A reasoning model counts its hidden tokens in this limit. ``None`` selects
+        12000, or 16000 for the first turn of a conversation and for the benchmark.
     headers: Mapping[str, str]
         Headers to add to each request.
 

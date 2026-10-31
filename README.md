@@ -379,8 +379,8 @@ A field that you set wins over the default of the call. The output limit has two
 
 | Calls | `max_output_tokens` |
 | --- | --- |
-| Turn 1 of a graph description, the draft of the summary, and the two turns of the benchmark | 8000 |
-| All other calls, including the local explanations | 6000 |
+| Turn 1 of a graph description, the draft of the summary, and the two turns of the benchmark | 16000 |
+| All other calls, including the local explanations | 12000 |
 
 ### Examples
 
