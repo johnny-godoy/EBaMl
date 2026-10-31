@@ -11,8 +11,8 @@ milestone adds no feature. A release that only stabilizes is easy to review.
 </goal>
 
 <context>
-- 1.0.0 needs 0.3.0. By then the model providers (0.1.0), the model kinds and the general local types (0.2.0) and the
-  read and explain tools of the MCP server (0.3.0) are on `main`.
+- 1.0.0 needs 0.4.0. By then the model providers (0.1.0), the model kinds and the general local types (0.2.0), the
+  custom audiences (0.3.0) and the read and explain tools of the MCP server (0.4.0) are on `main`.
 - The public API is: the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
   argument schemas, and the CLI flags (`benchmark/run.py`, `ebaml-mcp`). Prompt wording, LLM output text and log events
   are not part of it. `ebaml.experimental` and the MCP tools whose names start with `experimental_` are not part of it.
