@@ -48,7 +48,8 @@ computes the facts, Lean proves each exact claim, and the LLM only puts the fact
   - Count completions: sample as for binary. The share is an estimate, so it makes no exact claim.
 - Confidence: keep the rule of the module docstring. Each score moves by `z` standard deviations in the direction that
   makes the claim harder. For multiclass, define that direction for each margin, and write it in the paper.
-- Text and prompts: extend `ebaml.local.fact_text` with the text for each kind, for both audiences. The renderers of
+- Text and prompts: extend the methods of `ebaml.local.audience` (`Layperson` and `DataScientist`) with the text for each
+  kind. Keep `Audience` abstract methods in step, so that a custom audience (0.3.0) gets the new facts. The audiences of
   0.2.0 read binary facts only: they take the direction of a contribution from the sign of `Prediction.score`, and they
   pass neither `SufficientReason.minimum` nor `Counterfactual.new_decision` to the prompts. The sufficient reason prompt
   says "a smallest set". Pass both fields, and let the prompt say "minimal" when `minimum` is false, because the LLM

@@ -21,8 +21,9 @@ EBaMl will reach three goals:
 | 0.0.3 | Release of the changes that are on `main`. | None | | Done |
 | 0.1.0 | Custom model providers: `model=` on every function that calls an LLM. | [custom-model-providers](docs/plans/custom-model-providers.md) | | Done |
 | 0.2.0 | Model kinds: graphs and descriptions of multiclass classifiers, and local result types for every kind. | [model-kinds](docs/plans/model-kinds.md) | | Done |
-| 0.3.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | [ebm2mcp](docs/plans/ebm2mcp.md) | 0.1.0, 0.2.0 | Planned |
-| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.3.0 | Planned |
+| 0.3.0 | Custom audiences: `Audience` is a base class, and a user writes an audience with its own rules. | [custom-audiences](docs/plans/custom-audiences.md) | | Done |
+| 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | [ebm2mcp](docs/plans/ebm2mcp.md) | 0.1.0, 0.2.0, 0.3.0 | Planned |
+| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.4.0 | Planned |
 | 1.1.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.0.0 | Planned |
 | 1.2.0 | Local explanations of multiclass classifiers. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.1.0 | Planned |
 | 1.3.0 | Model editing in Python, in `ebaml.experimental`. | [model-editing](docs/plans/model-editing.md) | 1.0.0 | Planned |

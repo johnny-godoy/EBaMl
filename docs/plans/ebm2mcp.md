@@ -1,4 +1,4 @@
-# Plan: EBM2MCP (0.3.0, then 1.4.0)
+# Plan: EBM2MCP (0.4.0, then 1.4.0)
 
 You are a senior Python engineer who knows the Model Context Protocol (MCP) well. You will implement one milestone of
 `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in `.claude/rules/` first, because the project's
@@ -7,8 +7,8 @@ hooks enforce those rules and `prek run --all-files` must pass before you finish
 <goal>
 A user gives a fitted EBM to a command, and the command serves an MCP server. An agent that connects to it can:
 
-1. **read** the EBM: its kind, its features, their importances and the text of each graph (0.3.0),
-2. **explain** one prediction with the exact local facts (0.3.0),
+1. **read** the EBM: its kind, its features, their importances and the text of each graph (0.4.0),
+2. **explain** one prediction with the exact local facts (0.4.0),
 3. **edit** the EBM so that it meets business requirements (1.4.0, as experimental tools).
 
 The agent is the LLM. The read and explain tools return the output of the deterministic Python code (`EBMGraph.to_text`,
@@ -16,8 +16,9 @@ The agent is the LLM. The read and explain tools return the output of the determ
 </goal>
 
 <context>
-- 0.3.0 needs 0.1.0 (custom model providers) and 0.2.0 (model kinds). The tools use the kind abstraction from 0.2.0,
-  so they work for every kind from the start. The optional LLM tools use `ModelOptions` from 0.1.0.
+- 0.4.0 needs 0.1.0 (custom model providers), 0.2.0 (model kinds) and 0.3.0 (custom audiences). The tools use the kind
+  abstraction from 0.2.0, so they work for every kind from the start. The optional LLM tools use `ModelOptions` from
+  0.1.0. The explain tool takes the name of an audience from 0.3.0.
 - The MCP tool names and their argument schemas become part of the stable API at 1.0.0
   (`.claude/rules/changelog-and-versioning.md`). Design them with care: after 1.0.0, a renamed tool or argument needs a
   new MAJOR version.
@@ -53,7 +54,7 @@ ebaml-mcp --model PATH [--data PATH] [--llm PROVIDER/MODEL] [--transport stdio|s
 - `--llm` enables the optional LLM tools with `ModelOptions.parse`. Without it, the server has no LLM tools.
 </command>
 
-<tools_0_3_0>
+<tools_0_4_0>
 | Tool | Arguments | Result |
 | --- | --- | --- |
 | `get_model_summary` | none | kind, outputs or classes, intercept, number of features, interaction terms that the server skips |
@@ -70,7 +71,7 @@ ebaml-mcp --model PATH [--data PATH] [--llm PROVIDER/MODEL] [--transport stdio|s
 - Until 1.1.0 and 1.2.0, `explain_prediction` returns the `UnsupportedModelError` for a regressor or a multiclass
   classifier. Design its result on the general local types of 0.2.0, so those releases add support with no change to
   the schema.
-</tools_0_3_0>
+</tools_0_4_0>
 
 <tools_1_4_0>
 The edit tools wrap the `ebaml.experimental` edit API of the `model-editing.md` plan (1.3.0). Their names start with
@@ -110,7 +111,7 @@ The edit tools wrap the `ebaml.experimental` edit API of the `model-editing.md` 
 <release>
 Each PR with a user-visible change adds a changelog fragment, and the release workflow releases it after the merge
 (`.claude/rules/changelog-and-versioning.md`). The PR that completes the read and explain tools also sets
-`version = "0.3.0"` in `pyproject.toml`. After 1.0.0, the `Added` fragment of the edit tools makes the release workflow
+`version = "0.4.0"` in `pyproject.toml`. After 1.0.0, the `Added` fragment of the edit tools makes the release workflow
 raise the MINOR number, so that PR sets no version.
 </release>
 
