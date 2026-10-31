@@ -36,13 +36,10 @@ Changelog = "https://github.com/johnny-godoy/EBaMl/blob/main/CHANGELOG.md"
 [tool.uv]
 # A relative span keeps the cutoff 7 days behind today, so uv never picks a release that is less than 7 days old.
 exclude-newer = "7 days"
-# reason: security fixes must not wait for the 7-day cooldown. certifi 2026.7.22 has 1 CVE fixed in 2026.10.19, so Trivy
-# fails on the older version. Remove the entry once its fixed release is more than 7 days old. The check-exclusions
-# hook fails when an entry is no longer needed.
 # reason: baml-bridge must match the BAML toolchain that generates src/baml_sdk, or the SDK fails at start with a version
 # skew error. CI installs the newest toolchain, and toolchain 0.23.0 changed the ai.Client interface, so the repository
 # needs baml-bridge 0.23.0 at once. Remove the entry once 0.23.0 is more than 7 days old.
-exclude-newer-package = { certifi = false, baml-bridge = false }
+exclude-newer-package = { baml-bridge = false }
 # reason: semgrep 1.182.1 pins mcp==1.29.0 and opentelemetry-api~=1.37.0, which have 5 known CVEs fixed in mcp 1.30.0
 # and opentelemetry-api 1.45.1. Dependabot cannot update them, so the override forces the fixed releases. The
 # opentelemetry packages must move together, because semgrep fails to import with opentelemetry-api 1.45 and the older
