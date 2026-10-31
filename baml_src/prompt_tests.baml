@@ -39,7 +39,7 @@ testset "PromptChecks" {
 function live_layperson_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "effect": "strongly towards this prediction"}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "effect": "moderately towards this prediction"}, {"feature": "age", "value": "[35, 42)", "effect": "slightly towards this prediction"}], "likelihood": "very likely"}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "flip_holds_even_if_the_model_is_somewhat_off": true, "likelihood_of_new_prediction": "very unlikely"}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "new_predicted_class": "loan approved", "flip_holds_even_if_the_model_is_somewhat_off": true, "likelihood_of_new_predicted_class": "very likely"}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"]}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": "likely"}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": "almost certain"}]}`,
     }
@@ -48,7 +48,7 @@ function live_layperson_facts() -> LocalFactTexts {
 function live_data_scientist_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "score": 1.12, "std": 0.15}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "score": 0.31, "std": 0.08}, {"feature": "age", "value": "[35, 42)", "score": 0.04, "std": 0.03}], "probability": 0.83, "confidence_interval": [0.74, 0.89], "confidence_level": 0.95, "logit": 1.37}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "flip_holds_at_confidence": 0.95, "probability_of_new_prediction": 0.18}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "new_predicted_class": "loan approved", "flip_holds_at_confidence": 0.95, "probability_of_new_predicted_class": 0.82}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}]}`,
     }
