@@ -1,9 +1,10 @@
 # Custom audiences notebook
 
-A [marimo](https://marimo.io) notebook that writes three audiences for the local explanations of the Titanic EBM. An
-audience decides which facts the LLM gets and how the LLM is told to write. The notebook shows the short way (a
-subclass of `Layperson`), a change of one rule (a subclass of `DataScientist`) and an audience with new rules (a
-subclass of `Audience`). It prints the facts that each audience produces, side by side.
+A [marimo](https://marimo.io) notebook that writes six audiences for the local explanations of the Titanic EBM. An
+audience decides which facts the LLM gets and how the LLM is told to write. The notebook shows the short way (three
+subclasses of `Layperson` for a child, a chief executive and a reader of Simplified Technical English), a change of one
+rule (two subclasses of `DataScientist` for a loan officer and a machine learning engineer) and an audience with new
+rules (a subclass of `Audience` for a regulator). It prints the facts that each audience produces, side by side.
 
 - Everything up to "Put it in words" runs without an API key. This includes the errors that a wrong audience raises: an
   unknown name, and a missing method.
