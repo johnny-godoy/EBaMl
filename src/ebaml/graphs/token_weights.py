@@ -151,7 +151,8 @@ def fit_weights(samples: Sequence[TokenSample]) -> TokenWeights:
     """Fit the weights by least squares, with every weight at zero or above.
 
     The fit tries each set of features that can have a weight above zero. It solves the least-squares problem for the
-    set, and keeps the best set whose weights are all at zero or above. With three features this is exact.
+    set, and keeps the set with the smallest squared error among those whose weights are all at zero or above. No proof
+    backs that this is the best fit with weights of zero or above.
 
     Parameters
     ----------
@@ -161,7 +162,7 @@ def fit_weights(samples: Sequence[TokenSample]) -> TokenWeights:
     Returns
     -------
     TokenWeights
-        The weights with the least squared error on the samples.
+        The weights that fit the samples, with every weight at zero or above.
 
     Raises
     ------
