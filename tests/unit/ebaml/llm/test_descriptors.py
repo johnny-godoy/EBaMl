@@ -376,6 +376,22 @@ def test_explain_instance_uses_a_custom_audience(monkeypatch: pytest.MonkeyPatch
     assert "probability" in calls["facts"].prediction
 
 
+def test_explain_instance_passes_the_language(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(descriptors, "compute_local_facts", returning(_facts()))
+    text = baml_sdk.LocalExplanationText(
+        counterfactual="",
+        sufficient_reason="",
+        completions="",
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+    )
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
+    descriptors.explain_instance(FAKE_EBM, {}, "G")
+    assert calls["language"] == "English"
+    descriptors.explain_instance(FAKE_EBM, {}, "G", language="French")
+    assert calls["language"] == "French"
+
+
 def test_explain_instance_rejects_unknown_audience() -> None:
     with pytest.raises(InvalidOptionError):
         descriptors.explain_instance(FAKE_EBM, {}, "G", audience="child")

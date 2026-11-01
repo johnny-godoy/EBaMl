@@ -474,6 +474,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     audience: Audience | str = "layperson",
     num_sentences: int = 5,
     *,
+    language: str = "English",
     local: LocalOptions = _DEFAULT_LOCAL_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
     model: ModelOptions | str | None = None,
@@ -499,6 +500,9 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         and the instruction for any other reader.
     num_sentences: int, default=5
         The most sentences of each explanation.
+    language: str, default="English"
+        The language of the explanations, as a name that the LLM knows (``"French"``, ``"Deutsch"``). The facts and the
+        numbers stay as they are, and only the words around them change.
     local: LocalOptions, default=LocalOptions()
         The options of ``compute_local_facts``.
     prompt: PromptOptions, default=PromptOptions()
@@ -525,6 +529,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
             audience_guidance=audience.guidance(),
             num_sentences=num_sentences,
             opts=_prompt_options(prompt),
+            language=language,
             model=model_spec,
         )
     logger.info(
