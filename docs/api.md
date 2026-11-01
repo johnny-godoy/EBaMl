@@ -36,6 +36,8 @@
 
 ::: ebaml.graphs.token_budget
 
+::: ebaml.graphs.token_weights
+
 ## Text of the graphs
 
 ::: ebaml.graphs.graph_text

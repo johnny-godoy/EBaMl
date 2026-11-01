@@ -13,7 +13,7 @@ import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
-from ebaml.graphs.token_budget import check_token_budget
+from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local import facts as local
@@ -411,7 +411,7 @@ def test_describe_graph_simplifies_after_truncated_reply(
 
     def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
         texts.append(options)
-        return "x" * (900 if options == GraphOptions() else 300)
+        return "1.5 " * (900 if options == GraphOptions() else 300)
 
     replies = [_finish_error("MaxTokens"), counted]
 
@@ -424,8 +424,11 @@ def test_describe_graph_simplifies_after_truncated_reply(
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
     assert descriptors.describe_graph(fake_ebm, 0) == "answer"
-    # estimate is 300 tokens, so the retry asks for 75% of it with no tolerance
-    assert texts == [GraphOptions(), GraphOptions(max_tokens=225, overbudget_percent=0)]
+    # the retry asks for 75% of the estimate of the first text, with no tolerance
+    assert texts == [
+        GraphOptions(),
+        GraphOptions(max_tokens=int(estimate_tokens("1.5 " * 900) * 0.75), overbudget_percent=0),
+    ]
 
 
 def test_describe_graph_logs_the_truncated_attempts_with_the_usage(
