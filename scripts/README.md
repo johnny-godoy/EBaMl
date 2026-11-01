@@ -177,9 +177,9 @@ are in `cosmic-ray.toml`.
 
 ## `fit_token_weights.py`
 
-The token estimate of a graph text is `words * a + bytes * b + digits * c`. Each model has its own weights, because each
-model has its own tokenizer. Run the script when a new model comes out, or to refit the default weights. There are two
-steps.
+The token estimate of a graph text is `words * word_weight + bytes * byte_weight + digits * digit_weight`. Each model
+has its own weights, because each model has its own tokenizer. Run the script when a new model comes out, or to refit
+the default weights. There are two steps.
 
 1. `collect` sends one request for each graph text, and one for an empty graph. The request with the empty graph
    measures the tokens of the prompt template, which the fit takes away from every other request. The command costs

@@ -246,7 +246,7 @@ def test_a_file_that_cannot_be_read_gives_a_warning_and_a_fresh_start(tmp_path: 
     with capture_logs() as logs:
         learner = _learner(tmp_path, learning=True)
         assert learner.estimator_for(LUNA).current_weights == START
-    assert [log["event"] for log in logs] == ["token_weights_unreadable"]
+    assert [logged["event"] for logged in logs] == ["token_weights_unreadable"]
 
 
 @pytest.mark.parametrize(
@@ -266,7 +266,7 @@ def test_a_file_with_a_wrong_record_gives_a_warning(tmp_path: Path, document: di
     (tmp_path / "learned.json").write_bytes(orjson.dumps(document))
     with capture_logs() as logs:
         _learner(tmp_path, learning=True).estimator_for(LUNA)
-    assert [log["event"] for log in logs] == ["token_weights_unreadable"]
+    assert [logged["event"] for logged in logs] == ["token_weights_unreadable"]
 
 
 def test_a_file_that_cannot_be_written_gives_a_warning_and_does_not_stop_the_call(tmp_path: Path) -> None:
@@ -275,7 +275,7 @@ def test_a_file_that_cannot_be_written_gives_a_warning_and_does_not_stop_the_cal
     learner = TokenLearner(learning=True, path=blocker / "learned.json", table=_table())
     with capture_logs() as logs:
         assert learner.observe([_sample(LUNA, tokens=400)], GRAPH) == 1
-    assert "token_weights_not_saved" in [log["event"] for log in logs]
+    assert "token_weights_not_saved" in [logged["event"] for logged in logs]
 
 
 def test_the_learner_writes_to_the_default_path_when_it_gets_none(
