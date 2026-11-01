@@ -1,7 +1,7 @@
 """Tests for the LLM descriptors."""
 
 import inspect
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, override
 
@@ -1132,7 +1132,7 @@ def _learner(tmp_path: Path, *, learning: bool = False, spread: float = 0.0) -> 
     return TokenLearner(learning=learning, path=tmp_path / "learned.json", table=table)
 
 
-def _sampled(text: str = "sampled", tokens: int = 33) -> baml_sdk.Counted:
+def _sampled(text: str = "prompt g prompt", tokens: int = 33) -> baml_sdk.Counted:
     body = orjson.dumps({"messages": [{"role": "user", "content": text}]}).decode()
     sample = baml_sdk.TokenSample(provider=LUNA.provider, model=LUNA.model, body=body, input_tokens=tokens)
     return baml_sdk.Counted(text="answer", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2, samples=[sample]))
@@ -1241,42 +1241,49 @@ def test_describe_graph_without_a_learner_keeps_the_samples_out_of_every_estimat
     assert descriptors.describe_graph(fake_ebm, 0) == "answer"
 
 
-def test_describe_ebm_teaches_the_learner_the_samples_of_every_graph_and_of_the_summary(
+def test_describe_ebm_teaches_the_learner_the_samples_of_every_graph(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
-    monkeypatch.setattr(
-        baml_sdk,
-        "describe_graph_cot",
-        fake_sdk("describe_graph_cot", returning(_sampled("graph words"))),
-    )
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(_sampled())))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(_sampled("summary"))))
     learner = _learner(tmp_path, learning=True)
     descriptors.describe_ebm(fake_ebm, graph=GraphOptions(token_learner=learner), model=f"{LUNA.provider}/{LUNA.model}")
-    # two graphs of one sample each, and the summary
-    assert learner.estimator_for(LUNA).samples_seen == 3
+    # one sample for each of the two graphs. The summary holds no graph, so it teaches the learner nothing.
+    assert learner.estimator_for(LUNA).samples_seen == 2
 
 
-def test_describe_ebm_returns_the_samples_of_every_call_in_its_usage(
+def test_describe_graph_teaches_the_learner_the_graph_text_that_the_successful_attempt_sent(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(_sampled("graph"))))
-    summary = _sampled("summary")
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(summary)))
-    seen: list[list[baml_sdk.TokenSample]] = []
+    texts = iter(["long graph text", "g"])
 
-    def observe(_self: TokenLearner, samples: Iterable[baml_sdk.TokenSample]) -> int:
-        seen.append(list(samples))
-        return 0
+    def graph_text(*_args: object) -> str:
+        return next(texts)
 
-    monkeypatch.setattr(TokenLearner, "observe", observe)
-    learner = TokenLearner(learning=True, persist=False)
-    descriptors.describe_ebm(fake_ebm, graph=GraphOptions(token_learner=learner))
-    assert [sample.body.count("summary") for sample in seen[0]] == [0, 0, 1]
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    replies = [_finish_error("MaxTokens"), _sampled("prompt g prompt")]
+
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        reply = replies.pop(0)
+        if isinstance(reply, BamlError):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    learner = _learner(tmp_path, learning=True)
+    descriptors.describe_graph(
+        fake_ebm,
+        0,
+        graph=GraphOptions(token_learner=learner),
+        model=f"{LUNA.provider}/{LUNA.model}",
+    )
+    # the request holds the shorter graph "g" that the retry sent, and not the first graph
+    assert learner.estimator_for(LUNA).samples_seen == 1
 
 
 def test_sample_graph_tokens_sends_the_graph_the_prompt_and_the_model(monkeypatch: pytest.MonkeyPatch) -> None:

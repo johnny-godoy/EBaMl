@@ -23,7 +23,6 @@ from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
-from ebaml.llm.token_learning import TokenLearner
 from ebaml.local.audience import Audience, resolve_audience
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
@@ -244,7 +243,6 @@ def _log_usage(
     counted: baml_sdk.Counted,
     *,
     truncated_attempts: int,
-    learner: TokenLearner | None = None,
 ) -> str:
     """Log the token usage reported by the LLM provider and return the text.
 
@@ -259,8 +257,6 @@ def _log_usage(
         The LLM reply together with its token usage.
     truncated_attempts: int
         The number of attempts that were cut off, and that the usage does not count.
-    learner: TokenLearner | None
-        The learner that receives the token samples of the calls. ``None`` keeps them out of any estimator.
 
     Returns
     -------
@@ -269,8 +265,6 @@ def _log_usage(
 
     """
     usage = counted.usage
-    if learner is not None:
-        learner.observe(usage.samples)
     logger.info(
         "usage",
         what=what,
@@ -331,9 +325,15 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     truncated: list[BamlError] = []
     estimator = _estimator(graph_options, model)
     estimate = estimate_tokens if estimator is None else estimator.estimate
+    sent: list[str] = []
+
+    def ask(text: str) -> baml_sdk.Counted:
+        sent.append(text)
+        return baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model)
+
     with provider_errors():
         counted = call_with_shrinking_graph(
-            lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
+            ask,
             graph,
             error_type=BamlError,
             is_truncated=_is_truncated,
@@ -347,6 +347,9 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
             on_truncated=truncated.append,
             label=ebm.feature_names_in_[feature_index],
         )
+    if graph_options.token_learner is not None:
+        # the last text that the call sent is the one that the successful attempt used
+        graph_options.token_learner.observe(counted.usage.samples, sent[-1])
     return _Described(counted, len(truncated))
 
 
@@ -404,7 +407,6 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
         described.counted,
         truncated_attempts=described.truncated_attempts,
-        learner=graph.token_learner,
     )
 
 
@@ -527,13 +529,12 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.counted.usage.input_tokens for item in described),
         output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),
-        samples=[sample for item in described for sample in item.counted.usage.samples] + summary.usage.samples,
+        samples=[],
     )
     return _log_usage(
         "describe_ebm",
         baml_sdk.Counted(text=summary.text, usage=usage),
         truncated_attempts=sum(item.truncated_attempts for item in described),
-        learner=graph.token_learner,
     )
 
 

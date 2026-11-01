@@ -169,3 +169,27 @@ def test_an_entry_rejects_a_negative_spread_or_sample_count() -> None:
         WeightsEntry(weights, relative_spread=-0.1, samples=1)
     with pytest.raises(ValueError, match="samples"):
         WeightsEntry(weights, relative_spread=0.1, samples=-1)
+
+
+def test_an_entry_takes_four_bytes_of_prose_for_each_token_unless_told_otherwise() -> None:
+    assert _entry().prose_bytes_per_token == pytest.approx(4.0)
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0])
+def test_an_entry_rejects_a_density_of_prose_that_is_not_above_zero(bad: float) -> None:
+    with pytest.raises(ValueError, match="prose_bytes_per_token"):
+        WeightsEntry(
+            TokenWeights(words=1.0, bytes=0.0, digits=0.0),
+            relative_spread=0.1,
+            samples=1,
+            prose_bytes_per_token=bad,
+        )
+
+
+def test_a_table_keeps_the_density_of_prose_of_each_entry_when_it_is_written_and_read() -> None:
+    entry = WeightsEntry(TokenWeights(words=1.0, bytes=0.0, digits=0.0), 0.1, 1, prose_bytes_per_token=4.38)
+    table = WeightsTable(default=_entry(), models={ModelKey("p", "m"): entry})
+    assert WeightsTable.from_bytes(table.to_bytes()).entry_for(
+        ModelKey("p", "m"),
+    ).prose_bytes_per_token == pytest.approx(4.38)
+    assert WeightsTable.from_bytes(table.to_bytes()).default.prose_bytes_per_token == pytest.approx(4.0)
