@@ -1277,3 +1277,34 @@ def test_describe_ebm_returns_the_samples_of_every_call_in_its_usage(
     learner = TokenLearner(learning=True, persist=False)
     descriptors.describe_ebm(fake_ebm, graph=GraphOptions(token_learner=learner))
     assert [sample.body.count("summary") for sample in seen[0]] == [0, 0, 1]
+
+
+def test_sample_graph_tokens_sends_the_graph_the_prompt_and_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+    sample = baml_sdk.TokenSample(provider="p", model="m", body="{}", input_tokens=5)
+    monkeypatch.setattr(baml_sdk, "sample_graph_tokens", fake_sdk("sample_graph_tokens", appending(calls, [sample])))
+    result = descriptors.sample_graph_tokens(
+        "GRAPH",
+        ModelOptions("openrouter", "some/model", max_output_tokens=16),
+        prompt=PromptOptions(task_description="new"),
+    )
+    assert result == [sample]
+    assert calls[0]["graph"] == "GRAPH"
+    assert calls[0]["opts"].task_description == "new"
+    assert (calls[0]["model"].model, calls[0]["model"].max_output_tokens) == ("some/model", 16)
+
+
+def test_sample_graph_tokens_uses_the_default_clients_without_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(baml_sdk, "sample_graph_tokens", fake_sdk("sample_graph_tokens", appending(calls, [])))
+    assert descriptors.sample_graph_tokens("GRAPH") == []
+    assert calls[0]["model"] is None
+
+
+def test_sample_graph_tokens_turns_a_missing_key_into_an_error_with_fix_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(**_kw: object) -> list[baml_sdk.TokenSample]:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(baml_sdk, "sample_graph_tokens", fake_sdk("sample_graph_tokens", refuse))
+    with pytest.raises(MissingAPIKeyError):
+        descriptors.sample_graph_tokens("GRAPH")

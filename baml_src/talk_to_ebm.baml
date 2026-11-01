@@ -314,6 +314,35 @@ function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -
 
 // Entry points called from Python.
 
+// Sends the first request of the graph description chain and returns the token samples of the requests. The sample
+// holds the tokens of the input, so a short reply limit in `model` (`max_output_tokens`) keeps the cost low. A reply
+// that the limit cuts off raises, and the samples of the requests that were sent still come back. The scripts use the
+// function to fit the weights of the token estimate of a model.
+function sample_graph_tokens(
+    graph: string,
+    opts: GraphPromptOptions,
+    client: ai.Client? = null,
+    model: ModelSpec? = null,
+) -> TokenSample[] {
+    let samples: TokenSample[] = [];
+    let agent = ai.Agent.new(client = select_client(client, model, long_defaults()), on_event = (event) -> {
+        if let call: ai.events.ModelCall = event {
+            let sample = sample_of(call);
+            if (sample != null) {
+                samples.push(sample);
+            };
+        };
+    });
+    //# A reply that hits the limit raises. The input counts of the request are what this function returns.
+    let finished = {
+        agent.run(GraphFirstPass@spec(graph, opts));
+        true
+    } catch_all (e) {
+        _ => false
+    };
+    samples
+}
+
 function describe_graph_cot(
     graph: string,
     num_sentences: int,

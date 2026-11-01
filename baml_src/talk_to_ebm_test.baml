@@ -865,3 +865,23 @@ test "a run with no request in its calls returns no sample" {
     let result = describe_graph_cot("GRAPH", 7, default_graph_options(), client = SequenceClient { calls: 0 });
     assert.equal(result.usage.samples.length(), 0)
 }
+
+test "sample_graph_tokens returns the sample of the request" {
+    let samples = sample_graph_tokens("GRAPH", default_graph_options(), client = SampledClient {});
+    assert.equal(
+        samples,
+        [
+            TokenSample {
+                provider: "scripted",
+                model: "sampled/model",
+                body: "REQUEST-BODY",
+                input_tokens: 40,
+            },
+        ],
+    )
+}
+
+test "sample_graph_tokens returns no sample when the request has no counts" {
+    let samples = sample_graph_tokens("GRAPH", default_graph_options(), client = SequenceClient { calls: 0 });
+    assert.equal(samples.length(), 0)
+}

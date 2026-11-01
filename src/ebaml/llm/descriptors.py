@@ -408,6 +408,40 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
     )
 
 
+def sample_graph_tokens(
+    graph: str,
+    model: ModelOptions | str | None = None,
+    *,
+    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
+) -> list[baml_sdk.TokenSample]:
+    """Send one request with the text of a graph and return its token samples.
+
+    The request is the first turn of ``describe_graph``. Each sample has the body of the request and the input tokens
+    that the provider counted. Set ``max_output_tokens`` in the model options to a small number, such as 16, to keep the
+    cost low: a reply that the limit cuts off is not an error here. ``scripts/fit_token_weights.py`` uses the function
+    to fit the token weights of a model.
+
+    Parameters
+    ----------
+    graph: str
+        The text of the graph, as ``EBMGraph.to_text`` makes it.
+    model: ModelOptions | str | None, default=None
+        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
+        ``openrouter/free``.
+    prompt: PromptOptions, default=PromptOptions()
+        The descriptions that the prompt uses.
+
+    Returns
+    -------
+    list[baml_sdk.TokenSample]
+        One sample for each request that the provider counted. The list is empty when the provider reports no count.
+
+    """
+    model_spec = _model_spec(model)
+    with provider_errors():
+        return baml_sdk.sample_graph_tokens(graph=graph, opts=_prompt_options(prompt), model=model_spec)
+
+
 def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and three keyword-only option arguments
     ebm: ExplainableBoostingModel,
     num_sentences: int = 30,
