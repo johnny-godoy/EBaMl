@@ -18,14 +18,15 @@ def _defaults(function: Callable[..., object], names: set[str]) -> dict[str, obj
 
 def test_graph_options_default_to_the_defaults_of_the_graph_methods() -> None:
     from_ebm = _defaults(EBMGraph.from_ebm, {"normalization", "use_feature_bounds", "classes"})
-    to_text = _defaults(EBMGraph.to_text, set(attrs.fields_dict(GraphOptions)) - set(from_ebm))
-    assert attrs.asdict(GraphOptions()) == {**from_ebm, **to_text}
+    to_text = _defaults(EBMGraph.to_text, set(attrs.fields_dict(GraphOptions)) - set(from_ebm) - {"token_learner"})
+    # the token learner is not an option of a graph method: it chooses the estimator of the budget check
+    assert attrs.asdict(GraphOptions(), recurse=False) == {**from_ebm, **to_text, "token_learner": None}
 
 
 def test_graph_options_cover_the_options_of_the_graph_methods() -> None:
     to_text = set(inspect.signature(EBMGraph.to_text).parameters) - {"self", "check_budget"}
     from_ebm = set(inspect.signature(EBMGraph.from_ebm).parameters) - {"cls", "ebm", "feature_index"}
-    assert set(attrs.fields_dict(GraphOptions)) == to_text | from_ebm
+    assert set(attrs.fields_dict(GraphOptions)) - {"token_learner"} == to_text | from_ebm
 
 
 def test_prompt_options_keep_the_baml_defaults() -> None:

@@ -1,9 +1,11 @@
 """Tests for the LLM descriptors."""
 
 import inspect
-from collections.abc import Sequence
-from typing import Any, override
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+from typing import Any, ClassVar, override
 
+import orjson
 import pytest
 from baml_bridge.errors import BamlError
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
@@ -14,8 +16,10 @@ from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
+from ebaml.graphs.token_weights import ModelKey, TokenWeights, WeightsEntry, WeightsTable
 from ebaml.llm import descriptors
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
+from ebaml.llm.token_learning import TokenLearner
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.fact_text import FactTexts
@@ -124,7 +128,7 @@ def test_graph_text_forwards_every_option(monkeypatch: pytest.MonkeyPatch) -> No
         max_tokens=11,
         overbudget_percent=7,
     )
-    assert descriptors._graph_text(FAKE_EBM, 4, options) == "text"
+    assert descriptors._graph_text(FAKE_EBM, 4, options, None) == "text"
     assert seen == {
         "from_ebm": (FAKE_EBM, 4, Normalization.Z_SCORE, False, ("b", "a")),
         "to_text": {
@@ -154,7 +158,7 @@ def test_describe_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    def graph_text(_ebm: object, idx: int, options: GraphOptions) -> str:
+    def graph_text(_ebm: object, idx: int, options: GraphOptions, _model: object) -> str:
         return f"graph{idx}:{options.max_tokens}"
 
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
@@ -178,7 +182,7 @@ def test_describe_ebm(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions, _model: object) -> str:
         return f"graph{idx}"
 
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
@@ -214,7 +218,7 @@ def test_describe_ebm_retries_a_truncated_graph(
     fake_ebm: ExplainableBoostingClassifier,
     counted: baml_sdk.Counted,
 ) -> None:
-    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions, _model: object) -> str:
         return "x" * 300 if options == GraphOptions() else "short"
 
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
@@ -409,7 +413,7 @@ def test_describe_graph_simplifies_after_truncated_reply(
 ) -> None:
     texts = []
 
-    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions, _model: object) -> str:
         texts.append(options)
         return "1.5 " * (900 if options == GraphOptions() else 300)
 
@@ -470,7 +474,7 @@ def test_describe_graph_reraises_when_graph_cannot_shrink(
     monkeypatch: pytest.MonkeyPatch,
     fake_ebm: ExplainableBoostingClassifier,
 ) -> None:
-    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions, _model: object) -> str:
         if options != GraphOptions():
             msg = "too complex"
             raise EBMGraphSimplificationError(msg)
@@ -582,7 +586,7 @@ def test_describe_ebm_adds_the_truncated_attempts_of_every_graph(
             raise _finish_error(reason)
         return counted
 
-    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions, _model: object) -> str:
         return f"g{idx}"
 
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
@@ -658,7 +662,7 @@ def test_describe_ebm_passes_the_options_to_every_graph_and_the_summary(
     graph_calls: list[dict[str, Any]] = []
     summary_calls: dict[str, Any] = {}
 
-    def graph_text(_ebm: object, _idx: int, options: GraphOptions) -> str:
+    def graph_text(_ebm: object, _idx: int, options: GraphOptions, _model: object) -> str:
         graph_options.append(options)
         return "g"
 
@@ -1104,7 +1108,7 @@ def test_describe_ebm_skips_a_feature_without_a_term(
         term_importances=lambda: [2.0],
     )
 
-    def graph_text(_ebm: object, idx: int, _options: GraphOptions) -> str:
+    def graph_text(_ebm: object, idx: int, _options: GraphOptions, _model: object) -> str:
         return f"graph{idx}"
 
     monkeypatch.setattr(descriptors, "_graph_text", graph_text)
@@ -1116,3 +1120,160 @@ def test_describe_ebm_skips_a_feature_without_a_term(
     assert [call["graph"] for call in graph_calls] == ["graph1"]
     assert summary_calls["feature_importances"] == "f1: 2.00"
     assert summary_calls["graph_descriptions"] == "f1: answer"
+
+
+LUNA: ModelKey = ModelKey("openrouter", "openai/gpt-6-luna")
+
+
+def _learner(tmp_path: Path, *, learning: bool = False, spread: float = 0.0) -> TokenLearner:
+    # one token for each word, so that the estimate of a text is its number of words
+    weights = TokenWeights(words=1.0, bytes=0.0, digits=0.0)
+    table = WeightsTable(default=WeightsEntry(weights, spread, 1), models={LUNA: WeightsEntry(weights, spread, 1)})
+    return TokenLearner(learning=learning, path=tmp_path / "learned.json", table=table)
+
+
+def _sampled(text: str = "sampled", tokens: int = 33) -> baml_sdk.Counted:
+    body = orjson.dumps({"messages": [{"role": "user", "content": text}]}).decode()
+    sample = baml_sdk.TokenSample(provider=LUNA.provider, model=LUNA.model, body=body, input_tokens=tokens)
+    return baml_sdk.Counted(text="answer", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2, samples=[sample]))
+
+
+class _GraphRecorder:
+    """A graph whose ``to_text`` records its arguments."""
+
+    seen: ClassVar[dict[str, Any]] = {}
+
+    @staticmethod
+    def to_text(**kwargs: object) -> str:
+        _GraphRecorder.seen = kwargs
+        return "text"
+
+
+def _record_graph(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    monkeypatch.setattr(EBMGraph, "from_ebm", staticmethod(returning(_GraphRecorder())))
+    return _GraphRecorder.seen
+
+
+def test_graph_text_checks_the_budget_with_the_default_weights_when_there_is_no_learner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _record_graph(monkeypatch)
+    descriptors._graph_text(FAKE_EBM, 0, GraphOptions(), None)
+    assert _GraphRecorder.seen["check_budget"] is check_token_budget
+
+
+def test_graph_text_checks_the_budget_with_the_estimator_of_the_model_of_the_learner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _record_graph(monkeypatch)
+    learner = _learner(tmp_path)
+    spec = baml_sdk.ModelSpec(provider=LUNA.provider, model=LUNA.model)
+    descriptors._graph_text(FAKE_EBM, 0, GraphOptions(token_learner=learner), spec)
+    assert _GraphRecorder.seen["check_budget"] is learner.estimator_for(LUNA)
+
+
+def test_graph_text_checks_the_budget_with_the_default_entry_when_the_model_is_not_known(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _record_graph(monkeypatch)
+    descriptors._graph_text(FAKE_EBM, 0, GraphOptions(token_learner=_learner(tmp_path)), None)
+    assert _GraphRecorder.seen["check_budget"].weights == TokenWeights(words=1.0, bytes=0.0, digits=0.0)
+
+
+def test_describe_graph_retries_with_the_estimate_of_the_learner(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+    tmp_path: Path,
+) -> None:
+    options = []
+
+    def graph_text(_ebm: object, _idx: int, graph: GraphOptions, _model: object) -> str:
+        options.append(graph)
+        return "w " * (800 if graph.max_tokens == GraphOptions().max_tokens else 100)
+
+    replies = [_finish_error("MaxTokens"), counted]
+
+    def cot(**_kw: object) -> baml_sdk.Counted:
+        reply = replies.pop(0)
+        if isinstance(reply, BamlError):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(descriptors, "_graph_text", graph_text)
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
+    learner = _learner(tmp_path)
+    descriptors.describe_graph(
+        fake_ebm,
+        0,
+        graph=GraphOptions(token_learner=learner),
+        model=f"{LUNA.provider}/{LUNA.model}",
+    )
+    # the estimate of 800 words is 800 tokens, and the retry asks for 75% of it
+    assert options[-1].max_tokens == 600
+
+
+def test_describe_graph_teaches_the_learner_the_samples_of_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(_sampled())))
+    learner = _learner(tmp_path, learning=True)
+    descriptors.describe_graph(
+        fake_ebm,
+        0,
+        graph=GraphOptions(token_learner=learner),
+        model=f"{LUNA.provider}/{LUNA.model}",
+    )
+    assert learner.estimator_for(LUNA).samples_seen == 1
+
+
+def test_describe_graph_without_a_learner_keeps_the_samples_out_of_every_estimator(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(_sampled())))
+    assert descriptors.describe_graph(fake_ebm, 0) == "answer"
+
+
+def test_describe_ebm_teaches_the_learner_the_samples_of_every_graph_and_of_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(
+        baml_sdk,
+        "describe_graph_cot",
+        fake_sdk("describe_graph_cot", returning(_sampled("graph words"))),
+    )
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(_sampled("summary"))))
+    learner = _learner(tmp_path, learning=True)
+    descriptors.describe_ebm(fake_ebm, graph=GraphOptions(token_learner=learner), model=f"{LUNA.provider}/{LUNA.model}")
+    # two graphs of one sample each, and the summary
+    assert learner.estimator_for(LUNA).samples_seen == 3
+
+
+def test_describe_ebm_returns_the_samples_of_every_call_in_its_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(_sampled("graph"))))
+    summary = _sampled("summary")
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(summary)))
+    seen: list[list[baml_sdk.TokenSample]] = []
+
+    def observe(_self: TokenLearner, samples: Iterable[baml_sdk.TokenSample]) -> int:
+        seen.append(list(samples))
+        return 0
+
+    monkeypatch.setattr(TokenLearner, "observe", observe)
+    learner = TokenLearner(learning=True, persist=False)
+    descriptors.describe_ebm(fake_ebm, graph=GraphOptions(token_learner=learner))
+    assert [sample.body.count("summary") for sample in seen[0]] == [0, 0, 1]
