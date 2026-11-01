@@ -154,7 +154,7 @@ combine every audience with every language:
 explanation = explain_instance(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French")
 ```
 
-The quality of the text depends on how well the LLM writes the language. To change the language and the rules of the
+The [languages notebook](languages-notebook.md) shows one passenger in several languages. The quality of the text depends on how well the LLM writes the language. To change the language and the rules of the
 reader together, write your own audience (below).
 
 ### Your own audience
