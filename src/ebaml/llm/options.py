@@ -13,11 +13,12 @@ import attrs
 
 from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
+from ebaml.llm.token_learning import TokenLearner
 
 
 @attrs.frozen
 class GraphOptions:
-    """Options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+    """Options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``, and the token learner of the budget check.
 
     Attributes
     ----------
@@ -43,6 +44,9 @@ class GraphOptions:
         See ``EBMGraph.to_text``.
     overbudget_percent: int
         See ``EBMGraph.to_text``.
+    token_learner: TokenLearner | None
+        The token estimators of the budget check, and the weights that they learn from the calls. ``None`` checks the
+        budget with the default weights and learns nothing.
 
     """
 
@@ -57,6 +61,7 @@ class GraphOptions:
     confidence_level: float = 0.95
     max_tokens: int = 3000
     overbudget_percent: int = 50
+    token_learner: TokenLearner | None = None
 
 
 @attrs.frozen

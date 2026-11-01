@@ -17,11 +17,13 @@ from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
-from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
+from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
+from ebaml.graphs.token_weights import ModelKey
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
+from ebaml.llm.token_learning import TokenLearner
 from ebaml.local.audience import Audience, resolve_audience
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
@@ -153,7 +155,33 @@ def _model_spec(model: ModelOptions | str | None) -> baml_sdk.ModelSpec | None:
     return spec
 
 
-def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: GraphOptions) -> str:
+def _estimator(options: GraphOptions, model: baml_sdk.ModelSpec | None) -> TokenEstimator | None:
+    """Get the token estimator of the learner in the options, for the model that the call uses.
+
+    Parameters
+    ----------
+    options: GraphOptions
+        The options of the graph. Its ``token_learner`` can be ``None``.
+    model: baml_sdk.ModelSpec | None
+        The model of the requests. ``None`` selects the default clients, which the learner does not know by name.
+
+    Returns
+    -------
+    TokenEstimator | None
+        The estimator of the model, or ``None`` when the options have no learner.
+
+    """
+    if options.token_learner is None:
+        return None
+    return options.token_learner.estimator_for(None if model is None else ModelKey(model.provider, model.model))
+
+
+def _graph_text(
+    ebm: ExplainableBoostingModel,
+    feature_index: int,
+    options: GraphOptions,
+    model: baml_sdk.ModelSpec | None,
+) -> str:
     """Convert an EBM graph to text, with the token budget check.
 
     Parameters
@@ -164,6 +192,8 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: Grap
         The index of the feature to convert to text.
     options: GraphOptions
         The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+    model: baml_sdk.ModelSpec | None
+        The model of the requests. The token estimator of the learner in ``options`` depends on it.
 
     Returns
     -------
@@ -187,7 +217,7 @@ def _graph_text(ebm: ExplainableBoostingModel, feature_index: int, options: Grap
         confidence_level=options.confidence_level,
         max_tokens=options.max_tokens,
         overbudget_percent=options.overbudget_percent,
-        check_budget=check_token_budget,
+        check_budget=_estimator(options, model) or check_token_budget,
     )
 
 
@@ -209,7 +239,13 @@ def _is_truncated(error: BamlError) -> bool:
     return error.class_name == "ai.errors.FinishReasonError" and getattr(value, "finish_reason", None) == "MaxTokens"
 
 
-def _log_usage(what: str, counted: baml_sdk.Counted, *, truncated_attempts: int) -> str:
+def _log_usage(
+    what: str,
+    counted: baml_sdk.Counted,
+    *,
+    truncated_attempts: int,
+    learner: TokenLearner | None = None,
+) -> str:
     """Log the token usage reported by the LLM provider and return the text.
 
     The usage leaves out the attempts that were cut off by ``max_tokens``, because the provider error carries no token
@@ -223,6 +259,8 @@ def _log_usage(what: str, counted: baml_sdk.Counted, *, truncated_attempts: int)
         The LLM reply together with its token usage.
     truncated_attempts: int
         The number of attempts that were cut off, and that the usage does not count.
+    learner: TokenLearner | None
+        The learner that receives the token samples of the calls. ``None`` keeps them out of any estimator.
 
     Returns
     -------
@@ -231,6 +269,8 @@ def _log_usage(what: str, counted: baml_sdk.Counted, *, truncated_attempts: int)
 
     """
     usage = counted.usage
+    if learner is not None:
+        learner.observe(usage.samples)
     logger.info(
         "usage",
         what=what,
@@ -289,17 +329,20 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 
     """
     truncated: list[BamlError] = []
+    estimator = _estimator(graph_options, model)
+    estimate = estimate_tokens if estimator is None else estimator.estimate
     with provider_errors():
         counted = call_with_shrinking_graph(
             lambda text: baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model),
             graph,
             error_type=BamlError,
             is_truncated=_is_truncated,
-            estimate_tokens=estimate_tokens,
+            estimate_tokens=estimate,
             rebuild=lambda budget: _graph_text(
                 ebm,
                 feature_index,
                 attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
+                model,
             ),
             on_truncated=truncated.append,
             label=ebm.feature_names_in_[feature_index],
@@ -346,8 +389,8 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 
     """
     _warn_skipped_interactions(ebm, {feature_index})
-    graph_text = _graph_text(ebm, feature_index, graph)
     model_spec = _model_spec(model)
+    graph_text = _graph_text(ebm, feature_index, graph, model_spec)
     described = _describe_graph_counted(
         ebm,
         feature_index,
@@ -361,6 +404,7 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
         described.counted,
         truncated_attempts=described.truncated_attempts,
+        learner=graph.token_learner,
     )
 
 
@@ -411,8 +455,8 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     feature_names = [ebm.feature_names_in_[feature_index] for feature_index in features]
     _warn_skipped_interactions(ebm, features)
     feature_importances = _feature_importances_to_text(ebm)
-    graph_texts = [_graph_text(ebm, feature_index, graph) for feature_index in features]
     model_spec = _model_spec(model)
+    graph_texts = [_graph_text(ebm, feature_index, graph, model_spec) for feature_index in features]
     opts = _prompt_options(prompt)
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
@@ -455,6 +499,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
         "describe_ebm",
         baml_sdk.Counted(text=summary.text, usage=usage),
         truncated_attempts=sum(item.truncated_attempts for item in described),
+        learner=graph.token_learner,
     )
 
 
