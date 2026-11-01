@@ -41,7 +41,8 @@ def _project_nonnegative(
 
     A plain clip at zero would leave the other entries as they are, although a weight that is wrong at zero shifts the
     best value of the weights that correlate with it. The projection sets the entries of an active set to zero and moves
-    the others by the covariance between them. With three entries it tries every active set, so the result is exact.
+    the others by the covariance between them. With three entries it tries every active set and keeps the candidate
+    with the shortest distance. No proof backs that this is the nearest point.
 
     Parameters
     ----------
