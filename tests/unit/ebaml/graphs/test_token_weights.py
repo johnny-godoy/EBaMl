@@ -1,0 +1,107 @@
+"""Tests for the text counts, the token weights and their non-negative fit."""
+
+import math
+
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+
+from ebaml.core.exceptions import TokenFitError
+from ebaml.graphs.token_weights import TextFeatures, TokenSample, TokenWeights, fit_weights, relative_spread
+
+
+def test_text_features_count_words_bytes_and_digits_apart() -> None:
+    # "é" is two bytes, "²" is a digit of two bytes, and the three words are separated by spaces and a newline
+    assert TextFeatures.of("ab 12\né²") == TextFeatures(words=3, bytes=10, digits=3)
+
+
+def test_text_features_of_an_empty_text_are_zero() -> None:
+    assert TextFeatures.of("") == TextFeatures(words=0, bytes=0, digits=0)
+
+
+def test_text_features_vector_keeps_the_order_words_bytes_digits() -> None:
+    assert TextFeatures(words=1, bytes=2, digits=3).as_vector() == (1.0, 2.0, 3.0)
+
+
+def test_weights_vector_keeps_the_order_words_bytes_digits() -> None:
+    assert TokenWeights(words=1.0, bytes=2.0, digits=3.0).as_vector() == (1.0, 2.0, 3.0)
+
+
+def test_weights_estimate_gives_each_count_its_own_weight() -> None:
+    weights = TokenWeights(words=2.0, bytes=0.5, digits=3.0)
+    assert weights.estimate(TextFeatures(words=10, bytes=40, digits=5)) == pytest.approx(55.0)
+
+
+@pytest.mark.parametrize("bad", [-0.1, math.inf, math.nan])
+@pytest.mark.parametrize("field", ["words", "bytes", "digits"])
+def test_weights_reject_a_negative_or_non_finite_value(field: str, bad: float) -> None:
+    values = {"words": 1.0, "bytes": 1.0, "digits": 1.0, field: bad}
+    with pytest.raises(ValueError, match=field):
+        TokenWeights(**values)
+
+
+def test_weights_accept_zero() -> None:
+    assert TokenWeights(words=0.0, bytes=0.0, digits=0.0).as_vector() == (0.0, 0.0, 0.0)
+
+
+def test_sample_rejects_zero_tokens() -> None:
+    with pytest.raises(ValueError, match="tokens"):
+        TokenSample(TextFeatures(words=1, bytes=1, digits=0), 0)
+
+
+def _sample(words: int, bytes_: int, digits: int, tokens: float) -> TokenSample:
+    return TokenSample(TextFeatures(words=words, bytes=bytes_, digits=digits), round(tokens))
+
+
+def test_fit_recovers_the_exact_weights_of_clean_data() -> None:
+    rows = [(10, 70, 40), (30, 200, 90), (5, 33, 12), (50, 340, 200), (20, 130, 55)]
+    samples = [_sample(w, b, d, 4 * w + 1 * b + 2 * d) for w, b, d in rows]
+    fitted = fit_weights(samples)
+    assert fitted.as_vector() == pytest.approx((4.0, 1.0, 2.0), abs=1e-6)
+
+
+def test_fit_sets_a_weight_to_zero_where_least_squares_would_make_it_negative() -> None:
+    # the true bytes weight is -0.2, which a negative weight would fit exactly. The fit must keep it at zero instead.
+    rows = [(10, 70, 40), (30, 200, 90), (5, 33, 12), (50, 340, 200), (20, 130, 55), (40, 260, 150)]
+    samples = [_sample(w, b, d, 5 * w - 0.2 * b + 0.5 * d) for w, b, d in rows]
+    fitted = fit_weights(samples)
+    assert fitted.bytes == pytest.approx(0.0, abs=1e-12)
+    assert fitted.words > 0
+    assert fitted.digits > 0
+
+
+def test_fit_with_one_useful_feature_uses_only_that_feature() -> None:
+    samples = [_sample(w, 0, 0, 3 * w) for w in (1, 5, 20, 80)]
+    assert fit_weights(samples).words == pytest.approx(3.0, abs=1e-6)
+
+
+def test_fit_of_a_single_sample_matches_it() -> None:
+    sample = _sample(10, 0, 0, 40)
+    assert fit_weights([sample]).estimate(sample.features) == pytest.approx(40.0)
+
+
+def test_fit_rejects_no_samples() -> None:
+    with pytest.raises(TokenFitError, match="at least one sample"):
+        fit_weights([])
+
+
+@given(
+    rows=st.lists(
+        st.tuples(st.integers(1, 500), st.integers(1, 5000), st.integers(0, 3000), st.integers(1, 20000)),
+        min_size=1,
+        max_size=12,
+    ),
+)
+def test_fit_never_gives_a_negative_weight(rows: list[tuple[int, int, int, int]]) -> None:
+    fitted = fit_weights([TokenSample(TextFeatures(w, b, d), t) for w, b, d, t in rows])
+    assert min(fitted.as_vector()) >= 0.0
+
+
+def test_relative_spread_is_the_root_mean_square_of_the_relative_error() -> None:
+    weights = TokenWeights(words=1.0, bytes=0.0, digits=0.0)
+    samples = [_sample(1, 0, 0, 2), _sample(3, 0, 0, 2)]  # errors -0.5 and +0.5
+    assert relative_spread(weights, samples) == pytest.approx(0.5)
+
+
+def test_relative_spread_of_no_samples_is_zero() -> None:
+    assert relative_spread(TokenWeights(words=1.0, bytes=0.0, digits=0.0), []) == pytest.approx(0.0)
