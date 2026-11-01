@@ -84,6 +84,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
   hook fails. Leave `scripts/check_ignores.py`, `scripts/ignore_sites.py` and the hook unchanged.
 - Describe the code as it is now. Do not compare with an earlier version or promise backward compatibility: the package
   has no users yet (`.claude/rules/writing-style.md`).
+- Give every variable, parameter and coefficient a descriptive name (`word_weight`, not `alpha`; `bin_index`, not `i`). See
+  `.claude/rules/naming.md`.
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See
   `.claude/rules/writing-style.md`.
 - Ruff selects all rules with line length 120. Tests live in `tests/unit/ebaml/`.
