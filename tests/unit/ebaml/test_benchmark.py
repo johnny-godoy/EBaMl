@@ -38,6 +38,7 @@ class FakeUsage:
 
     input_tokens: int
     output_tokens: int
+    samples: list[baml_sdk.TokenSample] = attrs.field(factory=list)
 
 
 @attrs.frozen
@@ -239,7 +240,7 @@ def test_run_task_without_questions_asks_nothing() -> None:
 
 def test_baml_function_satisfies_the_benchmark_protocols() -> None:
     assert isinstance(baml_sdk.answer_benchmark_question, AskQuestion)
-    reply = baml_sdk.Counted(text="a", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2))
+    reply = baml_sdk.Counted(text="a", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2, samples=[]))
     assert isinstance(reply, Reply)
     assert isinstance(reply.usage, Usage)
     assert isinstance(counted("a"), Reply)

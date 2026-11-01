@@ -44,7 +44,7 @@ pytestmark: pytest.MarkDecorator = pytest.mark.usefixtures("default_options")
 
 @pytest.fixture
 def counted() -> baml_sdk.Counted:
-    return baml_sdk.Counted(text="answer", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5))
+    return baml_sdk.Counted(text="answer", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5, samples=[]))
 
 
 @pytest.fixture
@@ -311,7 +311,7 @@ def test_explain_instance(monkeypatch: pytest.MonkeyPatch) -> None:
         counterfactual="cf",
         sufficient_reason="sr",
         completions="cc",
-        usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2),
+        usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2, samples=[]),
     )
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
@@ -347,7 +347,7 @@ def test_explain_instance_defaults_to_layperson(monkeypatch: pytest.MonkeyPatch)
         counterfactual="",
         sufficient_reason="",
         completions="",
-        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]),
     )
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
@@ -367,7 +367,7 @@ def test_explain_instance_uses_a_custom_audience(monkeypatch: pytest.MonkeyPatch
         counterfactual="",
         sufficient_reason="",
         completions="",
-        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]),
     )
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
@@ -382,7 +382,7 @@ def test_explain_instance_passes_the_language(monkeypatch: pytest.MonkeyPatch) -
         counterfactual="",
         sufficient_reason="",
         completions="",
-        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]),
     )
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))
@@ -557,8 +557,8 @@ def test_describe_ebm_adds_the_usage_of_every_call(
     fake_ebm: ExplainableBoostingClassifier,
 ) -> None:
     # The numbers share bits, so a bitwise or / xor in place of the sum gives another total.
-    graph = baml_sdk.Counted(text="g", usage=baml_sdk.TokenUsage(input_tokens=6, output_tokens=7))
-    summary = baml_sdk.Counted(text="s", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5))
+    graph = baml_sdk.Counted(text="g", usage=baml_sdk.TokenUsage(input_tokens=6, output_tokens=7, samples=[]))
+    summary = baml_sdk.Counted(text="s", usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=5, samples=[]))
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(graph)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(summary)))
@@ -689,7 +689,7 @@ def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.Mon
         counterfactual="",
         sufficient_reason="",
         completions="",
-        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]),
     )
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", returning(text)))
     descriptors.explain_instance(FAKE_EBM, {}, "G")
@@ -708,7 +708,7 @@ def test_option_arguments_are_keyword_only() -> None:
 
 # The SDK classes that the faked functions take or return. The fakes build real instances, so these checks compare the
 # classes of the runtime package with the stub that `baml generate` wrote next to it.
-SDK_CLASSES = ["Counted", "TokenUsage", "LocalExplanationText", "LocalFactTexts", "GraphPromptOptions", "TokenBudget"]
+SDK_CLASSES = ["Counted", "TokenUsage", "TokenSample", "LocalExplanationText", "LocalFactTexts", "GraphPromptOptions"]
 FAKED_FUNCTIONS = ["default_graph_options", "describe_graph_cot", "summarize_ebm", "explain_local"]
 
 
@@ -891,7 +891,7 @@ def test_explain_instance_sends_the_model_to_the_llm(
         counterfactual="",
         sufficient_reason="",
         completions="",
-        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0),
+        usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]),
     )
     calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "explain_local", fake_sdk("explain_local", recording(calls, text)))

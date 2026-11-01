@@ -32,7 +32,7 @@ ROOT: Path = Path(__file__).resolve().parents[2]
 # the doctests compare the text of the output, so a reflowed long repr must still match
 OPTIONS: int = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 FAKE_TEXT = "A fake reply, which stands in for the text of the LLM."
-USAGE: baml_sdk.TokenUsage = baml_sdk.TokenUsage(input_tokens=1, output_tokens=1)
+USAGE: baml_sdk.TokenUsage = baml_sdk.TokenUsage(input_tokens=1, output_tokens=1, samples=[])
 PATCHER = "_offline_llm"
 
 

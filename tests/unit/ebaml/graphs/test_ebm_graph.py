@@ -3,8 +3,7 @@
 import inspect
 import itertools
 import warnings
-from collections.abc import Callable
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import attrs
 import numpy as np
@@ -14,7 +13,6 @@ from hypothesis import given
 from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
-import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import (
     EBMGraphShapeError,
@@ -27,24 +25,28 @@ from ebaml.core.exceptions import (
 )
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
 from ebaml.graphs.model_kinds import MulticlassClassifier
-from tests.unit.ebaml.conftest import appending, call_mismatches, fake_model, fake_sdk, protocol_mismatches
+from ebaml.graphs.token_budget import BudgetStatus, TokenEstimator, check_token_budget
+from tests.unit.ebaml.conftest import appending, fake_model
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 INF = float("inf")
 type Status = Literal["ok", "warn", "over"]
 
 
-def budget(status: Status, tokens: int = 10) -> baml_sdk.TokenBudget:
-    return baml_sdk.TokenBudget(estimated_tokens=tokens, status=status)
+def budget(status: Status, tokens: int = 10) -> BudgetStatus:
+    return BudgetStatus(estimated_tokens=tokens, status=status)
 
 
-def checker(*statuses: Status, tokens: int = 10) -> Callable[..., baml_sdk.TokenBudget]:
+def checker(*statuses: Status, tokens: int = 10) -> BudgetCheck:
     # the check answers with each status in turn, and with the last one after that
     answers = itertools.chain(statuses, itertools.repeat(statuses[-1]))
 
-    def check(**_kw: object) -> baml_sdk.TokenBudget:
+    def check(*, text: str, max_tokens: int, overbudget_percent: int) -> BudgetStatus:  # ruff: ignore[unused-function-argument] -- BudgetCheck takes these by name
         return budget(next(answers), tokens)
 
-    return fake_sdk("check_token_budget", check)
+    return check
 
 
 def continuous_ebm(scores: tuple[float, ...] = (9.0, 1.0, 2.0, 4.0, 9.0)) -> ExplainableBoostingClassifier:
@@ -419,11 +421,11 @@ def test_to_text_confidence_level_changes_bounds() -> None:
 def test_to_text_default_budget_arguments() -> None:
     seen = {}
 
-    def check(**kw: object) -> baml_sdk.TokenBudget:
+    def check(**kw: object) -> BudgetStatus:
         seen.update(kw)
         return budget("ok")
 
-    checked = fake_sdk("check_token_budget", check)
+    checked = check
     text = cont_graph().to_text(check_budget=checked)
     assert (seen["max_tokens"], seen["overbudget_percent"]) == (3000, 50)
     assert seen["text"] == text
@@ -462,7 +464,7 @@ def test_to_text_warning_points_at_the_caller() -> None:
 def test_to_text_tries_every_simplification_level() -> None:
     calls: list[dict[str, Any]] = []
     with pytest.raises(EBMGraphSimplificationError, match="10%"):
-        cont_graph().to_text(check_budget=fake_sdk("check_token_budget", appending(calls, budget("over", 5))))
+        cont_graph().to_text(check_budget=appending(calls, budget("over", 5)))
     assert len(calls) == 101  # 0.0%, 0.1%, ..., 10.0%
 
 
@@ -659,16 +661,12 @@ def test_to_text_rejects_more_stds_than_scores() -> None:
         graph.to_text()
 
 
-def test_the_budget_check_protocol_matches_the_sdk_function() -> None:
-    assert call_mismatches(BudgetCheck, "check_token_budget") == []
+def test_the_module_check_and_the_estimator_satisfy_the_budget_check_protocol() -> None:
+    assert isinstance(check_token_budget, BudgetCheck)
+    assert isinstance(TokenEstimator(), BudgetCheck)
 
 
-def test_the_token_budget_protocol_matches_the_sdk_class() -> None:
-    assert protocol_mismatches(TokenBudget, "TokenBudget", {}) == []
-
-
-def test_baml_check_satisfies_the_budget_check_protocol() -> None:
-    assert isinstance(baml_sdk.check_token_budget, BudgetCheck)
+def test_a_budget_status_satisfies_the_token_budget_protocol() -> None:
     assert isinstance(budget("ok"), TokenBudget)
 
 
