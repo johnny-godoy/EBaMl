@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.3.1'></a>
+## [0.3.1] - 2026-11-01
+
+### Added
+
+- `explain_instance` takes `language=` (default `"English"`), so the three local explanations come in the language of the reader. It works with every audience.
+
+### Changed
+
+- The `Audience` docstring and the guide show an executive audience in place of a French one. Use `language=` to change the language.
+
 <a id='changelog-0.3.0'></a>
 ## [0.3.0] - 2026-11-01
 
