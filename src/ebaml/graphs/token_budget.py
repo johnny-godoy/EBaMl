@@ -24,9 +24,9 @@ from ebaml.graphs.token_weights import TextFeatures, TokenSample, TokenWeights
 
 # The weights fitted on 100 graph texts of one current model (graph text only, tokens counted by the provider, with the
 # tokens of the prompt template taken away). ``scripts/fit_token_weights.py`` refits them.
-DEFAULT_WEIGHTS: TokenWeights = TokenWeights(words=4.1195141, bytes=0.0, digits=0.2923085)
+DEFAULT_WEIGHTS: TokenWeights = TokenWeights(words=4.1323705, bytes=0.0, digits=0.2713857)
 # The root mean square of the relative error of the default weights on the samples that fitted them.
-DEFAULT_RELATIVE_SPREAD: float = 0.1416
+DEFAULT_RELATIVE_SPREAD: float = 0.0901
 # The scale of one typical graph (words, bytes, digits). The learning divides the counts by it, so that a prior of the
 # same strength fits all three weights.
 _FEATURE_SCALE: npt.NDArray[np.float64] = np.array([500.0, 5000.0, 2500.0])
@@ -139,7 +139,7 @@ class TokenEstimator:
     Examples
     --------
     >>> estimator = TokenEstimator()
-    >>> estimator.check_budget(text="1.5 2.5 " * 10, max_tokens=100, overbudget_percent=50).status
+    >>> estimator.check_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
     'warn'
 
     """
@@ -335,8 +335,10 @@ def estimate_tokens(text: str) -> int:
 
     Examples
     --------
-    >>> estimate_tokens("0.1 0.2 0.3")
-    17
+    >>> estimate_tokens("")
+    0
+    >>> estimate_tokens("0.1 0.2 0.3 0.4") > estimate_tokens("0.1 0.2")
+    True
 
     """
     return _DEFAULT_ESTIMATOR.estimate(text)
@@ -364,8 +366,12 @@ def check_token_budget(*, text: str, max_tokens: int, overbudget_percent: int) -
 
     Examples
     --------
-    >>> check_token_budget(text="1.5 2.5 " * 10, max_tokens=100, overbudget_percent=50)
-    BudgetStatus(estimated_tokens=108, status='warn')
+    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
+    'warn'
+    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=1000, overbudget_percent=50).status
+    'ok'
+    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=50, overbudget_percent=50).status
+    'over'
 
     """
     return _DEFAULT_ESTIMATOR.check_budget(text=text, max_tokens=max_tokens, overbudget_percent=overbudget_percent)

@@ -1,8 +1,8 @@
 """The text of the messages in the body of an LLM request.
 
 The tokenizer of a provider counts the prompt, not the JSON around it. The body of a request holds the model name, the
-sampling parameters and the structure of the messages besides the text. So the counts of a sample come from the text of
-the messages only. Providers shape the body differently (OpenAI, Anthropic and Gemini differ), so the function collects
+sampling parameters and the structure of the messages besides the text. So the token learner reads the text of the
+messages only. Providers shape the body differently (OpenAI, Anthropic and Gemini differ), so the function collects
 the text under the keys that carry it. It needs no ``baml_sdk``.
 """
 

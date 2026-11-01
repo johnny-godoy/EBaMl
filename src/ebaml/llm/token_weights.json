@@ -1,26 +1,28 @@
 {
   "default": {
     "weights": {
-      "words": 4.1195141,
+      "words": 4.132370523613738,
       "bytes": 0.0,
-      "digits": 0.2923085
+      "digits": 0.27138567722081036
     },
-    "relative_spread": 0.1416,
+    "relative_spread": 0.09007623251517205,
     "samples": 100,
-    "update_allowed": true
+    "update_allowed": true,
+    "prose_bytes_per_token": 4.382488479262673
   },
   "models": [
     {
       "provider": "openrouter",
       "model": "openai/gpt-6-luna",
       "weights": {
-        "words": 4.1195141,
+        "words": 4.132370523613738,
         "bytes": 0.0,
-        "digits": 0.2923085
+        "digits": 0.27138567722081036
       },
-      "relative_spread": 0.1416,
+      "relative_spread": 0.09007623251517205,
       "samples": 100,
-      "update_allowed": true
+      "update_allowed": true,
+      "prose_bytes_per_token": 4.382488479262673
     }
   ]
 }

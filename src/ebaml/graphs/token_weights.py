@@ -256,6 +256,9 @@ class WeightsEntry:
         The number of samples that fitted ``weights``.
     update_allowed: bool
         Whether a learning estimator may change ``weights``. A model whose entry is final sets it to ``False``.
+    prose_bytes_per_token: float
+        The bytes of English prose that the model counts as one token, such as the prompt template. A request holds the
+        graph and also prose, and the learner takes the prose away to learn the weights of the graph alone.
 
     """
 
@@ -263,6 +266,7 @@ class WeightsEntry:
     relative_spread: float = attrs.field(validator=attrs.validators.ge(0.0))
     samples: int = attrs.field(validator=attrs.validators.ge(0))
     update_allowed: bool = True
+    prose_bytes_per_token: float = attrs.field(default=4.0, validator=attrs.validators.gt(0.0))
 
 
 class _WeightsRecord(TypedDict):
@@ -280,6 +284,7 @@ class _EntryRecord(TypedDict):
     relative_spread: float
     samples: int
     update_allowed: bool
+    prose_bytes_per_token: float
 
 
 class _ModelRecord(_EntryRecord):
@@ -309,6 +314,7 @@ def _read_entry(record: _EntryRecord) -> WeightsEntry:
         relative_spread=record["relative_spread"],
         samples=record["samples"],
         update_allowed=record["update_allowed"],
+        prose_bytes_per_token=record["prose_bytes_per_token"],
     )
 
 
@@ -335,6 +341,7 @@ def _write_model(key: ModelKey, entry: WeightsEntry) -> _ModelRecord:
         "relative_spread": entry.relative_spread,
         "samples": entry.samples,
         "update_allowed": entry.update_allowed,
+        "prose_bytes_per_token": entry.prose_bytes_per_token,
     }
 
 
@@ -357,6 +364,7 @@ def _write_entry(entry: WeightsEntry) -> _EntryRecord:
         "relative_spread": entry.relative_spread,
         "samples": entry.samples,
         "update_allowed": entry.update_allowed,
+        "prose_bytes_per_token": entry.prose_bytes_per_token,
     }
 
 

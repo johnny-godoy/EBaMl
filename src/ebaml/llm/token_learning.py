@@ -1,8 +1,9 @@
 """Token estimators that learn from the token counts of real LLM calls, one for each model.
 
 The BAML runtime reports the input tokens of each request and the model that answered. ``TokenLearner`` keeps one
-``TokenEstimator`` for each model. It starts each from the shipped table of weights, and moves it toward the counts of
-the requests when learning is on. Learning is off by default, because learned weights change the estimate, and so the
+``TokenEstimator`` for each model. It starts each from the shipped table of weights, and moves it toward the tokens of
+the graph in the requests when learning is on. The tokens of the prose in a request (the template and earlier replies)
+are taken away first. Learning is off by default, because learned weights change the estimate, and so the
 text of a graph, from one call to the next.
 
 When learning is on, the weights persist between sessions in a JSON file. By default the file is
@@ -258,15 +259,21 @@ class TokenLearner:
                 self._estimators[key] = estimator
             return estimator
 
-    def observe(self, samples: Iterable[RequestSample]) -> int:
-        """Teach the estimators the token counts of requests, and save what they learned.
+    def observe(self, samples: Iterable[RequestSample], graph: str) -> int:
+        """Teach the estimators the token counts of the graph in requests, and save what they learned.
 
-        A sample of a model whose entry is final changes nothing. The method does nothing when learning is off.
+        A request holds the graph and also prose: the prompt template and, in later turns, earlier replies. The
+        provider counts both. The method takes the prose away, at the bytes for each token that the table gives for the
+        model, and teaches the estimator what is left for the graph. A request that does not hold ``graph`` as it is,
+        or that has no tokens left, gives no sample. A model whose entry is final learns nothing. The method does
+        nothing when learning is off.
 
         Parameters
         ----------
         samples: Iterable[RequestSample]
             The counted requests, for example ``counted.usage.samples``.
+        graph: str
+            The text of the graph that the requests carried.
 
         Returns
         -------
@@ -274,16 +281,19 @@ class TokenLearner:
             The number of samples that changed an estimator.
 
         """
-        if not self.learning:
+        if not self.learning or not graph:
             return 0
+        features = TextFeatures.of(graph)
         applied = 0
         for sample in samples:
             text = message_text(sample.body)
-            if not text:
+            if graph not in text:
                 continue
-            estimator = self.estimator_for(ModelKey(sample.provider, sample.model))
-            token_sample = TokenSample(TextFeatures.of(text), sample.input_tokens)
-            applied += estimator.observe(token_sample)
+            key = ModelKey(sample.provider, sample.model)
+            prose_bytes = len(text.replace(graph, "", 1).encode())
+            tokens = round(sample.input_tokens - prose_bytes / self.table.entry_for(key).prose_bytes_per_token)
+            if tokens >= 1:
+                applied += self.estimator_for(key).observe(TokenSample(features, tokens))
         if applied:
             self.save()
         return applied
