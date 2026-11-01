@@ -449,6 +449,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.counted.usage.input_tokens for item in described),
         output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),
+        samples=[sample for item in described for sample in item.counted.usage.samples] + summary.usage.samples,
     )
     return _log_usage(
         "describe_ebm",

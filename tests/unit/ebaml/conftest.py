@@ -364,6 +364,10 @@ def _atoms(hint: object) -> frozenset[object]:
         return frozenset().union(*(_atoms(arg) for arg in typing.get_args(hint)))
     if origin is typing.Literal:
         return frozenset(("literal", value) for value in typing.get_args(hint))
+    if origin is list:
+        # typing.List[X] and list[X] accept the same values
+        (item,) = typing.get_args(hint)
+        return frozenset({list[item]})
     return frozenset({hint})
 
 

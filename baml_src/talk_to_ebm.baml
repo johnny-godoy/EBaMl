@@ -217,9 +217,20 @@ function EbmSummaryShorten(
 
 // Token accounting.
 
+// One request that the provider counted. Python counts the words, bytes and digits of the messages in `body` and fits
+// the weights of its token estimate to `input_tokens`. The sample holds the request body only: the headers carry the
+// API key, so they never leave the runtime.
+class TokenSample {
+    provider: string,
+    model: string,
+    body: string,
+    input_tokens: int,
+}
+
 class TokenUsage {
     input_tokens: int,
     output_tokens: int,
+    samples: TokenSample[],
 }
 
 // An LLM result plus the tokens the provider reported for producing it.
@@ -228,42 +239,65 @@ class Counted {
     usage: TokenUsage,
 }
 
-class TokenBudget {
-    estimated_tokens: int,
-    status: "ok" | "warn" | "over",
-}
-
 function add_usage(a: TokenUsage, b: TokenUsage) -> TokenUsage {
     TokenUsage {
         input_tokens: a.input_tokens + b.input_tokens,
         output_tokens: a.output_tokens + b.output_tokens,
+        samples: a.samples.concat(b.samples),
     }
 }
 
-// Rough estimate (~3 chars/token): graph text is mostly digits and punctuation, which tokenize worse than prose.
-// No tokenizer is available before a call, so this is a guard rail; the provider's own error is the real limit.
-function estimate_tokens(text: string) -> int {
-    (text.length() + 2) / 3
+// The input tokens of one call, with the cached and the cache-write tokens included, or null when the provider
+// reported no count. A count that is missing is not zero: a zero would pull the weights of the estimate toward zero.
+function input_total(usage: ai.events.Usage) -> int? {
+    let uncached = usage.uncached_input_tokens;
+    let cached = usage.cached_input_tokens;
+    let written = usage.cache_write_input_tokens;
+    if (uncached != null || cached != null || written != null) {
+        return (uncached ?? 0) + (cached ?? 0) + (written ?? 0);
+    };
+    usage.input_tokens
 }
 
-// "ok" within `max_tokens`; "warn" up to `max_tokens` plus `overbudget_percent`; "over" beyond that.
-function check_token_budget(text: string, max_tokens: int, overbudget_percent: int) -> TokenBudget {
-    let estimated = estimate_tokens(text);
-    let hard_limit = max_tokens * (100 + overbudget_percent) / 100;
-    if (estimated > hard_limit) {
-        return TokenBudget { estimated_tokens: estimated, status: "over" };
+// The sample of one model call. A call with no request, no usage, no model name or no input count gives no sample.
+function sample_of(call: ai.events.ModelCall) -> TokenSample? {
+    let usage = call.usage;
+    let request = call.http_request;
+    let model = call.resolved_model.model;
+    if (usage == null || request == null || model == null) {
+        return null;
     };
-    if (estimated > max_tokens) {
-        return TokenBudget { estimated_tokens: estimated, status: "warn" };
+    let total = input_total(usage);
+    if (total == null || total < 1) {
+        return null;
     };
-    TokenBudget { estimated_tokens: estimated, status: "ok" }
+    TokenSample {
+        provider: call.resolved_model.provider,
+        model: model,
+        body: request.body,
+        input_tokens: total,
+    }
+}
+
+// The samples of every model call in the events of a run, retries included.
+function samples_of(events: ai.events.Event[]) -> TokenSample[] {
+    let samples: TokenSample[] = [];
+    for (let event in events) {
+        if let call: ai.events.ModelCall = event {
+            let sample = sample_of(call);
+            if (sample != null) {
+                samples.push(sample);
+            };
+        };
+    }
+    samples
 }
 
 // Runs one text-producing LLM function and keeps the provider's token usage. A count that the provider did not report
 // is zero.
 function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -> Counted {
     let result = ai.Agent.new(client = client).run(spec);
-    let usage = TokenUsage { input_tokens: 0, output_tokens: 0 };
+    let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: samples_of(result.journal.entries()) };
     for (let entry in result.usage) {
         usage
             = add_usage(
@@ -271,6 +305,7 @@ function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -
                 TokenUsage {
                     input_tokens: entry.usage.input_tokens ?? 0,
                     output_tokens: entry.usage.output_tokens ?? 0,
+                    samples: [],
                 },
             );
     }
@@ -349,7 +384,7 @@ function describe_ebm(
     });
     let described: Counted[] = await baml.future.all(futures);
 
-    let usage = TokenUsage { input_tokens: 0, output_tokens: 0 };
+    let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: [] };
     let lines: string[] = [];
     let i = 0;
     while (i < described.length()) {
