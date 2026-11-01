@@ -1,0 +1,26 @@
+{
+  "default": {
+    "weights": {
+      "words": 4.1195141,
+      "bytes": 0.0,
+      "digits": 0.2923085
+    },
+    "relative_spread": 0.1416,
+    "samples": 100,
+    "update_allowed": true
+  },
+  "models": [
+    {
+      "provider": "openrouter",
+      "model": "openai/gpt-6-luna",
+      "weights": {
+        "words": 4.1195141,
+        "bytes": 0.0,
+        "digits": 0.2923085
+      },
+      "relative_spread": 0.1416,
+      "samples": 100,
+      "update_allowed": true
+    }
+  ]
+}
