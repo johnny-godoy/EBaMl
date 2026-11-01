@@ -12,6 +12,8 @@ file only when learning is on. A model that the table marks as final (``update_a
 """
 
 import functools
+
+# nosemgrep: python37-compatibility-importlib2 -- Python 3.7 ended on 2023-06-27, and the project needs 3.13
 import importlib.resources
 import os
 import threading
