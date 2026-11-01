@@ -253,15 +253,18 @@ them too.
 - **Concurrency:** `describe_ebm` describes features concurrently, at most `max_concurrency` at a time (default 8).
   Free models are rate limited, so lower it (`describe_ebm(ebm, max_concurrency=2)`) if you see rate-limit errors.
 - **Token budget:** there is no tokenizer before a call, so the check estimates the tokens of a graph text from its
-  words and its digits. The default weights are 4.12 tokens for each word and 0.29 for each digit. They come from 100
+  words and its digits. The default weights are 4.13 tokens for each word and 0.27 for each digit. They come from 100
   graph texts that one current model counted. The estimate has a margin above the fit, so it is more often too high
   than too low. Other models count other numbers of tokens, so the estimate is a guide. Going a little over
   `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes `to_text` simplify the graph, or
   raise if it cannot. The provider's own error is the real limit. The functions in `ebaml.llm.descriptors` pass the
   check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass `check_budget`, for example
   `ebaml.graphs.token_budget.check_token_budget`. That check needs no LLM and no key. To choose the weights, pass a
-  `TokenEstimator` instead. With `TokenEstimator(learning=True)`, `observe` moves the weights toward the token counts of
-  real requests. Learning is off by default, because learned weights change the graph text from one call to the next.
+  `TokenEstimator` instead. To use the weights of each model and to learn them, pass
+  `GraphOptions(token_learner=TokenLearner(learning=True))`. The learner starts each model at the weights of a table
+  that ships with the package. Then it moves them toward the tokens of the graphs in your real calls. The weights
+  persist in `~/.cache/ebaml/token_weights.json`. Learning is off by default, because learned weights change the graph
+  text from one call to the next. `scripts/fit_token_weights.py` adds the weights of a new model to the table.
 
 <!-- --8<-- [end:behaviour] -->
 ## Notebook

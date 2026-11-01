@@ -38,6 +38,10 @@
 
 ::: ebaml.graphs.token_weights
 
+::: ebaml.graphs.request_text
+
+::: ebaml.llm.token_learning
+
 ## Text of the graphs
 
 ::: ebaml.graphs.graph_text
