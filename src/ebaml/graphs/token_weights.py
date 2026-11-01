@@ -8,12 +8,13 @@ above. The module needs no tokenizer, no file and no ``baml_sdk``.
 
 import itertools
 import math
-from collections.abc import Sequence
-from typing import Self
+from collections.abc import Mapping, Sequence
+from typing import Self, TypedDict
 
 import attrs
 import numpy as np
 import numpy.typing as npt
+import orjson
 
 from ebaml.core.exceptions import TokenFitError
 
@@ -222,3 +223,233 @@ def relative_spread(weights: TokenWeights, samples: Sequence[TokenSample]) -> fl
         return 0.0
     errors = [(weights.estimate(sample.features) - sample.tokens) / sample.tokens for sample in samples]
     return math.sqrt(sum(error**2 for error in errors) / len(errors))
+
+
+@attrs.frozen
+class ModelKey:
+    """The provider and the name of the model that answered a request.
+
+    Attributes
+    ----------
+    provider: str
+        The provider that the BAML runtime resolved, for example ``"openrouter"``.
+    model: str
+        The model at the provider, for example ``"openai/gpt-6-luna"``.
+
+    """
+
+    provider: str
+    model: str
+
+
+@attrs.frozen
+class WeightsEntry:
+    """The weights of one model, and what they are worth.
+
+    Attributes
+    ----------
+    weights: TokenWeights
+        The weights that fit the model.
+    relative_spread: float
+        The root mean square of the relative error of ``weights`` on the samples that fitted them.
+    samples: int
+        The number of samples that fitted ``weights``.
+    update_allowed: bool
+        Whether a learning estimator may change ``weights``. A model whose entry is final sets it to ``False``.
+
+    """
+
+    weights: TokenWeights
+    relative_spread: float = attrs.field(validator=attrs.validators.ge(0.0))
+    samples: int = attrs.field(validator=attrs.validators.ge(0))
+    update_allowed: bool = True
+
+
+class _WeightsRecord(TypedDict):
+    """The JSON object of the weights of an entry."""
+
+    words: float
+    bytes: float
+    digits: float
+
+
+class _EntryRecord(TypedDict):
+    """The JSON object of an entry."""
+
+    weights: _WeightsRecord
+    relative_spread: float
+    samples: int
+    update_allowed: bool
+
+
+class _ModelRecord(_EntryRecord):
+    """The JSON object of the entry of one model."""
+
+    provider: str
+    model: str
+
+
+def _read_entry(record: _EntryRecord) -> WeightsEntry:
+    """Read one entry of the JSON table.
+
+    Parameters
+    ----------
+    record: _EntryRecord
+        The JSON object of the entry.
+
+    Returns
+    -------
+    WeightsEntry
+        The entry.
+
+    """
+    weights = record["weights"]
+    return WeightsEntry(
+        weights=TokenWeights(words=weights["words"], bytes=weights["bytes"], digits=weights["digits"]),
+        relative_spread=record["relative_spread"],
+        samples=record["samples"],
+        update_allowed=record["update_allowed"],
+    )
+
+
+def _write_model(key: ModelKey, entry: WeightsEntry) -> _ModelRecord:
+    """Convert the entry of one model to its JSON object.
+
+    Parameters
+    ----------
+    key: ModelKey
+        The model.
+    entry: WeightsEntry
+        Its entry.
+
+    Returns
+    -------
+    _ModelRecord
+        The JSON object.
+
+    """
+    return {
+        "provider": key.provider,
+        "model": key.model,
+        "weights": {"words": entry.weights.words, "bytes": entry.weights.bytes, "digits": entry.weights.digits},
+        "relative_spread": entry.relative_spread,
+        "samples": entry.samples,
+        "update_allowed": entry.update_allowed,
+    }
+
+
+def _write_entry(entry: WeightsEntry) -> _EntryRecord:
+    """Convert an entry to the JSON object that ``_read_entry`` reads.
+
+    Parameters
+    ----------
+    entry: WeightsEntry
+        The entry.
+
+    Returns
+    -------
+    _EntryRecord
+        The JSON object.
+
+    """
+    return {
+        "weights": {"words": entry.weights.words, "bytes": entry.weights.bytes, "digits": entry.weights.digits},
+        "relative_spread": entry.relative_spread,
+        "samples": entry.samples,
+        "update_allowed": entry.update_allowed,
+    }
+
+
+@attrs.frozen
+class WeightsTable:
+    """The default weights and the weights of the models that were fitted.
+
+    Attributes
+    ----------
+    default: WeightsEntry
+        The entry for a model that the table does not list.
+    models: Mapping[ModelKey, WeightsEntry]
+        The entry of each model that was fitted.
+
+    """
+
+    default: WeightsEntry
+    models: Mapping[ModelKey, WeightsEntry] = attrs.field(factory=dict)
+
+    def entry_for(self, key: ModelKey | None) -> WeightsEntry:
+        """Look up the entry of a model.
+
+        Parameters
+        ----------
+        key: ModelKey | None
+            The model, or ``None`` when it is not known.
+
+        Returns
+        -------
+        WeightsEntry
+            The entry of the model, or ``default`` when the table does not list it.
+
+        """
+        return self.models.get(key, self.default) if key is not None else self.default
+
+    def with_entry(self, key: ModelKey, entry: WeightsEntry) -> Self:
+        """Add the entry of a model, or replace the one that the table has.
+
+        Parameters
+        ----------
+        key: ModelKey
+            The model.
+        entry: WeightsEntry
+            Its entry.
+
+        Returns
+        -------
+        WeightsTable
+            A new table. The table itself does not change.
+
+        """
+        return attrs.evolve(self, models={**self.models, key: entry})
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> Self:
+        """Read a table from its JSON text.
+
+        Parameters
+        ----------
+        data: bytes
+            The JSON text that ``to_bytes`` writes.
+
+        Returns
+        -------
+        WeightsTable
+            The table.
+
+        Raises
+        ------
+        TokenFitError
+            If the text is not JSON, or lacks a field of the table.
+
+        """
+        try:
+            document = orjson.loads(data)
+            models = {
+                ModelKey(record["provider"], record["model"]): _read_entry(record) for record in document["models"]
+            }
+            return cls(default=_read_entry(document["default"]), models=models)
+        except (orjson.JSONDecodeError, KeyError, TypeError) as error:
+            msg = f"The table of token weights cannot be read: {error!r}."
+            raise TokenFitError(msg) from error
+
+    def to_bytes(self) -> bytes:
+        """Write the table as JSON text, with the models in order, so that the text is the same for the same table.
+
+        Returns
+        -------
+        bytes
+            The JSON text.
+
+        """
+        ordered = sorted(self.models.items(), key=lambda item: (item[0].provider, item[0].model))
+        models = list(itertools.starmap(_write_model, ordered))
+        document = {"default": _write_entry(self.default), "models": models}
+        return orjson.dumps(document, option=orjson.OPT_INDENT_2 | orjson.OPT_APPEND_NEWLINE)
