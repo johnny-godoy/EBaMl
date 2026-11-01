@@ -119,7 +119,8 @@ class Audience(abc.ABC):
 
     Examples
     --------
-    A reader that wants every explanation in French, with no model numbers:
+    To change only the language of the explanation, pass ``language=`` to ``explain_instance``. An audience is for a
+    reader with its own rules. This one wants every explanation in French, with no model numbers:
 
     ```python
     from ebaml.local.audience import Layperson

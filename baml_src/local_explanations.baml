@@ -31,6 +31,7 @@ function local_user_msg(
     facts: string,
     audience_guidance: string,
     dataset_description: string,
+    language: string = "English",
 ) -> string {
     let msg = `
         <global_explanation>
@@ -54,6 +55,10 @@ function local_user_msg(
             <audience>
             ${audience_guidance}
             </audience>
+
+            <language>
+            Write the whole answer in ${language}, because the reader reads ${language}. Keep every number exactly as the facts give it, and translate the names of inputs and categories only where the reader needs them.
+            </language>
 
             <question>
             ${question}
@@ -98,13 +103,14 @@ function LocalCounterfactual(
     audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    language: string = "English",
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, counterfactual_question(num_sentences), facts.counterfactual, audience_guidance, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, counterfactual_question(num_sentences), facts.counterfactual, audience_guidance, opts.dataset_description, language = language)}
     `
 }
 
@@ -114,13 +120,14 @@ function LocalSufficientReason(
     audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    language: string = "English",
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, sufficient_reason_question(num_sentences), facts.sufficient_reason, audience_guidance, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, sufficient_reason_question(num_sentences), facts.sufficient_reason, audience_guidance, opts.dataset_description, language = language)}
     `
 }
 
@@ -130,13 +137,14 @@ function LocalCompletions(
     audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    language: string = "English",
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${local_system_msg(opts.expert_description)}
         ${role("user")}
-        ${local_user_msg(global_explanation, facts.prediction, completions_question(num_sentences), facts.completions, audience_guidance, opts.dataset_description)}
+        ${local_user_msg(global_explanation, facts.prediction, completions_question(num_sentences), facts.completions, audience_guidance, opts.dataset_description, language = language)}
     `
 }
 
@@ -147,25 +155,26 @@ function explain_local(
     audience_guidance: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    language: string = "English",
     client: ai.Client? = null,
     model: ModelSpec? = null,
 ) -> LocalExplanationText {
     let selected = select_client(client, model, short_defaults());
     let counterfactual = spawn {
         run_counted(
-            LocalCounterfactual@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
+            LocalCounterfactual@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
             client = selected,
         )
     };
     let sufficient = spawn {
         run_counted(
-            LocalSufficientReason@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
+            LocalSufficientReason@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
             client = selected,
         )
     };
     let completions = spawn {
         run_counted(
-            LocalCompletions@spec(global_explanation, facts, audience_guidance, num_sentences, opts),
+            LocalCompletions@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
             client = selected,
         )
     };

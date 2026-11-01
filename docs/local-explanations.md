@@ -144,6 +144,19 @@ pass its name as a string:
 Removing the numbers *before* the prompt is deliberate: an instruction not to repeat a number is weaker than not
 having the number. The name is validated, so `audience="child"` raises `InvalidOptionError` before any LLM call.
 
+### Language
+
+The audience decides who reads the explanation. The `language` argument decides in which language the reader gets it.
+Pass any language name that the LLM knows. The facts, the numbers and the audience rules stay the same, so you can
+combine every audience with every language:
+
+```python
+explanation = explain_instance(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French")
+```
+
+The quality of the text depends on how well the LLM writes the language. To change the language and the rules of the
+reader together, write your own audience (below).
+
 ### Your own audience
 
 An audience has two jobs, and the base class `Audience` has one method for each part of them:
@@ -238,14 +251,15 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 
 ## Options
 
-The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, local, prompt)`.
-The arguments `local` and `prompt` are keyword-only. `local` is a `LocalOptions` from `ebaml.local.facts`. `prompt` is a
+The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, language, local, prompt)`.
+The arguments `language`, `local`, `prompt` and `model` are keyword-only. `local` is a `LocalOptions` from `ebaml.local.facts`. `prompt` is a
 `PromptOptions` from `ebaml.llm.options`. The table shows where each setting goes:
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
 | `audience` | `"layperson"` | An `Audience`, or the name `"layperson"` or `"data_scientist"`. See [Audience](#audience). |
 | `num_sentences` | `5` | The most sentences in each of the three explanations. |
+| `language` | `"English"` | The language of the explanations. See [Language](#language). |
 | `local.confidence_level` | `0.95` | See [Confidence](#confidence). In `[0, 1)`. |
 | `local.min_support` | `0.01` | Share of the training data a value needs to be offered as an alternative. A category needs this share; for a continuous feature the lowest and highest `min_support` of the data are trimmed. It keeps freak values with extreme scores out of the counterfactual and out of the worst case of the sufficient reason. `0` allows every value. |
 | `local.max_steps` | `5` | The most features revealed one by one in `completions`. |

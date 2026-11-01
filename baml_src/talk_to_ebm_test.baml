@@ -167,6 +167,18 @@ test "local_user_msg prepends the global explanation and puts in the guidance of
     assert.is_true(described.includes("A bank dataset"))
 }
 
+test "local_user_msg tells the model to write in the language" {
+    assert.is_true(
+        local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "").includes(
+            "Write the whole answer in English",
+        ),
+    );
+    assert.is_true(
+        local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "", language = "German")
+            .includes("Write the whole answer in German"),
+    )
+}
+
 test "explain_local makes three calls and sums usage" {
     let scripted = ScriptedClient { calls: 0 };
     let facts = LocalFactTexts {
