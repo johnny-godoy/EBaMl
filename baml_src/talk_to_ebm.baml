@@ -217,9 +217,9 @@ function EbmSummaryShorten(
 
 // Token accounting.
 
-// One request that the provider counted. Python counts the words, bytes and digits of the messages in `body` and fits
-// the weights of its token estimate to `input_tokens`. The sample holds the request body only: the headers carry the
-// API key, so they never leave the runtime.
+// One request that the provider counted. Python reads the text of the messages in `body`, takes the prose away and
+// fits the weights of its token estimate to the tokens of the graph that is left. The sample holds the request body
+// only: the headers carry the API key, so they never leave the runtime.
 class TokenSample {
     provider: string,
     model: string,
@@ -316,8 +316,8 @@ function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -
 
 // Sends the first request of the graph description chain and returns the token samples of the requests. The sample
 // holds the tokens of the input, so a short reply limit in `model` (`max_output_tokens`) keeps the cost low. A reply
-// that the limit cuts off raises, and the samples of the requests that were sent still come back. The scripts use the
-// function to fit the weights of the token estimate of a model.
+// that the limit cuts off is not an error here, and the samples of the requests that were sent still come back. Any
+// other error propagates. The scripts use the function to fit the weights of the token estimate of a model.
 function sample_graph_tokens(
     graph: string,
     opts: GraphPromptOptions,
@@ -334,11 +334,12 @@ function sample_graph_tokens(
         };
     });
     //# A reply that hits the limit raises. The input counts of the request are what this function returns.
+    //# Any other error (a rate limit, a refused key) is not a cut-off reply, so it propagates.
     let finished = {
         agent.run(GraphFirstPass@spec(graph, opts));
         true
-    } catch_all (e) {
-        _ => false
+    } catch (e) {
+        ai.errors.FinishReasonError => false
     };
     samples
 }
