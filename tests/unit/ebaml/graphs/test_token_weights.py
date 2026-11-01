@@ -41,10 +41,10 @@ def test_weights_estimate_gives_each_count_its_own_weight() -> None:
     assert weights.estimate(TextFeatures(words=10, bytes=40, digits=5)) == pytest.approx(55.0)
 
 
-@pytest.mark.parametrize("bad", [-0.1, math.inf, math.nan])
+@pytest.mark.parametrize("invalid_value", [-0.1, math.inf, math.nan])
 @pytest.mark.parametrize("field", ["words", "bytes", "digits"])
-def test_weights_reject_a_negative_or_non_finite_value(field: str, bad: float) -> None:
-    values = {"words": 1.0, "bytes": 1.0, "digits": 1.0, field: bad}
+def test_weights_reject_a_negative_or_non_finite_value(field: str, invalid_value: float) -> None:
+    values = {"words": 1.0, "bytes": 1.0, "digits": 1.0, field: invalid_value}
     with pytest.raises(ValueError, match=field):
         TokenWeights(**values)
 
@@ -64,7 +64,7 @@ def _sample(words: int, bytes_: int, digits: int, tokens: float) -> TokenSample:
 
 def test_fit_recovers_the_exact_weights_of_clean_data() -> None:
     rows = [(10, 70, 40), (30, 200, 90), (5, 33, 12), (50, 340, 200), (20, 130, 55)]
-    samples = [_sample(w, b, d, 4 * w + 1 * b + 2 * d) for w, b, d in rows]
+    samples = [_sample(words, bytes_, digits, 4 * words + 1 * bytes_ + 2 * digits) for words, bytes_, digits in rows]
     fitted = fit_weights(samples)
     assert fitted.as_vector() == pytest.approx((4.0, 1.0, 2.0), abs=1e-6)
 
@@ -72,7 +72,9 @@ def test_fit_recovers_the_exact_weights_of_clean_data() -> None:
 def test_fit_sets_a_weight_to_zero_where_least_squares_would_make_it_negative() -> None:
     # the true bytes weight is -0.2, which a negative weight would fit exactly. The fit must keep it at zero instead.
     rows = [(10, 70, 40), (30, 200, 90), (5, 33, 12), (50, 340, 200), (20, 130, 55), (40, 260, 150)]
-    samples = [_sample(w, b, d, 5 * w - 0.2 * b + 0.5 * d) for w, b, d in rows]
+    samples = [
+        _sample(words, bytes_, digits, 5 * words - 0.2 * bytes_ + 0.5 * digits) for words, bytes_, digits in rows
+    ]
     fitted = fit_weights(samples)
     assert fitted.bytes == pytest.approx(0.0, abs=1e-12)
     assert fitted.words > 0
@@ -80,7 +82,7 @@ def test_fit_sets_a_weight_to_zero_where_least_squares_would_make_it_negative() 
 
 
 def test_fit_with_one_useful_feature_uses_only_that_feature() -> None:
-    samples = [_sample(w, 0, 0, 3 * w) for w in (1, 5, 20, 80)]
+    samples = [_sample(words, 0, 0, 3 * words) for words in (1, 5, 20, 80)]
     assert fit_weights(samples).words == pytest.approx(3.0, abs=1e-6)
 
 
@@ -102,7 +104,9 @@ def test_fit_rejects_no_samples() -> None:
     ),
 )
 def test_fit_never_gives_a_negative_weight(rows: list[tuple[int, int, int, int]]) -> None:
-    fitted = fit_weights([TokenSample(TextFeatures(w, b, d), t) for w, b, d, t in rows])
+    fitted = fit_weights([
+        TokenSample(TextFeatures(words, bytes_, digits), tokens) for words, bytes_, digits, tokens in rows
+    ])
     assert min(fitted.as_vector()) >= 0.0
 
 
@@ -175,14 +179,14 @@ def test_an_entry_takes_four_bytes_of_prose_for_each_token_unless_told_otherwise
     assert _entry().prose_bytes_per_token == pytest.approx(4.0)
 
 
-@pytest.mark.parametrize("bad", [0.0, -1.0])
-def test_an_entry_rejects_a_density_of_prose_that_is_not_above_zero(bad: float) -> None:
+@pytest.mark.parametrize("invalid_density", [0.0, -1.0])
+def test_an_entry_rejects_a_density_of_prose_that_is_not_above_zero(invalid_density: float) -> None:
     with pytest.raises(ValueError, match="prose_bytes_per_token"):
         WeightsEntry(
             TokenWeights(words=1.0, bytes=0.0, digits=0.0),
             relative_spread=0.1,
             samples=1,
-            prose_bytes_per_token=bad,
+            prose_bytes_per_token=invalid_density,
         )
 
 

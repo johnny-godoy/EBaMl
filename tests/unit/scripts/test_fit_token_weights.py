@@ -78,20 +78,20 @@ def records(count: int = 60, key: ModelKey = LUNA) -> list[script.GraphRecord]:
 
 
 def small_ebm() -> ExplainableBoostingClassifier:
-    rng = np.random.default_rng(0)
-    x = rng.normal(size=(200, 2))
-    y = (x[:, 0] + rng.normal(scale=0.5, size=200) > 0).astype(int)
+    random_generator = np.random.default_rng(0)
+    features = random_generator.normal(size=(200, 2))
+    labels = (features[:, 0] + random_generator.normal(scale=0.5, size=200) > 0).astype(int)
     return ExplainableBoostingClassifier(
         feature_names=["a", "b"],
         interactions=0,
         max_rounds=3,
         random_state=0,
-    ).fit(x, y)
+    ).fit(features, labels)
 
 
 def continuous_graph(bins: int) -> EBMGraph:
-    x_vals = [(float(i), float(i + 1)) for i in range(bins)]
-    return EBMGraph("x", "continuous", x_vals, [i * 0.001 for i in range(bins)], [0.01] * bins)
+    x_vals = [(float(bin_index), float(bin_index + 1)) for bin_index in range(bins)]
+    return EBMGraph("x", "continuous", x_vals, [bin_index * 0.001 for bin_index in range(bins)], [0.01] * bins)
 
 
 def test_a_graph_record_counts_the_tokens_of_the_graph_without_the_template() -> None:
@@ -108,7 +108,13 @@ def test_graph_texts_make_distinct_texts_of_several_sizes() -> None:
 
 def test_graph_texts_skip_a_budget_that_a_graph_cannot_fit() -> None:
     # a categorical graph cannot be simplified, so a budget of 50 tokens is too small for 300 categories
-    graph = EBMGraph("c", "nominal", [f"cat{i}" for i in range(300)], [0.1] * 300, [0.1] * 300)
+    graph = EBMGraph(
+        "c",
+        "nominal",
+        [f"cat{category_index}" for category_index in range(300)],
+        [0.1] * 300,
+        [0.1] * 300,
+    )
     result = script.graph_texts([graph], budgets=(50, 100000))
     assert result
     assert result == script.graph_texts([graph], budgets=(100000,))
@@ -249,9 +255,9 @@ def test_fit_model_recovers_the_weights_and_beats_the_rule_of_three_characters()
     assert report.entry.samples == 60
     assert report.entry.prose_bytes_per_token == pytest.approx(880 / 200)
     assert report.entry.update_allowed is True
-    assert report.fit.mape < 2.0
-    assert report.rule.mape > 10 * report.fit.mape
-    assert report.entry.relative_spread == pytest.approx(report.fit.mape / 100, abs=0.05)
+    assert report.fit_error.mape < 2.0
+    assert report.rule_error.mape > 10 * report.fit_error.mape
+    assert report.entry.relative_spread == pytest.approx(report.fit_error.mape / 100, abs=0.05)
 
 
 def test_fit_model_marks_a_final_entry() -> None:
@@ -259,8 +265,8 @@ def test_fit_model_marks_a_final_entry() -> None:
 
 
 def test_fit_model_leaves_out_a_record_whose_graph_has_no_tokens() -> None:
-    bad = script.GraphRecord(LUNA.provider, LUNA.model, "g", BASELINE, len(PROSE), BASELINE)
-    assert script.fit_model([*records(), bad]).entry.samples == 60
+    record_without_tokens = script.GraphRecord(LUNA.provider, LUNA.model, "g", BASELINE, len(PROSE), BASELINE)
+    assert script.fit_model([*records(), record_without_tokens]).entry.samples == 60
 
 
 def test_fit_model_rejects_records_of_two_models() -> None:

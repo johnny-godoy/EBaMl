@@ -172,7 +172,8 @@ def fit_weights(samples: Sequence[TokenSample]) -> TokenWeights:
     Examples
     --------
     >>> samples = [
-    ...     TokenSample(TextFeatures(words=w, bytes=0, digits=d), 2 * w + d) for w, d in [(1, 5), (4, 1), (3, 3)]
+    ...     TokenSample(TextFeatures(words=words, bytes=0, digits=digits), 2 * words + digits)
+    ...     for words, digits in [(1, 5), (4, 1), (3, 3)]
     ... ]
     >>> [round(weight, 6) for weight in fit_weights(samples).as_vector()]
     [2.0, 0.0, 1.0]
@@ -181,22 +182,26 @@ def fit_weights(samples: Sequence[TokenSample]) -> TokenWeights:
     if not samples:
         msg = "Fitting the token weights needs at least one sample."
         raise TokenFitError(msg)
-    design = np.array([sample.features.as_vector() for sample in samples])
-    target = np.array([float(sample.tokens) for sample in samples])
-    best_error = float(np.sum(target**2))
-    best = np.zeros(_FEATURE_COUNT)
-    for size in range(1, _FEATURE_COUNT + 1):
-        for support in itertools.combinations(range(_FEATURE_COUNT), size):
-            columns = list(support)
-            solution: npt.NDArray[np.float64] = np.linalg.lstsq(design[:, columns], target, rcond=None)[0]
-            if np.any(solution < 0):
+    count_matrix = np.array([sample.features.as_vector() for sample in samples])
+    token_counts = np.array([float(sample.tokens) for sample in samples])
+    best_squared_error = float(np.sum(token_counts**2))
+    best_weights = np.zeros(_FEATURE_COUNT)
+    for support_size in range(1, _FEATURE_COUNT + 1):
+        for support in itertools.combinations(range(_FEATURE_COUNT), support_size):
+            support_columns = list(support)
+            support_weights: npt.NDArray[np.float64] = np.linalg.lstsq(
+                count_matrix[:, support_columns],
+                token_counts,
+                rcond=None,
+            )[0]
+            if np.any(support_weights < 0):
                 continue
-            error = float(np.sum((design[:, columns] @ solution - target) ** 2))
-            if error < best_error:
-                best_error = error
-                best = np.zeros(_FEATURE_COUNT)
-                best[columns] = solution
-    return TokenWeights(words=float(best[0]), bytes=float(best[1]), digits=float(best[2]))
+            squared_error = float(np.sum((count_matrix[:, support_columns] @ support_weights - token_counts) ** 2))
+            if squared_error < best_squared_error:
+                best_squared_error = squared_error
+                best_weights = np.zeros(_FEATURE_COUNT)
+                best_weights[support_columns] = support_weights
+    return TokenWeights(words=float(best_weights[0]), bytes=float(best_weights[1]), digits=float(best_weights[2]))
 
 
 def relative_spread(weights: TokenWeights, samples: Sequence[TokenSample]) -> float:
@@ -458,7 +463,10 @@ class WeightsTable:
             The JSON text.
 
         """
-        ordered = sorted(self.models.items(), key=lambda item: (item[0].provider, item[0].model))
+        ordered = sorted(
+            self.models.items(),
+            key=lambda model_and_entry: (model_and_entry[0].provider, model_and_entry[0].model),
+        )
         models = list(itertools.starmap(_write_model, ordered))
         document = {"default": _write_entry(self.default), "models": models}
         return orjson.dumps(document, option=orjson.OPT_INDENT_2 | orjson.OPT_APPEND_NEWLINE)

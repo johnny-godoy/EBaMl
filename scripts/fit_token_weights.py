@@ -5,8 +5,9 @@ requests, so it costs money and needs a key. The second sends nothing.
 
 1. ``collect`` sends one request for each graph text, and one for an empty graph. The empty graph measures the tokens
    of the prompt template, which the fit takes away from every request. The result is a JSON lines file.
-2. ``fit`` reads that file, fits ``tokens = words * a + bytes * b + digits * c`` with weights of zero or above, prints
-   the error on held-out samples, and writes the entry of the model into ``src/ebaml/llm/token_weights.json``.
+2. ``fit`` reads that file and fits ``tokens = words * word_weight + bytes * byte_weight + digits * digit_weight``
+   with weights of zero or above. It prints the error on held-out samples, and writes the entry of the model into
+   ``src/ebaml/llm/token_weights.json``.
    With ``--set-default`` it also makes the entry the default, in the table and in ``DEFAULT_WEIGHTS`` of
    ``src/ebaml/graphs/token_budget.py``.
 
@@ -98,7 +99,7 @@ class GraphRecord:
         The input tokens of the request with an empty graph, which are the tokens of the prompt template.
     baseline_bytes: int
         The bytes of the text of the messages of that request. The ratio to ``baseline`` is the bytes of prose that
-        the model counts as one token.
+        the model token_counts as one token.
     total: int
         The input tokens of the request with this graph.
 
@@ -124,7 +125,7 @@ class GraphRecord:
 
 @attrs.frozen
 class ErrorStats:
-    """How far estimates are from the real counts, on samples that the fit did not see.
+    """How far estimates are from the real token_counts, on samples that the fit did not see.
 
     Attributes
     ----------
@@ -152,17 +153,17 @@ class FitReport:
         The model.
     entry: WeightsEntry
         The weights, their spread and the number of samples.
-    fit: ErrorStats
+    fit_error: ErrorStats
         The held-out error of the fit.
-    rule: ErrorStats
+    rule_error: ErrorStats
         The held-out error of the rule of 3 characters per token on the same samples.
 
     """
 
     key: ModelKey
     entry: WeightsEntry
-    fit: ErrorStats
-    rule: ErrorStats
+    fit_error: ErrorStats
+    rule_error: ErrorStats
 
 
 def build_ebms(max_rounds: int = 60) -> list[ExplainableBoostingModel]:
@@ -368,14 +369,14 @@ def read_records(path: Path, key: ModelKey) -> list[GraphRecord]:
     return [record for record in records if record.key == key]
 
 
-def _stats(estimates: npt.NDArray[np.float64], counts: npt.NDArray[np.float64]) -> ErrorStats:
+def _stats(estimates: npt.NDArray[np.float64], token_counts: npt.NDArray[np.float64]) -> ErrorStats:
     """Measure the relative error of estimates.
 
     Parameters
     ----------
     estimates: npt.NDArray[np.float64]
         The estimated tokens.
-    counts: npt.NDArray[np.float64]
+    token_counts: npt.NDArray[np.float64]
         The real tokens.
 
     Returns
@@ -384,11 +385,11 @@ def _stats(estimates: npt.NDArray[np.float64], counts: npt.NDArray[np.float64]) 
         The error in percent.
 
     """
-    error = (estimates - counts) / counts
+    error = (estimates - token_counts) / token_counts
     return ErrorStats(
         mape=float(np.mean(np.abs(error)) * 100),
         bias=float(np.mean(error) * 100),
-        under=float(np.mean(estimates < counts) * 100),
+        under=float(np.mean(estimates < token_counts) * 100),
     )
 
 
@@ -443,18 +444,18 @@ def fit_model(records: Sequence[GraphRecord], *, final: bool = False) -> FitRepo
         msg = "The records have no measure of the prompt template, so the bytes for each token of prose are unknown."
         raise TokenFitError(msg)
     samples = [TokenSample(TextFeatures.of(record.graph), record.tokens) for record in usable]
-    counts = np.array([float(sample.tokens) for sample in samples])
-    rule = np.array([math.ceil(len(record.graph) / _CHARS_PER_TOKEN) for record in usable], dtype=float)
+    token_counts = np.array([float(sample.tokens) for sample in samples])
+    rule_estimates = np.array([math.ceil(len(record.graph) / _CHARS_PER_TOKEN) for record in usable], dtype=float)
     folds = np.array_split(np.random.default_rng(_SEED).permutation(len(samples)), _FOLDS)
-    fit_folds: list[ErrorStats] = []
-    rule_folds: list[ErrorStats] = []
+    fit_error_folds: list[ErrorStats] = []
+    rule_error_folds: list[ErrorStats] = []
     for held_out in folds:
         held_list: list[int] = held_out.tolist()
         held = set(held_list)
         weights = fit_weights([sample for index, sample in enumerate(samples) if index not in held])
         estimates = np.array([weights.estimate(samples[index].features) for index in held_list])
-        fit_folds.append(_stats(estimates, counts[held_out]))
-        rule_folds.append(_stats(rule[held_out], counts[held_out]))
+        fit_error_folds.append(_stats(estimates, token_counts[held_out]))
+        rule_error_folds.append(_stats(rule_estimates[held_out], token_counts[held_out]))
     weights = fit_weights(samples)
     entry = WeightsEntry(
         weights=weights,
@@ -463,7 +464,7 @@ def fit_model(records: Sequence[GraphRecord], *, final: bool = False) -> FitRepo
         update_allowed=not final,
         prose_bytes_per_token=usable[0].baseline_bytes / usable[0].baseline,
     )
-    return FitReport(usable[0].key, entry, _mean_stats(fit_folds), _mean_stats(rule_folds))
+    return FitReport(usable[0].key, entry, _mean_stats(fit_error_folds), _mean_stats(rule_error_folds))
 
 
 _WEIGHTS_PATTERN = re.compile(r"^DEFAULT_WEIGHTS: TokenWeights = TokenWeights\(.*\)$", re.MULTILINE)
@@ -503,6 +504,25 @@ def set_default_constants(source: str, entry: WeightsEntry) -> str:
     return _SPREAD_PATTERN.sub(spread, _WEIGHTS_PATTERN.sub(line, source, count=1), count=1)
 
 
+def _error_row(label: str, error: ErrorStats) -> str:
+    """Write one row of the table of held-out errors.
+
+    Parameters
+    ----------
+    label : str
+        The name of the predictor.
+    error : ErrorStats
+        Its held-out error.
+
+    Returns
+    -------
+    str
+        The row.
+
+    """
+    return f"  {label:<14s} {error.mape:7.1f} {error.bias:+7.1f} {error.under:7.0f}"
+
+
 def _format_report(report: FitReport) -> str:
     """Write the report of a fit as text.
 
@@ -525,8 +545,8 @@ def _format_report(report: FitReport) -> str:
             f"relative spread of the fit: {report.entry.relative_spread:.4f}",
             f"prose: {report.entry.prose_bytes_per_token:.2f} bytes for each token",
             "held-out error     mape%   bias%  under%",
-            f"  fit            {report.fit.mape:7.1f} {report.fit.bias:+7.1f} {report.fit.under:7.0f}",
-            f"  3 chars/token  {report.rule.mape:7.1f} {report.rule.bias:+7.1f} {report.rule.under:7.0f}",
+            _error_row("fit", report.fit_error),
+            _error_row("3 chars/token", report.rule_error),
         ],
     )
 

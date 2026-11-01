@@ -104,12 +104,12 @@ def test_observe_starts_at_the_prior_and_moves_the_weights_a_little_after_one_sa
 def test_many_consistent_samples_move_the_weights_to_the_true_slope() -> None:
     # a prior worth one sample leaves little bias after 400 samples. The default prior of 10 samples keeps more of it.
     estimator = TokenEstimator(weights=_ONE_PER_WORD, relative_spread=0.0, learning=True, prior_samples=1.0)
-    rng = np.random.default_rng(0)
+    random_generator = np.random.default_rng(0)
     for _ in range(400):
-        words = int(rng.integers(20, 800))
-        digits = int(rng.integers(0, 3000))
+        words = int(random_generator.integers(20, 800))
+        digits = int(random_generator.integers(0, 3000))
         # the bytes do not depend on the other two counts here, so that the true weights are the only fit
-        bytes_ = int(rng.integers(0, 5000))
+        bytes_ = int(random_generator.integers(0, 5000))
         estimator.observe(TokenSample(TextFeatures(words=words, bytes=bytes_, digits=digits), 2 * words + digits))
     weights = estimator.current_weights
     assert weights.as_vector() == pytest.approx((2.0, 0.0, 1.0), abs=0.1)
@@ -135,7 +135,10 @@ def test_concurrent_observations_lose_no_sample() -> None:
 
 def test_restore_gives_the_same_estimator_as_the_one_that_made_the_state() -> None:
     first = _plain(learning=True)
-    samples = [TokenSample(TextFeatures(words=w, bytes=7 * w, digits=w // 3), 3 * w) for w in (50, 120, 300)]
+    samples = [
+        TokenSample(TextFeatures(words=words, bytes=7 * words, digits=words // 3), 3 * words)
+        for words in (50, 120, 300)
+    ]
     for sample in samples[:2]:
         first.observe(sample)
     second = _plain(learning=True).restore(first.state())
@@ -165,8 +168,8 @@ def test_a_prior_of_no_samples_is_rejected() -> None:
 def test_to_text_simplifies_a_large_graph_with_an_estimator() -> None:
     # without a check, to_text ignores max_tokens; with this one it simplifies the graph until it fits
     bins = 200
-    x_vals = [(float(i), float(i + 1)) for i in range(bins)]
-    graph = EBMGraph("x", "continuous", x_vals, [i * 0.001 for i in range(bins)], [0.0] * bins)
+    x_vals = [(float(bin_index), float(bin_index + 1)) for bin_index in range(bins)]
+    graph = EBMGraph("x", "continuous", x_vals, [bin_index * 0.001 for bin_index in range(bins)], [0.0] * bins)
     long_text = graph.to_text()
     short_text = graph.to_text(max_tokens=1000, overbudget_percent=0, check_budget=TokenEstimator())
     assert estimate_tokens(short_text) <= 1000 < estimate_tokens(long_text)

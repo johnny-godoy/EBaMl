@@ -34,48 +34,53 @@ _FEATURE_COUNT: int = 3
 
 
 def _project_nonnegative(
-    coefficients: npt.NDArray[np.float64],
+    scaled_weights: npt.NDArray[np.float64],
     covariance: npt.NDArray[np.float64],
 ) -> npt.NDArray[np.float64]:
     """Find the nearest point with no negative entry, where distance follows the covariance of the estimate.
 
     A plain clip at zero would leave the other entries as they are, although a weight that is wrong at zero shifts the
-    best value of the weights that correlate with it. The projection sets the entries of an active set to zero and moves
-    the others by the covariance between them. With three entries it tries every active set and keeps the candidate
+    best value of the weights that correlate with it. The projection sets the entries of a chosen group to zero and
+    moves the others by the covariance between them. With three entries it tries every group and keeps the candidate
     with the shortest distance. No proof backs that this is the nearest point.
 
     Parameters
     ----------
-    coefficients: npt.NDArray[np.float64]
-        The unconstrained coefficients.
+    scaled_weights: npt.NDArray[np.float64]
+        The weights of the estimate times the typical scale of their counts, before the projection.
     covariance: npt.NDArray[np.float64]
         The covariance matrix of the least squares. It must be positive definite.
 
     Returns
     -------
     npt.NDArray[np.float64]
-        The coefficients with no negative entry that are nearest to ``coefficients``.
+        The scaled weights with no negative entry that are nearest to ``scaled_weights``.
 
     """
-    if np.all(coefficients >= 0):
-        return coefficients
-    best = np.zeros(_FEATURE_COUNT)
-    best_cost = math.inf
-    for size in range(1, _FEATURE_COUNT + 1):
-        for active_set in itertools.combinations(range(_FEATURE_COUNT), size):
-            active = list(active_set)
-            free = [index for index in range(_FEATURE_COUNT) if index not in active]
-            inverse_active = np.linalg.inv(covariance[np.ix_(active, active)])
-            candidate = np.zeros(_FEATURE_COUNT)
-            candidate[free] = (
-                coefficients[free] - covariance[np.ix_(free, active)] @ inverse_active @ coefficients[active]
+    if np.all(scaled_weights >= 0):
+        return scaled_weights
+    nearest_weights = np.zeros(_FEATURE_COUNT)
+    shortest_distance = math.inf
+    for zeroed_count in range(1, _FEATURE_COUNT + 1):
+        for zeroed_set in itertools.combinations(range(_FEATURE_COUNT), zeroed_count):
+            zeroed_indices = list(zeroed_set)
+            free_indices = [index for index in range(_FEATURE_COUNT) if index not in zeroed_indices]
+            inverse_zeroed_covariance = np.linalg.inv(covariance[np.ix_(zeroed_indices, zeroed_indices)])
+            candidate_weights = np.zeros(_FEATURE_COUNT)
+            candidate_weights[free_indices] = (
+                scaled_weights[free_indices]
+                - covariance[np.ix_(free_indices, zeroed_indices)]
+                @ inverse_zeroed_covariance
+                @ scaled_weights[zeroed_indices]
             )
-            if np.any(candidate < 0):
+            if np.any(candidate_weights < 0):
                 continue
-            cost = float(coefficients[active] @ inverse_active @ coefficients[active])
-            if cost < best_cost:
-                best, best_cost = candidate, cost
-    return best
+            distance = float(
+                scaled_weights[zeroed_indices] @ inverse_zeroed_covariance @ scaled_weights[zeroed_indices],
+            )
+            if distance < shortest_distance:
+                nearest_weights, shortest_distance = candidate_weights, distance
+    return nearest_weights
 
 
 @attrs.frozen
@@ -266,16 +271,16 @@ class TokenEstimator:
         """
         if not self.learning:
             return False
-        scaled = np.array(sample.features.as_vector()) / _FEATURE_SCALE
+        scaled_counts = np.array(sample.features.as_vector()) / _FEATURE_SCALE
         with self._lock:
-            coefficients = np.array(self._current.as_vector()) * _FEATURE_SCALE
-            gain_numerator = self._covariance @ scaled
-            gain = gain_numerator / (1.0 + scaled @ gain_numerator)
-            coefficients += gain * (sample.tokens - coefficients @ scaled)
-            covariance = self._covariance - np.outer(gain, gain_numerator)
-            self._covariance = (covariance + covariance.T) / 2
-            coefficients = _project_nonnegative(coefficients, self._covariance)
-            self._current = TokenWeights(*(coefficients / _FEATURE_SCALE).tolist())
+            scaled_weights = np.array(self._current.as_vector()) * _FEATURE_SCALE
+            covariance_times_counts = self._covariance @ scaled_counts
+            weight_correction_per_error = covariance_times_counts / (1.0 + scaled_counts @ covariance_times_counts)
+            scaled_weights += weight_correction_per_error * (sample.tokens - scaled_weights @ scaled_counts)
+            shrunk_covariance = self._covariance - np.outer(weight_correction_per_error, covariance_times_counts)
+            self._covariance = (shrunk_covariance + shrunk_covariance.T) / 2
+            scaled_weights = _project_nonnegative(scaled_weights, self._covariance)
+            self._current = TokenWeights(*(scaled_weights / _FEATURE_SCALE).tolist())
             self._samples_seen += 1
         return True
 
