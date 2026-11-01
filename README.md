@@ -213,6 +213,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |
 | `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
 | `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
+| `TokenFitError` | yes | The token weights cannot be fitted from an empty list of samples, or a weight is negative or not finite. |
 | `SDKUnavailableError` | no | `baml_sdk` is missing, and `ebaml` cannot run `baml generate`. The error also derives from `ImportError`. |
 | `LLMRequestError` | no | The base class of the errors of a provider. Its message lists the steps that fix the cause. |
 | `MissingAPIKeyError` | no | A provider needs an API key and the environment has none. |
@@ -251,11 +252,16 @@ them too.
   rejects are not retried.
 - **Concurrency:** `describe_ebm` describes features concurrently, at most `max_concurrency` at a time (default 8).
   Free models are rate limited, so lower it (`describe_ebm(ebm, max_concurrency=2)`) if you see rate-limit errors.
-- **Token budget:** there is no tokenizer before a call, so the check uses a rough estimate (about 3 characters per
-  token). Going a little over `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes
-  `to_text` simplify the graph, or raise if it cannot. The provider's own error is the real limit. The functions in
-  `ebaml.llm.descriptors` pass the check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass
-  `check_budget`, for example `ebaml.graphs.token_budget.check_token_budget`. That check needs no LLM and no key.
+- **Token budget:** there is no tokenizer before a call, so the check estimates the tokens of a graph text from its
+  words and its digits. The default weights are 4.12 tokens for each word and 0.29 for each digit. They come from 100
+  graph texts that one current model counted. The estimate has a margin above the fit, so it is more often too high
+  than too low. Other models count other numbers of tokens, so the estimate is a guide. Going a little over
+  `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes `to_text` simplify the graph, or
+  raise if it cannot. The provider's own error is the real limit. The functions in `ebaml.llm.descriptors` pass the
+  check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass `check_budget`, for example
+  `ebaml.graphs.token_budget.check_token_budget`. That check needs no LLM and no key. To choose the weights, pass a
+  `TokenEstimator` instead. With `TokenEstimator(learning=True)`, `observe` moves the weights toward the token counts of
+  real requests. Learning is off by default, because learned weights change the graph text from one call to the next.
 
 <!-- --8<-- [end:behaviour] -->
 ## Notebook
