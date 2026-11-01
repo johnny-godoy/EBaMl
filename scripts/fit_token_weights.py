@@ -20,7 +20,8 @@ import argparse
 import math
 import re
 import sys
-from collections.abc import Callable, Sequence
+import time
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 
 import attrs
@@ -31,8 +32,15 @@ from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostin
 from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
 
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.core.exceptions import EBMGraphSimplificationError, EBMGraphTokenLimitError, TokenFitError
+from ebaml.core.exceptions import (
+    EBMGraphSimplificationError,
+    EBMGraphTokenLimitError,
+    ProviderUnreachableError,
+    RateLimitedError,
+    TokenFitError,
+)
 from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.request_text import message_text
 from ebaml.graphs.token_budget import check_token_budget
 from ebaml.graphs.token_weights import (
     ModelKey,
@@ -49,7 +57,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TABLE_PATH = ROOT / "src" / "ebaml" / "llm" / "token_weights.json"
 ESTIMATOR_PATH = ROOT / "src" / "ebaml" / "graphs" / "token_budget.py"
 
-_BUDGETS = (120, 300, 700, 1500, 3500)
+_BUDGETS = (400, 800, 1500, 3000, 6000)
 
 
 @attrs.frozen
@@ -63,6 +71,9 @@ class _Display:
 
 _DISPLAYS = (_Display(), _Display(x_axis_precision=1, confidence_bounds=False), _Display(3, include_description=False))
 _FOLDS = 5
+# the attempts to send one request, and the first pause between two attempts in seconds
+_ATTEMPTS = 3
+_PAUSE = 5.0
 _SEED = 0
 _REPLY_LIMIT = 16
 # The rule that a rough estimate often follows. The report compares the fit with it.
@@ -85,6 +96,9 @@ class GraphRecord:
         The text of the graph.
     baseline: int
         The input tokens of the request with an empty graph, which are the tokens of the prompt template.
+    baseline_bytes: int
+        The bytes of the text of the messages of that request. The ratio to ``baseline`` is the bytes of prose that
+        the model counts as one token.
     total: int
         The input tokens of the request with this graph.
 
@@ -94,6 +108,7 @@ class GraphRecord:
     model: str
     graph: str
     baseline: int
+    baseline_bytes: int
     total: int
 
     @property
@@ -220,11 +235,56 @@ def graph_texts(graphs: Sequence[EBMGraph], budgets: Sequence[int] = _BUDGETS) -
     return list(texts)
 
 
-def collect(texts: Sequence[str], sampler: Sampler, count: int) -> list[GraphRecord]:
+def _ask(sampler: Sampler, text: str, sleep: Callable[[float], None]) -> Sequence[RequestSample]:
+    """Send one request, and send it again when the provider limits the rate, fails, or reports no count.
+
+    Parameters
+    ----------
+    sampler: Sampler
+        The function that sends one request with a graph text.
+    text: str
+        The graph text.
+    sleep: Callable[[float], None]
+        Waits for the given seconds. A retry waits longer each time.
+
+    Returns
+    -------
+    Sequence[RequestSample]
+        The samples of the request. They are empty if every attempt reported no count.
+
+    Raises
+    ------
+    RateLimitedError
+        If the provider limits the rate at every attempt.
+    ProviderUnreachableError
+        If a request does not reach the provider at any attempt.
+
+    """
+    for attempt in range(_ATTEMPTS):
+        try:
+            samples = sampler(text)
+        except (RateLimitedError, ProviderUnreachableError):
+            if attempt == _ATTEMPTS - 1:
+                raise
+            sleep(_PAUSE * 2**attempt)
+            continue
+        if samples:
+            return samples
+    return []
+
+
+def collect(
+    texts: Sequence[str],
+    sampler: Sampler,
+    count: int,
+    sleep: Callable[[float], None] = time.sleep,
+) -> Iterator[GraphRecord]:
     """Measure the graph texts: send an empty graph first, and then the texts until there are ``count`` records.
 
     The tokens of the template are the same in every request, so the empty graph measures them. A request that a
-    different model answered gives no record, because another tokenizer counted it.
+    different model answered gives no record, because another tokenizer counted it. The function yields each record as
+    soon as it has it, so the caller can save it and a failure loses nothing. A rate limit or a network failure
+    that lasts for every attempt to send one request stops the function with the error of the provider.
 
     Parameters
     ----------
@@ -235,11 +295,13 @@ def collect(texts: Sequence[str], sampler: Sampler, count: int) -> list[GraphRec
         ``ebaml.llm.descriptors.sample_graph_tokens``.
     count: int
         The most records to make.
+    sleep: Callable[[float], None]
+        Waits between the attempts to send a request.
 
-    Returns
-    -------
-    list[GraphRecord]
-        The records.
+    Yields
+    ------
+    GraphRecord
+        One record for each graph text that the model answered.
 
     Raises
     ------
@@ -247,21 +309,27 @@ def collect(texts: Sequence[str], sampler: Sampler, count: int) -> list[GraphRec
         If the provider reports no input count for the empty graph.
 
     """
-    baseline = sampler("")
+    baseline = _ask(sampler, "", sleep)
     if not baseline:
         msg = "The provider reported no input count for the empty graph, so the template cannot be measured."
         raise TokenFitError(msg)
     key = ModelKey(baseline[0].provider, baseline[0].model)
-    records: list[GraphRecord] = []
+    baseline_bytes = len(message_text(baseline[0].body).encode())
+    made = 0
     for text in texts:
-        if len(records) >= count:
+        if made >= count:
             break
-        records.extend(
-            GraphRecord(sample.provider, sample.model, text, baseline[0].input_tokens, sample.input_tokens)
-            for sample in sampler(text)[:1]
-            if ModelKey(sample.provider, sample.model) == key
-        )
-    return records
+        for sample in _ask(sampler, text, sleep)[:1]:
+            if ModelKey(sample.provider, sample.model) == key:
+                made += 1
+                yield GraphRecord(
+                    sample.provider,
+                    sample.model,
+                    text,
+                    baseline[0].input_tokens,
+                    baseline_bytes,
+                    sample.input_tokens,
+                )
 
 
 def write_records(records: Sequence[GraphRecord], path: Path) -> None:
@@ -371,6 +439,9 @@ def fit_model(records: Sequence[GraphRecord], *, final: bool = False) -> FitRepo
     if len(keys) != 1 or len(usable) < _FOLDS:
         msg = f"Fitting needs the records of one model and at least {_FOLDS} of them, not {len(usable)} of {len(keys)}."
         raise TokenFitError(msg)
+    if usable[0].baseline_bytes < 1 or usable[0].baseline < 1:
+        msg = "The records have no measure of the prompt template, so the bytes for each token of prose are unknown."
+        raise TokenFitError(msg)
     samples = [TokenSample(TextFeatures.of(record.graph), record.tokens) for record in usable]
     counts = np.array([float(sample.tokens) for sample in samples])
     rule = np.array([math.ceil(len(record.graph) / _CHARS_PER_TOKEN) for record in usable], dtype=float)
@@ -390,6 +461,7 @@ def fit_model(records: Sequence[GraphRecord], *, final: bool = False) -> FitRepo
         relative_spread=relative_spread(weights, samples),
         samples=len(samples),
         update_allowed=not final,
+        prose_bytes_per_token=usable[0].baseline_bytes / usable[0].baseline,
     )
     return FitReport(usable[0].key, entry, _mean_stats(fit_folds), _mean_stats(rule_folds))
 
@@ -451,6 +523,7 @@ def _format_report(report: FitReport) -> str:
             f"model: {report.key.provider}/{report.key.model} ({report.entry.samples} samples)",
             f"weights: words={weights.words:.4f} bytes={weights.bytes:.4f} digits={weights.digits:.4f}",
             f"relative spread of the fit: {report.entry.relative_spread:.4f}",
+            f"prose: {report.entry.prose_bytes_per_token:.2f} bytes for each token",
             "held-out error     mape%   bias%  under%",
             f"  fit            {report.fit.mape:7.1f} {report.fit.bias:+7.1f} {report.fit.under:7.0f}",
             f"  3 chars/token  {report.rule.mape:7.1f} {report.rule.bias:+7.1f} {report.rule.under:7.0f}",
@@ -585,9 +658,11 @@ def main(argv: Sequence[str] | None = None, *, sampler: Sampler | None = None) -
         texts = graph_texts([
             EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index in range(len(ebm.feature_names_in_))
         ])
-        records = collect(texts, sampler or _real_sampler(key), args.count)
-        write_records(records, output)
-        sys.stdout.write(f"wrote {len(records)} records to {output}\n")
+        written = 0
+        for record in collect(texts, sampler or _real_sampler(key), args.count):
+            write_records([record], output)
+            written += 1
+        sys.stdout.write(f"wrote {written} records to {output}\n")
         return 0
     report = fit_model(read_records(args.samples or _default_samples_path(key), key), final=args.final)
     sys.stdout.write(_format_report(report) + "\n")

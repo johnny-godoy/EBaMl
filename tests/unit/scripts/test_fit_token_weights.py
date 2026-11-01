@@ -11,7 +11,7 @@ import pytest
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from scripts import fit_token_weights as script
 
-from ebaml.core.exceptions import TokenFitError
+from ebaml.core.exceptions import ProviderUnreachableError, RateLimitedError, TokenFitError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_weights import ModelKey, TextFeatures, TokenWeights, WeightsEntry, WeightsTable
 from ebaml.llm.options import ModelOptions
@@ -43,13 +43,24 @@ def tokens_of(text: str) -> int:
     return round(4.0 * len(text.split()) + 0.3 * sum(char.isdigit() for char in text))
 
 
+PROSE: str = "p" * 880  # 880 bytes of template, which the model counts as 200 tokens
+
+
+def body_of(text: str) -> str:
+    return orjson.dumps({"model": "m", "messages": [{"role": "user", "content": PROSE + text}]}).decode()
+
+
 def fake_sampler(key: ModelKey = LUNA, *, calls: list[str] | None = None) -> script.Sampler:
     def sampler(text: str) -> list[FakeSample]:
         if calls is not None:
             calls.append(text)
-        return [FakeSample(key.provider, key.model, "{}", BASELINE + tokens_of(text))]
+        return [FakeSample(key.provider, key.model, body_of(text), BASELINE + tokens_of(text))]
 
     return sampler
+
+
+def no_sleep(_seconds: float) -> None:
+    """Skip the wait between two attempts."""
 
 
 def texts(count: int) -> list[str]:
@@ -61,7 +72,8 @@ def texts(count: int) -> list[str]:
 
 def records(count: int = 60, key: ModelKey = LUNA) -> list[script.GraphRecord]:
     return [
-        script.GraphRecord(key.provider, key.model, text, BASELINE, BASELINE + tokens_of(text)) for text in texts(count)
+        script.GraphRecord(key.provider, key.model, text, BASELINE, len(PROSE), BASELINE + tokens_of(text))
+        for text in texts(count)
     ]
 
 
@@ -83,7 +95,7 @@ def continuous_graph(bins: int) -> EBMGraph:
 
 
 def test_a_graph_record_counts_the_tokens_of_the_graph_without_the_template() -> None:
-    record = script.GraphRecord("p", "m", "g", baseline=200, total=260)
+    record = script.GraphRecord("p", "m", "g", baseline=200, baseline_bytes=880, total=260)
     assert record.tokens == 60
     assert record.key == ModelKey("p", "m")
 
@@ -110,7 +122,7 @@ def test_build_ebms_fits_three_models_that_give_graphs() -> None:
 
 def test_collect_sends_an_empty_graph_first_and_subtracts_its_tokens() -> None:
     calls: list[str] = []
-    result = script.collect(texts(5), fake_sampler(calls=calls), count=3)
+    result = list(script.collect(texts(5), fake_sampler(calls=calls), count=3, sleep=no_sleep))
     assert not calls[0]
     assert len(result) == 3
     assert {record.baseline for record in result} == {BASELINE}
@@ -119,39 +131,103 @@ def test_collect_sends_an_empty_graph_first_and_subtracts_its_tokens() -> None:
 
 def test_collect_stops_after_count_records_and_sends_no_more_requests() -> None:
     calls: list[str] = []
-    script.collect(texts(10), fake_sampler(calls=calls), count=2)
+    list(script.collect(texts(10), fake_sampler(calls=calls), count=2, sleep=no_sleep))
     assert len(calls) == 3  # the empty graph and two texts
 
 
 def test_collect_with_no_count_sends_only_the_empty_graph() -> None:
     calls: list[str] = []
-    assert script.collect(texts(10), fake_sampler(calls=calls), count=0) == []
+    assert list(script.collect(texts(10), fake_sampler(calls=calls), count=0, sleep=no_sleep)) == []
     assert calls == [""]
 
 
 def test_collect_leaves_out_a_request_that_another_model_answered() -> None:
     def sampler(text: str) -> list[FakeSample]:
         key = LUNA if text in {"", "kept"} else OTHER
-        return [FakeSample(key.provider, key.model, "{}", 300)]
+        return [FakeSample(key.provider, key.model, body_of(text), 300)]
 
-    result = script.collect(["kept", "dropped"], sampler, count=5)
+    result = list(script.collect(["kept", "dropped"], sampler, count=5, sleep=no_sleep))
     assert [record.graph for record in result] == ["kept"]
 
 
 def test_collect_keeps_the_first_sample_of_a_request() -> None:
     def sampler(text: str) -> list[FakeSample]:
         return (
-            [FakeSample("p", "m", "{}", 10), FakeSample("p", "m", "{}", 99)]
+            [FakeSample("p", "m", body_of(text), 10), FakeSample("p", "m", body_of(text), 99)]
             if text
             else [FakeSample("p", "m", "{}", 3)]
         )
 
-    assert [record.total for record in script.collect(["a"], sampler, count=5)] == [10]
+    assert [record.total for record in list(script.collect(["a"], sampler, count=5, sleep=no_sleep))] == [10]
+
+
+def test_collect_sends_a_request_again_after_a_rate_limit_and_waits_longer_each_time() -> None:
+    attempts = {"count": 0}
+    waits: list[float] = []
+
+    def sampler(text: str) -> list[FakeSample]:
+        attempts["count"] += 1
+        if attempts["count"] <= 2:
+            raise RateLimitedError
+        return [FakeSample(LUNA.provider, LUNA.model, body_of(text), 300)]
+
+    result = list(script.collect(["a"], sampler, count=1, sleep=waits.append))
+    assert len(result) == 1
+    assert waits == [5.0, 10.0]
+
+
+def test_collect_sends_a_request_again_after_a_network_failure() -> None:
+    attempts = {"count": 0}
+
+    def sampler(text: str) -> list[FakeSample]:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ProviderUnreachableError
+        return [FakeSample(LUNA.provider, LUNA.model, body_of(text), 300)]
+
+    assert len(list(script.collect(["a"], sampler, count=1, sleep=no_sleep))) == 1
+
+
+def test_collect_raises_the_error_of_the_provider_after_the_last_attempt() -> None:
+    waits: list[float] = []
+
+    def sampler(_text: str) -> list[FakeSample]:
+        raise RateLimitedError
+
+    with pytest.raises(RateLimitedError):
+        list(script.collect(["a"], sampler, count=1, sleep=waits.append))
+    assert waits == [5.0, 10.0]
+
+
+def test_collect_sends_a_request_again_when_the_provider_reports_no_count() -> None:
+    calls: list[str] = []
+
+    def sampler(text: str) -> list[FakeSample]:
+        calls.append(text)
+        return [] if len(calls) == 1 else [FakeSample(LUNA.provider, LUNA.model, body_of(text), 300)]
+
+    assert len(list(script.collect(["a"], sampler, count=1, sleep=no_sleep))) == 1
+    assert calls == ["", "", "a"]
+
+
+def test_collect_gives_no_record_for_a_text_that_never_gets_a_count() -> None:
+    def sampler(text: str) -> list[FakeSample]:
+        return [FakeSample(LUNA.provider, LUNA.model, body_of(text), 300)] if text != "bad" else []
+
+    result = list(script.collect(["bad", "good"], sampler, count=5, sleep=no_sleep))
+    assert [record.graph for record in result] == ["good"]
+
+
+def test_collect_yields_each_record_before_it_sends_the_next_request() -> None:
+    calls: list[str] = []
+    records_so_far = script.collect(texts(5), fake_sampler(calls=calls), count=5, sleep=no_sleep)
+    next(records_so_far)
+    assert calls == ["", texts(5)[0]]
 
 
 def test_collect_fails_when_the_empty_graph_has_no_count() -> None:
     with pytest.raises(TokenFitError, match="empty graph"):
-        script.collect(["a"], lambda _text: [], count=1)
+        list(script.collect(["a"], lambda _text: [], count=1, sleep=no_sleep))
 
 
 def test_records_are_written_by_appending_and_read_back_by_model(tmp_path: Path) -> None:
@@ -171,6 +247,7 @@ def test_fit_model_recovers_the_weights_and_beats_the_rule_of_three_characters()
     estimate = report.entry.weights.estimate(TextFeatures.of(sample.graph))
     assert estimate == pytest.approx(sample.tokens, rel=0.03)
     assert report.entry.samples == 60
+    assert report.entry.prose_bytes_per_token == pytest.approx(880 / 200)
     assert report.entry.update_allowed is True
     assert report.fit.mape < 2.0
     assert report.rule.mape > 10 * report.fit.mape
@@ -182,13 +259,24 @@ def test_fit_model_marks_a_final_entry() -> None:
 
 
 def test_fit_model_leaves_out_a_record_whose_graph_has_no_tokens() -> None:
-    bad = script.GraphRecord(LUNA.provider, LUNA.model, "g", BASELINE, BASELINE)
+    bad = script.GraphRecord(LUNA.provider, LUNA.model, "g", BASELINE, len(PROSE), BASELINE)
     assert script.fit_model([*records(), bad]).entry.samples == 60
 
 
 def test_fit_model_rejects_records_of_two_models() -> None:
     with pytest.raises(TokenFitError, match="one model"):
         script.fit_model([*records(30), *records(30, key=OTHER)])
+
+
+def test_fit_model_rejects_records_without_a_measure_of_the_template() -> None:
+    unmeasured = [attrs.evolve(record, baseline_bytes=0) for record in records()]
+    with pytest.raises(TokenFitError, match="prompt template"):
+        script.fit_model(unmeasured)
+
+
+def test_collect_measures_the_bytes_of_the_template() -> None:
+    result = list(script.collect(texts(2), fake_sampler(), count=2, sleep=no_sleep))
+    assert {record.baseline_bytes for record in result} == {len(PROSE)}
 
 
 def test_fit_model_rejects_too_few_records() -> None:
