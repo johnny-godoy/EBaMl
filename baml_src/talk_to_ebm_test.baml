@@ -885,3 +885,46 @@ test "sample_graph_tokens returns no sample when the request has no counts" {
     let samples = sample_graph_tokens("GRAPH", default_graph_options(), client = SequenceClient { calls: 0 });
     assert.equal(samples.length(), 0)
 }
+
+// Fails the request as a provider does: with a reply that the output limit cut off, or with another error.
+class FailingClient {
+    cut_off: bool,
+
+    implements ai.Client {
+        function provider(self) -> string {
+            "failing"
+        }
+
+        function requested_model(self) -> string {
+            "failing"
+        }
+
+        function render(self, input: ai.ModelTurnInput) -> baml.http.Request {
+            baml.http.Request.from_url("http://failing.invalid")
+        }
+
+        function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
+            if (self.cut_off) {
+                throw ai.errors.FinishReasonError {
+                    provider: "failing",
+                    finish_reason: ai.content.StopReason.MaxTokens,
+                    raw_output: "",
+                };
+            };
+            throw ai.errors.RateLimited { provider: "failing", retry_after_ms: null, status_code: 429, raw_body: null };
+        }
+    }
+}
+
+test "sample_graph_tokens treats a reply that the limit cut off as no error" {
+    let samples = sample_graph_tokens("GRAPH", default_graph_options(), client = FailingClient { cut_off: true });
+    assert.equal(samples.length(), 0)
+}
+
+test "sample_graph_tokens lets another error propagate" {
+    let marker = TokenSample { provider: "caught", model: "caught", body: "", input_tokens: 1 };
+    let outcome = sample_graph_tokens("GRAPH", default_graph_options(), client = FailingClient { cut_off: false }) catch (e) {
+        ai.errors.RateLimited => [marker]
+    };
+    assert.equal(outcome, [marker])
+}
