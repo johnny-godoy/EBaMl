@@ -166,7 +166,7 @@ An audience has two jobs, and the base class `Audience` has one method for each 
   kind of fact. `facts_to_texts` builds the keys that all audiences share (the names of the features, their values).
 
 All eight methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
-subclass it and override that method. This audience keeps the words of the layperson and asks for French:
+subclass it and override that method. This audience keeps the words of the layperson and writes for a chief executive:
 
 ```python
 from typing import override
@@ -174,11 +174,19 @@ from typing import override
 from ebaml.local.audience import Layperson
 
 
-class French(Layperson):
+class Executive(Layperson):
     @override
     def guidance(self) -> str:
-        return "The reader speaks French and is not technical, so answer in French, in everyday words."
+        return (
+            "The reader is a chief executive who has one minute, so open with the bottom line in one sentence. "
+            "Then name the one or two inputs that matter most, because the reader decides on the result and not "
+            "on the method. Use business words, and mention only values of the person's own inputs."
+        )
 ```
+
+The same way, `Layperson` with a new `guidance` gives a child (ELI5), a reader of Simplified Technical English
+(ASD-STE100) or any other role. Start from `DataScientist` for a role that reads numbers, such as a machine learning
+engineer.
 
 An audience with new rules overrides the methods of the facts. This one is for a loan officer: it gives the probability
 as a percentage in place of the probability, the confidence interval and the logit, and it drops the scores of the
@@ -205,7 +213,7 @@ class LoanOfficer(DataScientist):
 
 The module `ebaml.local.audience` also has the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
 `round_value` and `points_towards`. Pass the object to `explain_instance(..., audience=LoanOfficer())`. The
-[custom audiences notebook](audiences-notebook.md) walks through three audiences and shows their facts side by side.
+[custom audiences notebook](audiences-notebook.md) walks through six audiences (a child, a chief executive, a reader of Simplified Technical English, a loan officer, a machine learning engineer and a regulator) and shows their facts side by side.
 
 You can see exactly what the LLM reads, without calling it:
 

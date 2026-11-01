@@ -120,15 +120,18 @@ class Audience(abc.ABC):
     Examples
     --------
     To change only the language of the explanation, pass ``language=`` to ``explain_instance``. An audience is for a
-    reader with its own rules. This one wants every explanation in French, with no model numbers:
+    reader with its own rules. This one is a chief executive: no model numbers, and the bottom line first:
 
     ```python
     from ebaml.local.audience import Layperson
 
 
-    class French(Layperson):
+    class Executive(Layperson):
         def guidance(self) -> str:
-            return "The reader speaks French and is not technical, so answer in French, in everyday words."
+            return (
+                "The reader is a chief executive who has one minute, so open with the bottom line in one sentence. "
+                "Then name the one or two inputs that matter most, because the reader decides on the result."
+            )
     ```
 
     """

@@ -67,9 +67,13 @@ def _(mo) -> None:
     built-in audience** and override the one method that differs: this is the short way. **Subclass `Audience`** and
     write all eight methods: this is the way for an audience with new rules.
 
-    This notebook builds three audiences, shows the facts that each one produces, and shows the errors you meet when
-    an audience is wrong. Everything works without a key until the last cells. Those cells call the LLM, and they only
-    run when you press their button. The default model needs `OPENROUTER_API_KEY`. To use another model, pass `model=`:
+    This notebook builds six audiences for six readers (a child, a chief executive, a reader of Simplified Technical
+    English, a loan officer, a machine learning engineer and a regulator). It shows the facts that each one produces,
+    and the errors you meet when an audience is wrong. To change only the language of the explanation, you need no
+    audience: pass `language=` (see the languages notebook).
+
+    Everything works without a key until the last cells. Those cells call the LLM, and they only run when you press
+    their button. The default model needs `OPENROUTER_API_KEY`. To use another model, pass `model=`:
     see the documentation page "Choosing the model".
     """)
 
@@ -138,11 +142,17 @@ def _(mo) -> None:
     mo.md(r"""
     ## 1. The short way: subclass a built-in audience
 
-    A reader who wants the explanation in French needs the facts of a layperson and a different instruction. So the
-    class below subclasses `Layperson` and overrides `guidance`. The other seven methods stay as they are.
+    Some readers need the facts of a layperson (words, no model numbers) and a different instruction. For each of them,
+    the class below subclasses `Layperson` and overrides `guidance`. The other seven methods stay as they are. The
+    readers differ in role and style:
 
-    The instruction gives the reason ("the reader speaks French") as well as the order. A model follows a rule better
-    when it knows the motive.
+    - `Eli5` is a child. The text uses short sentences and one everyday comparison.
+    - `Executive` is a chief executive. The text opens with the bottom line and then gives the inputs that matter most.
+    - `SimplifiedEnglish` is a reader of Simplified Technical English (ASD-STE100), for example a technician or a reader
+      who learns English. The text uses one idea in each sentence and the same word for the same thing.
+
+    Each instruction gives the reason ("because a child follows an image better than a rule") as well as the order. A
+    model follows a rule better when it knows the motive.
     """)
 
 
@@ -150,18 +160,43 @@ def _(mo) -> None:
 def _(Layperson):
     from typing import override as _override
 
-    class French(Layperson):
-        """A layperson who reads French."""
+    class Eli5(Layperson):
+        """A layperson who is a child: short sentences and one everyday comparison."""
 
         @_override
         def guidance(self) -> str:
             return (
-                "The reader speaks French and is not technical, so answer in French, in everyday words. Express "
-                "strength and likelihood in plain words, and mention only values of the person's own inputs, because "
-                "model numbers mean nothing to this reader."
+                "The reader is a child of about ten, so use short sentences, ordinary words and one comparison from "
+                "everyday life, because a child follows an image better than a rule. Express strength and likelihood "
+                "in plain words, and mention only values of the person's own inputs, because model numbers mean "
+                "nothing to this reader."
             )
 
-    return (French,)
+    class Executive(Layperson):
+        """A layperson who decides: the bottom line first, then the inputs that matter."""
+
+        @_override
+        def guidance(self) -> str:
+            return (
+                "The reader is a chief executive who has one minute, so open with the bottom line in one sentence. "
+                "Then name the one or two inputs that matter most, because the reader decides on the result and not "
+                "on the method. Use business words, and mention only values of the person's own inputs, because model "
+                "numbers do not help this decision."
+            )
+
+    class SimplifiedEnglish(Layperson):
+        """A layperson who reads Simplified Technical English (ASD-STE100)."""
+
+        @_override
+        def guidance(self) -> str:
+            return (
+                "The reader needs text with one meaning, so write in Simplified Technical English (ASD-STE100): one "
+                "idea in each sentence, at most 20 words in a sentence, the active voice, the simple present tense, "
+                "and the same word for the same thing every time. Express strength and likelihood in plain words, and "
+                "mention only values of the person's own inputs, because model numbers mean nothing to this reader."
+            )
+
+    return Eli5, Executive, SimplifiedEnglish
 
 
 @app.cell
@@ -169,9 +204,10 @@ def _(mo) -> None:
     mo.md(r"""
     ## 2. Change one rule: subclass `DataScientist`
 
-    A loan officer reads figures, but only one: the probability, as a percentage. The scores, the standard deviations
-    and the confidence interval are noise for this reader. The class below subclasses `DataScientist` and overrides
-    three methods:
+    Two readers start from the data scientist and change a rule. A machine learning engineer wants one more number for
+    each input. A loan officer reads figures, but only one: the probability, as a percentage. The scores, the standard
+    deviations and the confidence interval are noise for this reader. The class `LoanOfficer` subclasses
+    `DataScientist` and overrides three methods:
 
     - `contribution` returns no key, so a contribution shows the feature and its value only.
     - `prediction` returns the probability as a percentage, in place of the probability, the interval and the logit.
@@ -179,6 +215,10 @@ def _(mo) -> None:
 
     The other methods keep the rules of the data scientist. The helper `round_value` rounds to the precision of the
     prompts.
+
+    The machine learning engineer debugs the model. An effect that is small against its standard deviation can be noise
+    from the training data. The class `MLEngineer` adds the key `signal_to_noise` (the size of the score divided by the
+    standard deviation) to each contribution, and keeps every other rule of the data scientist.
     """)
 
 
@@ -204,7 +244,26 @@ def _(DataScientist, JSONValue, round_value):
         def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
             return {"percent": round_value(100 * prediction.output)}
 
-    return (LoanOfficer,)
+    class MLEngineer(DataScientist):
+        """A reader who debugs the model and wants the signal-to-noise ratio of each effect."""
+
+        @_override
+        def guidance(self) -> str:
+            return (
+                "The reader is a machine learning engineer who debugs the model, so quote the score and the "
+                "signal_to_noise of each input. Point out an input with a low signal_to_noise, because such an effect "
+                "may be noise from the training data."
+            )
+
+        @_override
+        def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+            ratio = abs(contribution.score) / contribution.std if contribution.std > 0 else None
+            return {
+                **super().contribution(contribution, prediction),
+                "signal_to_noise": None if ratio is None else round_value(ratio),
+            }
+
+    return LoanOfficer, MLEngineer
 
 
 @app.cell
@@ -281,23 +340,46 @@ def _(mo) -> None:
     mo.md(r"""
     ## The facts that each audience produces
 
-    `facts_to_texts` renders the same facts for each audience. Compare the tabs. The French reader and the layperson get
-    the same facts, because `French` only changes `guidance`. The loan officer gets `percent`. The regulator gets
-    `direction` and `size`, and no probability. The LLM reads exactly these texts, so an audience that leaves a number
+    `facts_to_texts` renders the same facts for each audience. Compare the tabs. `Eli5`, `Executive` and
+    `SimplifiedEnglish` get the same facts as `Layperson`, because they only change `guidance`, so the tabs show
+    `Layperson` for all four. The machine learning engineer gets `signal_to_noise` in addition to the data scientist's
+    numbers. The loan officer gets `percent`. The regulator gets `direction` and `size`, and no probability.
+    The LLM reads exactly these texts, so an audience that leaves a number
     out makes sure that the LLM never repeats it.
     """)
 
 
 @app.cell
-def _(DataScientist, French, Layperson, LoanOfficer, Regulator, facts, facts_to_texts, mo) -> None:
+def _(
+    DataScientist,
+    Eli5,
+    Executive,
+    Layperson,
+    LoanOfficer,
+    MLEngineer,
+    Regulator,
+    SimplifiedEnglish,
+    facts,
+    facts_to_texts,
+    mo,
+) -> None:
     audience_objects = {
         "Layperson": Layperson(),
-        "French": French(),
+        "Eli5": Eli5(),
+        "Executive": Executive(),
+        "SimplifiedEnglish": SimplifiedEnglish(),
         "DataScientist": DataScientist(),
+        "MLEngineer": MLEngineer(),
         "LoanOfficer": LoanOfficer(),
         "Regulator": Regulator(),
     }
-    audience_texts = {name: facts_to_texts(facts, audience) for name, audience in audience_objects.items()}
+    # the three subclasses of Layperson that change only the guidance give the facts of Layperson
+    facts_audiences = {
+        name: audience
+        for name, audience in audience_objects.items()
+        if name not in {"Eli5", "Executive", "SimplifiedEnglish"}
+    }
+    audience_texts = {name: facts_to_texts(facts, audience) for name, audience in facts_audiences.items()}
     mo.ui.tabs({
         kind: mo.hstack(
             [mo.md(f"**{name}**\n```json\n{getattr(texts, kind)}\n```") for name, texts in audience_texts.items()],
@@ -452,7 +534,7 @@ def _(mo) -> None:
     mo.md(r"""
     Run it again with another audience and compare. The facts are the same. The numbers that the LLM sees, and the
     instruction that it follows, are the ones of the audience. To add a reader of your own, write a subclass like the
-    three above and pass an object of it as `audience=`.
+    six above and pass an object of it as `audience=`. To get the explanation in another language, add `language=`.
     """)
 
 
