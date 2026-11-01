@@ -14,6 +14,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
+| `fit_token_weights.py` | Collects the token counts of real requests to a model, and fits the weights of its token estimate. `collect` costs money. `fit` sends nothing. |
 | `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
 
 ## `check_ignores.py` and `compile_ignores.py`
@@ -173,3 +174,29 @@ each module with `--module`, and opens one issue that lists the surviving mutant
 
 Exits non-zero if any mutant survives. CI requires a 100% mutation score. Settings (module path, timeout, test command)
 are in `cosmic-ray.toml`.
+
+## `fit_token_weights.py`
+
+The token estimate of a graph text is `words * a + bytes * b + digits * c`. Each model has its own weights, because each
+model has its own tokenizer. Run the script when a new model comes out, or to refit the default weights. There are two
+steps.
+
+1. `collect` sends one request for each graph text, and one for an empty graph. The request with the empty graph
+   measures the tokens of the prompt template, which the fit takes away from every other request. The command costs
+   money and needs a key, so it sends nothing without `--yes`. It writes a JSON lines file.
+2. `fit` reads that file and fits the weights with every weight at zero or above. It prints the error on held-out
+   samples, next to the error of the rule of 3 characters per token. Then it writes the entry of the model into
+   `src/ebaml/llm/token_weights.json`. It sends no request.
+
+```bash
+OPENROUTER_API_KEY=... uv run python scripts/fit_token_weights.py collect openrouter/openai/gpt-6-luna --count 100 --yes
+uv run python scripts/fit_token_weights.py fit openrouter/openai/gpt-6-luna
+```
+
+- `--final` forbids a learning estimator to change the entry. Use it for a model that you want to keep fixed.
+- `--set-default` also makes the entry the default of the package, in the table and in `DEFAULT_WEIGHTS` of
+  `src/ebaml/graphs/token_budget.py`. A change of the default changes the text of the graphs that `describe_graph` and
+  `describe_ebm` send, so put it in its own commit and add a changelog fragment.
+- `--dry-run` prints the report and writes nothing.
+- Fit a model that answers by its own name. A router such as `openrouter/free` sends each request to a different model,
+  and the script keeps only the requests that the model of the first request answered.
