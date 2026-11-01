@@ -7,7 +7,16 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from ebaml.core.exceptions import TokenFitError
-from ebaml.graphs.token_weights import TextFeatures, TokenSample, TokenWeights, fit_weights, relative_spread
+from ebaml.graphs.token_weights import (
+    ModelKey,
+    TextFeatures,
+    TokenSample,
+    TokenWeights,
+    WeightsEntry,
+    WeightsTable,
+    fit_weights,
+    relative_spread,
+)
 
 
 def test_text_features_count_words_bytes_and_digits_apart() -> None:
@@ -105,3 +114,58 @@ def test_relative_spread_is_the_root_mean_square_of_the_relative_error() -> None
 
 def test_relative_spread_of_no_samples_is_zero() -> None:
     assert relative_spread(TokenWeights(words=1.0, bytes=0.0, digits=0.0), []) == pytest.approx(0.0)
+
+
+def _entry(words: float = 1.0, *, update_allowed: bool = True) -> WeightsEntry:
+    return WeightsEntry(
+        TokenWeights(words=words, bytes=0.0, digits=0.5),
+        relative_spread=0.1,
+        samples=7,
+        update_allowed=update_allowed,
+    )
+
+
+def test_entry_for_a_listed_model_is_its_entry_and_for_any_other_the_default() -> None:
+    table = WeightsTable(default=_entry(1.0), models={ModelKey("p", "m"): _entry(2.0)})
+    assert table.entry_for(ModelKey("p", "m")) == _entry(2.0)
+    assert table.entry_for(ModelKey("p", "other")) == _entry(1.0)
+    assert table.entry_for(None) == _entry(1.0)
+
+
+def test_with_entry_adds_or_replaces_an_entry_and_keeps_the_table_unchanged() -> None:
+    table = WeightsTable(default=_entry(1.0), models={ModelKey("p", "m"): _entry(2.0)})
+    added = table.with_entry(ModelKey("p", "n"), _entry(3.0))
+    replaced = table.with_entry(ModelKey("p", "m"), _entry(4.0))
+    assert added.entry_for(ModelKey("p", "n")) == _entry(3.0)
+    assert added.entry_for(ModelKey("p", "m")) == _entry(2.0)
+    assert replaced.entry_for(ModelKey("p", "m")) == _entry(4.0)
+    assert table.entry_for(ModelKey("p", "n")) == _entry(1.0)
+
+
+def test_a_table_reads_back_what_it_wrote() -> None:
+    table = WeightsTable(
+        default=_entry(1.0),
+        models={ModelKey("b", "x"): _entry(2.0, update_allowed=False), ModelKey("a", "y"): _entry(3.0)},
+    )
+    assert WeightsTable.from_bytes(table.to_bytes()) == table
+
+
+def test_a_table_writes_its_models_in_order_so_that_the_text_is_the_same() -> None:
+    first = WeightsTable(default=_entry(), models={ModelKey("b", "x"): _entry(), ModelKey("a", "y"): _entry()})
+    second = WeightsTable(default=_entry(), models={ModelKey("a", "y"): _entry(), ModelKey("b", "x"): _entry()})
+    assert first.to_bytes() == second.to_bytes()
+    assert first.to_bytes().index(b'"a"') < first.to_bytes().index(b'"b"')
+
+
+@pytest.mark.parametrize("data", [b"", b"not json", b"{}", b'{"default": {}, "models": []}', b"[]", b'{"default": 1}'])
+def test_a_table_that_cannot_be_read_raises_a_fit_error(data: bytes) -> None:
+    with pytest.raises(TokenFitError, match="cannot be read"):
+        WeightsTable.from_bytes(data)
+
+
+def test_an_entry_rejects_a_negative_spread_or_sample_count() -> None:
+    weights = TokenWeights(words=1.0, bytes=0.0, digits=0.0)
+    with pytest.raises(ValueError, match="relative_spread"):
+        WeightsEntry(weights, relative_spread=-0.1, samples=1)
+    with pytest.raises(ValueError, match="samples"):
+        WeightsEntry(weights, relative_spread=0.1, samples=-1)
