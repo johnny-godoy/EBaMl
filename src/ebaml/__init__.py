@@ -27,6 +27,7 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     ProviderUnreachableError,
     RateLimitedError,
     SDKUnavailableError,
+    TokenFitError,
     UnsupportedModelError,
 )
 from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
@@ -67,6 +68,7 @@ __all__ = [
     "RateLimitedError",
     "Regressor",
     "SDKUnavailableError",
+    "TokenFitError",
     "UnsupportedModelError",
     "__version__",
     "model_kind",

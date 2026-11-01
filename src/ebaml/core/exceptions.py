@@ -113,3 +113,7 @@ class RateLimitedError(LLMRequestError):
 
 class ProviderUnreachableError(LLMRequestError):
     """Exception raised when a request does not reach the provider."""
+
+
+class TokenFitError(EBaMlError, ValueError):
+    """Exception raised when the token weights cannot be fitted or read, for example from an empty list of samples."""
