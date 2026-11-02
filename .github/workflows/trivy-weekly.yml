@@ -1,0 +1,61 @@
+name: Trivy (weekly)
+
+# The trivy gate in ci.yml runs only when a pull request changes dependencies. A CVE that is published later reaches an
+# unchanged lockfile unseen, so this run scans the repository every week with the same settings as the gate. It opens an
+# issue when the scan finds a fixable HIGH or CRITICAL vulnerability, and it adds a comment to that issue on later runs
+# while the issue stays open, so one open problem gives one issue.
+on:
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  trivy:
+    name: trivy (weekly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+          output: /tmp/trivy.txt
+      - name: Show the scan result
+        if: failure()
+        run: cat /tmp/trivy.txt 2>/dev/null || true
+      - name: Open an issue, or comment on the open one
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "The weekly trivy scan found a fixable HIGH or CRITICAL vulnerability, or failed. Run: $run_url"
+            echo
+            echo '```text'
+            head -c 50000 /tmp/trivy.txt 2>/dev/null || echo "No scan output. Read the run log."
+            echo '```'
+          } > /tmp/issue.md
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Weekly trivy scan"' \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Weekly trivy scan failed ($(date -u +%F))" \
+              --body-file /tmp/issue.md
+          fi
