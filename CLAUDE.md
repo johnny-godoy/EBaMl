@@ -90,6 +90,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See
   `.claude/rules/writing-style.md`.
 - Ruff selects all rules with line length 120. Tests live in `tests/unit/ebaml/`.
+- Import public names from `ebaml` in examples, docs and notebooks (`from ebaml import describe_ebm`), so that they show the
+  public API. A guard test fails on a deep import of an exported name.
 - The `python` code blocks of `README.md` and `docs/*.md` and the docstring `Examples` run as tests, so the site shows
   only code that works. `tests/docs/conftest.py` gives them `X`, `y` and fake LLM replies. Put other setup in a
   `<!-- invisible-code-block: python -->` comment, which the site does not show.
