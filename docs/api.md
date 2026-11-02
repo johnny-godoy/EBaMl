@@ -1,5 +1,7 @@
 # API reference
 
+Import every public name from `ebaml`, for example `from ebaml import describe_ebm`. The sections below name the module that defines each name.
+
 ## Describing graphs and models
 
 ::: ebaml.llm.descriptors

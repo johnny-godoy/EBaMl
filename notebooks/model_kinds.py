@@ -15,9 +15,7 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
     from sklearn.datasets import load_iris
 
-    from ebaml import EBMGraph, UnsupportedModelError, model_kind
-    from ebaml.llm.descriptors import describe_graph
-    from ebaml.local.facts import LocalOptions, compute_local_facts
+    from ebaml import EBMGraph, LocalOptions, UnsupportedModelError, compute_local_facts, describe_graph, model_kind
 
     return (
         EBMGraph,

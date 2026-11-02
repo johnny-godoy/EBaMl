@@ -15,13 +15,22 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import fetch_openml
 
-    from ebaml import Audience, DataScientist, InvalidOptionError, Layperson
+    from ebaml import (
+        Audience,
+        DataScientist,
+        InvalidOptionError,
+        Layperson,
+        PromptOptions,
+        compute_local_facts,
+        describe_ebm,
+        explain_instance,
+        facts_to_texts,
+        likelihood_word,
+        points_towards,
+        round_value,
+        strength_word,
+    )
     from ebaml.core.custom_types import JSONValue
-    from ebaml.llm.descriptors import describe_ebm, explain_instance
-    from ebaml.llm.options import PromptOptions
-    from ebaml.local.audience import likelihood_word, points_towards, round_value, strength_word
-    from ebaml.local.fact_text import facts_to_texts
-    from ebaml.local.facts import compute_local_facts
 
     return (
         Audience,
@@ -412,7 +421,7 @@ def _(mo) -> None:
 
 @app.cell
 def _(InvalidOptionError, mo) -> None:
-    from ebaml.local.audience import resolve_audience
+    from ebaml import resolve_audience
 
     try:
         resolve_audience("child")

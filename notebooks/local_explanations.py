@@ -18,11 +18,16 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
-    from ebaml import DataScientist, Layperson
-    from ebaml.llm.descriptors import describe_ebm, explain_instance
-    from ebaml.llm.options import PromptOptions
-    from ebaml.local.fact_text import facts_to_texts
-    from ebaml.local.facts import LocalOptions, compute_local_facts
+    from ebaml import (
+        DataScientist,
+        Layperson,
+        LocalOptions,
+        PromptOptions,
+        compute_local_facts,
+        describe_ebm,
+        explain_instance,
+        facts_to_texts,
+    )
 
     return (
         DataScientist,

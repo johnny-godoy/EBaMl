@@ -6,8 +6,8 @@ model predict this for this one input?**
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml.llm.descriptors import describe_ebm, explain_instance
-from ebaml.llm.options import PromptOptions
+from ebaml import describe_ebm, explain_instance
+from ebaml import PromptOptions
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
 global_explanation = describe_ebm(ebm, prompt=PromptOptions(dataset_description="..."))  # once per model
@@ -31,10 +31,10 @@ The design has one rule: **nothing that can be computed is left to the LLM.**
 
 ```text
 EBM + one input
-      │  ebaml.local.facts (Python, deterministic)
+      │  compute_local_facts (Python, deterministic)
       ▼
 Facts: prediction, counterfactual, sufficient reason, completions
-      │  ebaml.local.fact_text.facts_to_texts(audience)
+      │  facts_to_texts(audience)
       ▼
 One JSON text per explanation ──┐
                                 ├──▶ BAML explain_local (3 LLM calls) ──▶ LocalExplanation
@@ -43,7 +43,7 @@ Global explanation (describe_ebm) ┘                                         (3
 
 1. `compute_local_facts` reads the scores and confidence intervals of the EBM and works out the facts. It is
    deterministic: the same model and input always give the same facts.
-2. `facts_to_texts` (module `ebaml.local.fact_text`) renders each fact as JSON for the audience. This is where numbers are
+2. `facts_to_texts` renders each fact as JSON for the audience. This is where numbers are
    removed for a layperson.
 3. `explain_local` (BAML, `baml_src/local_explanations.baml`) makes three LLM calls concurrently, one per
    explanation. Each prompt starts with the **global explanation** of the model, so the LLM knows what the features
@@ -118,7 +118,7 @@ the variance of the sum of the effects (`score_std`), which assumes the errors o
 | `completions` | One `CompletionStep(fixed, share)` for each step. |
 
 <!-- invisible-code-block: python
-from ebaml.local.facts import compute_local_facts
+from ebaml import compute_local_facts
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)
 instance = X.iloc[0].to_dict()
@@ -171,7 +171,7 @@ subclass it and override that method. This audience keeps the words of the laype
 ```python
 from typing import override
 
-from ebaml.local.audience import Layperson
+from ebaml import Layperson
 
 
 class Executive(Layperson):
@@ -194,7 +194,7 @@ contributions. The changes, the flip and the margin keep the numbers of the data
 
 ```python
 from ebaml.core.custom_types import JSONValue
-from ebaml.local.audience import DataScientist, round_value
+from ebaml import DataScientist, round_value
 
 
 class LoanOfficer(DataScientist):
@@ -211,7 +211,7 @@ class LoanOfficer(DataScientist):
         return {"percent": round_value(100 * prediction.output)}
 ```
 
-The module `ebaml.local.audience` also has the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
+`ebaml` also exports the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
 `round_value` and `points_towards`. Pass the object to `explain_instance(..., audience=LoanOfficer())`. The
 [custom audiences notebook](audiences-notebook.md) walks through six audiences (a child, a chief executive, a reader of Simplified Technical English, a loan officer, a machine learning engineer and a regulator) and shows their facts side by side.
 
@@ -222,9 +222,9 @@ instance = X.iloc[0].to_dict()
 -->
 
 ```python
-from ebaml.local.audience import DataScientist
-from ebaml.local.facts import compute_local_facts
-from ebaml.local.fact_text import facts_to_texts
+from ebaml import DataScientist
+from ebaml import compute_local_facts
+from ebaml import facts_to_texts
 
 facts = compute_local_facts(ebm, instance)
 texts = facts_to_texts(facts, DataScientist())
@@ -260,8 +260,8 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 ## Options
 
 The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, language, local, prompt)`.
-The arguments `language`, `local`, `prompt` and `model` are keyword-only. `local` is a `LocalOptions` from `ebaml.local.facts`. `prompt` is a
-`PromptOptions` from `ebaml.llm.options`. The table shows where each setting goes:
+The arguments `language`, `local`, `prompt` and `model` are keyword-only. `local` is a `LocalOptions` from `ebaml`. `prompt` is a
+`PromptOptions` from `ebaml`. The table shows where each setting goes:
 
 | Argument | Default | Meaning |
 | --- | --- | --- |
@@ -315,7 +315,7 @@ y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "o
 -->
 
 ```python
-from ebaml.core.exceptions import UnsupportedModelError
+from ebaml import UnsupportedModelError
 
 multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 try:
