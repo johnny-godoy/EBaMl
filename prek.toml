@@ -75,6 +75,29 @@ hooks = [
     priority = 42,
   },
   {
+    id = "deptry",
+    name = "deptry: declared and imported dependencies agree",
+    language = "system",
+    # src only: the check covers the runtime dependencies of the published package. Scripts, tests and notebooks use
+    # the dev groups, so they have no declared-dependency contract.
+    entry = "uv run deptry src",
+    files = "^(src/.*\\.py|pyproject\\.toml|uv\\.lock)$",
+    pass_filenames = false,
+    priority = 43,
+  },
+  {
+    id = "jscpd",
+    name = "jscpd: copy-paste in src stays under 1%",
+    language = "node",
+    additional_dependencies = ["jscpd@5.4.2"],
+    # The limit is a ratchet: src has 0.65% duplicated lines today. A new clone raises the share, and the hook fails
+    # when the share passes 1%. Tests repeat setup on purpose, so they are not scanned.
+    entry = "jscpd src --format python --min-tokens 50 --min-lines 5 --threshold 1 --reporters console --no-colors",
+    files = "^src/.*\\.py$",
+    pass_filenames = false,
+    priority = 44,
+  },
+  {
     id = "pyrefly",
     name = "pyrefly",
     language = "system",
