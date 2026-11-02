@@ -293,11 +293,12 @@ class _EntryRecord(TypedDict):
     prose_bytes_per_token: float
 
 
-class _ModelRecord(_EntryRecord):
+class _ModelRecord(TypedDict):
     """The JSON object of the entry of one model."""
 
     provider: str
     model: str
+    entry: _EntryRecord
 
 
 def _read_entry(record: _EntryRecord) -> WeightsEntry:
@@ -340,15 +341,7 @@ def _write_model(key: ModelKey, entry: WeightsEntry) -> _ModelRecord:
         The JSON object.
 
     """
-    return {
-        "provider": key.provider,
-        "model": key.model,
-        "weights": {"words": entry.weights.words, "bytes": entry.weights.bytes, "digits": entry.weights.digits},
-        "relative_spread": entry.relative_spread,
-        "samples": entry.samples,
-        "update_allowed": entry.update_allowed,
-        "prose_bytes_per_token": entry.prose_bytes_per_token,
-    }
+    return {"provider": key.provider, "model": key.model, "entry": _write_entry(entry)}
 
 
 def _write_entry(entry: WeightsEntry) -> _EntryRecord:
@@ -447,7 +440,8 @@ class WeightsTable:
         try:
             document = orjson.loads(data)
             models = {
-                ModelKey(record["provider"], record["model"]): _read_entry(record) for record in document["models"]
+                ModelKey(record["provider"], record["model"]): _read_entry(record["entry"])
+                for record in document["models"]
             }
             return cls(default=_read_entry(document["default"]), models=models)
         except (orjson.JSONDecodeError, KeyError, TypeError) as error:
