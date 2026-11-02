@@ -75,6 +75,17 @@ hooks = [
     priority = 42,
   },
   {
+    id = "deptry",
+    name = "deptry: declared and imported dependencies agree",
+    language = "system",
+    # src only: the check covers the runtime dependencies of the published package. Scripts, tests and notebooks use
+    # the dev groups, so they have no declared-dependency contract.
+    entry = "uv run deptry src",
+    files = "^(src/.*\\.py|pyproject\\.toml|uv\\.lock)$",
+    pass_filenames = false,
+    priority = 43,
+  },
+  {
     id = "pyrefly",
     name = "pyrefly",
     language = "system",
