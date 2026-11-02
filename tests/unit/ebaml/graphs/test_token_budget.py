@@ -54,24 +54,22 @@ def test_check_budget_changes_status_exactly_past_the_limits(
 ) -> None:
     text = "w " * 100  # 100 tokens
     estimator = _plain()
-    assert estimator.check_budget(text=text, max_tokens=max_tokens, overbudget_percent=overbudget_percent) == (
+    assert estimator(text=text, max_tokens=max_tokens, overbudget_percent=overbudget_percent) == (
         BudgetStatus(100, status)
     )
 
 
-def test_an_estimator_is_a_budget_check_that_does_the_same_as_check_budget() -> None:
+def test_an_estimator_is_a_budget_check() -> None:
     estimator = _plain()
     assert isinstance(estimator, BudgetCheck)
-    call = estimator(text="w " * 100, max_tokens=80, overbudget_percent=50)
-    assert call == estimator.check_budget(text="w " * 100, max_tokens=80, overbudget_percent=50)
-    assert call == BudgetStatus(100, "warn")
+    assert estimator(text="w " * 100, max_tokens=80, overbudget_percent=50) == BudgetStatus(100, "warn")
 
 
 def test_the_module_functions_use_the_default_weights_and_never_learn() -> None:
     text = "0.5 1.25 -0.75 " * 20
     default = TokenEstimator(weights=DEFAULT_WEIGHTS, relative_spread=DEFAULT_RELATIVE_SPREAD)
     assert estimate_tokens(text) == default.estimate(text)
-    assert check_token_budget(text=text, max_tokens=10, overbudget_percent=0) == default.check_budget(
+    assert check_token_budget(text=text, max_tokens=10, overbudget_percent=0) == default(
         text=text,
         max_tokens=10,
         overbudget_percent=0,

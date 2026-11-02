@@ -145,7 +145,7 @@ class TokenEstimator:
     Examples
     --------
     >>> estimator = TokenEstimator()
-    >>> estimator.check_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
+    >>> estimator(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
     'warn'
 
     """
@@ -199,8 +199,10 @@ class TokenEstimator:
         point = self._current.estimate(TextFeatures.of(text))
         return math.ceil(point * (1 + self.margin * self.relative_spread))
 
-    def check_budget(self, *, text: str, max_tokens: int, overbudget_percent: int) -> BudgetStatus:
+    def __call__(self, *, text: str, max_tokens: int, overbudget_percent: int) -> BudgetStatus:
         """Compare the estimated tokens of a text with a budget and with the tolerance above it.
+
+        The method makes an estimator a ``BudgetCheck``, so ``EBMGraph.to_text(check_budget=estimator)`` works.
 
         Parameters
         ----------
@@ -223,26 +225,6 @@ class TokenEstimator:
         if estimated > max_tokens:
             return BudgetStatus(estimated, "warn")
         return BudgetStatus(estimated, "ok")
-
-    def __call__(self, *, text: str, max_tokens: int, overbudget_percent: int) -> BudgetStatus:
-        """Do the same as ``check_budget``, so that an estimator is a ``BudgetCheck``.
-
-        Parameters
-        ----------
-        text: str
-            The text.
-        max_tokens: int
-            The budget.
-        overbudget_percent: int
-            How far above ``max_tokens``, in percent, the estimate may go before the status is ``"over"``.
-
-        Returns
-        -------
-        BudgetStatus
-            The estimate and the status.
-
-        """
-        return self.check_budget(text=text, max_tokens=max_tokens, overbudget_percent=overbudget_percent)
 
     def observe(self, sample: TokenSample) -> bool:
         """Move the weights toward the token count of one real request, if learning is on.
@@ -321,9 +303,22 @@ class TokenEstimator:
         return self
 
 
-# The estimator behind ``estimate_tokens`` and ``check_token_budget``. It never learns, so these functions give the same
-# number for the same text in every call.
-_DEFAULT_ESTIMATOR: TokenEstimator = TokenEstimator()
+check_token_budget: TokenEstimator = TokenEstimator()
+"""The budget check with the default weights.
+
+The estimator never learns, so it gives the same status for the same text in every call. Call it with ``text``,
+``max_tokens`` and ``overbudget_percent``. It is a ``BudgetCheck``, so ``EBMGraph.to_text`` accepts it as
+``check_budget``. Pass a ``TokenEstimator`` instead to choose the weights or to learn them.
+
+Examples
+--------
+>>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
+'warn'
+>>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=1000, overbudget_percent=50).status
+'ok'
+>>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=50, overbudget_percent=50).status
+'over'
+"""
 
 
 def estimate_tokens(text: str) -> int:
@@ -347,37 +342,4 @@ def estimate_tokens(text: str) -> int:
     True
 
     """
-    return _DEFAULT_ESTIMATOR.estimate(text)
-
-
-def check_token_budget(*, text: str, max_tokens: int, overbudget_percent: int) -> BudgetStatus:
-    """Compare the estimated tokens of a text with a budget and with the tolerance above it.
-
-    The function uses the default weights and never learns. It is a ``BudgetCheck``, so ``EBMGraph.to_text`` accepts it
-    as ``check_budget``. Pass a ``TokenEstimator`` instead to choose the weights or to learn them.
-
-    Parameters
-    ----------
-    text: str
-        The text.
-    max_tokens: int
-        The budget.
-    overbudget_percent: int
-        How far above ``max_tokens``, in percent, the estimate may go before the status is ``"over"``.
-
-    Returns
-    -------
-    BudgetStatus
-        The estimate and the status.
-
-    Examples
-    --------
-    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
-    'warn'
-    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=1000, overbudget_percent=50).status
-    'ok'
-    >>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=50, overbudget_percent=50).status
-    'over'
-
-    """
-    return _DEFAULT_ESTIMATOR.check_budget(text=text, max_tokens=max_tokens, overbudget_percent=overbudget_percent)
+    return check_token_budget.estimate(text)
