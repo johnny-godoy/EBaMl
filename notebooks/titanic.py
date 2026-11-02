@@ -16,10 +16,7 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
-    from ebaml.graphs.ebm_graph import EBMGraph
-    from ebaml.graphs.token_budget import check_token_budget
-    from ebaml.llm.descriptors import describe_ebm, describe_graph
-    from ebaml.llm.options import PromptOptions
+    from ebaml import EBMGraph, PromptOptions, check_token_budget, describe_ebm, describe_graph
 
     return (
         EBMGraph,

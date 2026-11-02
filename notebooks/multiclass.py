@@ -14,11 +14,16 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import load_iris
 
-    from ebaml import EBMGraph, model_kind
-    from ebaml.core.custom_types import Normalization
-    from ebaml.core.exceptions import InvalidOptionError, UnsupportedModelError
-    from ebaml.llm.descriptors import describe_ebm, describe_graph
-    from ebaml.llm.options import GraphOptions
+    from ebaml import (
+        EBMGraph,
+        GraphOptions,
+        InvalidOptionError,
+        Normalization,
+        UnsupportedModelError,
+        describe_ebm,
+        describe_graph,
+        model_kind,
+    )
 
     return (
         EBMGraph,

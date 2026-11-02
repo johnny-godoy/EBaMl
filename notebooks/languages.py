@@ -15,12 +15,16 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import fetch_openml
 
-    from ebaml import Layperson
-    from ebaml.core.exceptions import MissingAPIKeyError
-    from ebaml.llm.descriptors import describe_ebm, explain_instance
-    from ebaml.llm.options import ModelOptions, PromptOptions
-    from ebaml.local.fact_text import facts_to_texts
-    from ebaml.local.facts import compute_local_facts
+    from ebaml import (
+        Layperson,
+        MissingAPIKeyError,
+        ModelOptions,
+        PromptOptions,
+        compute_local_facts,
+        describe_ebm,
+        explain_instance,
+        facts_to_texts,
+    )
 
     return (
         ExplainableBoostingClassifier,
