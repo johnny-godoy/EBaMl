@@ -19,6 +19,8 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
   `llm/sdk_setup.py` imports `baml_sdk` through `importlib`, which import-linter cannot see.
 - A lower layer never imports a higher one. If `graphs` needs a service, take it as a `Callable` or `Protocol`
   parameter and let `llm` pass the real one.
+- Search for an existing contract before you add a shared one (`reuse.md`), and register a new shared contract in
+  `architecture/abstractions.yml`.
 - Add a new feature as a new module in the layer that fits. Add a new layer only with a new entry in the import-linter
   layers contract and a new row in this table.
 - Give each module a name that no other module in `src/ebaml` has. `scripts/mutation.py` finds the tests of a module by
@@ -35,6 +37,9 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 | import-linter | `[tool.importlinter]` in `pyproject.toml` | Layer order and the limits on `baml_sdk`. Run it alone with `uv run lint-imports`. |
 | Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree. |
 | semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, banned libraries, a bare `raise ValueError`, an `object` type hint, an `isinstance` check of a concrete container, branches on the type of one value, an SDK fake without `fake_sdk` in the tests. |
+| Abstraction registry | `architecture/abstractions.yml`, `scripts/check_abstractions.py` | One owner and one canonical symbol for each shared capability: unique IDs, symbols that exist, no second claim on a symbol or a responsibility. `reuse.md` has the process. |
+| Contract overlap | `scripts/check_contract_overlap.py` | Public `Protocol` and `ABC` classes with identical signatures in one context. |
+| New clones | `scripts/check_new_clones.py` | A copy-paste clone in `src/ebaml` that the base branch lacks. Run by CI on each pull request. |
 | Claude rules | `.claude/rules/` | The design judgment that no tool can check: one job per unit, small interfaces. |
 
 - Fix the code when a guard fails. Do not add an exception to a guard to make it pass.
