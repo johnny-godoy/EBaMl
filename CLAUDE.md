@@ -22,6 +22,8 @@ uv run pytest                      # unit tests in tests/unit; fails below 100% 
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
+uv run python -m scripts.check_abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
+uvx prek run --hook-stage manual check-new-clones   # fails on a copy-paste clone that origin/main lacks; needs Node.js and origin/main
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
@@ -75,6 +77,9 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
+- Search before you add a shared `Protocol`, `ABC` or cross-module helper, and register a new shared contract in
+  `architecture/abstractions.yml` (`.claude/rules/reuse.md`). Reuse a contract that the layers allow, because a second
+  contract for one job drifts from the first.
 - Ship each bug fix with a guard: a unit test or a semgrep rule that fails on the old code (`.claude/rules/bug-fixes.md`).
 - Commit in small steps, each with one purpose and a conventional commit message (`type(scope): description`).
   Write the PR title the same way, and fill the PR template (`.claude/rules/commits-and-prs.md`). Hooks and CI check it.
