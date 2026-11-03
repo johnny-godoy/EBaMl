@@ -1,0 +1,186 @@
+# Registry of the shared abstractions of src/ebaml. Read .claude/rules/reuse.md before you edit it.
+#
+# Register a contract or an entry point that more than one module uses. Do not register a private helper or a class
+# that only one module uses. Search first: `uv run python -m scripts.check_abstractions --search <words>`.
+# `uv run python -m scripts.check_abstractions --check` validates this file against the source.
+#
+# Fields: id (kebab-case, stable), responsibility (one sentence), owner (module or package that owns the symbol),
+# symbol (module:Name), consumers (descriptive, grants no import right), keywords (for the search), status (active or
+# deprecated), context (production unless the entry says otherwise).
+schema_version: 1
+
+capabilities:
+  - id: core-feature-types
+    responsibility: Name the feature types and the normalization modes of an EBM
+    owner: ebaml.core
+    symbol: ebaml.core.custom_types:FeatureType
+    consumers: [ebaml.graphs, ebaml.local, ebaml.llm]
+    keywords: [feature, type, continuous, categorical, enum]
+    status: active
+
+  - id: ebm-graph
+    responsibility: Extract the graph of one feature from an EBM and simplify it
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.ebm_graph:EBMGraph
+    consumers: [ebaml.local, ebaml.llm]
+    keywords: [graph, extract, simplify, ebm, feature]
+    status: active
+
+  - id: model-kind
+    responsibility: Tell what an EBM predicts and how its scores map to the outcome
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.model_kinds:ModelKind
+    consumers: [ebaml.local, ebaml.llm]
+    keywords: [classifier, regressor, model, kind, outcome]
+    status: active
+
+  - id: graph-text-parsing
+    responsibility: Parse the text of a graph back into its values
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.graph_text:parse_graph_text
+    consumers: [ebaml.llm]
+    keywords: [graph, text, parse]
+    status: active
+
+  - id: graph-text-rendering
+    responsibility: Write the values of a graph as JSON text
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.graph_text:xy_to_json
+    consumers: [ebaml.llm]
+    keywords: [graph, text, render, json]
+    status: active
+
+  - id: term-lookup
+    responsibility: Find the term of a feature in the term attributes of an EBM
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.terms:main_term
+    consumers: [ebaml.local, ebaml.llm]
+    keywords: [term, feature, index, interaction]
+    status: active
+
+  - id: token-estimation
+    responsibility: Estimate the tokens of a text from its words and digits
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.token_budget:TokenEstimator
+    consumers: [ebaml.llm]
+    keywords: [token, estimate, budget, weights]
+    status: active
+
+  - id: token-budget-result
+    responsibility: Describe the result of a token budget check, as a contract
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.ebm_graph:TokenBudget
+    consumers: [ebaml.llm]
+    keywords: [token, budget, result, protocol]
+    status: active
+
+  - id: token-budget-check
+    responsibility: Describe a function that compares a text with a token budget, as a contract
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.ebm_graph:BudgetCheck
+    consumers: [ebaml.llm]
+    keywords: [token, budget, check, protocol]
+    status: active
+
+  - id: audience
+    responsibility: Choose the words and the detail for one kind of reader
+    owner: ebaml.local
+    symbol: ebaml.local.audience:Audience
+    consumers: [ebaml.llm]
+    keywords: [audience, reader, layperson, wording]
+    status: active
+
+  - id: local-facts
+    responsibility: Compute the exact facts of one prediction from scores and confidence intervals
+    owner: ebaml.local
+    symbol: ebaml.local.facts:compute_local_facts
+    consumers: [ebaml.llm]
+    keywords: [local, explanation, counterfactual, sufficient, reason, facts]
+    status: active
+
+  - id: local-fact-text
+    responsibility: Render the facts of one prediction as text for an audience
+    owner: ebaml.local
+    symbol: ebaml.local.fact_text:facts_to_texts
+    consumers: [ebaml.llm]
+    keywords: [local, facts, text, render]
+    status: active
+
+  - id: model-options
+    responsibility: Choose the model and the provider of a request
+    owner: ebaml.llm
+    symbol: ebaml.llm.options:ModelOptions
+    consumers: [ebaml]
+    keywords: [model, provider, options, client]
+    status: active
+
+  - id: token-learning
+    responsibility: Learn the token weights of each model from counted requests
+    owner: ebaml.llm
+    symbol: ebaml.llm.token_learning:TokenLearner
+    consumers: [ebaml.llm]
+    keywords: [token, learn, weights, model]
+    status: active
+
+  - id: request-sample
+    responsibility: Describe one counted request, as a contract
+    owner: ebaml.llm
+    symbol: ebaml.llm.token_learning:RequestSample
+    consumers: [ebaml.llm]
+    keywords: [request, sample, token, protocol]
+    status: active
+
+  - id: graph-description
+    responsibility: Describe the graph of one feature with an LLM
+    owner: ebaml.llm
+    symbol: ebaml.llm.descriptors:describe_graph
+    consumers: [ebaml]
+    keywords: [describe, graph, llm, prompt]
+    status: active
+
+  - id: ebm-description
+    responsibility: Describe a whole EBM with an LLM
+    owner: ebaml.llm
+    symbol: ebaml.llm.descriptors:describe_ebm
+    consumers: [ebaml]
+    keywords: [describe, ebm, summary, llm]
+    status: active
+
+  - id: instance-explanation
+    responsibility: Explain one prediction with an LLM
+    owner: ebaml.llm
+    symbol: ebaml.llm.descriptors:explain_instance
+    consumers: [ebaml]
+    keywords: [explain, instance, prediction, local, llm]
+    status: active
+
+  - id: benchmark-usage
+    responsibility: Describe the tokens that a provider reports for a benchmark reply, as a contract
+    owner: ebaml.benchmark
+    symbol: ebaml.benchmark:Usage
+    consumers: []
+    keywords: [benchmark, usage, tokens, protocol]
+    status: active
+    context: benchmark
+
+  - id: benchmark-reply
+    responsibility: Describe the reply of the LLM to a benchmark question, as a contract
+    owner: ebaml.benchmark
+    symbol: ebaml.benchmark:Reply
+    consumers: []
+    keywords: [benchmark, reply, answer, protocol]
+    status: active
+    context: benchmark
+
+  - id: benchmark-ask-question
+    responsibility: Describe a function that asks the LLM a benchmark question, as a contract
+    owner: ebaml.benchmark
+    symbol: ebaml.benchmark:AskQuestion
+    consumers: []
+    keywords: [benchmark, question, ask, protocol]
+    status: active
+    context: benchmark
+
+# Approved overlaps of two contracts. Add an entry only for a pair that scripts.check_contract_overlap reports, and
+# write why the two contracts stay apart (for example, a consumer defines its own Protocol to keep the import direction).
+exceptions: []
