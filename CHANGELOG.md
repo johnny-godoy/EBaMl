@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.3.3'></a>
+## [0.3.3] - 2026-11-03
+
+### Added
+
+- `ebaml` now exports the functions, the option classes, the local-explanation facts and the audience helpers that the docs use, so `from ebaml import describe_ebm` works. `import ebaml` still loads no BAML code: `describe_graph`, `describe_ebm`, `explain_instance` and `LocalExplanation` load on first use.
+
 <a id='changelog-0.3.2'></a>
 ## [0.3.2] - 2026-11-02
 
