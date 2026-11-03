@@ -165,6 +165,15 @@ hooks = [
     priority = 50,
   },
   {
+    id = "check-contract-overlap",
+    name = "no public Protocol or ABC repeats another",
+    language = "system",
+    entry = "uv run python -m scripts.check_contract_overlap",
+    files = "^(architecture/|src/ebaml/.*\\.py|scripts/check_(abstractions|contract_overlap)\\.py|pyproject\\.toml)",
+    pass_filenames = false,
+    priority = 51,
+  },
+  {
     id = "import-linter",
     name = "import-linter: layers and BAML SDK limits",
     language = "system",
