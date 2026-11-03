@@ -13,7 +13,9 @@ Four subcommands, all stdlib only:
 
 ``watch``
     Run in the ``progress`` job, next to the gates. Every ``POLL_SECONDS`` seconds it reads the state of the gate jobs
-    from the GitHub API and updates the PR comment ("CI in progress"), until all gates have finished.
+    from the GitHub API and updates the PR comment ("CI in progress"), until all gates have finished. When a gate
+    fails, the comment shows the failure report of that gate at once. The report is the artifact that the failed job
+    uploads.
 
 ``post <file>``
     Create the PR comment from a file, or replace it if it exists. The ``report`` job uses it for the final report.
@@ -21,6 +23,7 @@ Four subcommands, all stdlib only:
     access (a fork PR) they do nothing.
 """
 
+import io
 import json
 import os
 import re
@@ -29,6 +32,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -44,6 +48,7 @@ POLL_SECONDS = 20
 WATCH_LIMIT_SECONDS = 70 * 60
 PAGE_SIZE = 100
 FORBIDDEN = (401, 403)
+REDIRECT = 302
 MARKER = "<!-- ci-report -->"
 FINISHED = frozenset({"success", "failure", "cancelled", "skipped"})
 
@@ -477,6 +482,67 @@ def api(method: str, path: str, payload: Mapping[str, object] | None = None) -> 
         return json.load(response)
 
 
+def fetch_archive(url: str) -> bytes:
+    """Download an artifact archive. The store behind the redirect rejects the token, so follow the redirect by hand.
+
+    Parameters
+    ----------
+    url : str
+        The ``archive_download_url`` of the artifact.
+
+    Returns
+    -------
+    bytes
+        The zip archive.
+
+    Raises
+    ------
+    urllib.error.HTTPError
+        If the API answers with an error other than the redirect to the store.
+
+    """
+    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage] -- the URL comes from the GitHub API
+        url,
+        headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}", "X-GitHub-Api-Version": "2022-11-28"},
+    )
+    opener = urllib.request.OpenerDirector()  # no redirect handler: the 302 then raises, and holds the final URL
+    for handler in (urllib.request.HTTPSHandler(), urllib.request.HTTPDefaultErrorHandler()):
+        opener.add_handler(handler)
+    try:
+        # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  # ruff: ignore[commented-out-code] -- semgrep marker, not code
+        return bytes(opener.open(request, timeout=30).read())
+    except urllib.error.HTTPError as error:
+        location = error.headers.get("Location")
+        if error.code != REDIRECT or not location or not location.startswith("https://"):
+            raise
+    # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected  # ruff: ignore[commented-out-code] -- semgrep marker, not code
+    with urllib.request.urlopen(location, timeout=30) as response:  # ruff: ignore[suspicious-url-open-usage] -- the scheme is checked above
+        return bytes(response.read())
+
+
+def download_report(gate: str) -> str:
+    """Read the failure report that the failed job of a gate uploaded as an artifact.
+
+    Parameters
+    ----------
+    gate: str
+        The job id of the gate.
+
+    Returns
+    -------
+    str
+        The markdown of the report, or an empty string if the artifact does not exist yet.
+
+    """
+    repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
+    listing = api("GET", f"/repos/{repository}/actions/runs/{run_id}/artifacts?name=report-{gate}")
+    artifacts = [artifact for artifact in listing["artifacts"] if not artifact["expired"]]
+    if not artifacts:
+        return ""
+    with zipfile.ZipFile(io.BytesIO(fetch_archive(artifacts[0]["archive_download_url"]))) as archive:
+        return "\n".join(archive.read(name).decode("utf-8", errors="replace") for name in archive.namelist())
+
+
 def pull_request_number() -> int:
     """Read the number of the pull request from the event of the run.
 
@@ -540,13 +606,15 @@ def gate_states(jobs: Sequence[Mapping[str, str | None]]) -> dict[str, str]:
     return states
 
 
-def render_progress(states: Mapping[str, str]) -> str:
+def render_progress(states: Mapping[str, str], reports: Mapping[str, str] | None = None) -> str:
     """Write the comment for a run that has not finished.
 
     Parameters
     ----------
     states: Mapping[str, str]
         The state of each gate, from ``gate_states``.
+    reports: Mapping[str, str], optional
+        The failure report of each failed gate whose report is available.
 
     Returns
     -------
@@ -558,7 +626,7 @@ def render_progress(states: Mapping[str, str]) -> str:
         "waiting": "⏳ waiting",
         "running": "🔄 running",
         "success": "✅ passed",
-        "failure": "❌ **failed**, details follow when the run ends",
+        "failure": "❌ **failed**, details below",
         "cancelled": "🚫 cancelled",
         "skipped": "⏭️ skipped (no relevant change, or blocked by an earlier gate)",
     }
@@ -570,18 +638,25 @@ def render_progress(states: Mapping[str, str]) -> str:
     lines = [heading, "", "This comment updates by itself when a gate changes. The final report replaces it.", ""]
     lines += ["| Gate | State |", "|---|---|"]
     lines += [f"| {title} | {icons.get(states[gate], states[gate])} |" for gate, title in GATES]
+    lines.append("")
+    for gate, title in GATES:
+        if states[gate] == "failure" and (report := (reports or {}).get(gate)):
+            lines += [f"### ❌ {title}", "", report.strip(), ""]
     sha = os.environ.get("GITHUB_SHA", "")[:7]
-    lines += ["", f"<sub>Commit `{sha}` · [live run logs]({run_url()})</sub>", ""]
+    lines += [f"<sub>Commit `{sha}` · [live run logs]({run_url()})</sub>", ""]
     return "\n".join(lines)
 
 
-def update_progress(posted: str) -> tuple[bool, str]:
+def update_progress(posted: str, reports: dict[str, str]) -> tuple[bool, str]:
     """Read the state of the gates and update the PR comment if the state changed.
 
     Parameters
     ----------
     posted: str
         The text that the last update wrote.
+    reports: dict[str, str]
+        The failure reports found so far. The function adds the report of each newly failed gate. A dict is
+        needed because the function stores into it.
 
     Returns
     -------
@@ -593,7 +668,10 @@ def update_progress(posted: str) -> tuple[bool, str]:
     states = gate_states(api("GET", f"/repos/{repository}/actions/runs/{run_id}/jobs?per_page={PAGE_SIZE}")["jobs"])
     if all(state in FINISHED for state in states.values()):
         return True, posted
-    text = render_progress(states)
+    for gate, state in states.items():
+        if state == "failure" and gate not in reports and (report := download_report(gate)):
+            reports[gate] = report  # an empty result means the job has not uploaded yet, so ask again next poll
+    text = render_progress(states, reports)
     if text != posted:
         upsert_comment(text)
     return False, text
@@ -603,9 +681,10 @@ def watch() -> None:
     """Update the PR comment with the state of the gates until all gates have finished."""
     deadline = time.monotonic() + WATCH_LIMIT_SECONDS
     posted = ""
+    reports: dict[str, str] = {}
     while time.monotonic() < deadline:
         try:
-            done, posted = update_progress(posted)
+            done, posted = update_progress(posted, reports)
         except urllib.error.HTTPError as error:
             if error.code in FORBIDDEN:  # a fork PR has a read-only token, so there is nothing to update
                 return
