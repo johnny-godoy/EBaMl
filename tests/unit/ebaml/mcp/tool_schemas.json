@@ -1,0 +1,140 @@
+{
+  "resource_templates": [
+    "ebm://graphs/{feature}"
+  ],
+  "tools": {
+    "describe_feature": {
+      "properties": {
+        "feature": {
+          "title": "Feature",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature"
+      ],
+      "title": "describe_featureArguments",
+      "type": "object"
+    },
+    "describe_model": {
+      "properties": {},
+      "title": "describe_modelArguments",
+      "type": "object"
+    },
+    "explain_prediction": {
+      "$defs": {
+        "FeatureValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "properties": {
+        "confidence_level": {
+          "default": 0.95,
+          "title": "Confidence Level",
+          "type": "number"
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/FeatureValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance"
+        },
+        "row": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row"
+        }
+      },
+      "title": "explain_predictionArguments",
+      "type": "object"
+    },
+    "get_graph": {
+      "properties": {
+        "feature": {
+          "title": "Feature",
+          "type": "string"
+        },
+        "max_tokens": {
+          "default": 3000,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "normalization": {
+          "default": "none",
+          "enum": [
+            "none",
+            "min_max",
+            "z_score"
+          ],
+          "title": "Normalization",
+          "type": "string"
+        },
+        "x_axis_precision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X Axis Precision"
+        },
+        "y_axis_precision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y Axis Precision"
+        }
+      },
+      "required": [
+        "feature"
+      ],
+      "title": "get_graphArguments",
+      "type": "object"
+    },
+    "get_model_summary": {
+      "properties": {},
+      "title": "get_model_summaryArguments",
+      "type": "object"
+    },
+    "list_features": {
+      "properties": {},
+      "title": "list_featuresArguments",
+      "type": "object"
+    }
+  }
+}
