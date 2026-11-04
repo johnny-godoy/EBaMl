@@ -25,6 +25,7 @@ import time
 import tomllib
 from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
 
 import attrs
@@ -149,7 +150,7 @@ def session_modules(session: Path) -> set[str]:
         The paths of the modules, relative to the project root.
 
     """
-    with sqlite3.connect(session) as db:
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
         return {row[0] for row in db.execute("SELECT DISTINCT module_path FROM mutation_specs")}
 
 
@@ -164,7 +165,7 @@ def keep_lines(session: Path, lines: Mapping[str, Collection[int]]) -> None:
         The line numbers to keep, by the path of the module. A module that is not a key loses all its mutants.
 
     """
-    with sqlite3.connect(session) as db:
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
         specs = db.execute("SELECT job_id, module_path, start_pos_row, end_pos_row FROM mutation_specs").fetchall()
         dropped = [
             (job,)
@@ -220,7 +221,7 @@ def make_shard(workdir: Path, module: str, index: int, shards: int) -> Shard:
             shutil.copy(source, path / name)
     session = path / "session.sqlite"
     shutil.copy(SESSION, session)
-    with sqlite3.connect(session) as db:
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
         # keep every ``shards``-th job of the module; results of earlier runs are dropped so they are recomputed
         # jobs the pragma filter skipped keep their result in the main session and are not executed again
         skipped = {row[0] for row in db.execute("SELECT job_id FROM work_results WHERE worker_outcome = 'SKIPPED'")}
@@ -357,7 +358,7 @@ def count_results(sessions: Sequence[Path], seen: dict[Path, tuple[int, int]]) -
     """
     for session in sessions:
         try:
-            with sqlite3.connect(session, timeout=5) as db:
+            with closing(sqlite3.connect(session, timeout=5)) as db, db:  # closing releases the file, db commits
                 query = "SELECT COUNT(*), COALESCE(SUM(test_outcome = 'SURVIVED'), 0) FROM work_results"
                 seen[session] = db.execute(query).fetchone()
         except sqlite3.OperationalError:
@@ -396,7 +397,7 @@ def merge_results(sessions: Sequence[Path]) -> None:
         The sessions of the shards.
 
     """
-    with sqlite3.connect(SESSION) as db:
+    with closing(sqlite3.connect(SESSION)) as db, db:  # closing releases the file, db commits
         for session in sessions:
             db.execute("ATTACH DATABASE ? AS shard", (str(session),))
             db.execute("INSERT OR REPLACE INTO work_results SELECT * FROM shard.work_results")
@@ -413,7 +414,7 @@ def count_mutants() -> int:
         The number of work items, without the items that the pragma filter skipped.
 
     """
-    with sqlite3.connect(SESSION) as db:
+    with closing(sqlite3.connect(SESSION)) as db, db:  # closing releases the file, db commits
         return int(
             db.execute(
                 "SELECT COUNT(*) FROM work_items WHERE job_id NOT IN "

@@ -1,6 +1,7 @@
 """Tests for the choice of the mutants that the mutation run executes."""
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from coverage import CoverageData
@@ -44,7 +45,7 @@ def make_session(path: Path, specs: list[tuple[str, str, int, int]]) -> Path:
 
     """
     session = path / "session.sqlite"
-    with sqlite3.connect(session) as db:
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
         db.execute("CREATE TABLE work_items (job_id VARCHAR PRIMARY KEY)")
         db.execute(
             "CREATE TABLE mutation_specs (module_path VARCHAR, start_pos_row INTEGER, end_pos_row INTEGER, "
@@ -59,7 +60,7 @@ def make_session(path: Path, specs: list[tuple[str, str, int, int]]) -> Path:
 
 
 def jobs(session: Path) -> set[str]:
-    with sqlite3.connect(session) as db:
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
         items = {row[0] for row in db.execute("SELECT job_id FROM work_items")}
         assert items == {row[0] for row in db.execute("SELECT job_id FROM mutation_specs")}
         return items
