@@ -26,6 +26,18 @@ Import every public name from `ebaml`, for example `from ebaml import describe_e
 
 ::: ebaml.local.fact_text
 
+## MCP server
+
+::: ebaml.mcp.server
+
+::: ebaml.mcp.model_store
+
+::: ebaml.mcp.read_tools
+
+::: ebaml.mcp.explain_tools
+
+::: ebaml.mcp.llm_tools
+
 ## Graphs
 
 ::: ebaml.graphs.ebm_graph

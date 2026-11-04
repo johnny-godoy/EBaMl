@@ -11,6 +11,7 @@ nav = [
   { Usage = "usage.md" },
   { "Local explanations" = "local-explanations.md" },
   { "Choosing the model" = "providers.md" },
+  { "MCP server" = "mcp.md" },
   { Notebooks = [
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
