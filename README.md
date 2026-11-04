@@ -21,11 +21,13 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | Model summary (`describe_ebm`) | ✅ | ✅ | ✅ | ⚠️ |
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
+| MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
 
 ✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
 `describe_graph` and `describe_ebm` log an `interactions_skipped` warning that names them. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
+The MCP server reads every kind of model. Its explain tool works for binary classifiers only.
 ## Setup
 
 <!-- --8<-- [start:setup] -->
@@ -310,6 +312,12 @@ graph.
 ```bash
 uv run marimo edit notebooks/model_kinds.py
 ```
+
+## MCP server
+
+`ebaml-mcp` serves a fitted EBM to an agent, for example Claude Code. The agent reads the features and the graphs, and
+explains one prediction with the exact local facts. These tools call no LLM, so they need no key. See the
+[MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/).
 
 ## Benchmark
 
