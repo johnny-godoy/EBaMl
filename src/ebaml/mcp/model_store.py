@@ -4,11 +4,14 @@ The user gives the paths at start. No tool argument names a path, so an agent ca
 """
 
 import os
+import zipfile
 
 import attrs
 import joblib
 import narwhals as nw
 import polars as pl
+import skops.io
+import skops.io.exceptions
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
@@ -95,11 +98,45 @@ class ModelStore:
         return {name: values[name] for name in names}
 
 
-def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
-    """Load a pickled or joblib EBM from the path that the user gave.
+_EBM_CLASSES = (ExplainableBoostingClassifier, ExplainableBoostingRegressor)
+# skops loads only the types that the caller names. The EBM classes are the only types that the file may need.
+_TRUSTED_TYPES = [f"{cls.__module__}.{cls.__qualname__}" for cls in _EBM_CLASSES]
 
-    Loading a pickle runs code from the file. Call this function only with a path from the command line of the user,
-    never with a path from a tool argument.
+
+def _load_skops(
+    path: str | os.PathLike[str],
+) -> object:  # nosemgrep: ebaml-no-object-type -- a file of any content, which the caller checks
+    """Load a skops file and trust only the EBM classes.
+
+    Parameters
+    ----------
+    path: str | os.PathLike[str]
+        The skops file.
+
+    Returns
+    -------
+    object
+        The object in the file.
+
+    Raises
+    ------
+    UnsupportedModelError
+        If the file holds a type other than an EBM class.
+
+    """
+    try:
+        return skops.io.load(os.fspath(path), trusted=_TRUSTED_TYPES)
+    except skops.io.exceptions.UntrustedTypesFoundException as error:
+        msg = f"The file {os.fspath(path)!r} holds types that the server does not trust: {error}"
+        raise UnsupportedModelError(msg) from error
+
+
+def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
+    """Load an EBM from a skops file, or from a pickled or joblib file, of the path that the user gave.
+
+    A skops file is a zip archive. The loader trusts only the EBM classes, so a skops file runs no code. A pickled or
+    joblib file runs code from the file. Call this function only with a path from the command line of the user, never
+    with a path from a tool argument.
 
     Parameters
     ----------
@@ -114,11 +151,11 @@ def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
     Raises
     ------
     UnsupportedModelError
-        If the file does not hold an EBM.
+        If the file does not hold an EBM, or a skops file holds an untrusted type.
 
     """
-    model = joblib.load(path)
-    if not isinstance(model, ExplainableBoostingClassifier | ExplainableBoostingRegressor):
+    model = _load_skops(path) if zipfile.is_zipfile(path) else joblib.load(path)
+    if not isinstance(model, _EBM_CLASSES):
         msg = f"The file {os.fspath(path)!r} does not hold an EBM. It holds a {type(model).__name__}."
         raise UnsupportedModelError(msg)
     return model

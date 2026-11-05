@@ -15,18 +15,44 @@ pip install "ebaml[mcp]"
 ## Start the server
 
 !!! warning
-    `--model` loads a pickle file, and loading a pickle runs code from the file. Load only a file that you trust.
-    The server loads only the path that you give at start. No tool can load or write a path.
+    `--model` also loads a pickled or joblib file, and loading such a file runs code from the file. Load only a file
+    that you trust, or use a skops file. The server loads only the path that you give at start. No tool can load or
+    write a path.
 
-Save a fitted EBM with `joblib`, then start the server:
+Save a fitted EBM with `skops.io`, which runs no code when the server loads the file. The server trusts only the EBM
+classes, so it rejects a skops file that holds any other type.
+
+<!-- invisible-code-block: python
+import os
+import tempfile
+
+from interpret.glassbox import ExplainableBoostingClassifier
+
+ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)
+start_directory = os.getcwd()
+os.chdir(tempfile.mkdtemp())
+-->
+
+```python
+import skops.io
+
+skops.io.dump(ebm, "model.skops")
+```
+
+<!-- invisible-code-block: python
+assert os.path.exists("model.skops")
+os.chdir(start_directory)
+-->
+
+Start the server. The same option loads a skops file or a joblib file, and the server reads the format from the file:
 
 ```bash
-ebaml-mcp --model model.joblib --data train.csv
+ebaml-mcp --model model.skops --data train.csv
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--model PATH` | The pickled or joblib EBM. This option is required. |
+| `--model PATH` | The EBM in a skops file, or in a pickled or joblib file. This option is required. |
 | `--data PATH` | A CSV file with the rows for the `row` argument of `explain_prediction`. |
 | `--llm PROVIDER/MODEL` | Turn on the LLM tools. See [Choosing the model](providers.md). Without it, the server has no LLM tools. |
 | `--transport` | `stdio` (the default) or `streamable-http`. |
