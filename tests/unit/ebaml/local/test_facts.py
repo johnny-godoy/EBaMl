@@ -7,7 +7,7 @@ from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st

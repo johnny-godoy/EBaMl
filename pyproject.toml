@@ -131,6 +131,14 @@ ignore = [
 preview = true
 select = ["ALL"]
 
+# Each banned module names its replacement. Ruff fails in the editor and shows the message; an exception is an inline
+# `# ruff: ignore[banned-api] -- <reason>` on the import.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses".msg = "Use attrs. See .claude/rules/libraries.md."
+"json".msg = "Use orjson. See .claude/rules/libraries.md."
+"logging".msg = "Use structlog. See .claude/rules/libraries.md."
+"pandas".msg = "Take a frame with narwhals, or read data with polars. See .claude/rules/libraries.md."
+
 [tool.ruff.lint.per-file-ignores]
 # reason: recurring pattern in tests/: pytest tests use bare assert, literal expected values and private members by design,
 # and are not public API, so docstrings are not required.

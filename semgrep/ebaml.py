@@ -1,26 +1,19 @@
 # Tests of the rules in ebaml.yml. A comment that starts with the word ruleid marks a line that must match.
-# ruleid: ebaml-preferred-libraries
-import json
-# ruleid: ebaml-preferred-libraries
-import logging
-# ruleid: ebaml-preferred-libraries
-from dataclasses import dataclass
-# ok: ebaml-preferred-libraries
-import structlog
-
-# ruleid: ebaml-no-pandas-import
-import pandas as pd
-# ruleid: ebaml-no-pandas-import
-from pandas.api.typing import NAType
-# ok: ebaml-no-pandas-import
 import narwhals as nw
 
 
-def frame_kind(frame):
-    # ruleid: ebaml-no-pandas-import
-    if isinstance(frame, pd.DataFrame):
-        return "pandas"
-    # ok: ebaml-no-pandas-import
+def is_pandas(frame):
+    # ruleid: ebaml-no-frame-type-branches
+    return isinstance(frame, pd.DataFrame)
+
+
+def is_polars(frame):
+    # ruleid: ebaml-no-frame-type-branches
+    return isinstance(frame, pl.DataFrame)
+
+
+def column_names(frame):
+    # ok: ebaml-no-frame-type-branches
     return nw.from_native(frame).columns
 
 
