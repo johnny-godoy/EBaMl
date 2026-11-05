@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.4.0'></a>
+## [0.4.0] - 2026-11-05
+
+### Added
+
+- The `ebaml-mcp` command serves a fitted EBM as an MCP server (install the `mcp` extra). An agent can read the model and its graphs, and explain one prediction with the exact local facts, with no LLM key. With `--llm`, it can also ask for LLM descriptions.
+
 <a id='changelog-0.3.3'></a>
 ## [0.3.3] - 2026-11-03
 
