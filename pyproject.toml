@@ -135,6 +135,7 @@ select = ["ALL"]
 # Each banned module names its replacement. Ruff fails in the editor and shows the message; an exception is an inline
 # `# ruff: ignore[banned-api] -- <reason>` on the import.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
+"argparse".msg = "Use cyclopts. See .claude/rules/libraries.md."
 "dataclasses".msg = "Use attrs. See .claude/rules/libraries.md."
 "json".msg = "Use orjson. See .claude/rules/libraries.md."
 "logging".msg = "Use structlog. See .claude/rules/libraries.md."

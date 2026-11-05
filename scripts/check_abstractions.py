@@ -25,7 +25,6 @@ Run it from the repo root:
 does not prove that no equivalent exists, so read the owner modules too.
 """
 
-import argparse
 import ast
 import difflib
 import re
@@ -34,9 +33,10 @@ import tomllib
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, Literal, cast
 
 import attrs
+import cyclopts
 import orjson
 import yaml
 
@@ -56,7 +56,6 @@ ID_PATTERN: re.Pattern[str] = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 MIN_REASON_WORDS = 4
 MIN_REASON_CHARACTERS = 20
 CLOSE_MATCH_COUNT = 3
-OUTPUT_FORMATS = ("text", "json")
 
 
 @attrs.frozen
@@ -1047,23 +1046,13 @@ def _read_layers(root: Path) -> list[str]:
     return layer_names(tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")))
 
 
-def _parser() -> argparse.ArgumentParser:
-    """Build the command line parser.
+_MODE = cyclopts.Group("Mode", validator=cyclopts.validators.MutuallyExclusive())
 
-    Returns
-    -------
-    argparse.ArgumentParser
-        The parser.
-
-    """
-    parser = argparse.ArgumentParser(prog="check_abstractions", description=__doc__.splitlines()[0])
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--check", action="store_true", help="validate the registry (the default)")
-    mode.add_argument("--list", action="store_true", help="print the registered capabilities")
-    mode.add_argument("--search", nargs="+", metavar="WORD", help="find capabilities and symbols by word")
-    parser.add_argument("--format", choices=OUTPUT_FORMATS, default="text", help="the output format")
-    parser.add_argument("--root", type=Path, default=ROOT, help="the repo root (default: this repository)")
-    return parser
+app: cyclopts.App = cyclopts.App(
+    name="check_abstractions",
+    help=__doc__.splitlines()[0],
+    result_action="return_value",
+)
 
 
 def emit(rows: Sequence[Any], output_format: str, empty_text: str) -> None:
@@ -1085,6 +1074,66 @@ def emit(rows: Sequence[Any], output_format: str, empty_text: str) -> None:
         sys.stdout.write("\n".join(row.render() for row in rows) + "\n" if rows else f"{empty_text}\n")
 
 
+@app.default
+def run(
+    *,
+    check: Annotated[bool, cyclopts.Parameter(group=_MODE)] = False,
+    list_capabilities: Annotated[bool, cyclopts.Parameter(name="--list", group=_MODE)] = False,
+    search_words: Annotated[
+        list[str] | None,
+        cyclopts.Parameter(name="--search", group=_MODE, consume_multiple=True, negative_iterable=()),
+    ] = None,
+    output_format: Annotated[Literal["text", "json"], cyclopts.Parameter(name="--format")] = "text",
+    root: Path = ROOT,
+) -> int:
+    """Check the registry, list its capabilities or search it.
+
+    Parameters
+    ----------
+    check: bool
+        Validate the registry. This is the default mode.
+    list_capabilities: bool
+        Print the registered capabilities.
+    search_words: list[str], optional
+        Find capabilities and symbols by word.
+    output_format: Literal["text", "json"]
+        The output format.
+    root: Path
+        The repo root. The default is this repository.
+
+    Returns
+    -------
+    int
+        The process exit code: 0 if the registry is right or the command only lists, 1 if the check found a problem.
+
+    """
+    del check  # the flag only names the default mode
+    registry, shape_problems = load_registry(root)
+    index = build_index(root)
+    if list_capabilities:
+        listing: defaultdict[str, list[Capability]] = defaultdict(list)
+        for capability in registry.capabilities:
+            listing[capability.owner].append(capability)
+        lines = [
+            f"{owner}: {capability.capability_id} ({capability.status}) {capability.symbol} -"
+            f" {capability.responsibility}"
+            for owner, capabilities in sorted(listing.items())
+            for capability in capabilities
+        ]
+        sys.stdout.write("\n".join(lines) + "\n")
+        return 0
+    if search_words:
+        emit(
+            search(registry, index, search_words, _read_layers(root)),
+            output_format,
+            "no match: read the owner modules before you add a shared contract",
+        )
+        return 0
+    problems = shape_problems + registry_diagnostics(registry, index)
+    emit(problems, output_format, "the registry of shared abstractions is right")
+    return 1 if problems else 0
+
+
 def main(argv: Sequence[str] = ()) -> int:
     """Run the command line.
 
@@ -1099,32 +1148,7 @@ def main(argv: Sequence[str] = ()) -> int:
         The process exit code: 0 if the registry is right or the command only lists, 1 if the check found a problem.
 
     """
-    arguments = _parser().parse_args(list(argv))
-    root = arguments.root
-    registry, shape_problems = load_registry(root)
-    index = build_index(root)
-    if arguments.list:
-        listing: defaultdict[str, list[Capability]] = defaultdict(list)
-        for capability in registry.capabilities:
-            listing[capability.owner].append(capability)
-        lines = [
-            f"{owner}: {capability.capability_id} ({capability.status}) {capability.symbol} -"
-            f" {capability.responsibility}"
-            for owner, capabilities in sorted(listing.items())
-            for capability in capabilities
-        ]
-        sys.stdout.write("\n".join(lines) + "\n")
-        return 0
-    if arguments.search:
-        emit(
-            search(registry, index, arguments.search, _read_layers(root)),
-            arguments.format,
-            "no match: read the owner modules before you add a shared contract",
-        )
-        return 0
-    problems = shape_problems + registry_diagnostics(registry, index)
-    emit(problems, arguments.format, "the registry of shared abstractions is right")
-    return 1 if problems else 0
+    return int(app(list(argv)))
 
 
 if __name__ == "__main__":

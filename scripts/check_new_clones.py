@@ -15,13 +15,14 @@ For an offline workflow, ``jscpd --baseline FILE`` with a committed baseline fil
 not combine the two modes.
 """
 
-import argparse
 import os
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- jscpd runs on Node.js and git answers revision questions only as commands
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+
+import cyclopts
 
 ROOT = Path(__file__).resolve().parent.parent
 # Keep this version equal to the one in the jscpd hook of prek.toml. A unit test checks that the two agree.
@@ -112,6 +113,31 @@ def revision_exists(base: str, root: Path) -> bool:
     return subprocess.run(command, cwd=root, capture_output=True, check=False).returncode == 0  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv of git, the revision is one argument
 
 
+app: cyclopts.App = cyclopts.App(
+    name="check_new_clones",
+    help=__doc__.splitlines()[0],
+    result_action="return_value",
+)
+
+
+@app.default
+def parse_base(*, base: str | None = None) -> str:
+    """Read the base revision from the command line.
+
+    Parameters
+    ----------
+    base: str, optional
+        The base revision. The default is the environment variable of the base revision, or ``origin/main``.
+
+    Returns
+    -------
+    str
+        The base revision.
+
+    """
+    return base or os.environ.get(BASE_ENVIRONMENT_VARIABLE, DEFAULT_BASE)
+
+
 def main(argv: Sequence[str] = (), runner: Runner = run_command, root: Path = ROOT) -> int:
     """Run the command line.
 
@@ -130,13 +156,7 @@ def main(argv: Sequence[str] = (), runner: Runner = run_command, root: Path = RO
         0 if the change adds no clone, 1 if it adds a clone, and 2 if the check cannot run (no base revision, no npx).
 
     """
-    parser = argparse.ArgumentParser(prog="check_new_clones", description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--base",
-        default=os.environ.get(BASE_ENVIRONMENT_VARIABLE, DEFAULT_BASE),
-        help=f"the base revision (default: ${BASE_ENVIRONMENT_VARIABLE} or {DEFAULT_BASE})",
-    )
-    base = parser.parse_args(list(argv)).base
+    base = app(list(argv))
     if not revision_exists(base, root):
         remote, _, branch = base.partition("/")
         sys.stderr.write(

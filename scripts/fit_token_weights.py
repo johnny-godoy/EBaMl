@@ -17,15 +17,16 @@ Example for a new model::
     uv run python scripts/fit_token_weights.py fit openrouter/openai/gpt-6-luna
 """
 
-import argparse
 import math
 import re
 import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from typing import Annotated
 
 import attrs
+import cyclopts
 import numpy as np
 import numpy.typing as npt
 import orjson
@@ -566,15 +567,37 @@ def _parse_model(value: str) -> ModelKey:
 
     Raises
     ------
-    argparse.ArgumentTypeError
+    ValueError
         If the text has no slash, or a part is empty.
 
     """
     provider, _, model = value.partition("/")
     if not provider or not model:
         msg = f"expected provider/model, got {value!r}"
-        raise argparse.ArgumentTypeError(msg)
+        raise ValueError(msg)
     return ModelKey(provider, model)
+
+
+def _convert_model(_type: type, tokens: Sequence[cyclopts.Token]) -> ModelKey:
+    """Read the ``provider/model`` token of the command line into a key.
+
+    Parameters
+    ----------
+    _type : type
+        The annotated type. Cyclopts passes it and this converter ignores it.
+    tokens : Sequence[cyclopts.Token]
+        The one token of the argument.
+
+    Returns
+    -------
+    ModelKey
+        The provider and the model.
+
+    """
+    return _parse_model(tokens[0].value)
+
+
+_MODEL = cyclopts.Parameter(converter=_convert_model, accepts_keys=False, n_tokens=1, metavar="PROVIDER/MODEL")
 
 
 def _real_sampler(key: ModelKey) -> Sampler:
@@ -598,40 +621,6 @@ def _real_sampler(key: ModelKey) -> Sampler:
     return lambda text: sample_graph_tokens(text, model)
 
 
-def _parser() -> argparse.ArgumentParser:
-    """Build the parser of the command line.
-
-    Returns
-    -------
-    argparse.ArgumentParser
-        The parser.
-
-    """
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    commands = parser.add_subparsers(dest="command", required=True)
-    collect_parser = commands.add_parser("collect", help="send requests and write the records (costs money)")
-    collect_parser.add_argument(
-        "model",
-        type=_parse_model,
-        help="provider/model, for example openrouter/openai/gpt-6-luna",
-    )
-    collect_parser.add_argument("--count", type=int, default=100, help="the number of graph texts to send")
-    collect_parser.add_argument(
-        "--output",
-        type=Path,
-        help="the JSON lines file (default: token_samples/<model>.jsonl)",
-    )
-    collect_parser.add_argument("--yes", action="store_true", help="agree to pay for count + 1 requests")
-    fit_parser = commands.add_parser("fit", help="fit the weights from the records and write the table (sends nothing)")
-    fit_parser.add_argument("model", type=_parse_model, help="provider/model")
-    fit_parser.add_argument("--samples", type=Path, help="the JSON lines file (default: token_samples/<model>.jsonl)")
-    fit_parser.add_argument("--table", type=Path, default=TABLE_PATH, help="the table to update")
-    fit_parser.add_argument("--final", action="store_true", help="forbid a learning estimator to change the entry")
-    fit_parser.add_argument("--set-default", action="store_true", help="also make the entry the default of the package")
-    fit_parser.add_argument("--dry-run", action="store_true", help="print the report and write nothing")
-    return parser
-
-
 def _default_samples_path(key: ModelKey) -> Path:
     """Name the default records file of a model.
 
@@ -647,6 +636,130 @@ def _default_samples_path(key: ModelKey) -> Path:
 
     """
     return Path("token_samples") / f"{key.provider}--{key.model.replace('/', '--')}.jsonl"
+
+
+@attrs.frozen(kw_only=True)
+class FitOptions:
+    """The options of the ``fit`` command.
+
+    Attributes
+    ----------
+    samples : Path | None
+        The JSON lines file. The default is a file in token_samples/, named after the model.
+    table : Path
+        The table to update.
+    final : bool
+        Forbid a learning estimator to change the entry.
+    set_default : bool
+        Also make the entry the default of the package.
+    dry_run : bool
+        Print the report and write nothing.
+
+    """
+
+    samples: Path | None = None
+    table: Path = TABLE_PATH
+    final: bool = False
+    set_default: bool = False
+    dry_run: bool = False
+
+
+_NO_OPTIONS = FitOptions()
+
+
+def _build_app(sampler: Sampler | None) -> cyclopts.App:
+    """Build the command line of the script.
+
+    Parameters
+    ----------
+    sampler : Sampler | None
+        The function that sends the requests of ``collect``. ``None`` sends real requests to the model.
+
+    Returns
+    -------
+    cyclopts.App
+        The app with the commands ``collect`` and ``fit``.
+
+    """
+    app = cyclopts.App(name="fit_token_weights", help=__doc__.splitlines()[0], result_action="return_value")
+
+    @app.command(name="collect")
+    def collect_command(
+        model: Annotated[ModelKey, _MODEL],
+        *,
+        count: int = 100,
+        output: Path | None = None,
+        yes: bool = False,
+    ) -> int:
+        """Send requests and write the records (costs money).
+
+        Parameters
+        ----------
+        model : ModelKey
+            Provider/model, for example openrouter/openai/gpt-6-luna.
+        count : int
+            The number of graph texts to send.
+        output : Path, optional
+            The JSON lines file. The default is a file in token_samples/, named after the model.
+        yes : bool
+            Agree to pay for count + 1 requests.
+
+        Returns
+        -------
+        int
+            The exit code: 0 on success, 2 when ``--yes`` is missing.
+
+        """
+        samples_path = output or _default_samples_path(model)
+        if not yes:
+            sys.stderr.write(
+                f"This sends {count + 1} paid requests to {model.provider}/{model.model}. Add --yes to agree.\n",
+            )
+            return 2
+        samples_path.parent.mkdir(parents=True, exist_ok=True)
+        texts = graph_texts([
+            EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index in range(len(ebm.feature_names_in_))
+        ])
+        written = 0
+        for record in collect(texts, sampler or _real_sampler(model), count):
+            write_records([record], samples_path)
+            written += 1
+        sys.stdout.write(f"wrote {written} records to {samples_path}\n")
+        return 0
+
+    @app.command(name="fit")
+    def fit_command(
+        model: Annotated[ModelKey, _MODEL],
+        options: Annotated[FitOptions, cyclopts.Parameter(name="*")] = _NO_OPTIONS,
+    ) -> int:
+        """Fit the weights from the records and write the table (sends nothing).
+
+        Parameters
+        ----------
+        model : ModelKey
+            Provider/model.
+        options : FitOptions
+            The input file, the table and the switches of the fit.
+
+        Returns
+        -------
+        int
+            The exit code, always 0.
+
+        """
+        report = fit_model(read_records(options.samples or _default_samples_path(model), model), final=options.final)
+        sys.stdout.write(_format_report(report) + "\n")
+        if options.dry_run:
+            return 0
+        weights_table = WeightsTable.from_bytes(options.table.read_bytes()).with_entry(report.key, report.entry)
+        if options.set_default:
+            weights_table = attrs.evolve(weights_table, default=report.entry)
+            ESTIMATOR_PATH.write_text(set_default_constants(ESTIMATOR_PATH.read_text(), report.entry))
+        options.table.write_bytes(weights_table.to_bytes())
+        sys.stdout.write(f"wrote {options.table}\n")
+        return 0
+
+    return app
 
 
 def main(argv: Sequence[str] | None = None, *, sampler: Sampler | None = None) -> int:
@@ -665,36 +778,7 @@ def main(argv: Sequence[str] | None = None, *, sampler: Sampler | None = None) -
         The exit code: 0 on success, 2 when ``collect`` lacks ``--yes``.
 
     """
-    args = _parser().parse_args(argv)
-    key: ModelKey = args.model
-    if args.command == "collect":
-        output = args.output or _default_samples_path(key)
-        if not args.yes:
-            sys.stderr.write(
-                f"This sends {args.count + 1} paid requests to {key.provider}/{key.model}. Add --yes to agree.\n",
-            )
-            return 2
-        output.parent.mkdir(parents=True, exist_ok=True)
-        texts = graph_texts([
-            EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index in range(len(ebm.feature_names_in_))
-        ])
-        written = 0
-        for record in collect(texts, sampler or _real_sampler(key), args.count):
-            write_records([record], output)
-            written += 1
-        sys.stdout.write(f"wrote {written} records to {output}\n")
-        return 0
-    report = fit_model(read_records(args.samples or _default_samples_path(key), key), final=args.final)
-    sys.stdout.write(_format_report(report) + "\n")
-    if args.dry_run:
-        return 0
-    table = WeightsTable.from_bytes(args.table.read_bytes()).with_entry(report.key, report.entry)
-    if args.set_default:
-        table = attrs.evolve(table, default=report.entry)
-        ESTIMATOR_PATH.write_text(set_default_constants(ESTIMATOR_PATH.read_text(), report.entry))
-    args.table.write_bytes(table.to_bytes())
-    sys.stdout.write(f"wrote {args.table}\n")
-    return 0
+    return int(_build_app(sampler)(None if argv is None else list(argv)))
 
 
 if __name__ == "__main__":

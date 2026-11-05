@@ -1,6 +1,5 @@
 """Tests for the script that collects token samples of a model and fits its token weights."""
 
-import argparse
 import ast
 from pathlib import Path
 
@@ -321,7 +320,7 @@ def test_a_model_name_with_slashes_is_read_after_the_first_slash() -> None:
 
 @pytest.mark.parametrize("text", ["gpt", "/model", "provider/"])
 def test_a_model_without_a_provider_or_a_name_is_rejected(text: str) -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match="provider/model"):
+    with pytest.raises(ValueError, match="provider/model"):
         script._parse_model(text)
 
 
