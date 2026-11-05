@@ -41,6 +41,7 @@ mcp = [
     "mcp>=1.30.0",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.0.0",
+    "skops>=0.16.0",
 ]
 
 [project.scripts]

@@ -227,7 +227,7 @@ def serve(
     Parameters
     ----------
     model: Path
-        Pickled or joblib EBM. Loading it runs code.
+        EBM in a skops file, which runs no code, or in a pickled or joblib file, which does.
     data: Path, optional
         CSV file with the rows for the row argument.
     llm: str, optional
