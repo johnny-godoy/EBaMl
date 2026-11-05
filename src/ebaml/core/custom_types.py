@@ -30,8 +30,9 @@ type ClassLabel = str | float
 type FeatureValue = str | float | Decimal | np.generic | NAType | None
 # A JSON value of the texts for the prompts. The abstract containers keep a list[str] or a dict[str, float] assignable,
 # so the hint also accepts a Sequence or a Mapping that orjson cannot write (a range, a MappingProxyType). orjson raises
-# for those when it writes the text.
-type JSONValue = str | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
+# for those when it writes the text. The numeric tower already lets float cover bool, but JSON has true and false as a
+# type of its own, so the hint names bool.
+type JSONValue = str | bool | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
 
 
 class Normalization(enum.StrEnum):
