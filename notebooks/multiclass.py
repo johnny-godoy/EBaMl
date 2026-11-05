@@ -10,7 +10,7 @@ app = marimo.App(width="medium")
 def _():
     import marimo as mo
     import numpy as np
-    import pandas as pd  # ruff: ignore[banned-api] -- the notebook builds the pandas labels that interpret fits on
+    import polars as pl
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import load_iris
 
@@ -38,7 +38,7 @@ def _():
         mo,
         model_kind,
         np,
-        pd,
+        pl,
     )
 
 
@@ -67,12 +67,15 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(ExplainableBoostingClassifier, load_iris, mo, model_kind, pd):
+def _(ExplainableBoostingClassifier, load_iris, mo, model_kind, pl):
     iris = load_iris(as_frame=True)
-    features = iris.data.rename(columns=lambda name: name.removesuffix(" (cm)").replace(" ", "_"))
-    species = pd.Series(iris.target_names[iris.target], name="species")
+    features = pl.from_pandas(iris.data).rename(lambda name: name.removesuffix(" (cm)").replace(" ", "_"))
+    species = pl.Series("species", iris.target_names[iris.target])
     # no pairwise interactions: the LLM reads one graph per feature
-    ebm = ExplainableBoostingClassifier(interactions=0, random_state=42).fit(features, species)
+    ebm = ExplainableBoostingClassifier(feature_names=features.columns, interactions=0, random_state=42).fit(
+        features,
+        species,
+    )
     kind = model_kind(ebm)
     petal_index = list(features.columns).index("petal_length")
     mo.md(f"`model_kind(ebm)` is `{kind!r}`, with the outputs `{kind.outputs}`.\n\n{kind.score_meaning}")
@@ -120,9 +123,9 @@ def _(EBMGraph, ebm, features, kind, mo, np):
         feature_graph = EBMGraph.from_ebm(ebm, index, use_feature_bounds=False)
         # the bin of each value, from the cut points of the EBM (one bin per interval)
         cuts = np.asarray(ebm.bins_[index][0], dtype=float)
-        bins = np.searchsorted(cuts, features.iloc[:5, index].to_numpy(), side="right")
+        bins = np.searchsorted(cuts, features[:5, index].to_numpy(), side="right")
         scores += np.asarray(feature_graph.scores)[bins]
-    difference = float(np.abs(kind.predict(scores) - ebm.predict_proba(features.iloc[:5])).max())
+    difference = float(np.abs(kind.predict(scores) - ebm.predict_proba(features.head(5))).max())
     mo.md(f"The largest difference from `ebm.predict_proba` is `{difference:.1e}`.")
 
 
@@ -197,7 +200,10 @@ def _(EBMGraph, InvalidOptionError, ebm, mo, petal_index) -> None:
 
 @app.cell
 def _(EBMGraph, ExplainableBoostingClassifier, UnsupportedModelError, features, mo, petal_index, species) -> None:
-    binary = ExplainableBoostingClassifier(interactions=0, random_state=42).fit(features, species == "setosa")
+    binary = ExplainableBoostingClassifier(feature_names=features.columns, interactions=0, random_state=42).fit(
+        features,
+        species == "setosa",
+    )
     try:
         EBMGraph.from_ebm(binary, petal_index, classes=["True"])
         binary_classes = mo.md("No error.")

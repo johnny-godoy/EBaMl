@@ -47,7 +47,9 @@ dependencies; do not add the replaced modules back. Ruff fails on an import of `
 - Code that reads a file itself uses polars (`nw.read_csv(path, backend="polars")`).
 - Ruff bans `pandas` (`banned-api`), so no module imports it without an inline `# ruff: ignore[banned-api] -- <reason>`.
   `PANDAS_NA_TYPE` in `ebaml.core.custom_types` is the one such import in `src/`: `pd.NA` has a type of its own.
-  Tests and two notebooks import pandas with the same ignore, because `interpret` fits on pandas frames.
+  Tests import pandas with the same ignore, because they build the frames that `interpret` fits on.
+- Notebooks use polars. `interpret` ignores the column names of a polars frame, so pass `feature_names=frame.columns`
+  to the EBM.
 - The semgrep rule `ebaml-no-frame-type-branches` fails on `isinstance` checks of a pandas or polars frame in `src/`,
   `scripts/` and `benchmark/`.
 
