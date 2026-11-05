@@ -60,30 +60,13 @@ rules:
     paths:
       include: ["/src/ebaml/core/", "/src/ebaml/graphs/", "/src/ebaml/local/"]
 
-  - id: ebaml-preferred-libraries
+  - id: ebaml-no-frame-type-branches
     languages: [python]
     severity: ERROR
     message: >-
-      Use structlog instead of logging, orjson instead of json and attrs instead of dataclasses
-      (.claude/rules/libraries.md).
+      A branch on a pandas or polars frame type repeats the work of narwhals. Take the frame with narwhals.from_native
+      and call the narwhals API (.claude/rules/libraries.md). The import bans are ruff banned-api entries.
     pattern-either:
-      - pattern: import logging
-      - pattern: from logging import $X
-      - pattern: import json
-      - pattern: from json import $X
-      - pattern: import dataclasses
-      - pattern: from dataclasses import $X
-    paths:
-      include: ["/src/", "/tests/", "/scripts/", "/benchmark/", "/notebooks/"]
-
-  - id: ebaml-no-pandas-import
-    languages: [python]
-    severity: ERROR
-    message: >-
-      Code in ebaml takes a frame of any library with narwhals, and reads data with polars. Import neither pandas nor
-      branch on a frame type (.claude/rules/libraries.md).
-    pattern-either:
-      - pattern-regex: ^\s*(import|from)\s+pandas\b
       - pattern: isinstance($X, pd.DataFrame)
       - pattern: isinstance($X, pl.DataFrame)
       - pattern: isinstance($X, pl.LazyFrame)

@@ -24,7 +24,7 @@ Four subcommands, all stdlib only:
 """
 
 import io
-import json
+import json  # ruff: ignore[banned-api] -- this script runs under the bare python3 of the runner, with no project environment
 import os
 import re
 import sys

@@ -12,9 +12,7 @@ from interpret.glassbox import (
     ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
     ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 )
-
-# nosemgrep: ebaml-no-pandas-import -- pd.NA has a type of its own, and only pandas exports it
-from pandas.api.typing import NAType
+from pandas.api.typing import NAType  # ruff: ignore[banned-api] -- pd.NA has a type of its own, and only pandas exports it
 
 from ebaml.core.exceptions import InvalidOptionError
 

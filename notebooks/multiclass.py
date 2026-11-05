@@ -10,7 +10,7 @@ app = marimo.App(width="medium")
 def _():
     import marimo as mo
     import numpy as np
-    import pandas as pd
+    import pandas as pd  # ruff: ignore[banned-api] -- the notebook builds the pandas labels that interpret fits on
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import load_iris
 

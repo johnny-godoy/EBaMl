@@ -1,7 +1,8 @@
 # Preferred libraries
 
 Use these libraries instead of their standard-library or alternative counterparts. They are declared in `pyproject.toml`
-dependencies; do not add the replaced modules back.
+dependencies; do not add the replaced modules back. Ruff fails on an import of `dataclasses`, `json`, `logging` and
+`pandas` (`[tool.ruff.lint.flake8-tidy-imports.banned-api]` in `pyproject.toml`).
 
 | Need | Use | Not |
 | --- | --- | --- |
@@ -44,10 +45,11 @@ dependencies; do not add the replaced modules back.
 - A function that takes a frame from the caller wraps it with `narwhals.from_native` and calls the narwhals API. The
   caller keeps its own library, and ebaml imports none of them. Do not branch on `pd.DataFrame` or `pl.DataFrame`.
 - Code that reads a file itself uses polars (`nw.read_csv(path, backend="polars")`).
-- `src/`, `scripts/` and `benchmark/` do not import pandas. The semgrep rule `ebaml-no-pandas-import` enforces this.
-  The one exception is `PANDAS_NA_TYPE` in `ebaml.core.custom_types`: `pd.NA` has a type of its own, and `interpret`
-  needs pandas anyway.
-- Tests may use pandas, because they feed `interpret`, which takes pandas frames.
+- Ruff bans `pandas` (`banned-api`), so no module imports it without an inline `# ruff: ignore[banned-api] -- <reason>`.
+  `PANDAS_NA_TYPE` in `ebaml.core.custom_types` is the one such import in `src/`: `pd.NA` has a type of its own.
+  Tests and two notebooks import pandas with the same ignore, because `interpret` fits on pandas frames.
+- The semgrep rule `ebaml-no-frame-type-branches` fails on `isinstance` checks of a pandas or polars frame in `src/`,
+  `scripts/` and `benchmark/`.
 
 ## Exception
 

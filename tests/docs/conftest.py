@@ -19,7 +19,7 @@ from collections.abc import Callable, MutableMapping
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 from sybil import Sybil
 from sybil.parsers.markdown import PythonCodeBlockParser, SkipParser
