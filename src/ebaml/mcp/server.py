@@ -4,13 +4,13 @@ Each tool is a thin adapter. It calls a function of a lower layer and turns the 
 (``EBaMlError``) becomes a tool error with its message.
 """
 
-import argparse
 import contextlib
 from collections.abc import Generator, Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
 import attrs
+import cyclopts
 import orjson
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -207,6 +207,39 @@ def _register_llm_tools(server: FastMCP, store: ModelStore, llm: ModelOptions) -
             return llm_tools.describe_model(store, llm)
 
 
+app: cyclopts.App = cyclopts.App(
+    name="ebaml-mcp",
+    help="Serve a fitted EBM to an MCP client.",
+    result_action="return_value",
+)
+
+
+@app.default
+def serve(
+    *,
+    model: Path,
+    data: Path | None = None,
+    llm: str | None = None,
+    transport: Literal["stdio", "streamable-http"] = "stdio",
+) -> None:
+    """Load the EBM and run the MCP server.
+
+    Parameters
+    ----------
+    model: Path
+        Pickled or joblib EBM. Loading it runs code.
+    data: Path, optional
+        CSV file with the rows for the row argument.
+    llm: str, optional
+        PROVIDER/MODEL of the LLM tools. Without it the server has none.
+    transport: Literal["stdio", "streamable-http"]
+        How the server talks to the client.
+
+    """
+    store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None)
+    create_server(store, ModelOptions.parse(llm) if llm else None).run(transport=transport)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the ``ebaml-mcp`` command.
 
@@ -216,15 +249,4 @@ def main(argv: Sequence[str] | None = None) -> None:
         The arguments. The default is the command line.
 
     """
-    parser = argparse.ArgumentParser(prog="ebaml-mcp", description="Serve a fitted EBM to an MCP client.")
-    parser.add_argument("--model", required=True, type=Path, help="pickled or joblib EBM; loading it runs code")
-    parser.add_argument("--data", type=Path, help="CSV file with the rows for the row argument")
-    parser.add_argument("--llm", help="PROVIDER/MODEL of the LLM tools; without it the server has none")
-    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio")
-    arguments = parser.parse_args(argv)
-    store = ModelStore(
-        ebm=load_model(arguments.model),
-        data=load_data(arguments.data) if arguments.data else None,
-    )
-    llm = ModelOptions.parse(arguments.llm) if arguments.llm else None
-    create_server(store, llm).run(transport=arguments.transport)
+    app(None if argv is None else list(argv))

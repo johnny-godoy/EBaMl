@@ -188,6 +188,13 @@ def test_main_loads_the_model_and_runs_the_server(
     assert [transport for _, transport in started] == ["stdio", "streamable-http"]
 
 
+def test_main_rejects_an_unknown_transport(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--model", str(tmp_path / "model.joblib"), "--transport", "carrier-pigeon"])
+    assert exit_info.value.code != 0
+    assert "carrier-pigeon" in capsys.readouterr().err
+
+
 async def test_no_tool_takes_a_path(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
     """Loading a pickle runs code, so only the user names a file, at start. No tool argument may name one."""
     ebm, _ = continuous_ebm
