@@ -12,13 +12,15 @@ Run it as a ``commit-msg`` hook (``--message-file``), or on the commits of a bra
 commits that git writes for ``fixup!`` and ``squash!`` are skipped.
 """
 
-import argparse
 import re
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- git offers the commits of a branch only as a command
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Annotated, cast
+
+import cyclopts
 
 MAX_CHANGED_LINES = 400
 # the same minimum as the reason of a workaround in scripts/check_ignores.py
@@ -177,8 +179,45 @@ def _report(problems: Iterable[str]) -> int:
     return 1 if found else 0
 
 
-def main(argv: Sequence[str]) -> int:
+_MODE = cyclopts.Group("Mode", validator=cyclopts.validators.LimitedChoice(min=1))
+
+app: cyclopts.App = cyclopts.App(
+    name="check_commits",
+    help=__doc__.split("\n", 1)[0],
+    result_action="return_value",
+)
+
+
+@app.default
+def check(
+    *,
+    message_file: Annotated[Path | None, cyclopts.Parameter(group=_MODE)] = None,
+    base: Annotated[str | None, cyclopts.Parameter(group=_MODE)] = None,
+) -> int:
     """Check one commit message, or every commit of a branch.
+
+    Parameters
+    ----------
+    message_file: Path, optional
+        The file that holds the commit message (the ``commit-msg`` hook).
+    base: str, optional
+        Check every commit from this revision to HEAD (CI).
+
+    Returns
+    -------
+    int
+        The process exit code: 0 if there is no problem, 1 otherwise.
+
+    """
+    if message_file is None:
+        # the group needs exactly one flag, so --base is set here
+        return _report(branch_problems(cast("str", base)))
+    subject = message_file.read_text(encoding="utf-8").split("\n", 1)[0]
+    return _report(subject_problems(subject))
+
+
+def main(argv: Sequence[str]) -> int:
+    """Run the command line.
 
     Parameters
     ----------
@@ -191,15 +230,7 @@ def main(argv: Sequence[str]) -> int:
         The process exit code: 0 if there is no problem, 1 otherwise.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--message-file", type=Path, help="the file that holds the commit message")
-    mode.add_argument("--base", help="check every commit from this revision to HEAD")
-    args = parser.parse_args(argv)
-    if args.base is not None:
-        return _report(branch_problems(args.base))
-    subject = args.message_file.read_text(encoding="utf-8").split("\n", 1)[0]
-    return _report(subject_problems(subject))
+    return int(app(list(argv)))
 
 
 if __name__ == "__main__":

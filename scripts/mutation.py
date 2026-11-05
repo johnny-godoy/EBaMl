@@ -10,7 +10,6 @@ mutants on the lines that changed since ``REF`` run. With ``--module``, all muta
 non-zero if any mutant survives.
 """
 
-import argparse
 import itertools
 import os
 import re
@@ -27,8 +26,10 @@ from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
+from typing import Annotated
 
 import attrs
+import cyclopts
 import orjson
 import structlog
 from coverage import CoverageData
@@ -443,8 +444,28 @@ def select_mutants(base: str | None, modules: Sequence[str] | None) -> None:
         logger.info("partial run", modules=sorted(modules))
 
 
-def main() -> int:
+_WHICH = cyclopts.Group("Which modules", validator=cyclopts.validators.MutuallyExclusive())
+
+app: cyclopts.App = cyclopts.App(name="mutation", help=__doc__, result_action="return_value")
+
+
+@app.default
+def main(
+    shards: int = os.cpu_count() or 1,
+    *,
+    base: Annotated[str | None, cyclopts.Parameter(group=_WHICH)] = None,
+    module: Annotated[list[str] | None, cyclopts.Parameter(group=_WHICH, negative_iterable=())] = None,
+) -> int:
     """Run the mutation testing in shards.
+
+    Parameters
+    ----------
+    shards: int
+        The number of shards. The default is the number of CPUs.
+    base: str, optional
+        Mutate only the modules that changed since this revision.
+    module: list[str], optional
+        Mutate only this module. Repeat the flag for more modules.
 
     Returns
     -------
@@ -452,23 +473,16 @@ def main() -> int:
         The exit code: non-zero if the baseline fails or any mutant survives.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("shards", nargs="?", type=int, default=os.cpu_count() or 1)
-    which = parser.add_mutually_exclusive_group()
-    which.add_argument("--base", help="mutate only the modules that changed since this revision")
-    which.add_argument("--module", action="append", help="mutate only this module; repeat for more modules")
-    args = parser.parse_args()
-    shards = args.shards
     SESSION.parent.mkdir(exist_ok=True)
     SESSION.unlink(missing_ok=True)
     run(sys.executable, "-m", "cosmic_ray.cli", "init", str(CONFIG), str(SESSION))
     # lines marked ``# pragma: no mutate`` hold mutants that are equivalent to the original code
     run(sys.executable, "-m", "cosmic_ray.tools.filters.pragma_no_mutate", str(SESSION))
-    if args.module:
-        missing = sorted(path for path in args.module if not (ROOT / path).is_file())
-        if missing:
-            parser.error(f"no such module: {', '.join(missing)}")
-    select_mutants(args.base, args.module)
+    missing = sorted(path for path in module or () if not (ROOT / path).is_file())
+    if missing:
+        sys.stderr.write(f"no such module: {', '.join(missing)}\n")
+        return 2
+    select_mutants(base, module)
     modules = sorted(session_modules(SESSION))
     if not modules:
         logger.info("no mutants to run")
@@ -501,4 +515,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(app())

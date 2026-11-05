@@ -18,15 +18,16 @@ Equal signatures do not prove equal meaning, so only a strong case is an error:
 Run it from the repo root: ``uv run python -m scripts.check_contract_overlap``. ``--format json`` prints JSON.
 """
 
-import argparse
 import ast
 import itertools
 import sys
 import tomllib
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Annotated, Literal
 
 import attrs
+import cyclopts
 
 from scripts.check_abstractions import (
     ACTIVE,
@@ -48,7 +49,6 @@ CONTRACT_BASES = frozenset({"Protocol", "ABC"})
 IGNORED_DECORATORS = frozenset({"abstractmethod", "overload"})
 CALL_METHOD = "__call__"
 SIMILARITY = 0.5
-OUTPUT_FORMATS = ("text", "json")
 
 
 @attrs.frozen
@@ -406,19 +406,43 @@ def overlap_diagnostics(contracts: Sequence[Contract], registry: Registry, path:
     return found
 
 
-def _parser() -> argparse.ArgumentParser:
-    """Build the command line parser.
+app: cyclopts.App = cyclopts.App(
+    name="check_contract_overlap",
+    help=__doc__.splitlines()[0],
+    result_action="return_value",
+)
+
+
+@app.default
+def run(
+    *,
+    output_format: Annotated[Literal["text", "json"], cyclopts.Parameter(name="--format")] = "text",
+    root: Path = ROOT,
+) -> int:
+    """Check the registered contracts for identical signatures.
+
+    Parameters
+    ----------
+    output_format: Literal["text", "json"]
+        The output format.
+    root: Path
+        The repo root. The default is this repository.
 
     Returns
     -------
-    argparse.ArgumentParser
-        The parser.
+    int
+        The process exit code: 1 if the check found an error, else 0. A warning does not fail the check.
 
     """
-    parser = argparse.ArgumentParser(prog="check_contract_overlap", description=__doc__.splitlines()[0])
-    parser.add_argument("--format", choices=OUTPUT_FORMATS, default="text", help="the output format")
-    parser.add_argument("--root", type=Path, default=ROOT, help="the repo root (default: this repository)")
-    return parser
+    layers = layer_names(tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")))
+    registry, shape_problems = load_registry(root)
+    findings = shape_problems + overlap_diagnostics(
+        find_contracts(root, layers),
+        registry,
+        "architecture/abstractions.yml",
+    )
+    emit(findings, output_format, "no contract repeats another")
+    return 1 if any(finding.severity == ERROR for finding in findings) else 0
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -435,17 +459,7 @@ def main(argv: Sequence[str] = ()) -> int:
         The process exit code: 1 if the check found an error, else 0. A warning does not fail the check.
 
     """
-    arguments = _parser().parse_args(list(argv))
-    root = arguments.root
-    layers = layer_names(tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8")))
-    registry, shape_problems = load_registry(root)
-    findings = shape_problems + overlap_diagnostics(
-        find_contracts(root, layers),
-        registry,
-        "architecture/abstractions.yml",
-    )
-    emit(findings, arguments.format, "no contract repeats another")
-    return 1 if any(finding.severity == ERROR for finding in findings) else 0
+    return int(app(list(argv)))
 
 
 if __name__ == "__main__":

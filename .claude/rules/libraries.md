@@ -18,6 +18,15 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 - `orjson.dumps` returns `bytes`: write with `write_bytes`, and use `option=orjson.OPT_INDENT_2` instead of `indent=2`.
 - Catch `orjson.JSONDecodeError`.
 
+## Command line (`cyclopts`)
+
+- Build a command from a function: the type hints are the interface, and the docstring (numpy style) is the help text.
+  Create the app with `result_action="return_value"`, so that a successful run returns the value and does not call
+  `sys.exit`.
+- Keep `main(argv)` as a thin wrapper that calls `app(list(argv))`, so that a test passes the arguments.
+- Raise `ValueError` in a converter. Cyclopts reports it as a usage error.
+- Use `cyclopts.Group` with `cyclopts.validators.MutuallyExclusive` or `LimitedChoice` for flags that exclude each other.
+
 ## Data classes (`attrs`)
 
 - Use `@attrs.define` (or `@attrs.frozen` for immutable values) rather than `@dataclass`; use `attrs.field` and

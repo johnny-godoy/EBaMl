@@ -9,11 +9,13 @@ by tool, so they can be reviewed in one place. Run it as a module from the repo 
 The report is generated, so do not commit it or edit it by hand.
 """
 
-import argparse
 import itertools
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Annotated
+
+import cyclopts
 
 from scripts.ignore_sites import Site, find_sites
 
@@ -69,8 +71,38 @@ def render(sites: Sequence[Site]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+app: cyclopts.App = cyclopts.App(
+    name="compile_ignores",
+    help=__doc__.splitlines()[0] if __doc__ else None,
+    result_action="return_value",
+)
+
+
+@app.default
+def compile_report(output: Annotated[Path | None, cyclopts.Parameter(name=["--output", "-o"])] = None) -> int:
     """Write the report to stdout or to ``--output``.
+
+    Parameters
+    ----------
+    output: Path, optional
+        Write the report here instead of stdout.
+
+    Returns
+    -------
+    int
+        The process exit code, always 0: use ``check_ignores`` to enforce.
+
+    """
+    report = render(find_sites())
+    if output is None:
+        sys.stdout.write(report)
+    else:
+        output.write_text(report, encoding="utf-8")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line.
 
     Parameters
     ----------
@@ -80,18 +112,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns
     -------
     int
-        The process exit code, always 0: use ``check_ignores`` to enforce.
+        The process exit code.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-    parser.add_argument("-o", "--output", type=Path, help="write the report here instead of stdout")
-    args = parser.parse_args(argv)
-    report = render(find_sites())
-    if args.output is None:
-        sys.stdout.write(report)
-    else:
-        args.output.write_text(report, encoding="utf-8")
-    return 0
+    return int(app(None if argv is None else list(argv)))
 
 
 if __name__ == "__main__":

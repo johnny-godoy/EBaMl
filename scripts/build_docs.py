@@ -23,7 +23,6 @@ So the ``build`` command also resolves every relative ``href`` and ``src`` of th
 ``site_url``, and fails when a link leaves that path or names a file that the site does not have.
 """
 
-import argparse
 import posixpath
 import re
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- marimo and Zensical only offer their build as a command
@@ -31,8 +30,10 @@ import sys
 import tomllib
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Literal
 from urllib.parse import unquote, urljoin, urlsplit
 
+import cyclopts
 import structlog
 import typst
 
@@ -261,6 +262,30 @@ def serve() -> int:
 
 COMMANDS: dict[str, Callable[[], int]] = {"build": build, "serve": serve}
 
+app: cyclopts.App = cyclopts.App(
+    name="build_docs",
+    help=__doc__.splitlines()[0] if __doc__ else None,
+    result_action="return_value",
+)
+
+
+@app.default
+def run_command(command: Literal["build", "serve"] = "build") -> int:
+    """Run one command of the script.
+
+    Parameters
+    ----------
+    command: Literal["build", "serve"]
+        The command to run.
+
+    Returns
+    -------
+    int
+        The exit code of the command.
+
+    """
+    return COMMANDS[command]()
+
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one command of the script.
@@ -276,9 +301,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         The exit code of the command.
 
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else None)
-    parser.add_argument("command", nargs="?", default="build", choices=sorted(COMMANDS))
-    return COMMANDS[parser.parse_args(argv).command]()
+    return int(app(None if argv is None else list(argv)))
 
 
 if __name__ == "__main__":
