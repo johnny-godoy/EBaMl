@@ -11,7 +11,7 @@ def _():
     import attrs
     import marimo as mo
     import numpy as np
-    import pandas as pd  # ruff: ignore[banned-api] -- the notebook builds the pandas labels that interpret fits on
+    import polars as pl
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
     from sklearn.datasets import load_iris
 
@@ -30,7 +30,7 @@ def _():
         mo,
         model_kind,
         np,
-        pd,
+        pl,
     )
 
 
@@ -69,16 +69,26 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(ExplainableBoostingClassifier, ExplainableBoostingRegressor, load_iris, mo, model_kind, pd):
+def _(ExplainableBoostingClassifier, ExplainableBoostingRegressor, load_iris, mo, model_kind, pl):
     iris = load_iris(as_frame=True)
-    measures = iris.data.rename(columns=lambda name: name.removesuffix(" (cm)").replace(" ", "_"))
-    species = pd.Series(iris.target_names[iris.target], name="species")
-    features = measures.drop(columns="petal_width")
+    measures = pl.from_pandas(iris.data).rename(lambda name: name.removesuffix(" (cm)").replace(" ", "_"))
+    species = pl.Series("species", iris.target_names[iris.target])
+    features = measures.drop("petal_width")
     # no pairwise interactions: the graphs and the local explanations read one effect per feature
     models = {
-        "binary": ExplainableBoostingClassifier(interactions=0, random_state=42).fit(features, species == "virginica"),
-        "multiclass": ExplainableBoostingClassifier(interactions=0, random_state=42).fit(features, species),
-        "regressor": ExplainableBoostingRegressor(interactions=0, random_state=42).fit(features, measures.petal_width),
+        "binary": ExplainableBoostingClassifier(feature_names=features.columns, interactions=0, random_state=42).fit(
+            features,
+            species == "virginica",
+        ),
+        "multiclass": ExplainableBoostingClassifier(
+            feature_names=features.columns,
+            interactions=0,
+            random_state=42,
+        ).fit(features, species),
+        "regressor": ExplainableBoostingRegressor(feature_names=features.columns, interactions=0, random_state=42).fit(
+            features,
+            measures["petal_width"],
+        ),
     }
     kinds = {name: model_kind(ebm) for name, ebm in models.items()}
     petal_index = list(features.columns).index("petal_length")
@@ -105,7 +115,7 @@ def _(mo) -> None:
 
 @app.cell
 def _(EBMGraph, features, kinds, mo, models, np):
-    first = features.iloc[:5]
+    first = features.head(5)
     # the output of each EBM, as its kind defines it: one column per output
     model_outputs = {
         "binary": models["binary"].predict_proba(first)[:, 1:],
@@ -119,7 +129,7 @@ def _(EBMGraph, features, kinds, mo, models, np):
             graph_scores = np.asarray(EBMGraph.from_ebm(model, feature_index, use_feature_bounds=False).scores)
             # the bin of each value, from the cut points of the EBM (one bin per interval)
             cuts = np.asarray(model.bins_[feature_index][0], dtype=float)
-            bins = np.searchsorted(cuts, first.iloc[:, feature_index].to_numpy(), side="right")
+            bins = np.searchsorted(cuts, first[:, feature_index].to_numpy(), side="right")
             total += graph_scores.reshape(len(graph_scores), -1)[bins]
         difference = float(np.abs(kinds[model_name].predict(total) - model_outputs[model_name]).max())
         differences.append({"model": model_name, "largest difference": f"{difference:.1e}"})
@@ -178,7 +188,7 @@ def _(features, mo):
 
 @app.cell
 def _(LocalOptions, compute_local_facts, confidence, features, flower, models):
-    instance = features.iloc[flower.value].to_dict()
+    instance = features.row(flower.value, named=True)
     facts = compute_local_facts(models["binary"], instance, LocalOptions(confidence_level=confidence.value))
     return facts, instance
 
