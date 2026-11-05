@@ -8,6 +8,22 @@ from dataclasses import dataclass
 # ok: ebaml-preferred-libraries
 import structlog
 
+# ruleid: ebaml-no-pandas-import
+import pandas as pd
+# ruleid: ebaml-no-pandas-import
+from pandas.api.typing import NAType
+# ok: ebaml-no-pandas-import
+import narwhals as nw
+
+
+def frame_kind(frame):
+    # ruleid: ebaml-no-pandas-import
+    if isinstance(frame, pd.DataFrame):
+        return "pandas"
+    # ok: ebaml-no-pandas-import
+    return nw.from_native(frame).columns
+
+
 
 # ruleid: ebaml-no-kwargs-bag
 def bag(**options):
