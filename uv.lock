@@ -1026,6 +1026,7 @@ mcp = [
 [package.dev-dependencies]
 commits = [
     { name = "commitizen" },
+    { name = "cyclopts" },
 ]
 dev = [
     { name = "commitizen" },
@@ -1046,6 +1047,7 @@ dev = [
     { name = "scipy-stubs" },
     { name = "scriv" },
     { name = "semgrep" },
+    { name = "skops" },
     { name = "sybil" },
     { name = "types-pyyaml" },
     { name = "typst" },
@@ -1080,7 +1082,10 @@ requires-dist = [
 provides-extras = ["mcp"]
 
 [package.metadata.requires-dev]
-commits = [{ name = "commitizen", specifier = ">=4.19.2" }]
+commits = [
+    { name = "commitizen", specifier = ">=4.19.2" },
+    { name = "cyclopts", specifier = ">=5.2.0" },
+]
 dev = [
     { name = "commitizen", specifier = ">=4.19.2" },
     { name = "cosmic-ray", specifier = ">=8.7.0" },
@@ -1100,6 +1105,7 @@ dev = [
     { name = "scipy-stubs", specifier = ">=1.18.1.1" },
     { name = "scriv", specifier = ">=1.8.0" },
     { name = "semgrep", specifier = ">=1.181.0" },
+    { name = "skops", specifier = ">=0.16.0" },
     { name = "sybil", specifier = ">=10.1.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
     { name = "typst", specifier = ">=0.15.0" },
