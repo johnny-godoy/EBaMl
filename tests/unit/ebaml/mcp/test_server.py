@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import joblib
+import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
 import orjson
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest

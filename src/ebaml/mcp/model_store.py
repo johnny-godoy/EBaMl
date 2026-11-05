@@ -7,7 +7,7 @@ import os
 import zipfile
 
 import attrs
-import joblib
+import joblib  # ruff: ignore[banned-api] -- ebaml-mcp also loads the joblib files that users saved, and the user trusts the file by naming its path
 import narwhals as nw
 import polars as pl
 import skops.io

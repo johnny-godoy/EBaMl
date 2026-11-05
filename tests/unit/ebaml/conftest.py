@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import interpret
-import joblib
+import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
 import narwhals as nw
 import numpy as np
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
