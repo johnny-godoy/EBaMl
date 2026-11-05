@@ -36,6 +36,7 @@ dependencies = [
 # The server for agents. Only ebaml.mcp imports these packages. The lower bound of mcp matches the override in
 # the uv override list, so the extra keeps the fixed release after the override goes away.
 mcp = [
+    "cyclopts>=5.2.0",
     "joblib>=1.5.0",
     "mcp>=1.30.0",
     # ebaml.mcp reads the CSV file of --data with polars
@@ -159,6 +160,7 @@ select = ["ALL"]
 [dependency-groups]
 dev = [
     "cosmic-ray>=8.7.0",
+    "cyclopts>=5.2.0",
     "deptry>=0.25.1",
     "hypothesis>=6.170.1",
     "import-linter>=2.15",
@@ -195,8 +197,9 @@ release = [
 
 [tool.vulture]
 # reason: recurring patterns: fixtures are used through pytest's name-based injection, and the functions that
-# @server.tool and @server.resource register are called by the MCP SDK by name. Vulture cannot see either.
-ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource"]
+# @server.tool and @server.resource register are called by the MCP SDK by name, and cyclopts calls the functions that
+# @app.default and @app.command register from the command line. Vulture cannot see any of them.
+ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*"]
 # reason: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, code never references them, so vulture
 # reports them as unused.
 ignore_names = ["pytestmark", "pytest_*"]
