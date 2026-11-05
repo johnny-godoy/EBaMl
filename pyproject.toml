@@ -137,10 +137,15 @@ select = ["ALL"]
 # `# ruff: ignore[banned-api] -- <reason>` on the import.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "argparse".msg = "Use cyclopts. See .claude/rules/libraries.md."
+"cloudpickle".msg = "Use skops.io. See .claude/rules/libraries.md."
 "dataclasses".msg = "Use attrs. See .claude/rules/libraries.md."
+"dill".msg = "Use skops.io. See .claude/rules/libraries.md."
+"joblib".msg = "Use skops.io. See .claude/rules/libraries.md."
 "json".msg = "Use orjson. See .claude/rules/libraries.md."
 "logging".msg = "Use structlog. See .claude/rules/libraries.md."
 "pandas".msg = "Take a frame with narwhals, or read data with polars. See .claude/rules/libraries.md."
+"pickle".msg = "Use skops.io. See .claude/rules/libraries.md."
+"shelve".msg = "Use skops.io. See .claude/rules/libraries.md."
 
 [tool.ruff.lint.per-file-ignores]
 # reason: recurring pattern in tests/: pytest tests use bare assert, literal expected values and private members by design,

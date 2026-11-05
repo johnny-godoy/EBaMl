@@ -27,6 +27,14 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 - Raise `ValueError` in a converter. Cyclopts reports it as a usage error.
 - Use `cyclopts.Group` with `cyclopts.validators.MutuallyExclusive` or `LimitedChoice` for flags that exclude each other.
 
+## Saved models (`skops.io`)
+
+- Save and load a fitted model with `skops.io`. It loads only the types that the caller trusts, so a file runs no code.
+  Pass the names of the trusted types to `skops.io.load(path, trusted=[...])`. Never pass `trusted=True`.
+- `pickle`, `shelve`, `dill`, `cloudpickle` and `joblib` run code when they load a file, so ruff bans them.
+- The one exception is `ebaml.mcp.model_store`, which also loads the joblib files that users saved. The ignore on the
+  import gives the reason. Tests that write such a file carry the same ignore.
+
 ## Data classes (`attrs`)
 
 - Use `@attrs.define` (or `@attrs.frozen` for immutable values) rather than `@dataclass`; use `attrs.field` and
