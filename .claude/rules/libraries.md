@@ -1,17 +1,9 @@
 # Preferred libraries
 
-Use these libraries instead of their standard-library or alternative counterparts. They are declared in `pyproject.toml`
-dependencies; do not add the replaced modules back. Ruff fails on an import of `dataclasses`, `json`, `logging` and
-`pandas` (`[tool.ruff.lint.flake8-tidy-imports.banned-api]` in `pyproject.toml`).
-
-| Need | Use | Not |
-| --- | --- | --- |
-| Logging | `structlog` | `logging` (and `print` for diagnostics) |
-| JSON | `orjson` | `json` |
-| Data classes | `attrs` | `dataclasses` |
-| Runtime type checks | `beartype` | `typeguard`, manual `isinstance` checks of hints |
-| Data frames that a caller passes | `narwhals` | `pandas` imports, `isinstance` checks of a frame type |
-| Data frames that ebaml reads itself | `polars` | `pandas` |
+Use the library that the section below names, and do not add its replacement back. The banned imports are the single
+source in `[tool.ruff.lint.flake8-tidy-imports.banned-api]` of `pyproject.toml`: each entry names the module and its
+replacement. Read that table when you need the list, and do not copy it here, because a copy goes stale. Ruff fails on
+a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reason>`.
 
 ## Logging (`structlog`)
 
@@ -45,7 +37,7 @@ dependencies; do not add the replaced modules back. Ruff fails on an import of `
 - A function that takes a frame from the caller wraps it with `narwhals.from_native` and calls the narwhals API. The
   caller keeps its own library, and ebaml imports none of them. Do not branch on `pd.DataFrame` or `pl.DataFrame`.
 - Code that reads a file itself uses polars (`nw.read_csv(path, backend="polars")`).
-- Ruff bans `pandas` (`banned-api`), so no module imports it without an inline `# ruff: ignore[banned-api] -- <reason>`.
+- No module imports `pandas` without the inline ignore above.
   `PANDAS_NA_TYPE` in `ebaml.core.custom_types` is the one such import in `src/`: `pd.NA` has a type of its own.
   Tests import pandas with the same ignore, because they build the frames that `interpret` fits on.
 - Notebooks use polars. `interpret` ignores the column names of a polars frame, so pass `feature_names=frame.columns`
