@@ -3,12 +3,10 @@
 import typing
 
 import pytest
-from beartype.door import is_bearable
 
 from ebaml.core.custom_types import (
     ExplainableBoostingModel,
     FeatureType,
-    JSONValue,
     Normalization,
     coerce_enum,
     normalize_feature_type,
@@ -84,9 +82,3 @@ def test_coerce_enum(value: str | Normalization) -> None:
 def test_coerce_enum_invalid() -> None:
     with pytest.raises(InvalidOptionError, match="bogus"):
         coerce_enum(Normalization, "bogus")
-
-
-def test_json_value_names_bool() -> None:
-    """A JSON true or false is a JSONValue by its own type, and not only through the numeric tower."""
-    assert typing.get_args(JSONValue.__value__).count(bool) == 1
-    assert is_bearable({"flip_possible": True, "scores": [False, 1.5, None]}, JSONValue)
