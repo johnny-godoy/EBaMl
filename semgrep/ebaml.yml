@@ -76,6 +76,20 @@ rules:
     paths:
       include: ["/src/", "/tests/", "/scripts/", "/benchmark/", "/notebooks/"]
 
+  - id: ebaml-no-pandas-import
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Code in ebaml takes a frame of any library with narwhals, and reads data with polars. Import neither pandas nor
+      branch on a frame type (.claude/rules/libraries.md).
+    pattern-either:
+      - pattern-regex: ^\s*(import|from)\s+pandas\b
+      - pattern: isinstance($X, pd.DataFrame)
+      - pattern: isinstance($X, pl.DataFrame)
+      - pattern: isinstance($X, pl.LazyFrame)
+    paths:
+      include: ["/src/", "/scripts/", "/benchmark/"]
+
   - id: ebaml-no-manual-beartype
     languages: [python]
     severity: ERROR

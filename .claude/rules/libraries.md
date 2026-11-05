@@ -9,6 +9,8 @@ dependencies; do not add the replaced modules back.
 | JSON | `orjson` | `json` |
 | Data classes | `attrs` | `dataclasses` |
 | Runtime type checks | `beartype` | `typeguard`, manual `isinstance` checks of hints |
+| Data frames that a caller passes | `narwhals` | `pandas` imports, `isinstance` checks of a frame type |
+| Data frames that ebaml reads itself | `polars` | `pandas` |
 
 ## Logging (`structlog`)
 
@@ -36,6 +38,16 @@ dependencies; do not add the replaced modules back.
 - A hint that is wrong fails at run time. Fix the hint (see `types.md`), and do not remove the check.
 - Pytest turns `BeartypeClawDecorWarning` into an error, because beartype skips a function that it cannot decorate.
 - Checks of annotated variables are off (`claw_is_pep526=False`): structlog's lazy logger proxy fails its own hint.
+
+## Data frames (`narwhals`, `polars`)
+
+- A function that takes a frame from the caller wraps it with `narwhals.from_native` and calls the narwhals API. The
+  caller keeps its own library, and ebaml imports none of them. Do not branch on `pd.DataFrame` or `pl.DataFrame`.
+- Code that reads a file itself uses polars (`nw.read_csv(path, backend="polars")`).
+- `src/`, `scripts/` and `benchmark/` do not import pandas. The semgrep rule `ebaml-no-pandas-import` enforces this.
+  The one exception is `PANDAS_NA_TYPE` in `ebaml.core.custom_types`: `pd.NA` has a type of its own, and `interpret`
+  needs pandas anyway.
+- Tests may use pandas, because they feed `interpret`, which takes pandas frames.
 
 ## Exception
 
