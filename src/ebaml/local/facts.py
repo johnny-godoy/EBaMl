@@ -28,9 +28,8 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 from interpret.utils._clean_x import _densify_categorical  # ruff: ignore[import-private-name] -- interpret has no public function that writes a value as the text of its category
-from pandas.api.typing import NAType
 
-from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import PANDAS_NA_TYPE, ClassLabel, ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import BinaryClassifier, model_kind
@@ -264,7 +263,11 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
 
     """
     # the missing markers of a FeatureValue: None, pd.NA, and a NaN of Python or of any NumPy float type
-    if value is None or isinstance(value, NAType) or (isinstance(value, float | np.floating) and math.isnan(value)):
+    if (
+        value is None
+        or isinstance(value, PANDAS_NA_TYPE)
+        or (isinstance(value, float | np.floating) and math.isnan(value))
+    ):
         msg = f"Feature {graph.feature_name!r} is missing; local explanations need every input."
         raise InvalidInstanceError(msg)
     if graph.feature_type == "continuous":

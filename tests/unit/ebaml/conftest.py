@@ -14,6 +14,7 @@ from typing import Any
 
 import interpret
 import joblib
+import narwhals as nw
 import numpy as np
 import pandas as pd
 import pytest
@@ -21,7 +22,7 @@ from beartype.door import is_bearable
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
-from ebaml.core.custom_types import FeatureValue
+from ebaml.core.custom_types import FeatureValue, Frame
 
 # `baml generate` writes the signatures of the SDK functions only to this stub. At run time each function takes
 # (*args, **kwargs), so inspect.signature cannot see the parameters.
@@ -443,3 +444,15 @@ def call_mismatches(protocol: type, sdk_function: str) -> list[str]:
         if name in theirs and not same_type(hints[name], theirs[name].annotation)
     ]
     return problems
+
+
+def as_frame(data: pd.DataFrame) -> Frame:
+    """Wrap a pandas frame as the narwhals frame that ``ModelStore`` takes.
+
+    Returns
+    -------
+    Frame
+        The same rows.
+
+    """
+    return nw.from_native(data)  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a pandas frame

@@ -10,28 +10,31 @@ from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import compute_local_facts
 from ebaml.mcp.explain_tools import explain_prediction
 from ebaml.mcp.model_store import ModelStore
-from tests.unit.ebaml.conftest import instance_of
+from tests.unit.ebaml.conftest import as_frame, instance_of
 
 
 def test_instance_and_row_give_the_same_facts(
     continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
 ) -> None:
-    ebm, data = continuous_ebm
+    ebm, frame = continuous_ebm
+    data = as_frame(frame)
     store = ModelStore(ebm=ebm, data=data)
     by_row = explain_prediction(store, row=3)
-    assert by_row == explain_prediction(store, instance=instance_of(data, 3))
-    assert by_row.facts == compute_local_facts(ebm, instance_of(data, 3))
+    assert by_row == explain_prediction(store, instance=instance_of(frame, 3))
+    assert by_row.facts == compute_local_facts(ebm, instance_of(frame, 3))
 
 
 def test_texts_follow_the_audience(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
-    ebm, data = continuous_ebm
+    ebm, frame = continuous_ebm
+    data = as_frame(frame)
     explanation = explain_prediction(ModelStore(ebm=ebm, data=data), row=0, audience="data_scientist")
     assert explanation.texts == facts_to_texts(explanation.facts, DataScientist())
     assert explanation.texts != explain_prediction(ModelStore(ebm=ebm, data=data), row=0).texts
 
 
 def test_confidence_level_reaches_the_facts(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
-    ebm, data = continuous_ebm
+    ebm, frame = continuous_ebm
+    data = as_frame(frame)
     explanation = explain_prediction(ModelStore(ebm=ebm, data=data), row=0, confidence_level=0.5)
     assert explanation.facts.confidence_level == pytest.approx(0.5)
 
@@ -41,7 +44,8 @@ def test_exactly_one_of_instance_and_row_is_needed(
     continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
     arguments: dict[str, object],
 ) -> None:
-    ebm, data = continuous_ebm
+    ebm, frame = continuous_ebm
+    data = as_frame(frame)
     with pytest.raises(InvalidInstanceError, match="exactly one"):
         explain_prediction(ModelStore(ebm=ebm, data=data), **arguments)  # pyrefly: ignore[bad-argument-type] -- the test passes bad argument combinations on purpose
 

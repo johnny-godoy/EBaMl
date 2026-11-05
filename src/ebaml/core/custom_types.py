@@ -4,18 +4,27 @@ import enum
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from decimal import Decimal
+from typing import Any
 
+import narwhals as nw
 import numpy as np
 from interpret.glassbox import (
     ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
     ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 )
+
+# nosemgrep: ebaml-no-pandas-import -- pd.NA has a type of its own, and only pandas exports it
 from pandas.api.typing import NAType
 
 from ebaml.core.exceptions import InvalidOptionError
 
 ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRegressor
 
+# The type of pd.NA. This is the only place in ebaml that imports pandas, so the rest of the code stays neutral.
+PANDAS_NA_TYPE: type[NAType] = NAType
+
+# A data frame of any library that narwhals supports.
+type Frame = nw.DataFrame[Any]
 # A label of a class, as NumPy's tolist() and item() return it. The numeric tower lets float cover int and bool.
 type ClassLabel = str | float
 # A value of one feature of an instance. A row of a pandas DataFrame gives NumPy scalars, a nullable column gives pd.NA,
