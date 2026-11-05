@@ -32,7 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # The server for agents. Only ebaml.mcp imports these packages. The lower bound of mcp matches the override in
-# [tool.uv], so the extra keeps the fixed release after the override goes away.
+# the uv override list, so the extra keeps the fixed release after the override goes away.
 mcp = [
     "joblib>=1.5.0",
     "mcp>=1.30.0",
