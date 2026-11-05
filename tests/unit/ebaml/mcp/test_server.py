@@ -16,7 +16,7 @@ from ebaml.llm.options import ModelOptions
 from ebaml.mcp import server as server_module
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.server import create_server, main
-from tests.unit.ebaml.conftest import instance_of
+from tests.unit.ebaml.conftest import as_frame, instance_of
 
 pytestmark = pytest.mark.anyio
 
@@ -34,7 +34,7 @@ async def _call(server: FastMCP, name: str, arguments: dict[str, object] | None 
 @pytest.fixture
 def binary_server(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> FastMCP:
     ebm, data = continuous_ebm
-    return create_server(ModelStore(ebm=ebm, data=data))
+    return create_server(ModelStore(ebm=ebm, data=as_frame(data)))
 
 
 async def test_summary_of_a_binary_classifier(binary_server: FastMCP) -> None:
@@ -82,7 +82,7 @@ async def test_explain_prediction_by_instance_and_by_row(
     continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
 ) -> None:
     ebm, data = continuous_ebm
-    server = create_server(ModelStore(ebm=ebm, data=data))
+    server = create_server(ModelStore(ebm=ebm, data=as_frame(data)))
     instance = {key: (value.item() if hasattr(value, "item") else value) for key, value in instance_of(data, 0).items()}
     _, by_instance = await _call(server, "explain_prediction", {"instance": instance})
     _, by_row = await _call(server, "explain_prediction", {"row": 0})

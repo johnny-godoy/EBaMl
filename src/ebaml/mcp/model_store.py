@@ -7,10 +7,11 @@ import os
 
 import attrs
 import joblib
-import pandas as pd
+import narwhals as nw
+import polars as pl
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 
 
@@ -22,15 +23,16 @@ class ModelStore:
     ----------
     ebm: ExplainableBoostingModel
         The fitted EBM.
-    data: pd.DataFrame | None
-        The rows that the ``row`` argument of the explain tool indexes.
+    data: Frame | None
+        The rows that the ``row`` argument of the explain tool indexes. Wrap a pandas or polars frame with
+        ``narwhals.from_native``.
     model_description: str | None
         The output of ``describe_ebm``. The first call computes it and the next calls reuse it.
 
     """
 
     ebm: ExplainableBoostingModel
-    data: pd.DataFrame | None = None
+    data: Frame | None = None
     model_description: str | None = None
 
     def feature_index(self, feature: str) -> int:
@@ -89,7 +91,8 @@ class ModelStore:
         if missing:
             msg = f"The data has no column for these features: {missing}."
             raise InvalidInstanceError(msg)
-        return {name: self.data.iloc[row][name] for name in names}
+        values = dict(zip(self.data.columns, self.data.row(row), strict=True))
+        return {name: values[name] for name in names}
 
 
 def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
@@ -121,7 +124,7 @@ def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
     return model
 
 
-def load_data(path: str | os.PathLike[str]) -> pd.DataFrame:
+def load_data(path: str | os.PathLike[str]) -> Frame:
     """Read the CSV file of the data.
 
     Parameters
@@ -131,8 +134,8 @@ def load_data(path: str | os.PathLike[str]) -> pd.DataFrame:
 
     Returns
     -------
-    pd.DataFrame
+    Frame
         The rows.
 
     """
-    return pd.read_csv(path)
+    return nw.from_native(pl.read_csv(os.fspath(path)))  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a polars frame

@@ -982,6 +982,7 @@ dependencies = [
     { name = "baml-bridge" },
     { name = "beartype" },
     { name = "interpret" },
+    { name = "narwhals" },
     { name = "numpy" },
     { name = "orjson" },
     { name = "pandas" },
@@ -993,6 +994,7 @@ dependencies = [
 mcp = [
     { name = "joblib" },
     { name = "mcp" },
+    { name = "polars" },
 ]
 
 [package.dev-dependencies]
@@ -1038,9 +1040,11 @@ requires-dist = [
     { name = "interpret", specifier = ">=0.7.8" },
     { name = "joblib", marker = "extra == 'mcp'", specifier = ">=1.5.0" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.30.0" },
+    { name = "narwhals", specifier = ">=2.27.1" },
     { name = "numpy", specifier = ">=2.5.4" },
     { name = "orjson", specifier = ">=3.13.0" },
     { name = "pandas", specifier = ">=3.0.6" },
+    { name = "polars", marker = "extra == 'mcp'", specifier = ">=2.0.0" },
     { name = "scipy", specifier = ">=1.18.1" },
     { name = "structlog", specifier = ">=26.1.0" },
 ]
