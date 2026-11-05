@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.4.1'></a>
+## [0.4.1] - 2026-11-05
+
+### Added
+
+- `ebaml-mcp --model` loads a skops file as well as a joblib file, and reads the format from the file. The server trusts only the EBM classes, so a skops file runs no code.
+
+### Changed
+
+- The MCP server reads the `--data` CSV file with polars, and `ModelStore` accepts a frame of any library that narwhals supports (pandas, polars, pyarrow). ebaml no longer imports pandas outside the type of `pd.NA`.
+
+- `ebaml-mcp` and `benchmark/run.py` use cyclopts for the command line. The flags stay the same, and the `mcp` extra installs cyclopts. A wrong value now gives a usage error with the list of valid choices.
+
 <a id='changelog-0.4.0'></a>
 ## [0.4.0] - 2026-11-05
 
