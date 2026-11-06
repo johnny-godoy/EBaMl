@@ -17,12 +17,14 @@
 
 #v(1em)
 
-*Summary.* EBaMl explains one prediction of a binary Explainable Boosting Machine (EBM) in two exact ways. The
+*Summary.* EBaMl explains one prediction of a binary or regression Explainable Boosting Machine (EBM) in two exact ways. The
 _minimum change required_ is the fewest features to change so that the prediction flips. The _minimum sufficient
 reason_ is the fewest features to fix so that no values of the other features can flip the prediction. Both queries
 come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
-one sort. This paper proves that the sort is optimal. A Lean 4 file @lean4 checks every statement, and the appendix tells
-the reader how to repeat the check.
+one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
+The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
+covering problem, and the paper proves what two searches return. A Lean 4 file @lean4 checks every statement, and the
+appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
 
@@ -36,6 +38,18 @@ change of any set of features flips the prediction.
 *Claim 2 (minimum sufficient reason).* The function `_sufficient_reason`, with the order of `_fixing_order`, returns
 a set of features that is sufficient. No set with fewer features is sufficient. If the function returns `None`, no set
 of features is sufficient, and the set of all features is not sufficient either.
+
+*Claim 3 (regressor).* For a regressor with a threshold $tau$, the margin of the decision is the margin of the binary
+model with the intercept $b - tau$. Claims 1 and 2 therefore hold for the decisions "above $tau$" and "at most $tau$"
+with no new proof (@sec-regressor, Lemmas 7 and 8). The code does this shift in `compute_local_facts`.
+
+*Claim 4 (inside an interval).* When the predicted value is inside the interval, the decision has two margins. The
+fewest features that flip it are the fewest of the two answers for the margins, and `_smallest_counterfactual` returns
+this number (Theorem 6).
+
+*Claim 5 (searches).* For a decision with several margins, `Minimal` returns a sufficient set from which no feature
+can be removed, and `ExactOrMinimal` returns a smallest sufficient set when the number of features is at most its
+limit. `Minimal` does not claim a smallest set, except for a set of at most one feature (Theorems 4 and 5, Corollary 3).
 
 The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The text of the module docstring
 differs a little from the code for the counterfactual. @sec-limits explains the difference.
@@ -63,6 +77,8 @@ term to each concept, and the text uses this term everywhere.
   [fixed], [A feature is _fixed_ when its bin is known to be $c_i$.],
   [sufficient], [A set $F$ of fixed features is _sufficient_ when its worst-case margin is above zero.],
   [drop, gain], [The numbers $d_i$ and $h_i$ of @sec-model. The code sorts them.],
+  [threshold], [The score $tau$ at which a margin changes sign. It is $0$ for a classifier.],
+  [decision], [The claim that the explanations keep. A decision holds while every one of its margins is positive.],
 )
 
 The code reads a model with one term per feature, and it rejects interaction terms (`_features`). The model is
@@ -361,6 +377,200 @@ The code returns the first $k$ in each case, and `None` in the case of Theorem 2
 @sec-claims follow from Theorems 2 and 3, provided that the code computes the quantities of @sec-model. The
 table in @sec-model shows where.
 
+= Decisions with several margins <sec-covering>
+
+A decision such as "inside an interval" holds while two margins are positive at the same time. This section knows
+nothing about EBMs. A _problem_ has a finite set $I$ of features, a finite index set $K$ of margins, a number
+$W_k$ for each margin (the worst case when no feature is fixed), and a gain $h_(k,i) >= 0$ for each margin $k$ and
+feature $i$. A set $F subset.eq I$ is _sufficient_ iff $W_k + sum_(i in F) h_(k,i) > 0$ for each $k in K$. With one
+margin this is the definition of @sec-model.
+
+#lemma("monotone", [
+  If $F subset.eq G$ and $F$ is sufficient, then $G$ is sufficient.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Covering.lean", "EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono"))
+
+#proof[
+  Let $k in K$. The gains are not negative, so $sum_(i in F) h_(k,i) <= sum_(i in G) h_(k,i)$. Hence
+  $W_k + sum_(i in G) h_(k,i) >= W_k + sum_(i in F) h_(k,i) > 0$.
+]
+
+The search `Minimal` has two passes. The first pass orders the features by their smallest gain over the margins and
+adds them until the set is sufficient. The second pass, _prune_, visits the added features from the last to the first.
+It removes a feature when the set stays sufficient without it. The proof allows any order in both passes. Let
+$"prune"(l, C)$ be the result for a list $l$ of features and a set $C$ at the start of the second pass.
+
+#theorem("the removal pass", [
+  Let $C$ be sufficient, and let $l$ hold every feature of $C$. Then $"prune"(l, C)$ is a sufficient subset of $C$,
+  and no feature can be removed from it: for each $f in "prune"(l, C)$, the set $"prune"(l, C) without {f}$ is not
+  sufficient.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Covering.lean", "EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal", "EBaMlProofs.LocalExplanations.Covering.Problem.prune_invariant"))
+
+#proof[
+  *ASSUME:* a sufficient set $C$, and a list $l$ that holds every feature of $C$. *PROVE:* the three claims.
+  *Invariant* for a list $l$ and a set $C$: $C$ is sufficient, and each $f in C$ is in $l$ or is needed (that is,
+  $C without {f}$ is not sufficient). We show by induction on $l$ that the invariant gives the three claims.
+
+  #step(1, "1", [*Case* $l$ is empty. Then $"prune"(l, C) = C$, and each $f in C$ is needed, because it is not in
+    $l$.])
+  #step(1, "2", [*Case* $l = f_0 :: l'$. Let $C'$ be $C without {f_0}$ if this set is sufficient, and $C$ otherwise.
+    The pass continues with $C'$ and $l'$.])
+  #step(2, "1", [$C'$ is sufficient, and $C' subset.eq C$, by the choice of $C'$.])
+  #step(2, "2", [Each $f in C'$ is in $l'$ or is needed in $C'$.])
+  #step(3, "1", [*Case* $f$ is in $l'$. Done.])
+  #step(3, "2", [*Case* $f = f_0$. Then $f_0 in C'$, so the first choice was not taken, $C' = C$, and
+    $C without {f_0}$ is not sufficient. Hence $f_0$ is needed in $C'$.])
+  #step(3, "3", [*Case* $f$ is needed in $C$. Then $C' without {f} subset.eq C without {f}$. If $C' without {f}$ were
+    sufficient, then $C without {f}$ would be sufficient by Lemma 6. So $f$ is needed in $C'$.])
+  #step(3, "4", [*Q.E.D.* The three cases cover each $f in C'$, because $f in C$ and the invariant holds for $C$.])
+  #step(2, "3", [The invariant holds for $C'$ and $l'$ by $chevron.l 2 chevron.r 1$ and $chevron.l 2 chevron.r 2$.
+    The induction hypothesis gives the three claims for the result, and the result is a subset of $C' subset.eq C$.])
+  #step(1, "3", [*Q.E.D.* The assumption of the theorem is the invariant for $C$, because each $f in C$ is in $l$.])
+]
+
+The search `ExactOrMinimal` tries the sets by size and returns the first sufficient set.
+
+#theorem("the exact search", [
+  Let $F$ be sufficient, and let no set with fewer than $|F|$ features be sufficient. Then each sufficient set has
+  at least $|F|$ features. The search visits at most $2^n$ sets for $n$ features.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Covering.lean", "EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum", "EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space"))
+
+#proof[
+  A sufficient set $G$ with $|G| < |F|$ would contradict the assumption. The sets that the search visits are
+  subsets of $I$, and there are $2^n$ of them.
+]
+
+#corollary("a set of at most one feature", [
+  Let $R$ be sufficient with $|R| <= 1$. If $R$ is empty, or the empty set is not sufficient, then each sufficient
+  set has at least $|R|$ features.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Covering.lean", "EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one"))
+
+#proof[
+  If $R$ is empty, the claim is $0 <= |G|$. Otherwise the empty set is not sufficient, so each sufficient set $G$ is
+  not empty, and $|G| >= 1 >= |R|$.
+]
+
+The code sets the flag `minimum` of the result of `Minimal` to `len(chosen) <= 1`. Corollary 3 proves this flag. The
+code does not claim a smallest set for a larger result, and the proof shows no such claim. An example shows why. Take
+two margins with $W = (-6, -2)$ and four features with the gains $h_1 = (2, 2)$, $h_2 = (2, 2)$, $h_3 = (3, 3)$ and
+$h_4 = (5, 1)$ for the two margins. The first pass adds the features $3, 1, 2$ (in the order of the smallest gain)
+and the set is sufficient. No feature can be removed, but $\{3, 4\}$ is also sufficient and has fewer features.
+
+= Regressors and the answer inside an interval <sec-regressor>
+
+A regressor predicts the value $L = b + sum_i s_i (c_i)$. A decision is a claim about $L$. The code gives it as a
+list of _margins_ (`Margin` in `decisions.py`). Each margin has a sign $sigma in {1, -1}$ and a threshold $tau$, and its
+value is $sigma (L - tau)$. A binary classifier is the case with one margin and $tau = 0$.
+The code (`Threshold.side` and `Interval.side`) chooses the margins as follows.
+
+#table(
+  columns: (auto, 1fr),
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [*Claim that holds*], [*Margins $(sigma, tau)$*],
+  [above $t$], [$(1, t)$],
+  [at most $t$], [$(-1, t)$],
+  [above $l$ and at most $u$ (inside)], [$(1, l)$ and $(-1, u)$],
+)
+
+The next lemmas apply to the margin with the data $(sigma, tau)$ when $sigma$ is the sign that the claim has. Let
+$m_tau$ be the model of @sec-model with the intercept $b - tau$ and the same scores, deviations, plausible bins and
+instance bins. The code does this shift: it passes `intercept - margin.threshold` to the algorithms (`_Bound` in
+`compute_local_facts`).
+
+#lemma("the shift", [
+  (a) The logit of $m_tau$ is $L - tau$. (b) The sign of $m_tau$ is $1$ if $tau < L$, and $-1$ otherwise. (c) The
+  margin of $m_tau$ is $epsilon (L - tau)$ with this sign. So a prediction above $tau$ has the margin $L - tau$ of the
+  claim "above $tau$", and any other prediction has the margin $tau - L$ of the claim "at most $tau$".
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Regressor.lean", "EBaMlProofs.LocalExplanations.Model.shift_logit", "EBaMlProofs.LocalExplanations.Model.shift_eps", "EBaMlProofs.LocalExplanations.Model.shift_margin_eq"))
+
+#proof[
+  (a) $(b - tau) + sum_i s_i (c_i) = L - tau$. (b) The sign is $1$ iff the logit $L - tau$ is above $0$, which holds
+  iff $tau < L$. (c) The margin is the sign times the logit (Notation of @sec-model), and the logit is $L - tau$.
+]
+
+The shifted model $m_tau$ is a model of @sec-model. Theorems 2 and 3 therefore hold for it, and they are the
+statements about the regressor decision "above $tau$" or "at most $tau$" (Claim 3). The function
+`_counterfactual` and the function `_sufficient_reason` run on $m_tau$.
+
+#lemma("a flip crosses the threshold", [
+  Let $z = 0$, and let $x$ be the predicted value after a change $(S, w)$. The robust margin $R(S, w)$ of $m_tau$ is
+  negative iff $x < tau$ when $tau < L$, and iff $x > tau$ when $L <= tau$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Regressor.lean", "EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff"))
+
+#proof[
+  With $z = 0$ the pessimistic score is the signed score, so $R(S, w) = epsilon (x - tau)$ for the sign $epsilon$ of
+  $m_tau$. For $epsilon = 1$ this is negative iff $x < tau$. For $epsilon = -1$ it is negative iff $x > tau$.
+]
+
+A change that the code finds therefore moves the value to the other side of $tau$. The converse fails only at the
+point $x = tau$ for a prediction above $tau$. @sec-limits discusses this tie.
+
+When the predicted value is inside the interval $(l, u]$, the two shifted models have the signs $1$ and $-1$.
+A change flips the decision "inside" iff it makes one of the two robust margins negative.
+
+#theorem("inside an interval", [
+  Let $l < L <= u$. Let $k_1$ and $k_2$ be the positions of Theorem 2 for the models $m_l$ and $m_u$. Then
+  (a) the signs of $m_l$ and $m_u$ are $1$ and $-1$,
+  (b) a set $S$ flips the decision iff it flips the margin of $m_l$ or the margin of $m_u$,
+  (c) the smallest set that flips the decision has $min(k_1, k_2)$ features, and
+  (d) if neither model has a position, no set flips the decision.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Regressor.lean", "EBaMlProofs.LocalExplanations.Model.inside_eps (a)", "EBaMlProofs.LocalExplanations.Model.canFlipInside_iff (b)", "EBaMlProofs.LocalExplanations.Model.min_change_inside (c)", "EBaMlProofs.LocalExplanations.Model.min_change_inside_none (d)"))
+
+#proof[
+  *ASSUME:* $l < L <= u$ and the positions $k_1$ and $k_2$ of Theorem 2. *PROVE:* (a)–(d).
+
+  #step(1, "1", [(a) holds by Lemma 7(b), because $l < L$ and $not (u < L)$.])
+  #step(1, "2", [(b) holds. A change $(S, w)$ flips the decision iff $R_l (S, w) < 0$ or $R_u (S, w) < 0$. The
+    plausible bins and the set $S$ are the same for both models. So the change flips one margin iff $S$ can flip
+    that margin.])
+  #step(1, "3", [(c) holds.])
+  #step(2, "1", [The first $min(k_1, k_2)$ features of the model with the smaller position, moved to the bins
+    $beta$, flip the decision, by Theorem 2(a) and $chevron.l 1 chevron.r 2$.])
+  #step(2, "2", [A set $S$ that flips the decision has $|S| >= k_1$ or $|S| >= k_2$ by Theorem 2(b) and
+    $chevron.l 1 chevron.r 2$. So $|S| >= min(k_1, k_2)$.])
+  #step(2, "3", [*Q.E.D.* by $chevron.l 2 chevron.r 1$ and $chevron.l 2 chevron.r 2$.])
+  #step(1, "4", [(d) holds by Theorem 2(d) for each model and $chevron.l 1 chevron.r 2$.])
+  #step(1, "5", [*Q.E.D.* by $chevron.l 1 chevron.r 1$ to $chevron.l 1 chevron.r 4$.])
+]
+
+The code takes the first of the two answers when both have the same size (`min` in `_smallest_counterfactual`). The
+size is the same, and the named features may differ.
+
+The sufficient reason of a decision with the margins $m_k$ is a covering problem.
+
+#lemma("several margins", [
+  Let $m_k$ be the shifted models of the margins of a decision. A set $F$ is sufficient for the problem with
+  $W_k = W_k (emptyset)$ and the gains $h_(k,i)$ of $m_k$ iff $F$ is sufficient for each model $m_k$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Regressor.lean", "EBaMlProofs.LocalExplanations.problemOfModels_sufficient"))
+
+#proof[
+  By Lemma 5, $F$ is sufficient for $m_k$ iff $W_k (emptyset) + sum_(i in F) h_(k,i) > 0$. This is the condition of
+  the problem for the margin $k$. The gains of a model are not negative, so the data form a problem.
+]
+
+Lemma 9 puts the sufficient reason of "inside" under Theorems 4 and 5. The function `_gain_table` computes the numbers
+$W_k$ and $h_(k,i)$, and the class `Minimal` or `ExactOrMinimal` does the search.
+
+*Correspondence of symbols to the code* for this section.
+
+#table(
+  columns: (auto, 1fr, auto),
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [*Symbol*], [*Computed by*], [*Function*],
+  [$(sigma, tau)$], [`Margin(sign, threshold, opposite)`], [`Threshold.side`, `Interval.side`],
+  [intercept $b - tau$], [`_Bound(intercept - margin.threshold, margin.sign)`], [`compute_local_facts`],
+  [the answer for a margin], [`_counterfactual(features, intercept - margin.threshold, margin.sign, ...)`], [`_smallest_counterfactual`],
+  [$min(k_1, k_2)$], [`min(found, key=lambda c: len(c.changes), default=None)`], [`_smallest_counterfactual`],
+  [$W_k (emptyset)$], [`bound.sign * bound.intercept + sum(scores.min() ...)`], [`_gain_table`],
+  [$h_(k,i)$], [`scores[f.bin_index] - scores.min()`], [`_gain_table`],
+  [first pass of `Minimal`], [`for feature in [None, *order]` until `_guaranteed(...) > 0`], [`Minimal.select`],
+  [$"prune"$], [`for feature in reversed(list(chosen))`], [`Minimal.select`],
+  [the exact search], [`itertools.combinations(order, size)` for each size], [`ExactOrMinimal.select`],
+  [the flag `minimum`], [`minimum=len(chosen) <= 1` and `minimum=True`], [`Minimal.select`, `ExactOrMinimal.select`],
+)
+
+
 = Limits <sec-limits>
 
 The proof does not cover the following points.
@@ -379,6 +589,20 @@ The proof does not cover the following points.
   For the counterfactual, only the changed features use $p$. The unchanged features keep their mean scores in
   $M$ (in `_counterfactual`). The proof covers the code. If the docstring is the intention, the counterfactual needs a
   different definition of $M$, and Theorem 2 needs a new proof.
+- *The tie at the threshold.* A change of a prediction above $tau$ that lands exactly on $tau$ gives the robust margin
+  $0$, so the code does not count it as a flip, although the value is then "at most $tau$". This is the same
+  convention as the logit $0$ of a classifier. Every change that the code finds does flip the decision (Lemma 8), and
+  "fewest" counts the changes that cross $tau$ strictly. A point mass at $tau$ has no meaning in floating point.
+- *The order of `Minimal`.* The proof allows any order in both passes of `Minimal`. It proves a set from which no feature
+  can be removed, and it proves nothing about how large that set is, except for at most one feature (Corollary 3).
+- *The cost of `ExactOrMinimal`.* The search visits at most $2^n$ sets (Theorem 5). The code limits $n$ with
+  `max_features`, and above the limit it returns the result of `Minimal` with the flag `minimum` false. The proof does
+  not model this switch, but each branch has its own statement.
+- *The confidence of a decision with several margins.* Each margin moves by $z$ deviations against its own claim, as in
+  @sec-model. The proof covers this definition, which is the code. EBMs store no covariance between the scores of two
+  margins, and the proof does not need one.
+- *Multiclass classifiers.* A multiclass classifier has one margin for each other class. The shift of Lemma 7 does not
+  describe it, and the proof of this paper does not cover it.
 - *Interaction terms.* With interaction terms the score is not a sum of one term per feature, and the greedy rule
   is not minimal. Take three features $a$, $b$ and $c$ with bins in ${0, 1}$, and the instance $(0, 0, 0)$. Let the
   score be $f = 1 - 0.6 a - 0.6 b + u(b, c)$, where $u(b, c) = -2$ for $(b, c) = (0, 1)$ and $u(b, c) = 0$
@@ -391,9 +615,11 @@ The proof does not cover the following points.
 
 = Computer check <sec-computer>
 
-The Lean 4 library in `proofs/` states each lemma, theorem and corollary of @sec-abstract and @sec-application
-and proves it with the Mathlib library @mathlib2020. The file `EBaMlProofs/LocalExplanations/Greedy.lean` holds the abstract part, and
-the file `EBaMlProofs/LocalExplanations/Model.lean` holds the model and the two theorems. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
+The Lean 4 library in `proofs/` states each lemma, theorem and corollary of @sec-abstract, @sec-application,
+@sec-covering and @sec-regressor and proves it with the Mathlib library @mathlib2020. The file
+`EBaMlProofs/LocalExplanations/Greedy.lean` holds the abstract part, the file `EBaMlProofs/LocalExplanations/Model.lean`
+holds the model and the two theorems, the file `EBaMlProofs/LocalExplanations/Covering.lean` holds the problem of several
+margins, and the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside". The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
 axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
 
 A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
@@ -418,7 +644,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`fa80d8d76f4c42836ed0221bc796cb6e0d42acb8`],
+  [Lean sources checked at commit], [`cfcd113a95964b867a90c049199b2d69acc4d103`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -434,7 +660,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout fa80d8d76f4c42836ed0221bc796cb6e0d42acb8
+git checkout cfcd113a95964b867a90c049199b2d69acc4d103
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
@@ -448,12 +674,24 @@ This takes tens of minutes, and the result is the same.
 with `error`. The file `Axioms.lean` prints these lines, in this order:
 
 ```text
-info: EBaMlProofs/LocalExplanations/Axioms.lean:10:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:11:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:11:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:16:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:17:0: 'EBaMlProofs.LocalExplanations.Model.shift_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:18:0: 'EBaMlProofs.LocalExplanations.Model.shift_margin_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:19:0: 'EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:20:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInside_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:21:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:22:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:23:0: 'EBaMlProofs.LocalExplanations.problemOfModels_sufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:24:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:25:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:26:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:27:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:28:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
@@ -463,7 +701,8 @@ must not appear. To search for it, run `lake build 2>&1 | grep -c sorry`. The ex
 The last command writes `papers/local-explanations/paper.pdf` and prints nothing.
 
 *Statements and Lean names.* The directory is `proofs/EBaMlProofs/LocalExplanations/`. In the table, `Greedy.` stands for
-`EBaMlProofs.LocalExplanations.Greedy.` and `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`.
+`EBaMlProofs.LocalExplanations.Greedy.` and `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`, `Covering.` stands for
+`EBaMlProofs.LocalExplanations.Covering.Problem.`, and `LE.` stands for `EBaMlProofs.LocalExplanations.`.
 
 #table(
   columns: (auto, 1fr, auto),
@@ -485,4 +724,15 @@ The last command writes `papers/local-explanations/paper.pdf` and prints nothing
   [Theorem 2 (d)], [`Model.min_change_none`], [`Model.lean`],
   [Theorem 3 (a, b)], [`Model.min_sufficient_reason`], [`Model.lean`],
   [Theorem 3 (c)], [`Model.min_sufficient_reason_none`], [`Model.lean`],
+  [Lemma 6 (monotone)], [`Covering.sufficient_mono`], [`Covering.lean`],
+  [Theorem 4 (removal pass)], [`Covering.prune_minimal`, `Covering.prune_invariant`], [`Covering.lean`],
+  [Theorem 5 (exact search)], [`Covering.exact_minimum`, `Covering.card_search_space`], [`Covering.lean`],
+  [Corollary 3 (at most one feature)], [`Covering.minimum_of_card_le_one`], [`Covering.lean`],
+  [Lemma 7 (shift)], [`Model.shift_logit`, `Model.shift_eps`, `Model.shift_margin_eq`], [`Regressor.lean`],
+  [Lemma 8 (crossing)], [`Model.shift_robustMargin_neg_iff`], [`Regressor.lean`],
+  [Theorem 6 (a)], [`Model.inside_eps`], [`Regressor.lean`],
+  [Theorem 6 (b)], [`Model.canFlipInside_iff`], [`Regressor.lean`],
+  [Theorem 6 (c)], [`Model.min_change_inside`], [`Regressor.lean`],
+  [Theorem 6 (d)], [`Model.min_change_inside_none`], [`Regressor.lean`],
+  [Lemma 9 (several margins)], [`LE.problemOfModels_sufficient`], [`Regressor.lean`],
 )
