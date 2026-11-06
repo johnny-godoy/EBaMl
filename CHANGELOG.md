@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.4.2'></a>
+## [0.4.2] - 2026-11-06
+
+### Fixed
+
+- `ebaml-mcp` writes its log events to stderr. Before, they went to stdout and could corrupt the JSON-RPC stream of the stdio transport.
+- The `max_tokens` argument of the `get_graph` tool takes effect. The server merges the bins of a continuous graph until its estimated size fits the budget, and it raises an error if the graph cannot fit.
+
 <a id='changelog-0.4.1'></a>
 ## [0.4.1] - 2026-11-05
 
