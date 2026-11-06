@@ -14,7 +14,7 @@ Run the examples with ``uv run pytest README.md docs src --no-cov``. Put setup t
 ``<!-- invisible-code-block: python -->`` comment, and skip a block with ``<!-- skip: next -- <reason> -->``.
 """
 
-import doctest
+import doctest  # ruff: ignore[banned-api] -- Sybil reads the option flags of doctest; the project runs no doctest itself
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
 

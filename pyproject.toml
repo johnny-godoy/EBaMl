@@ -147,6 +147,7 @@ select = ["ALL"]
 "cloudpickle".msg = "Use skops.io. See .claude/rules/libraries.md."
 "dataclasses".msg = "Use attrs. See .claude/rules/libraries.md."
 "dill".msg = "Use skops.io. See .claude/rules/libraries.md."
+"doctest".msg = "Use sybil. See .claude/rules/libraries.md."
 "joblib".msg = "Use skops.io. See .claude/rules/libraries.md."
 "json".msg = "Use orjson. See .claude/rules/libraries.md."
 "logging".msg = "Use structlog. See .claude/rules/libraries.md."
