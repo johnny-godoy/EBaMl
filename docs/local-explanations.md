@@ -104,16 +104,18 @@ the variance of the sum of the effects (`score_std`), which assumes the errors o
 
 `explanation.facts` is a `LocalFacts`. Its fields have names that fit every model kind:
 
-| Field | Meaning for a binary classifier |
-| --- | --- |
-| `prediction.decision` | The predicted class. |
-| `prediction.output`, `lower`, `upper` | The probability of the predicted class, and its confidence interval. |
-| `prediction.score`, `score_std` | The log-odds of the second class, and its standard deviation. |
-| `prediction.margin` | The log-odds of the predicted class. It is positive for every prediction. |
-| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change)`. |
-| `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. |
-| `sufficient_reason.features` | The features that fix the prediction. |
-| `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. |
+| Field | Meaning for a binary classifier | Meaning for a regressor |
+| --- | --- | --- |
+| `prediction.decision` | The predicted class. | The answer to the question about the value, such as `"above 10"`. |
+| `prediction.output`, `lower`, `upper` | The probability of the predicted class, and its confidence interval. | The predicted value, and its confidence interval. |
+| `prediction.score`, `score_std` | The log-odds of the second class, and its standard deviation. | The predicted value, and its standard deviation. |
+| `prediction.margin` | The log-odds of the predicted class. It is positive for every prediction. | The distance of the value from the threshold, on the side of the decision. |
+| `prediction.threshold` | `0`: the log-odds at which the class changes. | The threshold of the question. |
+| `prediction.output_kind` | `OutputKind.PROBABILITY` | `OutputKind.VALUE` |
+| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change)`. | The same. |
+| `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
+| `sufficient_reason.features` | The features that fix the prediction. | The features that fix the answer. |
+| `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. | The worst case of the distance from the threshold, with these features fixed. |
 | `sufficient_reason.minimum` | True: no smaller set fixes the prediction. |
 | `completions` | One `CompletionStep(fixed, share)` for each step. |
 
@@ -130,6 +132,37 @@ print(facts.prediction.decision, round(facts.prediction.output, 2))
 if facts.counterfactual is not None:
     print(facts.counterfactual.new_decision, [change.feature for change in facts.counterfactual.changes])
 ```
+
+## Regressors
+
+A regressor predicts a number, so the user says which question about the number to explain. `LocalOptions.decision` takes
+a `Decision`:
+
+| Decision | Question | Answers |
+| --- | --- | --- |
+| `Threshold(value)` | Is the predicted value above `value`? | "above `value`", "at most `value`". |
+| `Interval(low, high)` | Is the predicted value below, inside or above the interval? | "below `low`", "above `high`". The answer "inside" is not supported yet. |
+| `None` (default) | Is the predicted value above the intercept? | The intercept is the average prediction on the training data. |
+
+The counterfactual is the fewest changes after which the answer is the other one. The sufficient reason is the fewest
+inputs that keep the answer for every value of the other inputs. A classifier accepts no `decision`, because its
+predicted class is the decision.
+
+<!-- invisible-code-block: python
+from ebaml import Threshold, LocalOptions
+from interpret.glassbox import ExplainableBoostingRegressor
+
+regressor = ExplainableBoostingRegressor(interactions=0).fit(X, X["age"] * 0.5 + X["fare"] * 0.01)
+-->
+
+```python
+facts = compute_local_facts(regressor, instance, LocalOptions(decision=Threshold(30.0)))
+print(facts.prediction.decision, round(facts.prediction.output, 1))
+```
+
+`explain_instance` takes the same options with `local=LocalOptions(decision=Threshold(30.0))`. The explanations of a
+regressor use the same sorting algorithms as the explanations of a classifier. The
+[proof page](local-explanations-proof.md) says which claims have a proof.
 
 ## Audience
 
@@ -295,9 +328,9 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
 
 ## Limits
 
-- **Binary classifiers only.** Other tasks raise `UnsupportedModelError`, which is a `ValueError`. The
-  [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind) say what the
-  explanations of regressors and multiclass classifiers will mean. The [model kinds notebook](model-kinds-notebook.md)
+- **Binary classifiers and regressors only.** A multiclass classifier raises `UnsupportedModelError`, which is a
+  `ValueError`. The [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind)
+  say what the explanations of multiclass classifiers will mean. The [model kinds notebook](model-kinds-notebook.md)
   shows the fields of the result types and the error for the other kinds.
 - **No interactions.** Fit with `interactions=0`. With pairwise terms the effects no longer add up per feature, so the
   greedy solutions would not be exact; the function raises `ValueError` instead of answering approximately.
@@ -321,5 +354,5 @@ multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 try:
     compute_local_facts(multiclass, X.iloc[0].to_dict())
 except UnsupportedModelError as error:
-    print(error)  # Local explanations need a binary classifier. Got a MulticlassClassifier.
+    print(error)  # Local explanations need a binary classifier or a regressor. Got a MulticlassClassifier.
 ```

@@ -29,10 +29,11 @@ the *gains*.
 
 ## Definitions for every model kind
 
-`explain_instance` accepts binary classifiers only. The definitions below set what the explanations of the other
-kinds will mean. The result types of `ebaml.local` can hold all of them. Only the binary case has a proof. For the other
-kinds, the words "exact" and "smallest" below state the claims that the proofs of 1.1.0 and 1.2.0 must check. They are
-not proved.
+`explain_instance` accepts binary classifiers and regressors. The definitions below set what the explanations of each
+kind mean. The result types of `ebaml.local` can hold all of them. Only the binary case has a proof so far.
+The regressor with a threshold, or with an interval answer "below" or "above", uses the same sorting algorithms on a
+shifted intercept, but the proof of that reduction is not written yet. For the other
+kinds, the words "exact" and "smallest" below state the claims that a proof must check. They are not proved.
 
 ### Notation
 
