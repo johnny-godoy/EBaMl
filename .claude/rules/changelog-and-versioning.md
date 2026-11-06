@@ -39,6 +39,9 @@ last one: the package has no users yet, so the API stays free to change until ev
   use them up.
 - The public API is the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
   argument schemas, and the CLI flags. Prompt wording, LLM output text and log events are not part of it.
+- `ebaml.experimental` is outside the public API. It can change in any release, so say so in its docstrings. Put a
+  feature there while its API is not settled, and move it out when it is. The layout check accepts layers only, so
+  add `experimental` to the layers contract and to `architecture.md` with its first feature.
 - From 1.0.0, deprecate before you remove: keep the old name for at least one MINOR with a `DeprecationWarning`, and add
   a `Deprecated` entry. Remove it only in the next MAJOR.
 - Never invent a version. `scripts/release.py` derives it from the table above, and a milestone PR takes it from
