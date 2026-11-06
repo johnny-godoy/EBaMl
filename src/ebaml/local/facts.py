@@ -272,10 +272,10 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
         raise InvalidInstanceError(msg)
     if graph.feature_type == "continuous":
         # interpret types bins_ loosely, but the bins of a continuous feature are an array of cut points
-        cuts = typing.cast("npt.NDArray[np.float64]", ebm.bins_[feature_index][0])
+        cuts = typing.cast(npt.NDArray[np.float64], ebm.bins_[feature_index][0])
         # a value of a continuous feature is a number or a numeric text, and float() raises for anything else
         try:
-            number = float(typing.cast("typing.SupportsFloat | str", value))
+            number = float(typing.cast(typing.SupportsFloat | str, value))
         except (TypeError, ValueError) as error:
             msg = f"Feature {graph.feature_name!r} is continuous, but its value {value!r} is not a number."
             raise InvalidInstanceError(msg) from error
@@ -313,7 +313,7 @@ def _category(value: FeatureValue, feature_name: str) -> str:
     """
     try:
         # interpret has no type hints, but the function returns one text per value
-        categories = typing.cast("npt.NDArray[np.str_]", _densify_categorical(np.array([value], dtype=object)))
+        categories = typing.cast(npt.NDArray[np.str_], _densify_categorical(np.array([value], dtype=object)))
     except TypeError as error:
         msg = f"The value {value!r} of feature {feature_name!r} cannot be a category."
         raise InvalidInstanceError(msg) from error

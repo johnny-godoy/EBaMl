@@ -383,8 +383,8 @@ def _text_list(value: Any) -> list[str] | None:  # ruff: ignore[any-type] -- the
     """
     if value is None:
         return []
-    if isinstance(value, list) and all(isinstance(item, str) for item in cast("list[object]", value)):
-        return cast("list[str]", list(value))
+    if isinstance(value, list) and all(isinstance(item, str) for item in cast(list[object], value)):
+        return cast(list[str], list(value))
     return None
 
 
@@ -560,7 +560,7 @@ def _parse_items[T](
     lines = _entry_lines(document, key)
     built: list[T] = []
     problems: list[Diagnostic] = []
-    for number, item in enumerate(cast("list[object]", items)):
+    for number, item in enumerate(cast(list[object], items)):
         line = lines[number] if number < len(lines) else 1
         result = build(item, line) if isinstance(item, dict) else "the entry must be a mapping"
         if isinstance(result, str):

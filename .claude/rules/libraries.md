@@ -48,6 +48,8 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 - A hint that is wrong fails at run time. Fix the hint (see `types.md`), and do not remove the check.
 - Pytest turns `BeartypeClawDecorWarning` into an error, because beartype skips a function that it cannot decorate.
 - Checks of annotated variables are off (`claw_is_pep526=False`): structlog's lazy logger proxy fails its own hint.
+- An import that only a hint uses is a run-time import, because beartype reads the hint. So ruff's rules that move
+  such imports into a `TYPE_CHECKING` block are off.
 
 ## Data frames (`narwhals`, `polars`)
 
