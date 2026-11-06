@@ -9,6 +9,8 @@ import-linter limits what a module imports. This check limits where a module liv
 4. Each module name is unique in ``src/ebaml``, because ``scripts/mutation.py`` finds the tests of a module by name.
 5. The test tree mirrors the source tree. Each module has a test file at the same path under ``tests/unit/ebaml``, with
    ``test_`` before the name. Each test file and test directory has a source module or package at the same path.
+6. No file matches a glob of ``BANNED_FILES``, for example a ``requirements.txt`` or a pickled model. Each glob belongs
+   to a tool that ``.claude/rules/libraries.md`` replaces.
 
 Run it from the repo root: ``uv run python -m scripts.check_layout``.
 """
@@ -17,16 +19,35 @@ import ast
 import sys
 import tomllib
 from collections import Counter
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+# Directories of tools and builds: the project does not write their files, so a banned name there is not a choice.
+SKIPPED_DIRECTORIES = frozenset({".git", ".venv", ".lake", ".mutation", "__pycache__", "node_modules", "site", "dist"})
 # The benchmark has no import of another part of ebaml, so it is a layer of its own.
 TOP_LEVEL_MODULES = frozenset({"__init__.py", "benchmark.py"})
 LAYERS_CONTRACT = "layers"
 # The tests of a package file ``__init__.py`` cannot be named ``test___init__.py``, so they have a short name.
 INIT_TESTS = {"test_init.py": "__init__.py"}
+# Each glob with the tool to use instead. A glob with a ``/`` matches the path from the root, and a glob without one
+# matches the file name in any directory.
+BANNED_FILES = {
+    "requirements*.txt": "uv",
+    "setup.py": "uv",
+    "setup.cfg": "uv",
+    "poetry.lock": "uv",
+    "Pipfile": "uv",
+    "Pipfile.lock": "uv",
+    ".pre-commit-config.yaml": "prek",
+    "*.pkl": "skops.io",
+    "*.pickle": "skops.io",
+    "*.joblib": "skops.io",
+    "*.ipynb": "marimo",
+    "mkdocs.yml": "Zensical",
+    "docs/conf.py": "Zensical",
+}
 
 
 def layer_names(pyproject: dict[str, Any]) -> list[str]:
@@ -159,6 +180,53 @@ def _orphan_tests(src: Path, tests: Path) -> list[str]:
     return problems
 
 
+def project_files(root: Path) -> list[Path]:
+    """List the files of the project, without the directories of tools and builds.
+
+    Parameters
+    ----------
+    root: Path
+        The root of the project.
+
+    Returns
+    -------
+    list[Path]
+        The paths of the files, relative to the root, sorted.
+
+    """
+    return sorted(
+        path.relative_to(root)
+        for path in root.rglob("*")
+        if path.is_file() and not SKIPPED_DIRECTORIES.intersection(path.relative_to(root).parts[:-1])
+    )
+
+
+def banned_file_problems(files: Iterable[Path], banned: Mapping[str, str]) -> list[str]:
+    """List the files that match a banned glob.
+
+    A glob with a ``/`` matches the path from the root. A glob without one matches the file name in any directory.
+
+    Parameters
+    ----------
+    files: Iterable[Path]
+        The paths of the files, relative to the root.
+    banned: Mapping[str, str]
+        Each banned glob with the tool to use instead.
+
+    Returns
+    -------
+    list[str]
+        One message for each banned file, with the replacement.
+
+    """
+    return [
+        f"{path.as_posix()}: a banned file ({glob}). Use {use} instead (.claude/rules/libraries.md)."
+        for path in files
+        for glob, use in banned.items()
+        if path.full_match(glob) or ("/" not in glob and path.match(glob))
+    ]
+
+
 def main(argv: Sequence[str] = ()) -> int:
     """Report every layout problem.
 
@@ -181,6 +249,7 @@ def main(argv: Sequence[str] = ()) -> int:
         layer_names(pyproject),
         TOP_LEVEL_MODULES,
     )
+    problems.extend(banned_file_problems(project_files(root), BANNED_FILES))
     for problem in problems:
         sys.stderr.write(f"{problem}\n")
     return 1 if problems else 0

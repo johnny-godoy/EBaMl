@@ -5,6 +5,9 @@ source in `[tool.ruff.lint.flake8-tidy-imports.banned-api]` of `pyproject.toml`:
 replacement. Read that table when you need the list, and do not copy it here, because a copy goes stale. Ruff fails on
 a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reason>`.
 
+`scripts/check_layout.py` fails on the files of a replaced tool (`BANNED_FILES`: a `requirements.txt`, a
+`.pre-commit-config.yaml`, a pickled model, a Jupyter notebook, a Sphinx or MkDocs config).
+
 ## Logging (`structlog`)
 
 - Module-level logger: `logger = structlog.get_logger(__name__)`.

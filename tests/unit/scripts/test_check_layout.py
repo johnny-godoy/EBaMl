@@ -123,5 +123,35 @@ def test_main(tmp_path: Path, files: list[str], code: int, capsys: pytest.Captur
     assert bool(capsys.readouterr().err) == bool(code)
 
 
+def test_main_reports_a_banned_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    build(tmp_path, [*GOOD, "requirements.txt"])
+    (tmp_path / "pyproject.toml").write_text(
+        '[[tool.importlinter.contracts]]\ntype = "layers"\nlayers = ["ebaml.core"]\n',
+        encoding="utf-8",
+    )
+    assert check_layout.main([str(tmp_path)]) == 1
+    assert "requirements.txt: a banned file" in capsys.readouterr().err
+
+
+BANS = {"requirements*.txt": "uv", "*.ipynb": "marimo", "docs/conf.py": "Zensical"}
+
+
+@pytest.mark.parametrize("path", ["requirements.txt", "sub/requirements-dev.txt", "notebooks/a.ipynb", "docs/conf.py"])
+def test_a_banned_file_fails_with_its_replacement(path: str) -> None:
+    [problem] = check_layout.banned_file_problems([Path(path)], BANS)
+    assert problem.startswith(f"{path}: a banned file")
+    assert "Use " in problem
+
+
+@pytest.mark.parametrize("path", ["pyproject.toml", "notebooks/a.py", "other/docs/conf.py", "conf.py"])
+def test_an_allowed_file_passes(path: str) -> None:
+    assert check_layout.banned_file_problems([Path(path)], BANS) == []
+
+
+def test_project_files_skip_the_directories_of_tools(tmp_path: Path) -> None:
+    build(tmp_path, ["src/ebaml/a.py", ".venv/lib/setup.py", "site/index.html", "node_modules/x/setup.py"])
+    assert check_layout.project_files(tmp_path) == [Path("src/ebaml/a.py")]
+
+
 def test_main_checks_this_repository() -> None:
     assert check_layout.main() == 0

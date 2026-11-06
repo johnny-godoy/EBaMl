@@ -36,7 +36,7 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 | Guard | Config | What it checks |
 | --- | --- | --- |
 | import-linter | `[tool.importlinter]` in `pyproject.toml` | Layer order and the limits on `baml_sdk`. Run it alone with `uv run lint-imports`. |
-| Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree. |
+| Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree, and the banned files. |
 | semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, an `isinstance` check of a frame type, a bare `raise ValueError`, an `object` type hint, an `isinstance` check of a concrete container, branches on the type of one value, an SDK fake without `fake_sdk` in the tests, a `while True` loop with a sleep, a bare `asyncio.gather` or `create_task`, `skops.io.load` with `trusted=True`. |
 | Abstraction registry | `architecture/abstractions.yml`, `scripts/check_abstractions.py` | One owner and one canonical symbol for each shared capability: unique IDs, symbols that exist, no second claim on a symbol or a responsibility. `reuse.md` has the process. |
 | Contract overlap | `scripts/check_contract_overlap.py` | Public `Protocol` and `ABC` classes with identical signatures in one context. |
