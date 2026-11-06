@@ -125,6 +125,41 @@ async def test_summary_of_a_regressor_and_a_multiclass_classifier(
     assert len(multiclass["intercept"]) == 3
 
 
+async def test_features_and_graphs_of_a_regressor(regression_ebm: ExplainableBoostingRegressor) -> None:
+    server = create_server(ModelStore(ebm=regression_ebm))
+    features = orjson.loads((await _call(server, "list_features"))[1])
+    is_error, graph = await _call(server, "get_graph", {"feature": "a", "max_tokens": 500})
+    assert {feature["name"]: feature["type"] for feature in features} == {"a": "continuous", "c": "nominal"}
+    assert features[0]["name"] == "a"
+    assert not is_error
+    assert "Feature Name: a" in graph
+
+
+async def test_features_and_graphs_of_a_multiclass_classifier(multiclass_ebm: ExplainableBoostingClassifier) -> None:
+    server = create_server(ModelStore(ebm=multiclass_ebm))
+    features = orjson.loads((await _call(server, "list_features"))[1])
+    is_error, graph = await _call(server, "get_graph", {"feature": "c", "max_tokens": 500})
+    assert {feature["name"] for feature in features} == {"a", "c"}
+    assert not is_error
+    assert "Feature Name: c" in graph
+    for label in ("low", "mid", "high"):
+        assert label in graph
+
+
+async def test_a_model_with_an_interaction_names_it_and_the_tools_skip_it(
+    interaction_ebm: ExplainableBoostingClassifier,
+) -> None:
+    server = create_server(ModelStore(ebm=interaction_ebm))
+    summary = orjson.loads((await _call(server, "get_model_summary"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])
+    interaction_graph = await _call(server, "get_graph", {"feature": "p x q"})
+    assert summary["skipped_terms"] == ["p x q"]
+    assert summary["feature_count"] == 2
+    assert {feature["name"] for feature in features} == {"p", "q"}
+    assert interaction_graph[0]
+    assert "no feature 'p x q'" in interaction_graph[1]
+
+
 async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
     monkeypatch: pytest.MonkeyPatch,
