@@ -4,6 +4,8 @@
 agent can read the model, read each graph and explain one prediction. The read and explain tools call no LLM. They are
 fast, free and exact, and they need no API key.
 
+A worked example, with its output, is in the [MCP server notebook](mcp-notebook.md).
+
 ## Install
 
 Install the `mcp` extra:
