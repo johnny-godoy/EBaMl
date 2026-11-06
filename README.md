@@ -20,14 +20,14 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | Graph descriptions (`describe_graph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Model summary (`describe_ebm`) | ✅ | ✅ | ✅ | ⚠️ |
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
-| Local explanations (`explain_instance`) | ✅ | ❌ | ❌ | ❌ |
+| Local explanations (`explain_instance`) | ✅ | ✅ | ❌ | ❌ |
 | MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
 
 ✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
 `describe_graph` and `describe_ebm` log an `interactions_skipped` warning that names them. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
-The MCP server reads every kind of model. Its explain tool works for binary classifiers only.
+The MCP server reads every kind of model. Its explain tool works for binary classifiers and regressors.
 ## Setup
 
 <!-- --8<-- [start:setup] -->
@@ -194,7 +194,7 @@ The facts are computed exactly from the scores and confidence intervals of the E
 them in words. They are the three queries of [arXiv:2010.12265](https://arxiv.org/abs/2010.12265): minimum change
 required, minimum sufficient reason and count completions. `audience="layperson"` (default) gives no model numbers;
 `audience="data_scientist"` quotes scores, probabilities and confidence intervals. Subclass `ebaml.Audience` to add a
-reader with its own rules. Pass `language="French"` (any language name) to get the explanations in that language. It supports binary classifiers
+reader with its own rules. Pass `language="French"` (any language name) to get the explanations in that language. It supports binary classifiers and regressors
 without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
 and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
@@ -209,7 +209,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
 | `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
 | `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
-| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
+| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier or a regressor. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
 | `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
 | `EBMGraphError` | no | The base class of the errors of a graph. |
 | `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |
