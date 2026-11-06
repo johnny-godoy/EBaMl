@@ -66,3 +66,16 @@ def test_graph_text_of_an_unknown_feature_is_an_error(
     ebm, _ = continuous_ebm
     with pytest.raises(InvalidInstanceError, match="no feature 'zzz'"):
         graph_text(ModelStore(ebm=ebm), "zzz")
+
+
+def test_a_small_max_tokens_gives_a_shorter_graph_text(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+) -> None:
+    """Bug: ``max_tokens`` had no effect, because ``graph_text`` passed no ``check_budget`` to ``to_text``."""
+    ebm, _ = continuous_ebm
+    store = ModelStore(ebm=ebm)
+    with pytest.warns(UserWarning, match="above the budget"):
+        short = graph_text(store, "a", max_tokens=1500)
+    with pytest.warns(UserWarning, match="above the budget"):
+        long = graph_text(store, "a", max_tokens=3000)
+    assert len(short) < len(long)

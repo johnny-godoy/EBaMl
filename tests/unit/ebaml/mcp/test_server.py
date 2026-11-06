@@ -70,7 +70,7 @@ async def test_features_are_sorted_by_importance(binary_server: FastMCP) -> None
 
 
 async def test_get_graph_returns_the_graph_text(binary_server: FastMCP) -> None:
-    is_error, text = await _call(binary_server, "get_graph", {"feature": "a", "max_tokens": 500})
+    is_error, text = await _call(binary_server, "get_graph", {"feature": "a"})
     assert not is_error
     assert "a" in text
     assert "min_max" not in text
@@ -141,7 +141,7 @@ async def test_summary_of_a_regressor_and_a_multiclass_classifier(
 async def test_features_and_graphs_of_a_regressor(regression_ebm: ExplainableBoostingRegressor) -> None:
     server = create_server(ModelStore(ebm=regression_ebm))
     features = orjson.loads((await _call(server, "list_features"))[1])
-    is_error, graph = await _call(server, "get_graph", {"feature": "a", "max_tokens": 500})
+    is_error, graph = await _call(server, "get_graph", {"feature": "a"})
     assert {feature["name"]: feature["type"] for feature in features} == {"a": "continuous", "c": "nominal"}
     assert features[0]["name"] == "a"
     assert not is_error
@@ -151,7 +151,7 @@ async def test_features_and_graphs_of_a_regressor(regression_ebm: ExplainableBoo
 async def test_features_and_graphs_of_a_multiclass_classifier(multiclass_ebm: ExplainableBoostingClassifier) -> None:
     server = create_server(ModelStore(ebm=multiclass_ebm))
     features = orjson.loads((await _call(server, "list_features"))[1])
-    is_error, graph = await _call(server, "get_graph", {"feature": "c", "max_tokens": 500})
+    is_error, graph = await _call(server, "get_graph", {"feature": "c"})
     assert {feature["name"] for feature in features} == {"a", "c"}
     assert not is_error
     assert "Feature Name: c" in graph
@@ -385,7 +385,7 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
         names = {tool.name for tool in (await session.list_tools()).tools}
         summary = await session.call_tool("get_model_summary", {})
         features = await session.call_tool("list_features", {})
-        graph = await session.call_tool("get_graph", {"feature": "a", "max_tokens": 500})
+        graph = await session.call_tool("get_graph", {"feature": "a"})
         explanation = await session.call_tool("explain_prediction", {"row": 0})
     texts = [result.content[0].text for result in (summary, features, graph, explanation)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
     assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction"}
