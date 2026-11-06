@@ -56,6 +56,8 @@ ebaml-mcp --model model.skops --data train.csv
 | `--data PATH` | A CSV file with the rows for the `row` argument of `explain_prediction`. |
 | `--llm PROVIDER/MODEL` | Turn on the LLM tools. See [Choosing the model](providers.md). Without it, the server has no LLM tools. |
 | `--transport` | `stdio` (the default) or `streamable-http`. |
+| `--host ADDRESS` | The address of the `streamable-http` transport. The default is `127.0.0.1`, which accepts this computer only. |
+| `--port NUMBER` | The port of the `streamable-http` transport. The default is `8000`. |
 
 ## Connect a client
 
@@ -83,6 +85,18 @@ Any other client that starts a stdio server uses the same command and arguments.
 ```bash
 npx @modelcontextprotocol/inspector ebaml-mcp --model /path/to/model.skops
 ```
+
+### Serve over HTTP
+
+Use the `streamable-http` transport when the client runs on another computer or in a container:
+
+```bash
+ebaml-mcp --model model.skops --data train.csv --transport streamable-http --port 9000
+```
+
+The client connects to `http://127.0.0.1:9000/mcp`. The server has no login. Keep the default host `127.0.0.1`
+unless a firewall or a proxy with authentication protects the port. With `--host 0.0.0.0`, every computer that
+reaches the port can read the model and the rows of the data file.
 
 ## Tools
 

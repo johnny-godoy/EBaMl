@@ -58,7 +58,13 @@ def _tool_errors() -> Generator[None]:
         raise ToolError(str(error)) from error
 
 
-def create_server(store: ModelStore, llm: ModelOptions | None = None) -> FastMCP:
+def create_server(
+    store: ModelStore,
+    llm: ModelOptions | None = None,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+) -> FastMCP:
     """Create the server and register the tools.
 
     Parameters
@@ -67,6 +73,10 @@ def create_server(store: ModelStore, llm: ModelOptions | None = None) -> FastMCP
         The session.
     llm: ModelOptions, optional
         The LLM. Without it, the server has no LLM tools.
+    host: str, default="127.0.0.1"
+        The address that the ``streamable-http`` transport listens on. The ``stdio`` transport ignores it.
+    port: int, default=8000
+        The port that the ``streamable-http`` transport listens on. The ``stdio`` transport ignores it.
 
     Returns
     -------
@@ -74,7 +84,7 @@ def create_server(store: ModelStore, llm: ModelOptions | None = None) -> FastMCP
         The server.
 
     """
-    server = FastMCP("ebaml", instructions=_INSTRUCTIONS)
+    server = FastMCP("ebaml", instructions=_INSTRUCTIONS, host=host, port=port)
 
     @server.tool()
     def get_model_summary() -> str:
@@ -217,12 +227,14 @@ app: cyclopts.App = cyclopts.App(
 
 
 @app.default
-def serve(
+def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option of the command
     *,
     model: Path,
     data: Path | None = None,
     llm: str | None = None,
     transport: Literal["stdio", "streamable-http"] = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
 ) -> None:
     """Load the EBM and run the MCP server.
 
@@ -236,12 +248,16 @@ def serve(
         PROVIDER/MODEL of the LLM tools. Without it the server has none.
     transport: Literal["stdio", "streamable-http"]
         How the server talks to the client.
+    host: str
+        The address that the ``streamable-http`` transport listens on. Use ``0.0.0.0`` to accept other computers.
+    port: int
+        The port that the ``streamable-http`` transport listens on.
 
     """
     # structlog prints to stdout by default, and a stdio server speaks JSON-RPC there, so a log line would corrupt it
     structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
     store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None)
-    create_server(store, ModelOptions.parse(llm) if llm else None).run(transport=transport)
+    create_server(store, ModelOptions.parse(llm) if llm else None, host=host, port=port).run(transport=transport)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
