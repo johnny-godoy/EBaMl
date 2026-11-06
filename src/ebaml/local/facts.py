@@ -583,11 +583,11 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     features : Sequence[_Feature]
         The features.
     intercept : float
-        The intercept of the model minus the threshold of the decision.
+        The intercept of the model, moved by the threshold of the decision (zero for a classifier).
     sign : int
-        ``1`` if the decision says that the score is high, ``-1`` otherwise.
+        ``1`` if the decision says that the score is high, ``-1`` if it says that the score is low.
     z : float
-        Standard deviations to move the scores by.
+        The number of standard deviations that each score moves against the claim.
 
     Returns
     -------
