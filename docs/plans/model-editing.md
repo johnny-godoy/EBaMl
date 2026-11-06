@@ -1,4 +1,4 @@
-# Plan: model editing (1.3.0, 1.5.0 and 1.6.0)
+# Plan: model editing (0.7.0, 0.9.0 and 0.10.0)
 
 You are a senior Python engineer with a strong background in generalized additive models and in the design of
 interactive tools. You will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every
@@ -8,11 +8,15 @@ before you finish.
 <goal>
 Let a person or an agent change the graphs of a fitted EBM so that the model meets business requirements: for example,
 "the risk must not fall when the age goes up", "a missing value scores 0", or "this feature must not be used". EBaMl
-builds this in Python, and the MCP server exposes it to agents (`mcp-edit-tools.md`, 1.4.0). The work has three milestones:
+builds this in Python, and the MCP server exposes it to agents (`mcp-edit-tools.md`, 0.8.0). The work has three
+milestones:
 
-1. **1.3.0:** the edit API in Python, in `ebaml.experimental`.
-2. **1.5.0:** parity with GAM Changer: business constraints, the effect of an edit on data, and `.gamchanger` files.
-3. **1.6.0:** the edit API leaves `experimental`, and editing works for every model kind.
+1. **0.7.0:** the edit API in Python, in `ebaml.edit`.
+2. **0.9.0:** parity with GAM Changer: business constraints, the effect of an edit on data, and `.gamchanger` files.
+3. **0.10.0:** editing works for every model kind.
+
+All three come before 1.0.0, so a milestone can change the API of an earlier one. Mark such a change **BREAKING** in
+the changelog fragment.
 </goal>
 
 <context>
@@ -42,14 +46,11 @@ Build on them where they fit, and write your own operation only where none fits.
 <architecture>
 - Editing is domain code: it changes numbers of the model and calls no LLM and no I/O. Add a new layer `ebaml.edit`
   that may import `graphs` and `core`, with an entry in the import-linter layers contract and in
-  `.claude/rules/architecture.md`.
-- Expose it to users only as `ebaml.experimental.edit` until 1.6.0. `ebaml.experimental` is outside the stable API
-  (`.claude/rules/changelog-and-versioning.md`). It is a facade package, not a layer, so extend
-  `scripts/check_layout.py` to allow it, and say so in `.claude/rules/architecture.md`.
+  `.claude/rules/architecture.md`. Export its public names from `ebaml`.
 </architecture>
 </context>
 
-<design_1_3_0>
+<design_0_7_0>
 - An `EditSession` holds a copy of the EBM (`ebm.copy()`), never the original, and the list of applied edits.
   Its methods: `preview(edit)` (the result of the edit, with no change), `apply(edit)`, `undo()`, `model` (the edited
   copy) and `history` (the edits as replayable JSON, written with `orjson`).
@@ -72,10 +73,10 @@ Build on them where they fit, and write your own operation only where none fits.
 - The prediction of an EBM is the intercept plus the scores. Some edits move the mean of a graph. Decide, with the user,
   whether an edit re-centres the graph and moves the mean into the intercept. If it does, test with Hypothesis that
   re-centring alone does not change any prediction (to floating point tolerance, with no "exact" claim).
-- Support binary classifiers and regressors first. Raise `UnsupportedModelError` for multiclass models until 1.6.0.
-</design_1_3_0>
+- Support binary classifiers and regressors first. Raise `UnsupportedModelError` for multiclass models until 0.10.0.
+</design_0_7_0>
 
-<design_1_5_0>
+<design_0_9_0>
 - **Business constraints.** One `attrs` class per kind of constraint, in the same pattern as the edits: for example
   `Monotone(feature, direction)`, `Bounded(feature, low, high)`, `FixedScore(feature, category, value)`, `Unused(feature)`.
   `check_constraints(ebm, constraints)` returns the list of violations, each with the bins that break it. Each
@@ -86,16 +87,13 @@ Build on them where they fit, and write your own operation only where none fits.
 - **`.gamchanger` files.** `load_gamchanger(path)` turns a GAM Changer export into a list of `SetScores` edits (and bin
   changes), and `save_gamchanger(session, path)` writes one that the widget can open. Test both against the behavior of
   `get_edited_model` on a saved example file.
-</design_1_5_0>
+</design_0_9_0>
 
-<design_1_6_0>
+<design_0_10_0>
 - Support multiclass models: an edit names the class (or all classes), and uses the model kind abstraction
   (`src/ebaml/graphs/model_kinds.py`).
-- Move the API from `ebaml.experimental.edit` to `ebaml.edit` as a public module. Keep `ebaml.experimental.edit` as a
-  deprecated alias for one MINOR release, as the versioning rule says.
-- Move the MCP edit tools to names without `experimental_`, and keep the old names as deprecated aliases.
 - Check every row of the README table "Supported models": each feature works for each model kind.
-</design_1_6_0>
+</design_0_10_0>
 
 <tests>
 - Unit tests for each edit and each constraint, on small fitted models in fixtures. Each test checks the scores that
@@ -116,15 +114,16 @@ Build on them where they fit, and write your own operation only where none fits.
 </documentation>
 
 <release>
-Each milestone is a MINOR release (`.claude/rules/changelog-and-versioning.md`). 1.3.0 and 1.5.0 add experimental API,
-so say "experimental" in their changelog entries. 1.6.0 lists the new public module under `Added` and the experimental
-aliases under `Deprecated`.
+Each milestone can take more than one PR. Each PR with a user-visible change adds a changelog fragment, and the release
+workflow releases it as a PATCH (`.claude/rules/changelog-and-versioning.md`). The PR that completes a milestone also
+sets its version (0.7.0, 0.9.0 or 0.10.0) in `pyproject.toml`, runs `uv lock`, and marks its row of `ROADMAP.md` as
+done.
 </release>
 
 <done>
-- 1.3.0: a person can load an EBM, apply and undo each edit, and save the edited model, from Python.
-- 1.5.0: an agent through the MCP server can find the violations of a list of constraints, repair them with edits, and
+- 0.7.0: a person can load an EBM, apply and undo each edit, and save the edited model, from Python.
+- 0.9.0: an agent through the MCP server can find the violations of a list of constraints, repair them with edits, and
   see the effect of each edit on the data.
-- 1.6.0: every feature in the README table works for every model kind, and the edit API is public.
+- 0.10.0: every feature in the README table works for every model kind.
 - `prek run --all-files`, `uv run pytest`, mutation testing and the strict docs build pass for each milestone.
 </done>

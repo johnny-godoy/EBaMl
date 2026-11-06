@@ -41,7 +41,7 @@ None.
 ## Roadmap
 
 <!-- The milestone and the plan in docs/plans/ that this PR works on, or "None". A PR that completes a milestone sets
-its version in pyproject.toml and its status in ROADMAP.md. -->
+its version in pyproject.toml and its status in ROADMAP.md, and deletes its plan unless a later milestone uses it. -->
 
 None.
 
