@@ -5,17 +5,19 @@ You are a senior Python engineer who maintains libraries with a stable public AP
 hooks enforce those rules and `prek run --all-files` must pass before you finish.
 
 <goal>
-Release 1.0.0: declare the public API, and add the checks that stop an accidental breaking change. After this release,
-a breaking change of the public API needs a new MAJOR version (`.claude/rules/changelog-and-versioning.md`). This
-milestone adds no feature. A release that only stabilizes is easy to review.
+Release 1.0.0, the last milestone of `ROADMAP.md`: declare the public API, and add the checks that stop an accidental
+breaking change. After this release, a breaking change of the public API needs a new MAJOR version
+(`.claude/rules/changelog-and-versioning.md`). This milestone adds no feature. A release that only stabilizes is easy
+to review.
 </goal>
 
 <context>
-- 1.0.0 needs 0.4.0. By then the model providers (0.1.0), the model kinds and the general local types (0.2.0), the
-  custom audiences (0.3.0) and the read and explain tools of the MCP server (0.4.0) are on `main`.
+- 1.0.0 needs 0.10.0. By then every other milestone of `ROADMAP.md` is on `main`: the model providers, the model
+  kinds, the custom audiences, the MCP server with its read, explain and edit tools, the local explanations of every
+  model kind, and model editing with GAM Changer parity.
 - The public API is: the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
   argument schemas, and the CLI flags (`benchmark/run.py`, `ebaml-mcp`). Prompt wording, LLM output text and log events
-  are not part of it. `ebaml.experimental` and the MCP tools whose names start with `experimental_` are not part of it.
+  are not part of it.
 - `.claude/rules/writing-style.md` has a section "Current state, not history" that says the package makes no promise of
   backward compatibility. That stops being true at 1.0.0.
 </context>
@@ -38,7 +40,7 @@ milestone adds no feature. A release that only stabilizes is easy to review.
    the current state, and deprecated items stay in the docs, marked as deprecated, until their removal. Update
    `CLAUDE.md` if it mentions the pre-1.0 policy.
 8. **Update the user docs.** Make the README table "Supported models" true, and remove "Full support is on the roadmap"
-   where it no longer applies.
+   where it does not apply.
 </steps>
 
 <release>

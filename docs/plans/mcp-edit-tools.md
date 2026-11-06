@@ -1,12 +1,12 @@
-# Plan: EBM2MCP edit tools (1.4.0)
+# Plan: EBM2MCP edit tools (0.8.0)
 
 You are a senior Python engineer who knows the Model Context Protocol (MCP) well. You will implement one milestone of
 `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in `.claude/rules/` first, because the project's
 hooks enforce those rules and `prek run --all-files` must pass before you finish.
 
 <goal>
-The `ebaml-mcp` server gets tools that let an agent **edit** the EBM so that it meets business requirements, as
-experimental tools. The agent is the LLM. The edit tools call the deterministic edit API of Python and call no LLM.
+The `ebaml-mcp` server gets tools that let an agent **edit** the EBM so that it meets business requirements. The agent
+is the LLM. The edit tools call the deterministic edit API of Python and call no LLM.
 </goal>
 
 <context>
@@ -14,25 +14,26 @@ experimental tools. The agent is the LLM. The edit tools call the deterministic 
   `explain_tools.py`, `llm_tools.py` and `model_store.py` (the loaded model, the data of `--data`, the session state).
   `docs/mcp.md` documents it. Read them first, and follow their patterns: thin tools, `EBaMlError` as tool errors, tool
   descriptions written as prompts.
-- The edit tools wrap the `ebaml.experimental` edit API of the `model-editing.md` plan (1.3.0). Their names start with
-  `experimental_`, so they are outside the stable API.
+- The edit tools wrap the `ebaml.edit` API of the `model-editing.md` plan (0.7.0). The tool names and their argument
+  schemas become part of the stable API at 1.0.0. Until then, a change of them is allowed, marked **BREAKING**.
 - `tests/unit/ebaml/mcp/test_server.py` has a snapshot test of the tool names and their JSON schemas.
 </context>
 
 <tools>
 | Tool | Result |
 | --- | --- |
-| `experimental_preview_edit` | the graph before and after one edit, and its effect on `--data` if given, with no change to the model |
-| `experimental_apply_edit` | applies one edit to the session copy of the model, and returns the same report |
-| `experimental_undo_edit` | undoes the last edit |
-| `experimental_list_edits` | the history of the session, as replayable JSON |
-| `experimental_check_constraints` | the business constraints that the model breaks (from 1.5.0) |
-| `experimental_save_model` | writes the edited model and the edit history |
+| `preview_edit` | the graph before and after one edit, and its effect on `--data` if given, with no change to the model |
+| `apply_edit` | applies one edit to the session copy of the model, and returns the same report |
+| `undo_edit` | undoes the last edit |
+| `list_edits` | the history of the session, as replayable JSON |
+| `check_constraints` | the business constraints that the model breaks (from 0.9.0) |
+| `save_model` | writes the edited model and the edit history |
 
-- Put the edit tools in a module of their own (`mcp/edit_tools.py`), with a name that no other module of `src/ebaml` has.
+- Put the edit tools in a module of their own (`mcp/edit_tools.py`), with a name that no other module of `src/ebaml`
+  has.
 - The server edits a copy. It never changes the file of `--model`.
-- `experimental_save_model` writes only into a directory that the user gives at start (`--output-dir`). Without that
-  option, the tool is not registered. Never write to a path from a tool argument outside that directory.
+- `save_model` writes only into a directory that the user gives at start (`--output-dir`). Without that option, the
+  tool is not registered. Never write to a path from a tool argument outside that directory.
 </tools>
 
 <tests>
@@ -48,7 +49,8 @@ experimental tools. The agent is the LLM. The edit tools call the deterministic 
 </documentation>
 
 <release>
-Add a changelog fragment (`.claude/rules/changelog-and-versioning.md`).
+Add a changelog fragment (`.claude/rules/changelog-and-versioning.md`). The PR that completes the milestone also sets
+`version = "0.8.0"` in `pyproject.toml`, runs `uv lock`, and marks its row of `ROADMAP.md` as done.
 </release>
 
 <done>

@@ -26,7 +26,8 @@ requests never conflict on the version or the changelog.
 ## Semantic versioning
 
 The project follows [Semantic Versioning 2.0.0](https://semver.org/) strictly. The single source of truth is `version`
-in `pyproject.toml`. `ROADMAP.md` lists the planned versions.
+in `pyproject.toml`. `ROADMAP.md` lists the planned versions. Every milestone comes before 1.0.0, and 1.0.0 is the
+last one: the package has no users yet, so the API stays free to change until every planned feature is on `main`.
 
 | Version range | Breaking change | New feature | Fix, docs, internal change |
 | --- | --- | --- | --- |
@@ -38,8 +39,6 @@ in `pyproject.toml`. `ROADMAP.md` lists the planned versions.
   use them up.
 - The public API is the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
   argument schemas, and the CLI flags. Prompt wording, LLM output text and log events are not part of it.
-- `ebaml.experimental` and the MCP tools whose names start with `experimental_` are outside the public API. They can
-  change in a MINOR or PATCH at any time. Say so in their docstrings.
 - From 1.0.0, deprecate before you remove: keep the old name for at least one MINOR with a `DeprecationWarning`, and add
   a `Deprecated` entry. Remove it only in the next MAJOR.
 - Never invent a version. `scripts/release.py` derives it from the table above, and a milestone PR takes it from

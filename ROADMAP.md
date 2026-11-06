@@ -1,8 +1,8 @@
 # Roadmap
 
-This file lists the planned releases of EBaMl. Each planned milestone has an implementation plan in `docs/plans/`. An agent or
-a contributor can use the plan as the full task description. The PR that completes a milestone sets its status to
-"Done".
+This file lists the planned releases of EBaMl. Each planned milestone has an implementation plan in `docs/plans/`. An
+agent or a contributor can use the plan as the full task description. The PR that completes a milestone sets its status
+to "Done". It also deletes the plan, unless a later milestone uses the same plan.
 
 ## Goals
 
@@ -23,30 +23,27 @@ EBaMl will reach three goals:
 | 0.2.0 | Model kinds: graphs and descriptions of multiclass classifiers, and local result types for every kind. | None | | Done |
 | 0.3.0 | Custom audiences: `Audience` is a base class, and a user writes an audience with its own rules. | None | | Done |
 | 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | None | 0.1.0, 0.2.0, 0.3.0 | Done |
-| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.4.0 | Planned |
-| 1.1.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.0.0 | Planned |
-| 1.2.0 | Local explanations of multiclass classifiers. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.1.0 | Planned |
-| 1.3.0 | Model editing in Python, in `ebaml.experimental`. | [model-editing](docs/plans/model-editing.md) | 1.0.0 | Planned |
-| 1.4.0 | EBM2MCP: edit tools, as experimental tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 1.3.0 | Planned |
-| 1.5.0 | GAM Changer parity: business constraints, the effect of an edit on data, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 1.4.0 | Planned |
-| 1.6.0 | Stable editing. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 1.2.0, 1.5.0 | Planned |
+| 0.5.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 0.4.0 | Planned |
+| 0.6.0 | Local explanations of multiclass classifiers. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 0.5.0 | Planned |
+| 0.7.0 | Model editing in Python, in `ebaml.edit`. | [model-editing](docs/plans/model-editing.md) | 0.4.0 | Planned |
+| 0.8.0 | EBM2MCP: edit tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 0.7.0 | Planned |
+| 0.9.0 | GAM Changer parity: business constraints, the effect of an edit on data, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 0.8.0 | Planned |
+| 0.10.0 | Editing of every model kind. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 0.6.0, 0.9.0 | Planned |
+| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.10.0 | Planned |
 
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
-model that has them. The README table "Supported models" shows the state of each feature. Full support needs a two-dimensional
-graph text and new proofs of the local explanations.
+model that has them. The README table "Supported models" shows the state of each feature. Full support needs a
+two-dimensional graph text and new proofs of the local explanations.
 
 ## Versions
 
-EBaMl follows [Semantic Versioning 2.0.0](https://semver.org/) strictly.
+EBaMl follows [Semantic Versioning 2.0.0](https://semver.org/) strictly. The package has no users yet, so 1.0.0 comes
+last: it freezes the API only after every feature of the table is on `main`.
 
 - Each pull request with a user-visible change adds a changelog fragment. After the merge, a workflow releases it with
   a new version.
 - Before 1.0.0, any release can break the API. Such a change is marked **BREAKING** in the changelog. A release between
   two milestones raises the PATCH number, and the release that completes a milestone takes the version in the table.
-- From 1.0.0, a breaking change needs a new MAJOR version, after a deprecation of at least one MINOR version. A
-  milestone after 1.0.0 is a MINOR release. Its number in the table shows the order, and other MINOR releases can come
-  between two milestones.
-- `ebaml.experimental` and the MCP tools whose names start with `experimental_` are not part of the stable API. They
-  can change in any release.
+- From 1.0.0, a breaking change needs a new MAJOR version, after a deprecation of at least one MINOR version.
 
 `.claude/rules/changelog-and-versioning.md` has the full rule.
