@@ -11,6 +11,7 @@ from ebaml.core.custom_types import ClassLabel, Normalization
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
+from ebaml.graphs.token_budget import check_token_budget
 from ebaml.mcp.model_store import ModelStore
 
 
@@ -152,4 +153,5 @@ def graph_text(  # ruff: ignore[too-many-arguments] -- one argument for each opt
         x_axis_precision=x_axis_precision,
         y_axis_precision=y_axis_precision,
         max_tokens=max_tokens,
+        check_budget=check_token_budget,
     )
