@@ -23,7 +23,7 @@ EBaMl will reach three goals:
 | 0.2.0 | Model kinds: graphs and descriptions of multiclass classifiers, and local result types for every kind. | None | | Done |
 | 0.3.0 | Custom audiences: `Audience` is a base class, and a user writes an audience with its own rules. | None | | Done |
 | 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | None | 0.1.0, 0.2.0, 0.3.0 | Done |
-| 0.5.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 0.4.0 | Planned |
+| 0.5.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 0.4.0 | Done |
 | 0.6.0 | Local explanations of multiclass classifiers. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 0.5.0 | Planned |
 | 0.7.0 | Model editing in Python, in `ebaml.edit`. | [model-editing](docs/plans/model-editing.md) | 0.4.0 | Planned |
 | 0.8.0 | EBM2MCP: edit tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 0.7.0 | Planned |
