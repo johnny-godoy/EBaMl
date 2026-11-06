@@ -1,6 +1,6 @@
 # Roadmap
 
-This file lists the planned releases of EBaMl. Each milestone has an implementation plan in `docs/plans/`. An agent or
+This file lists the planned releases of EBaMl. Each planned milestone has an implementation plan in `docs/plans/`. An agent or
 a contributor can use the plan as the full task description. The PR that completes a milestone sets its status to
 "Done".
 
@@ -19,21 +19,21 @@ EBaMl will reach three goals:
 | Version | Milestone | Plan | Needs | Status |
 | --- | --- | --- | --- | --- |
 | 0.0.3 | Release of the changes that are on `main`. | None | | Done |
-| 0.1.0 | Custom model providers: `model=` on every function that calls an LLM. | [custom-model-providers](docs/plans/custom-model-providers.md) | | Done |
-| 0.2.0 | Model kinds: graphs and descriptions of multiclass classifiers, and local result types for every kind. | [model-kinds](docs/plans/model-kinds.md) | | Done |
+| 0.1.0 | Custom model providers: `model=` on every function that calls an LLM. | None | | Done |
+| 0.2.0 | Model kinds: graphs and descriptions of multiclass classifiers, and local result types for every kind. | None | | Done |
 | 0.3.0 | Custom audiences: `Audience` is a base class, and a user writes an audience with its own rules. | None | | Done |
-| 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | [ebm2mcp](docs/plans/ebm2mcp.md) | 0.1.0, 0.2.0, 0.3.0 | Done |
+| 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | None | 0.1.0, 0.2.0, 0.3.0 | Done |
 | **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.4.0 | Planned |
 | 1.1.0 | Local explanations of regressors. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.0.0 | Planned |
 | 1.2.0 | Local explanations of multiclass classifiers. | [local-explanations-all-kinds](docs/plans/local-explanations-all-kinds.md) | 1.1.0 | Planned |
 | 1.3.0 | Model editing in Python, in `ebaml.experimental`. | [model-editing](docs/plans/model-editing.md) | 1.0.0 | Planned |
-| 1.4.0 | EBM2MCP: edit tools, as experimental tools. | [ebm2mcp](docs/plans/ebm2mcp.md) | 1.3.0 | Planned |
+| 1.4.0 | EBM2MCP: edit tools, as experimental tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 1.3.0 | Planned |
 | 1.5.0 | GAM Changer parity: business constraints, the effect of an edit on data, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 1.4.0 | Planned |
 | 1.6.0 | Stable editing. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 1.2.0, 1.5.0 | Planned |
 
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
-model that has them. The README table "Supported models" shows the state of each feature, and the
-[model-kinds](docs/plans/model-kinds.md) plan says what full support needs.
+model that has them. The README table "Supported models" shows the state of each feature. Full support needs a two-dimensional
+graph text and new proofs of the local explanations.
 
 ## Versions
 

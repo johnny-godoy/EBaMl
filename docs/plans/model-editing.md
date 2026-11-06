@@ -8,7 +8,7 @@ before you finish.
 <goal>
 Let a person or an agent change the graphs of a fitted EBM so that the model meets business requirements: for example,
 "the risk must not fall when the age goes up", "a missing value scores 0", or "this feature must not be used". EBaMl
-builds this in Python, and the MCP server exposes it to agents (`ebm2mcp.md`, 1.4.0). The work has three milestones:
+builds this in Python, and the MCP server exposes it to agents (`mcp-edit-tools.md`, 1.4.0). The work has three milestones:
 
 1. **1.3.0:** the edit API in Python, in `ebaml.experimental`.
 2. **1.5.0:** parity with GAM Changer: business constraints, the effect of an edit on data, and `.gamchanger` files.
@@ -89,8 +89,8 @@ Build on them where they fit, and write your own operation only where none fits.
 </design_1_5_0>
 
 <design_1_6_0>
-- Support multiclass models: an edit names the class (or all classes), and uses the model kind abstraction of the
-  `model-kinds.md` plan.
+- Support multiclass models: an edit names the class (or all classes), and uses the model kind abstraction
+  (`src/ebaml/graphs/model_kinds.py`).
 - Move the API from `ebaml.experimental.edit` to `ebaml.edit` as a public module. Keep `ebaml.experimental.edit` as a
   deprecated alias for one MINOR release, as the versioning rule says.
 - Move the MCP edit tools to names without `experimental_`, and keep the old names as deprecated aliases.

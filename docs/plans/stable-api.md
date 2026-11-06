@@ -31,7 +31,7 @@ milestone adds no feature. A release that only stabilizes is easy to review.
    base branch.
 4. **Check the BAML entry points.** Add a snapshot test of the signatures of the public `baml_sdk` functions, read from
    the generated stub as `tests/unit/ebaml/conftest.py` does, so a changed BAML signature shows in review.
-5. **Check the MCP schemas.** The snapshot test of the `ebm2mcp.md` plan exists. Make sure CI runs it.
+5. **Check the MCP schemas.** The snapshot test in `tests/unit/ebaml/mcp/test_server.py` exists. Make sure CI runs it.
 6. **Add deprecation support.** Add one small helper that emits a `DeprecationWarning` with the release that will
    remove the name, and a semgrep rule or a test that every deprecated name has a `Deprecated` changelog entry.
 7. **Update the rules.** Rewrite "Current state, not history" in `.claude/rules/writing-style.md`: the docs describe
