@@ -33,7 +33,6 @@ from tests.unit.ebaml.conftest import as_frame, instance_of
 pytestmark = pytest.mark.anyio
 
 SNAPSHOT = Path(__file__).parent / "tool_schemas.json"
-HTTP_PORT = 8000  # the default port of FastMCP, which the ebaml-mcp command does not change
 
 
 async def _call(server: FastMCP, name: str, arguments: dict[str, object] | None = None) -> tuple[bool, str]:
@@ -296,6 +295,24 @@ def test_log_events_go_to_stderr_and_never_to_the_protocol_channel(
     assert "probe_event" in captured.err
 
 
+def test_main_passes_the_host_and_the_port_to_the_server(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ebm, _ = continuous_ebm
+    skops.io.dump(ebm, tmp_path / "model.skops")
+    listening: list[tuple[str, int]] = []
+
+    def fake_run(self: FastMCP, transport: str) -> None:  # ruff: ignore[unused-function-argument] -- the signature of FastMCP.run
+        listening.append((self.settings.host, self.settings.port))
+
+    monkeypatch.setattr(FastMCP, "run", fake_run)
+    main(["--model", str(tmp_path / "model.skops"), "--transport", "streamable-http"])
+    main(["--model", str(tmp_path / "model.skops"), "--host", "0.0.0.0", "--port", "9123"])  # ruff: ignore[hardcoded-bind-all-interfaces] -- the test checks the option, and the server does not start
+    assert listening == [("127.0.0.1", 8000), ("0.0.0.0", 9123)]  # ruff: ignore[hardcoded-bind-all-interfaces] -- the value that the test passed
+
+
 def test_main_rejects_an_unknown_transport(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     with pytest.raises(SystemExit) as exit_info:
         main(["--model", str(tmp_path / "model.joblib"), "--transport", "carrier-pigeon"])
@@ -396,16 +413,15 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
     assert set(orjson.loads(texts[3])) == {"facts", "texts"}
 
 
-async def test_the_real_command_listens_with_streamable_http(saved_files: tuple[Path, Path]) -> None:
-    """The command has no option for the port, so the server listens on the port 8000 of FastMCP."""
+async def test_the_real_command_listens_with_streamable_http_on_the_given_port(saved_files: tuple[Path, Path]) -> None:
     model, _ = saved_files
     with socket.socket() as probe:
-        if probe.connect_ex(("127.0.0.1", HTTP_PORT)) == 0:
-            pytest.skip(reason="port 8000 is in use, and ebaml-mcp has no option to choose another port")
-    command = [_command(), "--model", str(model), "--transport", "streamable-http"]
-    async with await anyio.open_process(command, stderr=asyncio.subprocess.DEVNULL) as process:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    command = [_command(), "--model", str(model), "--transport", "streamable-http", "--host", "127.0.0.1"]
+    async with await anyio.open_process([*command, "--port", str(port)], stderr=asyncio.subprocess.DEVNULL) as process:
         try:
-            names = await _tool_names_when_ready(f"http://127.0.0.1:{HTTP_PORT}/mcp")
+            names = await _tool_names_when_ready(f"http://127.0.0.1:{port}/mcp")
         finally:
             process.terminate()
     assert "get_model_summary" in names
