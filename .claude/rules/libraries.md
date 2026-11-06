@@ -30,7 +30,8 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 ## Saved models (`skops.io`)
 
 - Save and load a fitted model with `skops.io`. It loads only the types that the caller trusts, so a file runs no code.
-  Pass the names of the trusted types to `skops.io.load(path, trusted=[...])`. Never pass `trusted=True`.
+  Pass the names of the trusted types to `skops.io.load(path, trusted=[...])`. Never pass `trusted=True`: the semgrep
+  rule `ebaml-skops-load-trusted-true` fails on it.
 - `pickle`, `shelve`, `dill`, `cloudpickle` and `joblib` run code when they load a file, so ruff bans them.
 - The one exception is `ebaml.mcp.model_store`, which also loads the joblib files that users saved. The ignore on the
   import gives the reason. Tests that write such a file carry the same ignore.
