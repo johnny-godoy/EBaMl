@@ -398,3 +398,28 @@ def matches_values(kind):
         case "b":
             return 2
     return 0
+
+
+def loads_a_joblib_file(path):
+    # ruleid: ebaml-files-are-read-only-in-model-store
+    return joblib.load(path)
+
+
+def loads_a_pickle(handle):
+    # ruleid: ebaml-files-are-read-only-in-model-store
+    return pickle.load(handle)
+
+
+def loads_a_skops_file(path):
+    # ruleid: ebaml-files-are-read-only-in-model-store
+    return skops.io.load(path)
+
+
+def reads_a_csv_file(path):
+    # ruleid: ebaml-files-are-read-only-in-model-store
+    return pl.read_csv(path)
+
+
+def dumps_a_skops_file(model, path):
+    # ok: ebaml-files-are-read-only-in-model-store
+    skops.io.dump(model, path)

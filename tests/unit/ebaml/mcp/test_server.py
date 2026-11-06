@@ -1,5 +1,6 @@
 """Tests of the MCP server, through an in-memory client session of the SDK."""
 
+import ast
 from pathlib import Path
 
 import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
@@ -238,3 +239,41 @@ async def test_no_tool_takes_a_path(continuous_ebm: tuple[ExplainableBoostingCla
         tools = (await session.list_tools()).tools
     argument_names = {name for tool in tools for name in tool.inputSchema.get("properties", {})}
     assert not {name for name in argument_names if any(part in name for part in ("path", "file", "dir", "url"))}
+
+
+def test_only_the_command_loads_files() -> None:
+    """Only ``serve``, which gets its paths from the command line, calls ``load_model`` and ``load_data``."""
+    tree = ast.parse(Path(server_module.__file__).read_text(encoding="utf-8"))
+    callers = {
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, ast.FunctionDef)
+        for call in ast.walk(function)
+        if isinstance(call, ast.Call) and ast.unparse(call.func) in {"load_model", "load_data"}
+    }
+    # ast.walk also visits the functions that a function holds, so a tool inside create_server would add its parent
+    assert callers == {"serve"}
+
+
+async def test_a_tool_argument_with_a_path_loads_no_file(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent cannot make the server load a file, even if it adds an argument that names a path."""
+    ebm, data = continuous_ebm
+
+    def forbidden(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("a tool loaded a file")
+
+    monkeypatch.setattr(server_module, "load_model", forbidden)
+    monkeypatch.setattr(server_module, "load_data", forbidden)
+    monkeypatch.setattr(joblib, "load", forbidden)
+    server = create_server(ModelStore(ebm=ebm, data=as_frame(data)), ModelOptions(provider="ollama", model="llama3"))
+    attempts: tuple[tuple[str, dict[str, object]], ...] = (
+        ("get_graph", {"feature": "/etc/passwd", "path": "/etc/passwd"}),
+        ("explain_prediction", {"row": 0, "model": "../evil.joblib"}),
+        ("get_model_summary", {"path": "../evil.joblib"}),
+    )
+    for name, arguments in attempts:
+        is_error, _ = await _call(server, name, arguments)
+        assert is_error == (name == "get_graph")
