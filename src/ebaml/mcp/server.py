@@ -5,6 +5,7 @@ Each tool is a thin adapter. It calls a function of a lower layer and turns the 
 """
 
 import contextlib
+import sys
 from collections.abc import Generator, Mapping, Sequence
 from pathlib import Path
 from typing import Literal
@@ -12,6 +13,7 @@ from typing import Literal
 import attrs
 import cyclopts
 import orjson
+import structlog
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
@@ -236,6 +238,8 @@ def serve(
         How the server talks to the client.
 
     """
+    # structlog prints to stdout by default, and a stdio server speaks JSON-RPC there, so a log line would corrupt it
+    structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
     store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None)
     create_server(store, ModelOptions.parse(llm) if llm else None).run(transport=transport)
 

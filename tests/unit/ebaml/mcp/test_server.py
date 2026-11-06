@@ -7,6 +7,8 @@ import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file tha
 import orjson
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
+import skops.io
+import structlog
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -259,6 +261,31 @@ def test_main_loads_the_model_and_runs_the_server(
     main(["--model", str(tmp_path / "model.joblib"), "--data", str(tmp_path / "data.csv"), "--llm", "ollama/llama3"])
     main(["--model", str(tmp_path / "model.joblib"), "--transport", "streamable-http"])
     assert [transport for _, transport in started] == ["stdio", "streamable-http"]
+
+
+@pytest.mark.parametrize("transport", ["stdio", "streamable-http"])
+def test_log_events_go_to_stderr_and_never_to_the_protocol_channel(
+    transport: str,
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Bug: structlog printed to stdout, so a log event broke the JSON-RPC stream of the stdio server."""
+    ebm, _ = continuous_ebm
+    skops.io.dump(ebm, tmp_path / "model.skops")
+
+    def fake_run(_self: FastMCP, transport: str) -> None:
+        structlog.get_logger("probe").info("probe_event", transport=transport)
+
+    monkeypatch.setattr(FastMCP, "run", fake_run)
+    try:
+        main(["--model", str(tmp_path / "model.skops"), "--transport", transport])
+        captured = capsys.readouterr()
+    finally:
+        structlog.reset_defaults()  # serve configures structlog for the whole process, so undo it for the other tests
+    assert not captured.out
+    assert "probe_event" in captured.err
 
 
 def test_main_rejects_an_unknown_transport(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
