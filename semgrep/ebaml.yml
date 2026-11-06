@@ -315,3 +315,51 @@ rules:
     paths:
       include: ["/src/ebaml/"]
       exclude: ["/src/ebaml/mcp/model_store.py"]
+
+  - id: ebaml-no-sleep-loop
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A `while True` loop with a sleep is a hand-written retry with no jitter, no limit and no test mode. Let the BAML
+      client retry (`ai.clients.Retry` in baml_src/), or write a bounded loop as ebaml.llm.retry does.
+    pattern-either:
+      - pattern: |
+          while True:
+              ...
+              time.sleep(...)
+              ...
+      - pattern: |
+          while True:
+              ...
+              await asyncio.sleep(...)
+              ...
+      - pattern: |
+          while True:
+              ...
+              await anyio.sleep(...)
+              ...
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-structured-concurrency
+    languages: [python]
+    severity: ERROR
+    message: >-
+      asyncio.gather and asyncio.create_task start tasks that can outlive their caller or hide an error. Start them
+      in an anyio task group, which mcp already depends on.
+    pattern-either:
+      - pattern: asyncio.gather(...)
+      - pattern: asyncio.create_task(...)
+    paths:
+      include: ["/src/ebaml/"]
+
+  - id: ebaml-skops-load-trusted-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      trusted=True makes skops.io load every type in the file, so the file can run code. Pass the list of the types
+      that you trust, after get_untrusted_types shows what the file holds (.claude/rules/libraries.md).
+    pattern-either:
+      - pattern: skops.io.load(..., trusted=True, ...)
+      - pattern: sio.load(..., trusted=True, ...)
+      - pattern: load(..., trusted=True, ...)

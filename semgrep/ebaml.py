@@ -423,3 +423,48 @@ def reads_a_csv_file(path):
 def dumps_a_skops_file(model, path):
     # ok: ebaml-files-are-read-only-in-model-store
     skops.io.dump(model, path)
+
+
+def poll(client):
+    # ruleid: ebaml-no-sleep-loop
+    while True:
+        if client.ready():
+            return client.result()
+        time.sleep(1)
+
+
+async def poll_async(client):
+    # ruleid: ebaml-no-sleep-loop
+    while True:
+        if await client.ready():
+            return await client.result()
+        await anyio.sleep(1)
+
+
+def consume(queue):
+    # ok: ebaml-no-sleep-loop
+    while True:
+        item = queue.get()
+        if item is None:
+            return
+        handle(item)
+
+
+async def fan_out(first, second):
+    # ruleid: ebaml-structured-concurrency
+    await asyncio.gather(first(), second())
+    # ruleid: ebaml-structured-concurrency
+    asyncio.create_task(first())
+    # ok: ebaml-structured-concurrency
+    async with anyio.create_task_group() as group:
+        group.start_soon(first)
+
+
+def loads_with_trust(path, types):
+    # ruleid: ebaml-skops-load-trusted-true, ebaml-files-are-read-only-in-model-store
+    first = skops.io.load(path, trusted=True)
+    # ruleid: ebaml-skops-load-trusted-true
+    second = sio.load(path, trusted=True)
+    # ok: ebaml-skops-load-trusted-true
+    third = sio.load(path, trusted=types)
+    return first, second, third
