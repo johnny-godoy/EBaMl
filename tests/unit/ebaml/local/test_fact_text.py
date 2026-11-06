@@ -138,6 +138,7 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
+        "is_smallest_set": True,
         "features_not_needed": ["f1"],
         "m": ["f0"],
     }
@@ -182,6 +183,7 @@ def test_layperson_text_of_the_explanations() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
+        "is_smallest_set": True,
         "features_not_needed": ["f1"],
     }
     assert orjson.loads(texts.completions) == {
@@ -204,6 +206,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
+        "is_smallest_set": True,
         "features_not_needed": ["f1"],
         "guaranteed_margin_logit": 0.988,
     }
@@ -236,3 +239,12 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
 def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(confidence_level))
     assert orjson.loads(texts.counterfactual)["flip_holds_even_if_the_model_is_somewhat_off"] is holds
+
+
+def test_a_minimal_set_is_not_called_the_smallest() -> None:
+    facts = _text_facts_with_everything(0.95)
+    minimal = attrs.evolve(
+        facts,
+        sufficient_reason=local.SufficientReason(["f0"], 0.5, minimum=False),
+    )
+    assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_smallest_set"] is False

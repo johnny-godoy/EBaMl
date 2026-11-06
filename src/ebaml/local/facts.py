@@ -20,6 +20,7 @@ the direction that makes the claim harder to prove, so a counterfactual flips th
 keeps it, even if the scores sit at the edge of their confidence interval.
 """
 
+import functools
 import math
 import operator
 import statistics
@@ -37,7 +38,8 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.local.decisions import Decision
-from ebaml.local.local_kinds import LocalKind, OutputKind, local_kind
+from ebaml.local.local_kinds import LocalKind, OutputKind, PredictionFrame, local_kind
+from ebaml.local.reason_search import Minimal, ReasonSearch, by_smallest_gain
 
 
 @attrs.frozen
@@ -95,6 +97,11 @@ class LocalOptions:
         The question about the predicted value of a regressor that the explanations keep, such as ``Threshold(10)`` or
         ``Interval(10, 20)``. ``None`` asks whether the value is above the intercept, the average prediction. A
         classifier has its predicted class as the decision, so it accepts ``None`` only.
+    reason_search: ReasonSearch
+        How to choose the features of a sufficient reason when the decision has several margins, as "inside an
+        interval" has. ``Minimal`` (the default) returns a set from which no feature can be removed. ``ExactOrMinimal``
+        returns the smallest set when the number of features is at most its limit. A decision with one margin ignores
+        this option, because sorting finds its smallest set exactly.
 
     """
 
@@ -104,6 +111,7 @@ class LocalOptions:
     seed: int = 0
     min_support: float = 0.01
     decision: Decision | None = None
+    reason_search: ReasonSearch = attrs.field(factory=Minimal)
 
 
 @attrs.frozen
@@ -610,11 +618,18 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     )
 
 
+@attrs.frozen
+class _Bound:
+    """One margin of the decision: ``sign * (intercept + the scores)`` is positive while the margin holds."""
+
+    intercept: float
+    sign: int
+
+
 def _completions(
     features: Sequence[_Feature],
     order: Sequence[_Feature],
-    intercept: float,
-    sign: int,
+    bounds: Sequence[_Bound],
     options: LocalOptions,
 ) -> list[CompletionStep]:
     """Count completions, estimated by sampling the unknown features from their training bin weights.
@@ -625,10 +640,8 @@ def _completions(
         The features.
     order : Sequence[_Feature]
         The features in the order they are revealed.
-    intercept : float
-        The intercept of the model minus the threshold of the decision.
-    sign : int
-        ``1`` if the decision says that the score is high, ``-1`` otherwise.
+    bounds : Sequence[_Bound]
+        The margins of the decision. A completion keeps the decision if every margin holds.
     options : LocalOptions
         Uses ``n_samples``, ``seed`` and ``max_steps``.
 
@@ -647,9 +660,177 @@ def _completions(
     steps = []
     for k in range(min(options.max_steps, len(order)) + 1):
         known = {f.name for f in order[:k]}
-        logit = intercept + sum(current[n] if n in known else sampled[n] for n in current)
-        steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean((logit > 0) == (sign == 1)))))
+        total = sum(current[n] if n in known else sampled[n] for n in current)
+        holds = np.all([(bound.intercept + total > 0) == (bound.sign == 1) for bound in bounds], axis=0)
+        steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean(holds))))
     return steps
+
+
+@attrs.frozen
+class _GainTable:
+    """The numbers of the covering problem of a decision with several margins (``ebaml.local.reason_search``)."""
+
+    worst: list[float]
+    gains: list[list[float]]
+
+
+def _gain_table(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float) -> _GainTable:
+    """Read, for each margin, its worst case and how much each feature raises it when fixed.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    bounds : Sequence[_Bound]
+        The margins of the decision.
+    z : float
+        Standard deviations to move the scores by.
+
+    Returns
+    -------
+    _GainTable
+        The worst cases and the gains.
+
+    """
+    worst: list[float] = []
+    gains: list[list[float]] = []
+    for bound in bounds:
+        guaranteed = [_robust_scores(f, bound.sign, z, towards_outcome=True) for f in features]
+        worst.append(bound.sign * bound.intercept + sum(float(scores.min()) for scores in guaranteed))
+        gains.append([
+            float(scores[f.bin_index] - scores.min()) for f, scores in zip(features, guaranteed, strict=True)
+        ])
+    return _GainTable(worst, gains)
+
+
+def _several_margins_reason(
+    features: Sequence[_Feature],
+    table: _GainTable,
+    search: ReasonSearch,
+) -> SufficientReason | None:
+    """Choose a sufficient reason for a decision with several margins, with the search of the user.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    table : _GainTable
+        The worst cases and the gains.
+    search : ReasonSearch
+        How to choose the features.
+
+    Returns
+    -------
+    SufficientReason | None
+        The reason, or None if even all the features do not guarantee the decision.
+
+    """
+    selection = search.select(table.worst, table.gains)
+    if selection is None:
+        return None
+    return SufficientReason(
+        features=[features[index].name for index in selection.indices],
+        guaranteed_margin=selection.guaranteed_margin,
+        minimum=selection.minimum,
+    )
+
+
+def _reason(
+    features: Sequence[_Feature],
+    bounds: Sequence[_Bound],
+    z: float,
+    search: ReasonSearch,
+) -> SufficientReason | None:
+    """Choose the sufficient reason of a decision.
+
+    One margin has a smallest set that sorting finds exactly. Several margins use the search of the user.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    bounds : Sequence[_Bound]
+        The margins of the decision.
+    z : float
+        Standard deviations to move the scores by.
+    search : ReasonSearch
+        How to choose the features when the decision has several margins.
+
+    Returns
+    -------
+    SufficientReason | None
+        The reason, or None if even all the features do not guarantee the decision.
+
+    """
+    if len(bounds) == 1:
+        return _sufficient_reason(features, bounds[0].intercept, bounds[0].sign, z)
+    return _several_margins_reason(features, _gain_table(features, bounds, z), search)
+
+
+def _reveal_order(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float) -> list[_Feature]:
+    """Order the features by how much knowing their value guarantees, largest first.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features to order.
+    bounds : Sequence[_Bound]
+        The margins of the decision. A feature ranks by its smallest gain over these margins.
+    z : float
+        The number of standard deviations that each score moves against the claim.
+
+    Returns
+    -------
+    list[_Feature]
+        The features in the order that the count-completions steps reveal them.
+
+    """
+    if len(bounds) == 1:
+        return [step.feature for step in _fixing_order(features, bounds[0].sign, z)]
+    return [features[index] for index in by_smallest_gain(_gain_table(features, bounds, z).gains)]
+
+
+def _smallest_counterfactual(
+    features: Sequence[_Feature],
+    frame: PredictionFrame,
+    intercept: float,
+    z: float,
+) -> Counterfactual | None:
+    """Find the fewest changes after which one margin of the decision fails.
+
+    The decision fails when one margin fails, so the answer is the smallest of the answers for each margin. Each is a
+    problem with one margin, which sorting solves exactly.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    frame : PredictionFrame
+        The decision, with its margins.
+    intercept : float
+        The intercept of the model.
+    z : float
+        Standard deviations to move the scores by.
+
+    Returns
+    -------
+    Counterfactual | None
+        The counterfactual with the fewest changes, the first one on a tie, or None if no margin can fail.
+
+    """
+    found = []
+    for margin in frame.side.margins:
+        counterfactual = _counterfactual(
+            features,
+            intercept - margin.threshold,
+            margin.sign,
+            z,
+            new_decision=margin.opposite,
+            new_output=functools.partial(frame.output_after, margin),
+        )
+        if counterfactual is not None:
+            found.append(counterfactual)
+    return min(found, key=lambda counterfactual: len(counterfactual.changes), default=None)
 
 
 def compute_local_facts(
@@ -700,9 +881,10 @@ def compute_local_facts(
         confidence_level=options.confidence_level,
         decision=options.decision,
     )
-    sign = frame.side.sign
-    # every algorithm sees the margin sign * (baseline + sum of the scores), which is positive while the decision holds
-    baseline = intercept - frame.side.threshold
+    margins = frame.side.margins
+    binding = frame.side.binding(score)
+    # every algorithm sees the margin sign * (intercept - threshold + the scores), which is positive while it holds
+    bounds = [_Bound(intercept - margin.threshold, margin.sign) for margin in margins]
     prediction = Prediction(
         decision=frame.side.label,
         output=frame.output,
@@ -710,11 +892,11 @@ def compute_local_facts(
         upper=frame.upper,
         score=score,
         score_std=score_std,
-        margin=sign * (score - frame.side.threshold),
-        threshold=frame.side.threshold,
+        margin=binding.value(score),
+        threshold=binding.threshold,
         output_kind=kind.output_kind,
     )
-    order = [step.feature for step in _fixing_order(features, sign, z)]
+    order = _reveal_order(features, bounds, z)
     return LocalFacts(
         prediction=prediction,
         contributions=sorted(
@@ -722,15 +904,8 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_counterfactual(
-            features,
-            baseline,
-            sign,
-            z,
-            new_decision=frame.side.opposite,
-            new_output=frame.output_after,
-        ),
-        sufficient_reason=_sufficient_reason(features, baseline, sign, z),
-        completions=_completions(features, order, baseline, sign, options),
+        counterfactual=_smallest_counterfactual(features, frame, intercept, z),
+        sufficient_reason=_reason(features, bounds, z, options.reason_search),
+        completions=_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,
     )

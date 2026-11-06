@@ -190,6 +190,26 @@ testset "Live" {
         assert.is_true(count_sentences(text) <= 3)
     }
 
+    test "minimal sufficient reason: the set is called minimal, not the smallest" {
+        let facts = LocalFactTexts {
+            prediction: live_regressor_facts().prediction,
+            counterfactual: live_regressor_facts().counterfactual,
+            sufficient_reason: `{"exists": true, "features": ["living_area", "age_of_house"], "is_smallest_set": false, "features_not_needed": ["garage"]}`,
+            completions: live_regressor_facts().completions,
+        };
+        let text = LocalSufficientReason(
+            "The model predicts the price of a house, mainly from its living area.",
+            facts,
+            live_layperson_guidance(),
+            3,
+            default_graph_options(),
+        );
+        log_reply(text);
+        assert.is_true(text.to_lower_case().includes("garage"));
+        assert.is_true(!text.to_lower_case().includes("smallest"));
+        assert.is_true(count_sentences(text) <= 3)
+    }
+
     test "explain_local: three explanations, each non-empty, usage reported" {
         let result = explain_local(
             "The model denies loans mainly because of low income and a high debt ratio.",

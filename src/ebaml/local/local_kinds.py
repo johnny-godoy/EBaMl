@@ -1,8 +1,9 @@
 """What each kind of EBM tells the local explanations about one prediction.
 
-The algorithms of ``ebaml.local.facts`` work on one margin: a sum of one term per feature, positive while the decision
-holds. This module turns the prediction of a model into that margin. One ``LocalKind`` class does it for each model
-kind (``ebaml.graphs.model_kinds``), so ``facts`` never tests the kind of the model. ``local_kind`` selects the class.
+The algorithms of ``ebaml.local.facts`` work on margins: each is a sum of one term per feature, and the decision holds
+while every margin is positive. This module turns the prediction of a model into its margins. One ``LocalKind`` class
+does it for each model kind (``ebaml.graphs.model_kinds``), so ``facts`` never tests the kind of the model.
+``local_kind`` selects the class.
 
 - ``BinaryLocal`` keeps the predicted class. The margin is the log-odds of that class.
 - ``RegressorLocal`` keeps the answer to a ``Decision`` (``ebaml.local.decisions``). The margin is the distance of the
@@ -22,7 +23,7 @@ import attrs
 from ebaml.core.custom_types import ClassLabel
 from ebaml.core.exceptions import OptionRangeError, UnsupportedModelError
 from ebaml.graphs.model_kinds import BinaryClassifier, ModelKind, Regressor
-from ebaml.local.decisions import Decision, Side, Threshold
+from ebaml.local.decisions import Decision, Margin, Side, Threshold
 
 
 class OutputKind(enum.Enum):
@@ -46,8 +47,8 @@ class PredictionFrame:
         The lower end of the confidence interval of ``output``.
     upper: float
         The upper end of the confidence interval of ``output``.
-    output_after: Callable[[float], float]
-        The output of the model for the opposite decision, from the margin after some changes.
+    output_after: Callable[[Margin, float], float]
+        The output of the model for the opposite decision, from the value of a margin after some changes.
 
     """
 
@@ -55,7 +56,7 @@ class PredictionFrame:
     output: float
     lower: float
     upper: float
-    output_after: Callable[[float], float]
+    output_after: Callable[[Margin, float], float]
 
 
 def _sigmoid(logit: float) -> float:
@@ -141,11 +142,13 @@ class BinaryLocal(LocalKind):
         # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
         lower, upper = sorted((_sigmoid(sign * (score - z * score_std)), _sigmoid(sign * (score + z * score_std))))
         return PredictionFrame(
-            side=Side(self.classes[int(score > 0)], self.classes[int(score <= 0)], sign, 0.0),
+            side=Side(self.classes[int(score > 0)], (Margin(sign, 0.0, self.classes[int(score <= 0)]),)),
             output=_sigmoid(sign * score),
             lower=lower,
             upper=upper,
-            output_after=lambda new_margin: _sigmoid(-new_margin),  # the opposite class has the opposite log-odds
+            output_after=lambda _margin, new_margin: _sigmoid(
+                -new_margin,
+            ),  # the opposite class has the opposite log-odds
         )
 
 
@@ -175,7 +178,7 @@ class RegressorLocal(LocalKind):
             output=score,
             lower=score - spread,
             upper=score + spread,
-            output_after=lambda new_margin: side.threshold + side.sign * new_margin,
+            output_after=lambda margin, new_margin: margin.threshold + margin.sign * new_margin,
         )
 
 

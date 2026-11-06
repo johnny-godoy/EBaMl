@@ -19,6 +19,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.local_kinds import OutputKind
+from ebaml.local.reason_search import ExactOrMinimal, Minimal, ReasonSearch
 from tests.unit.ebaml.conftest import fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
@@ -694,7 +695,7 @@ def test_sufficient_reason_needs_a_margin_above_zero() -> None:
 def _completion_shares(cur: float, sampled: float, *, intercept: float = 0.0, sign: int = 1) -> list[float]:
     feature = _hand("f", [cur, sampled], weights=[0.0, 1.0])  # the sample always falls in the second bin
     options = local.LocalOptions(n_samples=5, max_steps=1)
-    return [step.share for step in local._completions([feature], [feature], intercept, sign, options)]
+    return [step.share for step in local._completions([feature], [feature], [local._Bound(intercept, sign)], options)]
 
 
 @pytest.mark.parametrize(
@@ -725,7 +726,7 @@ def test_completions_add_the_intercept() -> None:
 def test_completions_reveal_max_steps_features(max_steps: int) -> None:
     features = [_hand(f"f{i}", [1.0, 1.0]) for i in range(4)]
     options = local.LocalOptions(n_samples=5, max_steps=max_steps)
-    steps = local._completions(features, features, 0.0, 1, options)
+    steps = local._completions(features, features, [local._Bound(0.0, 1)], options)
     assert [len(step.fixed) for step in steps] == list(range(max_steps + 1))
 
 
@@ -987,35 +988,85 @@ def test_regressor_threshold_matches_brute_force(
         assert facts.sufficient_reason.minimum
 
 
+def _sufficient_sizes(
+    ebm: ExplainableBoostingRegressor,
+    row: tuple[str, ...],
+    holds: Callable[[float], bool],
+) -> dict[frozenset[int], bool]:
+    """Tell for every set of fixed features whether the answer holds for all completions, by enumeration.
+
+    Returns
+    -------
+    dict[frozenset[int], bool]
+        For each set of positions, True if every completion keeps the answer of the row.
+
+    """
+    values = {
+        combo: float(ebm.predict(pd.DataFrame([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
+    }
+    same = {combo: holds(value) == holds(values[row]) for combo, value in values.items()}
+    return {
+        frozenset(subset): all(ok for combo, ok in same.items() if all(combo[i] == row[i] for i in subset))
+        for size in range(len(NAMES) + 1)
+        for subset in itertools.combinations(range(len(NAMES)), size)
+    }
+
+
+def _interval_answer(interval: Interval, value: float) -> Callable[[float], bool]:
+    """Return the test of the answer that the interval gives for ``value``: at most the low end, inside, or above.
+
+    Returns
+    -------
+    Callable[[float], bool]
+        The test.
+
+    """
+    if value <= interval.low:
+        return lambda other: other <= interval.low
+    if value > interval.high:
+        return lambda other: other > interval.high
+    return lambda other: interval.low < other <= interval.high
+
+
+@pytest.mark.parametrize("interval", [Interval(-1.5, 1.5), Interval(-0.7, 0.7), Interval(-3.5, 3.5)])
+@pytest.mark.parametrize("search", [Minimal(), ExactOrMinimal()])
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_regressor_interval_matches_brute_force(
     categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
     row: tuple[str, ...],
+    search: ReasonSearch,
+    interval: Interval,
 ) -> None:
     ebm, _ = categorical_regressor
-    interval = Interval(-1.5, 1.5)
-    value = float(ebm.predict(pd.DataFrame([dict(zip(NAMES, row, strict=True))]))[0])
-    options = local.LocalOptions(confidence_level=0, min_support=0, decision=interval)
-    if interval.low <= value <= interval.high:
-        with pytest.raises(UnsupportedModelError, match="inside"):
-            local.compute_local_facts(ebm, dict(zip(NAMES, row, strict=True)), options)
-        return
-    facts = local.compute_local_facts(ebm, dict(zip(NAMES, row, strict=True)), options)
-    below = value < interval.low
-    # the claim is "below the low end" or "above the high end", and the opposite claim is its negation
-    flip, sufficient = _brute_force_regressor(
+    instance = dict(zip(NAMES, row, strict=True))
+    value = float(ebm.predict(pd.DataFrame([instance]))[0])
+    holds = _interval_answer(interval, value)
+    facts = local.compute_local_facts(
         ebm,
-        row,
-        (lambda v: v < interval.low) if below else (lambda v: v > interval.high),
+        instance,
+        local.LocalOptions(confidence_level=0, min_support=0, decision=interval, reason_search=search),
     )
+    flip, _ = _brute_force_regressor(ebm, row, holds)
     assert (facts.counterfactual is None) == (flip is None)
     if flip is not None:
         assert facts.counterfactual is not None
         assert len(facts.counterfactual.changes) == flip
-    assert (facts.sufficient_reason is None) == (sufficient is None)
-    if sufficient is not None:
-        assert facts.sufficient_reason is not None
-        assert len(facts.sufficient_reason.features) == sufficient
+    sufficient = _sufficient_sizes(ebm, row, holds)
+    reason = facts.sufficient_reason
+    if not sufficient[frozenset(range(len(NAMES)))]:
+        assert reason is None
+        return
+    assert reason is not None
+    chosen = frozenset(NAMES.index(name) for name in reason.features)
+    assert sufficient[chosen]
+    # minimal: no feature can be removed
+    assert not any(sufficient[chosen - {feature}] for feature in chosen)
+    smallest = min(len(subset) for subset, ok in sufficient.items() if ok)
+    if reason.minimum:
+        assert len(chosen) == smallest
+    if isinstance(search, ExactOrMinimal):
+        assert reason.minimum
+        assert len(chosen) == smallest
 
 
 def test_regressor_prediction_is_the_predicted_value(
@@ -1057,3 +1108,9 @@ def test_a_classifier_rejects_a_decision(categorical_ebm: tuple[ExplainableBoost
     ebm, _ = categorical_ebm
     with pytest.raises(OptionRangeError, match="Only a regressor accepts a decision"):
         local.compute_local_facts(ebm, {"f0": "p", "f1": "p", "f2": "p"}, local.LocalOptions(decision=Threshold(0.0)))
+
+
+def test_no_reason_with_several_margins_when_all_features_are_not_enough() -> None:
+    features = [_feature([0.5, -2.0], 0, std=1.0), _feature([0.5, -2.0], 0, std=1.0)]
+    bounds = [local._Bound(0.0, 1), local._Bound(0.0, -1)]
+    assert local._reason(features, bounds, 1.96, Minimal()) is None
