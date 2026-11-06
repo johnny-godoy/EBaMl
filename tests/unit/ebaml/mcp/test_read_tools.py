@@ -38,11 +38,8 @@ def test_summary_of_a_multiclass_classifier_has_one_intercept_per_class(
     assert len(summary.intercept) == 3
 
 
-def test_summary_names_the_skipped_interaction_terms(fit_ebm: object) -> None:
-    rng_data = pd.DataFrame({"p": range(300), "q": [value % 7 for value in range(300)]})
-    target = ((rng_data["p"] % 5) * (rng_data["q"] % 3) > 2).astype(int)
-    ebm = fit_ebm(rng_data, target, interactions=1, random_state=0)  # pyrefly: ignore[not-callable] -- the fixture is a callable
-    summary = model_summary(ModelStore(ebm=ebm))
+def test_summary_names_the_skipped_interaction_terms(interaction_ebm: ExplainableBoostingClassifier) -> None:
+    summary = model_summary(ModelStore(ebm=interaction_ebm))
     assert summary.skipped_terms == ["p x q"]
     assert summary.feature_count == 2
 
