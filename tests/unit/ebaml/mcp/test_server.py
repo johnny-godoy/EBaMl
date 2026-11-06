@@ -1,8 +1,12 @@
 """Tests of the MCP server, through an in-memory client session of the SDK."""
 
 import ast
+import asyncio
+import socket
+import sys
 from pathlib import Path
 
+import anyio
 import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
 import orjson
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
@@ -10,6 +14,9 @@ import pytest
 import skops.io
 import structlog
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp import FastMCP
 from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import TextContent, TextResourceContents
@@ -26,6 +33,7 @@ from tests.unit.ebaml.conftest import as_frame, instance_of
 pytestmark = pytest.mark.anyio
 
 SNAPSHOT = Path(__file__).parent / "tool_schemas.json"
+HTTP_PORT = 8000  # the default port of FastMCP, which the ebaml-mcp command does not change
 
 
 async def _call(server: FastMCP, name: str, arguments: dict[str, object] | None = None) -> tuple[bool, str]:
@@ -341,3 +349,82 @@ async def test_a_tool_argument_with_a_path_loads_no_file(
     for name, arguments in attempts:
         is_error, _ = await _call(server, name, arguments)
         assert is_error == (name == "get_graph")
+
+
+def _command() -> str:
+    """Find the ``ebaml-mcp`` script that the project installs next to the Python of the tests.
+
+    Returns
+    -------
+    str
+        The path of the script.
+
+    """
+    command = Path(sys.executable).parent / "ebaml-mcp"
+    assert command.exists(), "install the package with `uv sync --extra mcp`"
+    return str(command)
+
+
+@pytest.fixture
+def saved_files(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    tmp_path: Path,
+) -> tuple[Path, Path]:
+    ebm, data = continuous_ebm
+    skops.io.dump(ebm, tmp_path / "model.skops")
+    data.to_csv(tmp_path / "data.csv", index=False)
+    return tmp_path / "model.skops", tmp_path / "data.csv"
+
+
+async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[Path, Path]) -> None:
+    """Start ``ebaml-mcp`` as a client does. This needs no LLM key, because the command has no ``--llm``."""
+    model, data = saved_files
+    parameters = StdioServerParameters(command=_command(), args=["--model", str(model), "--data", str(data)])
+    async with stdio_client(parameters) as (read, write), ClientSession(read, write) as session:
+        await session.initialize()
+        names = {tool.name for tool in (await session.list_tools()).tools}
+        summary = await session.call_tool("get_model_summary", {})
+        features = await session.call_tool("list_features", {})
+        graph = await session.call_tool("get_graph", {"feature": "a", "max_tokens": 500})
+        explanation = await session.call_tool("explain_prediction", {"row": 0})
+    texts = [result.content[0].text for result in (summary, features, graph, explanation)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
+    assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction"}
+    assert not any(result.isError for result in (summary, features, graph, explanation))
+    assert orjson.loads(texts[0])["kind"] == "BinaryClassifier"
+    assert orjson.loads(texts[1])[0]["name"] == "a"
+    assert "Feature Name: a" in texts[2]
+    assert set(orjson.loads(texts[3])) == {"facts", "texts"}
+
+
+async def test_the_real_command_listens_with_streamable_http(saved_files: tuple[Path, Path]) -> None:
+    """The command has no option for the port, so the server listens on the port 8000 of FastMCP."""
+    model, _ = saved_files
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", HTTP_PORT)) == 0:
+            pytest.skip(reason="port 8000 is in use, and ebaml-mcp has no option to choose another port")
+    command = [_command(), "--model", str(model), "--transport", "streamable-http"]
+    async with await anyio.open_process(command, stderr=asyncio.subprocess.DEVNULL) as process:
+        try:
+            names = await _tool_names_when_ready(f"http://127.0.0.1:{HTTP_PORT}/mcp")
+        finally:
+            process.terminate()
+    assert "get_model_summary" in names
+
+
+async def _tool_names_when_ready(url: str) -> set[str]:
+    """List the tools of the server at the URL. Retry for up to 30 seconds while the server starts.
+
+    Returns
+    -------
+    set[str]
+        The names of the tools.
+
+    """
+    for _attempt in range(60):
+        try:
+            async with streamable_http_client(url) as (read, write, _), ClientSession(read, write) as session:
+                await session.initialize()
+                return {tool.name for tool in (await session.list_tools()).tools}
+        except (OSError, ExceptionGroup):
+            await asyncio.sleep(0.5)
+    pytest.fail("the HTTP server did not start in 30 seconds")
