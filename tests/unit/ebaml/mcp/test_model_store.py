@@ -1,5 +1,6 @@
 """Tests of the session state and the loading of the files that the user names."""
 
+import ast
 from pathlib import Path
 
 import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
@@ -8,6 +9,7 @@ import pytest
 import skops.io
 from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
+import ebaml
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 from tests.unit.ebaml.conftest import as_frame
@@ -77,3 +79,45 @@ def test_row_instance_checks_the_row_and_the_columns(
     with pytest.raises(InvalidInstanceError, match="no column"):
         ModelStore(ebm=ebm, data=data.drop("b")).row_instance(0)
     assert set(ModelStore(ebm=ebm, data=data).row_instance(len(data) - 1)) == {"a", "b", "c"}
+
+
+_LOADERS = {"joblib.load", "pickle.load", "pickle.loads", "skops.io.load", "skops.io.loads"}
+
+
+def _loader_calls(node: ast.AST, function: str = "<module>") -> list[tuple[str, str]]:
+    """Find each call that reads a model or a CSV file below a syntax node.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        The name of the call and the name of the function that holds it, for each call.
+
+    """
+    found: list[tuple[str, str]] = []
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef):
+            found += _loader_calls(child, child.name)
+            continue
+        if isinstance(child, ast.Call):
+            name = ast.unparse(child.func)
+            if name in _LOADERS or name.endswith(".read_csv"):
+                found.append((name, function))
+        found += _loader_calls(child, function)
+    return found
+
+
+def test_only_load_model_reads_a_pickle_and_only_model_store_reads_files() -> None:
+    """Loading a pickle runs code. The only reader is ``load_model``, which only the command line of the user calls."""
+    package = Path(ebaml.__file__).parent
+    calls = {
+        source.relative_to(package).as_posix(): _loader_calls(ast.parse(source.read_text(encoding="utf-8")))
+        for source in package.rglob("*.py")
+    }
+    readers = {source: found for source, found in calls.items() if found}
+    assert readers == {
+        "mcp/model_store.py": [
+            ("skops.io.load", "_load_skops"),
+            ("joblib.load", "load_model"),
+            ("pl.read_csv", "load_data"),
+        ],
+    }

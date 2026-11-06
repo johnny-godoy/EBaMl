@@ -298,3 +298,20 @@ rules:
       - pattern-regex: '(?m)^[ \t]*case[ \t]+[A-Za-z_][\w.]*\(.*\n(?:(?![ \t]*match\b).*\n)*?[ \t]*case[ \t]+[A-Za-z_][\w.]*\('
     paths:
       include: ["/src/ebaml/"]
+
+  - id: ebaml-files-are-read-only-in-model-store
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Loading a pickle runs code from the file, and only the user may name a file, at the start of the server. Read
+      a model or a CSV file only in ebaml/mcp/model_store.py, and never with a path from a tool argument.
+    pattern-either:
+      - pattern: joblib.load(...)
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+      - pattern: skops.io.load(...)
+      - pattern: skops.io.loads(...)
+      - pattern: $X.read_csv(...)
+    paths:
+      include: ["/src/ebaml/"]
+      exclude: ["/src/ebaml/mcp/model_store.py"]
