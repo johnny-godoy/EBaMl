@@ -31,8 +31,8 @@ the *gains*.
 
 `explain_instance` accepts binary classifiers and regressors. The definitions below set what the explanations of each
 kind mean. The result types of `ebaml.local` can hold all of them. Only the binary case has a proof so far.
-The regressor with a threshold, or with an interval answer "below" or "above", uses the same sorting algorithms on a
-shifted intercept, but the proof of that reduction is not written yet. For the other
+A regressor uses the same sorting algorithms on a shifted intercept for each margin, and the answer "inside" uses the
+search strategies below. The proof of that reduction is not written yet. For the other
 kinds, the words "exact" and "smallest" below state the claims that a proof must check. They are not proved.
 
 ### Notation
@@ -46,7 +46,7 @@ more, and each margin is a sum of one term for each feature.
 | --- | --- | --- | --- |
 | Binary classifier | The predicted class. | `±s(x)`, with the sign of the predicted class. | The probability of the predicted class. |
 | Regressor, threshold `t` | The prediction is above `t`, or not above `t`. | `±(s(x) - t)`. | The predicted value. |
-| Regressor, interval `[lo, hi]` | The prediction is below, inside or above the interval. | Below: `lo - s(x)`. Inside: `s(x) - lo` and `hi - s(x)`. Above: `s(x) - hi`. | The predicted value. |
+| Regressor, interval `(lo, hi]` | The prediction is at most `lo`, inside the interval, or above `hi`. | At most `lo`: `lo - s(x)`. Inside: `s(x) - lo` and `hi - s(x)`. Above: `s(x) - hi`. | The predicted value. |
 | Multiclass classifier | The predicted class `c`. | `s_c(x) - s_j(x)` for each other class `j`. | The probability of `c`. |
 
 ### Counterfactual

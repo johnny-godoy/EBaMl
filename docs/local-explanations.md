@@ -141,12 +141,24 @@ a `Decision`:
 | Decision | Question | Answers |
 | --- | --- | --- |
 | `Threshold(value)` | Is the predicted value above `value`? | "above `value`", "at most `value`". |
-| `Interval(low, high)` | Is the predicted value below, inside or above the interval? | "below `low`", "above `high`". The answer "inside" is not supported yet. |
+| `Interval(low, high)` | Is the predicted value at most `low`, inside the interval, or above `high`? | "at most `low`", "above `low` and at most `high`", "above `high`". |
 | `None` (default) | Is the predicted value above the intercept? | The intercept is the average prediction on the training data. |
 
-The counterfactual is the fewest changes after which the answer is the other one. The sufficient reason is the fewest
+The counterfactual is the fewest changes after which the answer is another one. The sufficient reason is a set of
 inputs that keep the answer for every value of the other inputs. A classifier accepts no `decision`, because its
 predicted class is the decision.
+
+The answer "inside" has two margins, one for each end of the interval. The counterfactual is the smaller of the two
+answers for the margins, and it is exact. The sufficient reason must keep both margins positive at the same time.
+Sorting does not find the smallest set for that, so `LocalOptions.reason_search` chooses the search:
+
+| Search | Result | `sufficient_reason.minimum` |
+| --- | --- | --- |
+| `Minimal()` (default) | A set from which no input can be removed. | True only for a set of at most one input. |
+| `ExactOrMinimal(max_features=12)` | The smallest set, found by trying the sets by size. The cost grows as 2 to the power of the number of features. Above `max_features` it returns what `Minimal` returns. | True when the search runs. |
+
+A decision with one margin ignores `reason_search`, because sorting finds its smallest set exactly. When `minimum` is
+false, the prompt tells the LLM to call the set "minimal" and not "the smallest".
 
 <!-- invisible-code-block: python
 from ebaml import Threshold, LocalOptions
