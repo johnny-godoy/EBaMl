@@ -323,6 +323,7 @@ async def _(
         "127.0.0.1",
         "--port",
         str(free_port),
+        stdout=asyncio.subprocess.DEVNULL,
         stderr=asyncio.subprocess.DEVNULL,
     )
     http_names: list[str] = []
@@ -353,8 +354,8 @@ def _(mo) -> None:
     ## Serve each kind of model
 
     The read tools work for the three kinds of EBM. `explain_prediction` works for a binary classifier without
-    interaction terms only. The notebook fits a regressor, a multiclass classifier and a classifier with one
-    interaction term on the same features. Then it asks each server for the summary, and for an explanation.
+    interaction terms only. The notebook fits a regressor, a multiclass classifier (low, mid and high income) and a
+    classifier with one interaction term. Then it asks each server for the summary, and for an explanation.
     """)
 
 
@@ -363,54 +364,65 @@ def _(
     ExplainableBoostingClassifier,
     ExplainableBoostingRegressor,
     Path,
+    np,
     people,
     skops,
     workdir,
 ):
     older_than = 45
     income_target = people["income"].to_numpy()
-    city_target = people["city"].to_numpy()
+    income_band = np.array(["low", "mid", "high"])[np.digitize(people["income"].to_numpy(), [40, 60])]
     other_models = {
         "regressor": ExplainableBoostingRegressor(feature_names=["age", "city"], interactions=0, random_state=0).fit(
             people.drop("income"),
             income_target,
         ),
         "multiclass classifier": ExplainableBoostingClassifier(
-            feature_names=["age", "income"],
+            feature_names=["age", "city"],
             interactions=0,
             random_state=0,
-        ).fit(people.drop("city"), city_target),
+        ).fit(people.drop("income"), income_band),
         "classifier with an interaction": ExplainableBoostingClassifier(
             feature_names=people.columns,
             interactions=1,
             random_state=0,
         ).fit(people, (people["age"].to_numpy() > older_than) ^ (people["city"].to_numpy() == "north")),
     }
+    other_instances = {
+        "regressor": people.drop("income").row(0, named=True),
+        "multiclass classifier": people.drop("income").row(0, named=True),
+        "classifier with an interaction": people.row(0, named=True),
+    }
     other_files: dict[str, Path] = {}
     for kind_name, fitted in other_models.items():
         other_files[kind_name] = workdir / f"{kind_name.replace(' ', '_')}.skops"
         skops.io.dump(fitted, other_files[kind_name])
-    return (other_files,)
+    return other_files, other_instances
 
 
 @app.cell
-async def _(open_session, orjson, other_files):
+async def _(mo, open_session, orjson, other_files, other_instances):
     kind_rows = []
     for row_label, row_file in other_files.items():
         async with open_session("--model", str(row_file)) as kind_session:
             kind_summary = orjson.loads((await kind_session.call_tool("get_model_summary", {})).content[0].text)
             kind_features = orjson.loads((await kind_session.call_tool("list_features", {})).content[0].text)
-            kind_explain = await kind_session.call_tool("explain_prediction", {"instance": {"age": 30}})
+            kind_explain = await kind_session.call_tool(
+                "explain_prediction",
+                {"instance": other_instances[row_label]},
+            )
         kind_rows.append(
             {
                 "model": row_label,
                 "kind": kind_summary["kind"],
                 "features with a graph": ", ".join(feature["name"] for feature in kind_features),
                 "skipped terms": ", ".join(kind_summary["skipped_terms"]) or "none",
-                "explain_prediction": "works" if not kind_explain.isError else "tool error",
+                "explain_prediction": "tool error: " + kind_explain.content[0].text.split(".")[0]
+                if kind_explain.isError
+                else "works",
             },
         )
-    kind_rows
+    mo.ui.table(kind_rows, selection=None, label="One server for each model", wrapped_columns=["explain_prediction"])
 
 
 @app.cell
@@ -425,7 +437,7 @@ def _(mo) -> None:
 
 
 @app.cell
-async def _(data_file, model_file, open_session, other_files):
+async def _(data_file, mo, model_file, open_session, other_files):
     problems = {}
     async with open_session("--model", str(model_file), "--data", str(data_file)) as problem_session:
         problems["Unknown feature"] = await problem_session.call_tool("get_graph", {"feature": "height"})
@@ -445,7 +457,7 @@ async def _(data_file, model_file, open_session, other_files):
         {"situation": situation, "tool error": result.isError, "message": result.content[0].text}
         for situation, result in problems.items()
     ]
-    problem_rows
+    mo.ui.table(problem_rows, selection=None, label="Tool errors", wrapped_columns=["message"])
 
 
 @app.cell
@@ -458,7 +470,7 @@ def _(mo) -> None:
 
 
 @app.cell
-async def _(asyncio, command, skops, workdir):
+async def _(asyncio, command, mo, skops, workdir):
     not_a_model = workdir / "not_a_model.skops"
     skops.io.dump({"this": "is a dict"}, not_a_model)
     failed_server = await asyncio.create_subprocess_exec(
@@ -470,7 +482,7 @@ async def _(asyncio, command, skops, workdir):
     )
     _, error_output = await failed_server.communicate()
     start_failure = error_output.decode().strip().splitlines()[-1]
-    start_failure
+    mo.md(f"The last line of the output of the server:\n\n```text\n{start_failure}\n```")
 
 
 @app.cell
@@ -483,7 +495,7 @@ def _(mo) -> None:
 
 
 @app.cell
-async def _(data_file, model_file, open_session):
+async def _(data_file, mo, model_file, open_session):
     async with open_session(
         "--model",
         str(model_file),
@@ -494,7 +506,10 @@ async def _(data_file, model_file, open_session):
     ) as keyless_session:
         keyless_tools = [tool.name for tool in (await keyless_session.list_tools()).tools]
         keyless_result = await keyless_session.call_tool("describe_feature", {"feature": "age"})
-    keyless_tools, keyless_result.content[0].text
+    mo.md(
+        f"The server offered **{len(keyless_tools)}** tools. The call of `describe_feature` answered:\n\n"
+        f"```text\n{keyless_result.content[0].text}\n```",
+    )
 
 
 @app.cell
