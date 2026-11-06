@@ -7,12 +7,22 @@ states what a proof shows, and where to read it.
 
 ## What is proved
 
-The proof covers a binary EBM without interaction terms. The score of such a model is a sum of one term per feature.
+The proof covers a binary EBM and a regressor without interaction terms. The score of such a model is a sum of one
+term per feature.
 
 - **Minimum change required.** `_counterfactual` returns a set of features whose change flips the prediction. No set
   with fewer features has a change that flips it. If the function returns `None`, no change flips the prediction.
 - **Minimum sufficient reason.** `_sufficient_reason` returns a set of features that is sufficient. No set with fewer
   features is sufficient. If the function returns `None`, no set of features is sufficient.
+
+- **Regressors.** The decision of a regressor ("above `t`" or "at most `t`") has the margin of the binary model with the
+  intercept moved by `t`. The code does this shift, so the two claims above hold for it. A change that the code finds
+  moves the predicted value across `t`.
+- **Inside an interval.** When the predicted value is inside `Interval(low, high)`, the decision has two margins. The
+  counterfactual has as many features as the smaller of the two answers for the margins.
+- **Several margins.** `Minimal` returns a sufficient set from which no feature can be removed. `ExactOrMinimal` returns
+  a smallest sufficient set when it runs, and its search visits at most 2 to the power of the number of features. A
+  result of `Minimal` with at most one feature is also a smallest set. `Minimal` makes no other claim about the size.
 
 Both claims come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the
@@ -24,16 +34,20 @@ the *gains*.
 - Floating point. The proof works over the real numbers.
 - Ties between bins. The proof allows any bin at the minimum, and the code takes the first.
 - The completions. They are sampled, so there is nothing exact to prove.
+- A change that lands exactly on the threshold. The robust margin is then zero, and the code does not count it as a
+  flip. A classifier has the same convention at the log-odds zero.
+- The order of `Minimal`. The proof allows any order, and it proves only that no feature can be removed.
+- Multiclass classifiers.
 - The confidence level of the counterfactual. Only the features that the counterfactual changes move by `z` standard
   deviations. The other features keep their mean scores, and the proof covers this behavior.
 
 ## Definitions for every model kind
 
 `explain_instance` accepts binary classifiers and regressors. The definitions below set what the explanations of each
-kind mean. The result types of `ebaml.local` can hold all of them. Only the binary case has a proof so far.
+kind mean. The result types of `ebaml.local` can hold all of them. The binary classifier and the regressor have a proof.
 A regressor uses the same sorting algorithms on a shifted intercept for each margin, and the answer "inside" uses the
-search strategies below. The proof of that reduction is not written yet. For the other
-kinds, the words "exact" and "smallest" below state the claims that a proof must check. They are not proved.
+search strategies below. For the multiclass classifier, the words "exact" and "smallest" below state the claims that a
+proof must check. They are not proved.
 
 ### Notation
 
