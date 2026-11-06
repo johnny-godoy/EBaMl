@@ -80,8 +80,9 @@ function counterfactual_question(num_sentences: int) -> string {
 function sufficient_reason_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, which inputs are enough to settle the prediction.
-                The facts list a smallest set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome.
-                This is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input.
+                The facts list a set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome.
+                If "is_smallest_set" is true, this is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input.
+                If "is_smallest_set" is false, call the set minimal: no input can be removed from it, but a set with fewer inputs may exist. Do not call it the smallest, because the reader would believe a claim that the facts do not make.
                 The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval.
                 Present it as a statement about this model, not about the real world.
                 If there is no such set, say that every input matters.

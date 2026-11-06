@@ -83,6 +83,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     sufficient: dict[str, JSONValue] = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
+        sufficient["is_smallest_set"] = sr.minimum
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)
 

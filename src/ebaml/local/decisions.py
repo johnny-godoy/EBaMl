@@ -2,10 +2,11 @@
 
 A classifier has a decision already: its predicted class. A regressor predicts a number, so the user says which
 question about the number to explain. Each question is one ``Decision`` class. A ``Decision`` looks at the predicted
-value and returns the ``Side`` of the value: the claim that holds, and how the claim is a margin of the score.
+value and returns the ``Side`` of the value: the claim that holds, and its margins. Each margin is a number that is a
+sum of one term per feature, and the claim holds while every margin is positive.
 
 - ``Threshold`` asks whether the value is above a number.
-- ``Interval`` asks whether the value is below, inside or above two numbers.
+- ``Interval`` asks whether the value is at most the low end, inside the interval, or above the high end.
 
 To add a question, write a new subclass of ``Decision``. No other code changes.
 """
@@ -17,33 +18,79 @@ from typing import override
 import attrs
 
 from ebaml.core.custom_types import ClassLabel
-from ebaml.core.exceptions import OptionRangeError, UnsupportedModelError
+from ebaml.core.exceptions import OptionRangeError
+
+
+@attrs.frozen
+class Margin:
+    """One condition of a claim, as a number that is positive while the claim holds.
+
+    The margin is ``sign * (score - threshold)``. A margin of zero belongs to the claim only when ``sign`` is ``-1``, as
+    the logit zero belongs to the negative class.
+
+    Attributes
+    ----------
+    sign: int
+        ``1`` if the condition says that the score is high, ``-1`` if it says that the score is low.
+    threshold: float
+        The score at which the condition stops to hold.
+    opposite: ClassLabel
+        The claim after this margin becomes negative.
+
+    """
+
+    sign: int
+    threshold: float
+    opposite: ClassLabel
+
+    def value(self, score: float) -> float:
+        """Return the margin of a score.
+
+        Parameters
+        ----------
+        score: float
+            The score of the prediction.
+
+        Returns
+        -------
+        float
+            The margin, positive while the condition holds.
+
+        """
+        return self.sign * (score - self.threshold)
 
 
 @attrs.frozen
 class Side:
-    """The claim about one prediction, as a margin of the score.
-
-    The margin is ``sign * (score - threshold)``. The claim holds while the margin is positive, and a margin of zero
-    belongs to the claim only when ``sign`` is ``-1``, as the logit zero belongs to the negative class.
+    """The claim about one prediction. It holds while every margin is positive.
 
     Attributes
     ----------
     label: ClassLabel
         The claim that holds for the prediction.
-    opposite: ClassLabel
-        The claim after the margin becomes negative.
-    sign: int
-        ``1`` if the claim says that the score is high, ``-1`` if it says that the score is low.
-    threshold: float
-        The score at which the claim stops to hold.
+    margins: tuple[Margin, ...]
+        The conditions of the claim. Most claims have one margin. The claim "inside an interval" has two.
 
     """
 
     label: ClassLabel
-    opposite: ClassLabel
-    sign: int
-    threshold: float
+    margins: tuple[Margin, ...]
+
+    def binding(self, score: float) -> Margin:
+        """Return the margin that is closest to failing.
+
+        Parameters
+        ----------
+        score: float
+            The score of the prediction.
+
+        Returns
+        -------
+        Margin
+            The margin with the smallest value.
+
+        """
+        return min(self.margins, key=lambda margin: margin.value(score))
 
 
 def _number(value: float) -> str:
@@ -73,12 +120,7 @@ class Decision(abc.ABC):
         Returns
         -------
         Side
-            The claim, its opposite and the margin.
-
-        Raises
-        ------
-        UnsupportedModelError
-            If the explanations cannot keep the answer for this value.
+            The claim and its margins.
 
         """
 
@@ -95,7 +137,7 @@ class Threshold(Decision):
     Examples
     --------
     >>> Threshold(10.0).side(12.5)
-    Side(label='above 10', opposite='at most 10', sign=1, threshold=10.0)
+    Side(label='above 10', margins=(Margin(sign=1, threshold=10.0, opposite='at most 10'),))
     >>> Threshold(10.0).side(10.0).label
     'at most 10'
 
@@ -107,30 +149,32 @@ class Threshold(Decision):
     def side(self, value: float) -> Side:
         above, at_most = f"above {_number(self.value)}", f"at most {_number(self.value)}"
         if value > self.value:
-            return Side(above, at_most, 1, self.value)
-        return Side(at_most, above, -1, self.value)
+            return Side(above, (Margin(1, self.value, at_most),))
+        return Side(at_most, (Margin(-1, self.value, above),))
 
 
 @attrs.frozen
 class Interval(Decision):
-    """Ask whether the predicted value is below, inside or above two numbers.
+    """Ask whether the predicted value is at most the low end, inside the interval, or above the high end.
 
-    An explanation keeps the answer "below" or "above". The answer "inside" has two margins, and the explanations do not
-    support it.
+    The interval is open at the low end and closed at the high end, as ``Threshold`` is: a value equal to a number is
+    not above it. The answer "inside" has two margins, one for each end.
 
     Attributes
     ----------
     low: float
-        The lower end. A predicted value equal to it is inside.
+        The lower end. A predicted value equal to it is at most the low end.
     high: float
         The upper end. A predicted value equal to it is inside.
 
     Examples
     --------
-    >>> Interval(10.0, 20.0).side(25.0)
-    Side(label='above 20', opposite='at most 20', sign=1, threshold=20.0)
+    >>> Interval(10.0, 20.0).side(25.0).label
+    'above 20'
     >>> Interval(10.0, 20.0).side(5.0).label
-    'below 10'
+    'at most 10'
+    >>> Interval(10.0, 20.0).side(15.0).label
+    'above 10 and at most 20'
 
     """
 
@@ -152,13 +196,12 @@ class Interval(Decision):
 
     @override
     def side(self, value: float) -> Side:
-        if value < self.low:
-            return Side(f"below {_number(self.low)}", f"at least {_number(self.low)}", -1, self.low)
+        low, high = _number(self.low), _number(self.high)
+        if value <= self.low:
+            return Side(f"at most {low}", (Margin(-1, self.low, f"above {low}"),))
         if value > self.high:
-            return Side(f"above {_number(self.high)}", f"at most {_number(self.high)}", 1, self.high)
-        msg = (
-            f"The predicted value {_number(value)} is inside the interval [{_number(self.low)}, {_number(self.high)}]."
-            " The explanations of the answer 'inside' are not supported yet. Use a Threshold, or an interval that"
-            " does not contain the prediction."
+            return Side(f"above {high}", (Margin(1, self.high, f"at most {high}"),))
+        return Side(
+            f"above {low} and at most {high}",
+            (Margin(1, self.low, f"at most {low}"), Margin(-1, self.high, f"above {high}")),
         )
-        raise UnsupportedModelError(msg)
