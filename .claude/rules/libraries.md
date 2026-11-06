@@ -30,6 +30,14 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 - Raise `ValueError` in a converter. Cyclopts reports it as a usage error.
 - Use `cyclopts.Group` with `cyclopts.validators.MutuallyExclusive` or `LimitedChoice` for flags that exclude each other.
 
+## Tests of the code in the docs (`sybil`)
+
+- `tests/docs/conftest.py` runs the `python` code blocks of `README.md` and `docs/*.md` and the docstring `Examples`
+  with Sybil. One runner covers both, and it can give a file setup that the reader does not see.
+- Do not run doctest itself (`--doctest-modules`, `--doctest-glob`, `doctest.testmod`), because a second runner skips
+  that setup. Ruff bans the `doctest` import. Sybil reads the option flags of doctest, so its configuration keeps an
+  inline ignore.
+
 ## Saved models (`skops.io`)
 
 - Save and load a fitted model with `skops.io`. It loads only the types that the caller trusts, so a file runs no code.
