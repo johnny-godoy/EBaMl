@@ -13,7 +13,9 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from mcp.types import TextContent, TextResourceContents
 from pydantic import AnyUrl
 
+from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.llm.options import ModelOptions
+from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import server as server_module
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.server import create_server, main
@@ -186,6 +188,41 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     server = create_server(ModelStore(ebm=ebm), options)
     assert await _call(server, "describe_feature", {"feature": "a"}) == (False, "graph a")
     assert await _call(server, "describe_model") == (False, "model text")
+
+
+async def test_llm_tools_reach_the_llm_once_through_the_client(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fake the two calls into ``ebaml.llm``, not the tools: the full path from the client to the LLM runs."""
+    ebm, _ = continuous_ebm
+    options = ModelOptions(provider="ollama", model="llama3")
+    graph_calls: list[tuple[int, ModelOptions]] = []
+    model_calls: list[ModelOptions] = []
+
+    def fake_describe_graph(fitted: ExplainableBoostingModel, feature_index: int, *, model: ModelOptions) -> str:
+        assert fitted is ebm
+        graph_calls.append((feature_index, model))
+        return f"words about feature {feature_index}"
+
+    def fake_describe_ebm(fitted: ExplainableBoostingModel, *, model: ModelOptions) -> str:
+        assert fitted is ebm
+        model_calls.append(model)
+        return f"words about the model, call {len(model_calls)}"
+
+    monkeypatch.setattr(llm_tools_module, "describe_graph", fake_describe_graph)
+    monkeypatch.setattr(llm_tools_module, "describe_ebm", fake_describe_ebm)
+    server = create_server(ModelStore(ebm=ebm), options)
+    async with create_connected_server_and_client_session(server._mcp_server) as session:
+        feature = await session.call_tool("describe_feature", {"feature": "b"})
+        missing = await session.call_tool("describe_feature", {"feature": "zzz"})
+        first = await session.call_tool("describe_model", {})
+        second = await session.call_tool("describe_model", {})
+    texts = [result.content[0].text for result in (feature, first, second)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
+    assert texts == ["words about feature 1", "words about the model, call 1", "words about the model, call 1"]
+    assert missing.isError
+    assert graph_calls == [(1, options)]
+    assert model_calls == [options]
 
 
 async def test_tool_schemas_match_the_snapshot(
