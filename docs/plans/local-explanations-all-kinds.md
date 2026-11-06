@@ -12,8 +12,8 @@ computes the facts, Lean proves each exact claim, and the LLM only puts the fact
 </goal>
 
 <context>
-- 1.1.0 and 1.2.0 come after the API freeze at 1.0.0. They must not break the public API. The `model-kinds.md` plan
-  (0.2.0) made the result types general and wrote the definitions for each kind, which the user agreed to. Read those
+- 1.1.0 and 1.2.0 come after the API freeze at 1.0.0. They must not break the public API. Release 0.2.0
+  made the result types general and wrote the definitions for each kind, which the user agreed to. Read those
   definitions first, and build on them. If they turn out wrong, stop and ask the user: a change of the types is now a
   breaking change.
 - `src/ebaml/local/facts.py` holds the binary algorithms. Its module docstring explains them. The proofs live in
