@@ -55,6 +55,7 @@ from ebaml.local.audience import (  # ruff: ignore[module-import-not-at-top-of-f
     round_value,
     strength_word,
 )
+from ebaml.local.decisions import Decision, Interval, Threshold  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.local.fact_text import FactTexts, facts_to_texts  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.local.facts import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
     Change,
@@ -67,6 +68,7 @@ from ebaml.local.facts import (  # ruff: ignore[module-import-not-at-top-of-file
     SufficientReason,
     compute_local_facts,
 )
+from ebaml.local.local_kinds import OutputKind  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
 if TYPE_CHECKING:
     from ebaml.llm.descriptors import LocalExplanation, describe_ebm, describe_graph, explain_instance
@@ -82,6 +84,7 @@ __all__ = [
     "Contribution",
     "Counterfactual",
     "DataScientist",
+    "Decision",
     "EBMGraph",
     "EBMGraphError",
     "EBMGraphShapeError",
@@ -92,6 +95,7 @@ __all__ = [
     "FeatureType",
     "GraphOptions",
     "GraphTextError",
+    "Interval",
     "InvalidInstanceError",
     "InvalidOptionError",
     "LLMRequestError",
@@ -105,6 +109,7 @@ __all__ = [
     "MulticlassClassifier",
     "Normalization",
     "OptionRangeError",
+    "OutputKind",
     "Prediction",
     "PromptOptions",
     "ProviderUnreachableError",
@@ -112,6 +117,7 @@ __all__ = [
     "Regressor",
     "SDKUnavailableError",
     "SufficientReason",
+    "Threshold",
     "TokenFitError",
     "UnsupportedModelError",
     "__version__",

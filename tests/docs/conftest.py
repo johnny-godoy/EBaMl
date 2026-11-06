@@ -57,7 +57,7 @@ def training_data() -> tuple[pd.DataFrame, pd.Series]:
     """Make the data that the Markdown examples call ``X`` and ``y``.
 
     Three continuous features with few values and a binary target keep the fit to a few seconds. ``explain_instance``
-    supports a binary classifier only.
+    supports a binary classifier and a regressor.
 
     Returns
     -------

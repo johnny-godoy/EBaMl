@@ -13,6 +13,7 @@ import orjson
 from ebaml.core.custom_types import JSONValue
 from ebaml.local.audience import Audience, Layperson
 from ebaml.local.facts import LocalFacts
+from ebaml.local.local_kinds import OutputKind
 
 
 def _dump(data: Mapping[str, JSONValue]) -> str:
@@ -28,6 +29,9 @@ class FactTexts:
     sufficient_reason: str
     completions: str
 
+
+# the key of the decision: a class for a classifier, an answer to a question about the value for a regressor
+_DECISION_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "predicted_class", OutputKind.VALUE: "decision"}
 
 _DEFAULT_AUDIENCE = Layperson()
 
@@ -52,7 +56,8 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
 
     """
     p = facts.prediction
-    prediction: dict[str, JSONValue] = {"predicted_class": p.decision}
+    decision_key = _DECISION_KEYS[p.output_kind]
+    prediction: dict[str, JSONValue] = {decision_key: p.decision}
     prediction["contributions_largest_first"] = [
         {"feature": c.feature, "value": c.value} | audience.contribution(c, p) for c in facts.contributions
     ]
@@ -67,8 +72,9 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
         counterfactual["minimum_number_of_changes"] = len(cf.changes)
         # the class after the changes and its probability share one object, so the LLM cannot read the probability
         # as one of the old class
-        counterfactual["after_the_changes"] = {"predicted_class": cf.new_decision} | audience.class_output(
+        counterfactual["after_the_changes"] = {decision_key: cf.new_decision} | audience.class_output(
             cf.new_output,
+            p.output_kind,
         )
         counterfactual |= audience.flip(facts.confidence_level)
 
@@ -78,7 +84,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     if sr is not None:
         sufficient["features"] = sr.features
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
-        sufficient |= audience.margin(sr)
+        sufficient |= audience.margin(sr, p.output_kind)
 
     completions = [
         {"known_features": s.fixed, "share_with_same_prediction": audience.share(s.share)} for s in facts.completions

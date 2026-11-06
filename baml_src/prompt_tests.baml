@@ -74,11 +74,11 @@ testset "PromptChecks" {
 // The guidance of the two built-in audiences. A test in tests/unit/ebaml/local/test_audience.py checks that these texts
 // equal Layperson.guidance() and DataScientist.guidance(), so the live tests run the prompts that users get.
 function live_layperson_guidance() -> string {
-    "The reader is not technical and knows no statistics, so write in everyday words. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. Mention only values of the person's own inputs (for example their age), because model numbers (scores, log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader."
+    "The reader is not technical and knows no statistics, so write in everyday words. Express strength and likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. Mention only values of the person's own inputs (for example their age), because model numbers (scores, log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader. The predicted value of a number prediction and the limits of the question are not model numbers: quote them as the facts give them, because the reader asked about them."
 }
 
 function live_data_scientist_guidance() -> string {
-    "The reader is a data scientist, so be precise. Quote the scores (log-odds contributions), probabilities and confidence intervals from the facts. Say how uncertain a statement is when the facts show wide confidence intervals."
+    "The reader is a data scientist, so be precise. Quote the scores, the probabilities or predicted values, and the confidence intervals from the facts. Say how uncertain a statement is when the facts show wide confidence intervals."
 }
 
 // The facts of one loan prediction, as ebaml.local.fact_text.facts_to_texts renders them for each audience. A layperson
@@ -98,6 +98,16 @@ function live_data_scientist_facts() -> LocalFactTexts {
         counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}]}`,
+    }
+}
+
+// The facts of one prediction of a regressor, for a layperson: the decision is a question about the predicted value.
+function live_regressor_facts() -> LocalFactTexts {
+    LocalFactTexts {
+        prediction: `{"decision": "above 250000", "contributions_largest_first": [{"feature": "living_area", "value": "[160, 190)", "effect": "strongly towards this prediction"}, {"feature": "age_of_house", "value": "[5, 10)", "effect": "slightly towards this prediction"}], "predicted_value": 312000.0}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "living_area", "from": "[160, 190)", "to": "[60, 80)"}], "minimum_number_of_changes": 1, "after_the_changes": {"decision": "at most 250000", "predicted_value": 198000.0}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
+        sufficient_reason: `{"exists": true, "features": ["living_area"], "features_not_needed": ["age_of_house"]}`,
+        completions: `{"steps": [{"known_features": ["living_area"], "share_with_same_prediction": "almost certain"}]}`,
     }
 }
 
@@ -164,6 +174,20 @@ testset "Live" {
         assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text));
         // 0.82 is the probability of "loan approved", the class after the changes
         assert.is_true(!ties_figure_to_denial(text, "0.82"))
+    }
+
+    test "regressor counterfactual: names the input and the new value, and keeps the new value apart from the old one" {
+        let text = LocalCounterfactual(
+            "The model predicts the price of a house, mainly from its living area.",
+            live_regressor_facts(),
+            live_layperson_guidance(),
+            3,
+            default_graph_options(),
+        );
+        log_reply(text);
+        assert.is_true(text.to_lower_case().includes("area"));
+        assert.is_true(baml.regex.new("198[,. ]?000|198k").has_match(text));
+        assert.is_true(count_sentences(text) <= 3)
     }
 
     test "explain_local: three explanations, each non-empty, usage reported" {

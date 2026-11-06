@@ -13,12 +13,13 @@ of them and override one method. Pass an instance of any subclass as ``audience=
 """
 
 import abc
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import override
 
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.local.facts import Change, Contribution, Prediction, SufficientReason
+from ebaml.local.local_kinds import OutputKind
 
 _LIKELIHOOD_WORDS = (
     (0.95, "almost certain"),
@@ -91,8 +92,9 @@ def round_value(value: float) -> float:
 def points_towards(contribution: Contribution, prediction: Prediction) -> bool:
     """Tell whether a contribution pushes towards the prediction.
 
-    A score points towards the prediction if it has the sign of the score of the prediction (the logit). A logit of 0
-    belongs to the negative class.
+    A score points towards the prediction if it raises the score while the decision says that the score is high, and if
+    it lowers the score otherwise. The decision says that the score is high when the score is above the threshold of
+    the decision: the log-odds zero for a classifier. A score on the threshold belongs to the low side.
 
     Parameters
     ----------
@@ -107,7 +109,32 @@ def points_towards(contribution: Contribution, prediction: Prediction) -> bool:
         True if the contribution supports the prediction.
 
     """
-    return (contribution.score if prediction.score > 0 else -contribution.score) > 0
+    return (contribution.score if prediction.score > prediction.threshold else -contribution.score) > 0
+
+
+def _likelihood(
+    probability: float,
+) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    return {"likelihood": likelihood_word(probability)}
+
+
+def _predicted_value(
+    value: float,
+) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    return {"predicted_value": round_value(value)}
+
+
+# The rule for each kind of output. A new kind of output is a new row.
+_PLAIN_OUTPUT: Mapping[OutputKind, Callable[[float], dict[str, JSONValue]]] = {
+    OutputKind.PROBABILITY: _likelihood,
+    OutputKind.VALUE: _predicted_value,
+}
+_OUTPUT_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "probability", OutputKind.VALUE: "predicted_value"}
+_SCORE_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "logit", OutputKind.VALUE: "score"}
+_MARGIN_KEYS: Mapping[OutputKind, str] = {
+    OutputKind.PROBABILITY: "guaranteed_margin_logit",
+    OutputKind.VALUE: "guaranteed_margin",
+}
 
 
 class Audience(abc.ABC):
@@ -174,13 +201,15 @@ class Audience(abc.ABC):
     def class_output(
         self,
         output: float,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        """Return the key that tells how likely a class is, from its probability ``output``."""
+        """Return the key that tells the output after the changes: the probability of a class, or a predicted value."""
 
     @abc.abstractmethod
     def margin(
         self,
         reason: SufficientReason,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the margin of the sufficient reason."""
 
@@ -198,7 +227,9 @@ class Layperson(Audience):
             "The reader is not technical and knows no statistics, so write in everyday words. Express strength and "
             "likelihood in plain words such as 'strongly', 'slightly', 'very likely' or 'about as likely as not'. "
             "Mention only values of the person's own inputs (for example their age), because model numbers (scores, "
-            "log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader."
+            "log-odds, probabilities, percentages, intervals, standard deviations) mean nothing to this reader. The "
+            "predicted value of a number prediction and the limits of the question are not model numbers: quote them "
+            "as the facts give them, because the reader asked about them."
         )
 
     @override
@@ -216,7 +247,7 @@ class Layperson(Audience):
         prediction: Prediction,
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {"likelihood": likelihood_word(prediction.output)}
+        return _PLAIN_OUTPUT[prediction.output_kind](prediction.output)
 
     @override
     def change(
@@ -236,13 +267,15 @@ class Layperson(Audience):
     def class_output(
         self,
         output: float,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {"likelihood": likelihood_word(output)}
+        return _PLAIN_OUTPUT[output_kind](output)
 
     @override
     def margin(
         self,
         reason: SufficientReason,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {}
 
@@ -257,8 +290,8 @@ class DataScientist(Audience):
     @override
     def guidance(self) -> str:
         return (
-            "The reader is a data scientist, so be precise. Quote the scores (log-odds contributions), probabilities "
-            "and confidence intervals from the facts. Say how uncertain a statement is when the facts show wide "
+            "The reader is a data scientist, so be precise. Quote the scores, the probabilities or predicted values, "
+            "and the confidence intervals from the facts. Say how uncertain a statement is when the facts show wide "
             "confidence intervals."
         )
 
@@ -277,10 +310,10 @@ class DataScientist(Audience):
         confidence_level: float,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
-            "probability": round_value(prediction.output),
+            _OUTPUT_KEYS[prediction.output_kind]: round_value(prediction.output),
             "confidence_interval": [round_value(prediction.lower), round_value(prediction.upper)],
             "confidence_level": confidence_level,
-            "logit": round_value(prediction.score),
+            _SCORE_KEYS[prediction.output_kind]: round_value(prediction.score),
         }
 
     @override
@@ -301,15 +334,17 @@ class DataScientist(Audience):
     def class_output(
         self,
         output: float,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {"probability": round_value(output)}
+        return {_OUTPUT_KEYS[output_kind]: round_value(output)}
 
     @override
     def margin(
         self,
         reason: SufficientReason,
+        output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
-        return {"guaranteed_margin_logit": round_value(reason.guaranteed_margin)}
+        return {_MARGIN_KEYS[output_kind]: round_value(reason.guaranteed_margin)}
 
     @override
     def share(self, share: float) -> float | str:
