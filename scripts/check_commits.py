@@ -211,7 +211,7 @@ def check(
     """
     if message_file is None:
         # the group needs exactly one flag, so --base is set here
-        return _report(branch_problems(cast("str", base)))
+        return _report(branch_problems(cast(str, base)))
     subject = message_file.read_text(encoding="utf-8").split("\n", 1)[0]
     return _report(subject_problems(subject))
 

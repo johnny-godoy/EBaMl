@@ -161,7 +161,7 @@ def __getattr__(name: str) -> object:
 
     value = getattr(descriptors, name)
     globals()[name] = value
-    return cast("object", value)  # getattr returns Any, and the hint names the real type
+    return cast(object, value)  # getattr returns Any, and the hint names the real type
 
 
 def __dir__() -> list[str]:

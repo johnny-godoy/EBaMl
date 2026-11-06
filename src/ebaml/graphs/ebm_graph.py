@@ -374,7 +374,7 @@ class EBMGraph:
             case "nominal":
                 # the bins map each category to its (1-based, after the missing bin) position
                 # interpret types bins_ as arrays, but the bins of a nominal feature are a dict of category to position
-                bins = cast("dict[str, int]", ebm.bins_[feature_index][0])
+                bins = cast(dict[str, int], ebm.bins_[feature_index][0])
                 positions = {position - 1: category for category, position in bins.items()}
                 x_vals = [positions[idx] for idx in range(len(positions))]
             case _:
