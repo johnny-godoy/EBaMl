@@ -215,7 +215,8 @@ function position_of(text: string, needle: string) -> int {
 test "local_system_msg names the expert and forbids invented facts" {
     let msg = local_system_msg("a credit risk analyst");
     assert.is_true(msg.includes("You are a credit risk analyst."));
-    assert.is_true(msg.includes("invented number"))
+    assert.is_true(msg.includes("invented number"));
+    assert.is_true(msg.includes("a question about the predicted value"))
 }
 
 test "local_user_msg orders the global explanation, dataset, prediction, facts, guidance and question" {

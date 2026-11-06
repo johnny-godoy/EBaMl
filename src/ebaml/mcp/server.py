@@ -163,9 +163,11 @@ def create_server(
         row: int | None = None,
         confidence_level: float = 0.95,
     ) -> str:
-        """Explain one prediction of a binary classifier with exact facts.
+        """Explain one prediction of a binary classifier or a regressor with exact facts.
 
-        Give the value of every feature in instance, or give the number of a row of the data that the server loaded.
+        A regressor's explanation keeps the answer to the question "is the predicted value above the average
+        prediction?". Give the value of every feature in instance, or give the number of a row of the data that the
+        server loaded.
 
         Returns
         -------

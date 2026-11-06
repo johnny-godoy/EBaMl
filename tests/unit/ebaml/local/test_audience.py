@@ -8,6 +8,7 @@ import pytest
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.local import audience as audiences
 from ebaml.local import facts as local
+from ebaml.local.local_kinds import OutputKind
 from tests.unit.ebaml.conftest import returning
 
 AUDIENCE_METHODS = ["guidance", "contribution", "prediction", "change", "flip", "class_output", "margin", "share"]
@@ -123,3 +124,68 @@ def test_the_live_prompt_tests_run_the_guidance_that_users_get(name: str, functi
     source = PROMPT_TESTS.read_text(encoding="utf-8")
     body = source.split(f"function {function}() -> string {{", 1)[1].split("}", 1)[0]
     assert audiences.BUILT_IN_AUDIENCES[name].guidance() in body
+
+
+@pytest.mark.parametrize(
+    ("score", "contribution", "towards"),
+    [
+        (12.0, 1.5, True),  # above the threshold 10: a higher score supports the decision "above"
+        (12.0, -1.5, False),
+        (8.0, -1.5, True),  # below it: a lower score supports the decision "at most"
+        (8.0, 1.5, False),
+        (10.0, -0.3, True),  # a score on the threshold belongs to the low side, as the log-odds zero does
+    ],
+)
+def test_a_contribution_points_towards_the_side_of_the_threshold(
+    score: float,
+    contribution: float,
+    *,
+    towards: bool,
+) -> None:
+    prediction = local.Prediction(
+        decision="d",
+        output=score,
+        lower=score,
+        upper=score,
+        score=score,
+        score_std=0.1,
+        margin=abs(score - 10.0),
+        threshold=10.0,
+        output_kind=OutputKind.VALUE,
+    )
+    assert audiences.points_towards(local.Contribution("f", "v", contribution, 0.1), prediction) is towards
+
+
+def _value_prediction() -> local.Prediction:
+    return local.Prediction(
+        decision="above 10",
+        output=12.3456,
+        lower=11.1111,
+        upper=13.5555,
+        score=12.3456,
+        score_std=0.5,
+        margin=2.3456,
+        threshold=10.0,
+        output_kind=OutputKind.VALUE,
+    )
+
+
+def test_a_layperson_gets_the_predicted_value_of_a_regressor() -> None:
+    audience = audiences.Layperson()
+    assert audience.prediction(_value_prediction(), 0.95) == {"predicted_value": 12.346}
+    assert audience.class_output(12.3456, OutputKind.VALUE) == {"predicted_value": 12.346}
+    assert audience.class_output(0.9, OutputKind.PROBABILITY) == {"likelihood": "very likely"}
+
+
+def test_a_data_scientist_gets_the_value_interval_and_margin_of_a_regressor() -> None:
+    audience = audiences.DataScientist()
+    assert audience.prediction(_value_prediction(), 0.95) == {
+        "predicted_value": 12.346,
+        "confidence_interval": [11.111, 13.556],
+        "confidence_level": 0.95,
+        "score": 12.346,
+    }
+    assert audience.class_output(12.3456, OutputKind.VALUE) == {"predicted_value": 12.346}
+    reason = local.SufficientReason(["f"], 1.23456, minimum=True)
+    assert audience.margin(reason, OutputKind.VALUE) == {"guaranteed_margin": 1.235}
+    assert audience.margin(reason, OutputKind.PROBABILITY) == {"guaranteed_margin_logit": 1.235}

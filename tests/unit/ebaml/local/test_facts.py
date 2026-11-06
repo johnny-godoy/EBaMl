@@ -17,6 +17,8 @@ from ebaml.core.custom_types import FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
+from ebaml.local.decisions import Interval, Threshold
+from ebaml.local.local_kinds import OutputKind
 from tests.unit.ebaml.conftest import fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
@@ -192,14 +194,43 @@ def _feature(
     return local._Feature("f", graph, weights, bin_index, "v", np.array(plausible or [True] * len(scores)))
 
 
+def _probability_after(margin: float) -> float:
+    """Return the probability of the opposite class from the log-odds margin of the class that holds.
+
+    Returns
+    -------
+    float
+        The probability.
+
+    """
+    return 1 / (1 + math.exp(margin))
+
+
 def test_counterfactual_is_none_when_no_change_flips() -> None:
     features = [_feature([1.0, 0.9], 0), _feature([1.0, 0.8], 0)]
-    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other") is None
+    assert (
+        local._counterfactual(
+            features,
+            intercept=0.0,
+            sign=1,
+            z=0.0,
+            new_decision="other",
+            new_output=_probability_after,
+        )
+        is None
+    )
 
 
 def test_counterfactual_skips_unplausible_bins() -> None:
     features = [_feature([1.0, -5.0], 0, plausible=[True, False]), _feature([1.0, -5.0], 0)]
-    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept=0.0,
+        sign=1,
+        z=0.0,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assert counterfactual is not None
     assert [c.feature for c in counterfactual.changes] == ["f"]
     assert len(counterfactual.changes) == 1
@@ -214,16 +245,7 @@ def test_rejects_multiclass(fit_ebm: Callable[..., ExplainableBoostingClassifier
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
     ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
-    with pytest.raises(UnsupportedModelError, match="binary"):
-        local.compute_local_facts(ebm, instance_of(frame, 0))
-
-
-def test_rejects_regressor_with_unsupported_model_error() -> None:
-    # a regressor has no classes_, so the check once raised an AttributeError and not an UnsupportedModelError
-    rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.normal(size=(200, 2)), columns=["a", "b"])
-    ebm = ExplainableBoostingRegressor(interactions=0, random_state=0).fit(frame, frame["a"] * 2)
-    with pytest.raises(UnsupportedModelError, match="binary"):
+    with pytest.raises(UnsupportedModelError, match="binary classifier or a regressor"):
         local.compute_local_facts(ebm, instance_of(frame, 0))
 
 
@@ -271,14 +293,6 @@ def test_local_options_defaults() -> None:
 def test_bin_label() -> None:
     assert local._bin_label((1.5, 2.5)) == "[1.5, 2.5)"
     assert local._bin_label("red") == "red"
-
-
-@pytest.mark.parametrize(
-    ("logit", "probability"),
-    [(0.0, 0.5), (2.0, 0.8807970779778823), (-2.0, 0.11920292202211755)],
-)
-def test_sigmoid(logit: float, probability: float) -> None:
-    assert local._sigmoid(logit) == pytest.approx(probability)
 
 
 def test_bin_index_of_a_category_is_its_position() -> None:
@@ -455,14 +469,15 @@ def test_features_read_the_bin_weights_of_the_term_of_each_feature(monkeypatch: 
     [
         (["only"], "logit", "An EBM with the logit link needs two classes"),
         (["a", "b", "c"], "mlogit", "Got a MulticlassClassifier"),
-        # a model with two classes_ and the identity link is a regressor, not a binary classifier
-        (["a", "b"], "identity", "Got a Regressor"),
         (["a", "b"], "probit", "EBaMl reads the links"),
     ],
 )
-def test_facts_reject_other_than_a_binary_classifier(classes: list[str], link: str, detail: str) -> None:
+def test_facts_reject_other_than_a_binary_classifier_or_a_regressor(classes: list[str], link: str, detail: str) -> None:
     model = _model_features(term_features=[(0,), (1,)], classes=classes, link=link)
-    with pytest.raises(UnsupportedModelError, match=rf"^Local explanations need a binary classifier\. {detail}"):
+    with pytest.raises(
+        UnsupportedModelError,
+        match=rf"^Local explanations need a binary classifier or a regressor\. {detail}",
+    ):
         local.compute_local_facts(model, {})
 
 
@@ -512,7 +527,14 @@ def test_robust_scores_move_by_z_standard_deviations() -> None:
 def test_counterfactual_changes_the_biggest_drop_first() -> None:
     features = [_hand("f1", [1.0, -2.0]), _hand("f2", [0.5, -0.25])]
     # the margin is 0.5 + 1 + 0.5 = 2; f1 can drop by 3, f2 by 0.75
-    counterfactual = local._counterfactual(features, intercept=0.5, sign=1, z=0.0, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept=0.5,
+        sign=1,
+        z=0.0,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", -3.0)]
     # the new logit is 0.5 + 1.5 - 3 = -1, so the new class (negative) has the probability sigmoid(1)
@@ -521,7 +543,14 @@ def test_counterfactual_changes_the_biggest_drop_first() -> None:
 
 def test_counterfactual_of_the_negative_class() -> None:
     features = [_hand("f1", [-1.0, 2.0]), _hand("f2", [-0.5, 0.25])]
-    counterfactual = local._counterfactual(features, intercept=-0.5, sign=-1, z=0.0, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept=-0.5,
+        sign=-1,
+        z=0.0,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", 3.0)]
     assert counterfactual.new_output == pytest.approx(_sig(1.0))  # the new logit is +1
@@ -530,7 +559,14 @@ def test_counterfactual_of_the_negative_class() -> None:
 def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
     features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, 0.0]), _hand("f3", [0.5, -1.0])]
     # the margin is 2.5 and the drops are 1, 1 and 1.5: the margin is 1 and then 0 (a tie, not a flip) and then -1
-    counterfactual = local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept=0.0,
+        sign=1,
+        z=0.0,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f3", "f1", "f2"]
 
@@ -538,10 +574,27 @@ def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
 def test_counterfactual_with_two_changes() -> None:
     features = [_hand("f1", [1.0, 0.0]), _hand("f2", [1.0, -0.5]), _hand("f3", [1.0, 0.5])]
     # the margin is 3 and the drops are 1, 1.5 and 0.5: after the two largest drops it is 0.5, so it is not yet flipped
-    assert local._counterfactual(features, intercept=0.0, sign=1, z=0.0, new_decision="other") is None
+    assert (
+        local._counterfactual(
+            features,
+            intercept=0.0,
+            sign=1,
+            z=0.0,
+            new_decision="other",
+            new_output=_probability_after,
+        )
+        is None
+    )
     features[0] = _hand("f1", [1.0, -3.0])
     # the drops are now 4, 1.5 and 0.5, and the margin 3 flips after the first; with a margin of 4.5 it takes two
-    counterfactual = local._counterfactual(features, intercept=1.5, sign=1, z=0.0, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept=1.5,
+        sign=1,
+        z=0.0,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f1", "f2"]
 
@@ -554,21 +607,52 @@ def test_counterfactual_probability_of_the_new_class() -> None:
         sign=1,
         z=0.0,
         new_decision="other",
+        new_output=_probability_after,
     )
     assert counterfactual is not None
     assert counterfactual.new_output == pytest.approx(_sig(1.5))
 
 
 def test_counterfactual_is_none_for_a_tie() -> None:
-    assert local._counterfactual([_hand("f", [1.0, 0.0])], intercept=0.0, sign=1, z=0.0, new_decision="other") is None
+    assert (
+        local._counterfactual(
+            [_hand("f", [1.0, 0.0])],
+            intercept=0.0,
+            sign=1,
+            z=0.0,
+            new_decision="other",
+            new_output=_probability_after,
+        )
+        is None
+    )
     # the margin counts the score of the feature itself, not just its sign
-    assert local._counterfactual([_hand("f", [2.0, 0.0])], intercept=0.0, sign=1, z=0.0, new_decision="other") is None
+    assert (
+        local._counterfactual(
+            [_hand("f", [2.0, 0.0])],
+            intercept=0.0,
+            sign=1,
+            z=0.0,
+            new_decision="other",
+            new_output=_probability_after,
+        )
+        is None
+    )
 
 
 def test_counterfactual_asks_for_the_worst_case_of_the_other_class() -> None:
     feature = _hand("f", [1.0, -2.0], stds=[0.5, 0.5])
     # with z = 1 the scores are raised by 0.5, so the drop is 1 + 1.5 = 2.5, and the margin 2.8 is not enough
-    assert local._counterfactual([feature], intercept=1.8, sign=1, z=1.0, new_decision="other") is None
+    assert (
+        local._counterfactual(
+            [feature],
+            intercept=1.8,
+            sign=1,
+            z=1.0,
+            new_decision="other",
+            new_output=_probability_after,
+        )
+        is None
+    )
 
 
 def test_fixing_order_counts_what_a_known_value_guarantees() -> None:
@@ -672,7 +756,14 @@ def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     assert facts.confidence_level == pytest.approx(0.95)
     # the largest effect first
     assert facts.contributions == [local.Contribution("a", "a0", 1.0, 0.3), local.Contribution("b", "b0", -0.5, 0.4)]
-    assert facts.counterfactual == local._counterfactual(features, 0.25, 1, Z95, new_decision="no")
+    assert facts.counterfactual == local._counterfactual(
+        features,
+        0.25,
+        1,
+        Z95,
+        new_decision="no",
+        new_output=_probability_after,
+    )
     assert facts.sufficient_reason == local._sufficient_reason(features, 0.25, 1, Z95)
 
 
@@ -688,7 +779,14 @@ def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     assert prediction.margin == pytest.approx(-logit)
     assert prediction.lower == pytest.approx(1 - _sig(logit + z * std))
     assert prediction.upper == pytest.approx(1 - _sig(logit - z * std))
-    assert facts.counterfactual == local._counterfactual(features, -0.25, -1, z, new_decision="yes")
+    assert facts.counterfactual == local._counterfactual(
+        features,
+        -0.25,
+        -1,
+        z,
+        new_decision="yes",
+        new_output=_probability_after,
+    )
 
 
 def test_facts_of_a_prediction_on_the_edge(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -765,7 +863,14 @@ def test_the_changes_of_a_counterfactual_flip_the_prediction(
 ) -> None:
     features = _build(parts)
     sign = _sign(features, intercept)
-    counterfactual = local._counterfactual(features, intercept, sign, z, new_decision="other")
+    counterfactual = local._counterfactual(
+        features,
+        intercept,
+        sign,
+        z,
+        new_decision="other",
+        new_output=_probability_after,
+    )
     assume(counterfactual is not None)
     assert counterfactual is not None
     new_bins = {change.feature: int(change.to_value) for change in counterfactual.changes}
@@ -810,3 +915,145 @@ def test_a_decimal_value_falls_in_the_bin_of_its_float(
     as_float = local.compute_local_facts(ebm, {"a": 0.25, "b": -0.5, "c": "x"})
     as_decimal = local.compute_local_facts(ebm, {"a": Decimal("0.25"), "b": -0.5, "c": "x"})
     assert as_decimal.prediction == as_float.prediction
+
+
+@pytest.fixture(scope="module")
+def categorical_regressor(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
+) -> tuple[ExplainableBoostingRegressor, pd.DataFrame]:
+    rng = np.random.default_rng(2)
+    data = pd.DataFrame({name: rng.choice(CATEGORIES, 900) for name in NAMES})
+    target = data["f0"].map({"p": 3.0, "q": 0.0, "r": -3.0}) + data["f1"].map({"p": 1.0, "q": 0.0, "r": -1.0})
+    target += data["f2"].map({"p": 0.4, "q": 0.0, "r": -0.4}) + rng.normal(size=900) * 0.2
+    ebm = fit_ebm(data, target, interactions=0, random_state=0, regression=True)
+    assert isinstance(ebm, ExplainableBoostingRegressor)
+    return ebm, data
+
+
+def _brute_force_regressor(
+    ebm: ExplainableBoostingRegressor,
+    row: tuple[str, ...],
+    holds: Callable[[float], bool],
+) -> tuple[int | None, int | None]:
+    """Minimum change required and size of the minimum sufficient reason of a regressor, by enumeration.
+
+    Returns
+    -------
+    tuple[int | None, int | None]
+        The sizes, ``None`` when there is none.
+
+    """
+    values = {
+        combo: float(ebm.predict(pd.DataFrame([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
+    }
+    outcome = {combo: holds(value) == holds(values[row]) for combo, value in values.items()}
+    flips = [sum(a != b for a, b in zip(row, combo, strict=True)) for combo, same in outcome.items() if not same]
+    sufficient = [
+        size
+        for size in range(len(NAMES) + 1)
+        for subset in itertools.combinations(range(len(NAMES)), size)
+        if all(same for combo, same in outcome.items() if all(combo[i] == row[i] for i in subset))
+    ]
+    return (min(flips) if flips else None), (min(sufficient) if sufficient else None)
+
+
+@pytest.mark.parametrize("threshold", [None, 0.5, -1.0, 2.5])
+@pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
+def test_regressor_threshold_matches_brute_force(
+    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    row: tuple[str, ...],
+    threshold: float | None,
+) -> None:
+    ebm, _ = categorical_regressor
+    cut = float(ebm.intercept_) if threshold is None else threshold
+    facts = local.compute_local_facts(
+        ebm,
+        dict(zip(NAMES, row, strict=True)),
+        local.LocalOptions(
+            confidence_level=0,
+            min_support=0,
+            decision=None if threshold is None else Threshold(threshold),
+        ),
+    )
+    flip, sufficient = _brute_force_regressor(ebm, row, lambda value: value > cut)
+    assert (facts.counterfactual is None) == (flip is None)
+    if flip is not None:
+        assert facts.counterfactual is not None
+        assert len(facts.counterfactual.changes) == flip
+    assert (facts.sufficient_reason is None) == (sufficient is None)
+    if sufficient is not None:
+        assert facts.sufficient_reason is not None
+        assert len(facts.sufficient_reason.features) == sufficient
+        assert facts.sufficient_reason.minimum
+
+
+@pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
+def test_regressor_interval_matches_brute_force(
+    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    row: tuple[str, ...],
+) -> None:
+    ebm, _ = categorical_regressor
+    interval = Interval(-1.5, 1.5)
+    value = float(ebm.predict(pd.DataFrame([dict(zip(NAMES, row, strict=True))]))[0])
+    options = local.LocalOptions(confidence_level=0, min_support=0, decision=interval)
+    if interval.low <= value <= interval.high:
+        with pytest.raises(UnsupportedModelError, match="inside"):
+            local.compute_local_facts(ebm, dict(zip(NAMES, row, strict=True)), options)
+        return
+    facts = local.compute_local_facts(ebm, dict(zip(NAMES, row, strict=True)), options)
+    below = value < interval.low
+    # the claim is "below the low end" or "above the high end", and the opposite claim is its negation
+    flip, sufficient = _brute_force_regressor(
+        ebm,
+        row,
+        (lambda v: v < interval.low) if below else (lambda v: v > interval.high),
+    )
+    assert (facts.counterfactual is None) == (flip is None)
+    if flip is not None:
+        assert facts.counterfactual is not None
+        assert len(facts.counterfactual.changes) == flip
+    assert (facts.sufficient_reason is None) == (sufficient is None)
+    if sufficient is not None:
+        assert facts.sufficient_reason is not None
+        assert len(facts.sufficient_reason.features) == sufficient
+
+
+def test_regressor_prediction_is_the_predicted_value(
+    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+) -> None:
+    ebm, data = categorical_regressor
+    facts = local.compute_local_facts(ebm, instance_of(data, 3), local.LocalOptions(decision=Threshold(1.0)))
+    prediction = facts.prediction
+    value = float(ebm.predict(data.iloc[[3]])[0])
+    assert prediction.output == pytest.approx(value)
+    assert prediction.score == pytest.approx(value)
+    assert prediction.threshold == pytest.approx(1.0)
+    assert prediction.output_kind is OutputKind.VALUE
+    assert prediction.decision == ("above 1" if value > 1.0 else "at most 1")
+    assert prediction.margin == pytest.approx(abs(value - 1.0))
+    assert prediction.lower < value < prediction.upper
+    assert prediction.upper - value == pytest.approx(value - prediction.lower)
+
+
+def test_regressor_counterfactual_gives_the_new_value(
+    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+) -> None:
+    ebm, _ = categorical_regressor
+    row = {"f0": "p", "f1": "p", "f2": "p"}
+    facts = local.compute_local_facts(
+        ebm,
+        row,
+        local.LocalOptions(confidence_level=0, min_support=0, decision=Threshold(0.5)),
+    )
+    assert facts.counterfactual is not None
+    assert facts.counterfactual.new_decision == "at most 0.5"
+    changed = {**row, **{c.feature: c.to_value for c in facts.counterfactual.changes}}
+    new_value = float(ebm.predict(pd.DataFrame([changed]))[0])
+    assert facts.counterfactual.new_output == pytest.approx(new_value)
+    assert new_value <= 0.5
+
+
+def test_a_classifier_rejects_a_decision(categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+    ebm, _ = categorical_ebm
+    with pytest.raises(OptionRangeError, match="Only a regressor accepts a decision"):
+        local.compute_local_facts(ebm, {"f0": "p", "f1": "p", "f2": "p"}, local.LocalOptions(decision=Threshold(0.0)))

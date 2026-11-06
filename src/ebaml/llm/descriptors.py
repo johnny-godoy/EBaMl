@@ -570,7 +570,7 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
     Parameters
     ----------
     ebm: ExplainableBoostingModel
-        The EBM: a binary classifier without interactions.
+        The EBM: a binary classifier or a regressor, without interactions.
     instance: Mapping[str, FeatureValue]
         The value of every feature, by feature name.
     global_explanation: str
@@ -585,7 +585,8 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         The language of the explanations, as a name that the LLM knows (``"French"``, ``"Deutsch"``). The facts and the
         numbers stay as they are, and only the words around them change.
     local: LocalOptions, default=LocalOptions()
-        The options of ``compute_local_facts``.
+        The options of ``compute_local_facts``. For a regressor, ``decision`` sets the question about the predicted
+        value that the explanations keep.
     prompt: PromptOptions, default=PromptOptions()
         The descriptions that the prompts use. The local prompts read ``expert_description`` and
         ``dataset_description``.

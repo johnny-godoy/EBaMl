@@ -115,13 +115,20 @@ async def test_explain_prediction_errors_are_tool_errors(binary_server: FastMCP)
     assert "does not exist" in missing_row[1]
 
 
-async def test_explain_prediction_of_a_regressor_says_it_is_unsupported(
-    regression_ebm: ExplainableBoostingRegressor,
-) -> None:
+async def test_explain_prediction_of_a_regressor_gives_the_facts(regression_ebm: ExplainableBoostingRegressor) -> None:
     server = create_server(ModelStore(ebm=regression_ebm))
     is_error, text = await _call(server, "explain_prediction", {"instance": {"a": 0.5, "c": "x"}})
+    assert not is_error
+    assert orjson.loads(text)["facts"]["prediction"]["output_kind"] == "value"
+
+
+async def test_explain_prediction_of_a_multiclass_classifier_says_it_is_unsupported(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    server = create_server(ModelStore(ebm=multiclass_ebm))
+    is_error, text = await _call(server, "explain_prediction", {"instance": {}})
     assert is_error
-    assert "binary classifier" in text
+    assert "binary classifier or a regressor" in text
 
 
 async def test_summary_of_a_regressor_and_a_multiclass_classifier(

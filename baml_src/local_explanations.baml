@@ -19,7 +19,7 @@ class LocalExplanationText {
 }
 
 function local_system_msg(expert_description: string) -> string {
-    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. Answer in plain prose paragraphs, because a person reads your answer.`
+    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. A prediction is a class or a number. For a number, the facts name the decision as a question about the predicted value, such as "above 10", and a flip means that the value crosses the limit of the question. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
 // The guidance comes from the Audience of the Python caller (ebaml.local.audience), so a user can add an audience

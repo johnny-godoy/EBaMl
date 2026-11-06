@@ -12,6 +12,7 @@ from ebaml.core.custom_types import JSONValue
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
+from ebaml.local.local_kinds import OutputKind
 from tests.unit.ebaml.conftest import instance_of
 
 
@@ -106,11 +107,11 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
             return {"fl": confidence_level > 0}
 
         @override
-        def class_output(self, output: float) -> dict[str, JSONValue]:
+        def class_output(self, output: float, output_kind: OutputKind) -> dict[str, JSONValue]:
             return {"co": output}
 
         @override
-        def margin(self, reason: local.SufficientReason) -> dict[str, JSONValue]:
+        def margin(self, reason: local.SufficientReason, output_kind: OutputKind) -> dict[str, JSONValue]:
             return {"m": reason.features}
 
         @override

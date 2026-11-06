@@ -7,11 +7,13 @@ Interpretability through the Lens of Computational Complexity" (arXiv:2010.12265
 - *Minimum sufficient reason*: the fewest inputs that fix the prediction whatever the other inputs are.
 - *Count completions*: the share of completions of a partially known input that get the same prediction.
 
-An EBM without interactions is a sum of one score per feature, so the first two are solved exactly by sorting the
-features by how much they move the score, and the third by sampling the unknown features from their training
-distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
+An EBM without interactions is a sum of one score per feature. The decision of a prediction is a margin: a sum of one
+term per feature, positive while the decision holds (``ebaml.local.local_kinds``). The first two explanations are solved
+exactly by sorting the features by how much they move the margin, and the third by sampling the unknown features from
+their training distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
 ``ebaml.local.fact_text`` puts the facts in words for the prompts in ``baml_src/local_explanations.baml``.
-The proof that the first two are exact is in ``proofs/papers/local-explanations/paper.typ``.
+The proof that the first two are exact for a binary classifier is in ``proofs/papers/local-explanations/paper.typ``.
+A regressor uses the same algorithms on the margin of its decision. The proof of that reduction is not written yet.
 
 The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
 the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason
@@ -22,7 +24,7 @@ import math
 import operator
 import statistics
 import typing
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import attrs
 import numpy as np
@@ -32,8 +34,10 @@ from interpret.utils._clean_x import _densify_categorical  # ruff: ignore[import
 from ebaml.core.custom_types import PANDAS_NA_TYPE, ClassLabel, ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
-from ebaml.graphs.model_kinds import BinaryClassifier, model_kind
+from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
+from ebaml.local.decisions import Decision
+from ebaml.local.local_kinds import LocalKind, OutputKind, local_kind
 
 
 @attrs.frozen
@@ -49,7 +53,7 @@ class _Feature:
 
     @property
     def scores(self) -> npt.NDArray[np.float64]:
-        """Score of every bin. A binary classifier has one score per bin."""
+        """Score of every bin. A binary classifier and a regressor have one score per bin."""
         return np.asarray(self.graph.scores, dtype=float)
 
     @property
@@ -87,6 +91,10 @@ class LocalOptions:
         possible value of an unknown feature in the sufficient reason: a category needs this share, and the lowest and
         highest ``min_support`` of a continuous feature are trimmed. It keeps rare values, with extreme scores, out of
         the explanations.
+    decision: Decision | None
+        The question about the predicted value of a regressor that the explanations keep, such as ``Threshold(10)`` or
+        ``Interval(10, 20)``. ``None`` asks whether the value is above the intercept, the average prediction. A
+        classifier has its predicted class as the decision, so it accepts ``None`` only.
 
     """
 
@@ -95,6 +103,7 @@ class LocalOptions:
     n_samples: int = 10_000
     seed: int = 0
     min_support: float = 0.01
+    decision: Decision | None = None
 
 
 @attrs.frozen
@@ -106,20 +115,28 @@ class Prediction:
     Attributes
     ----------
     decision: ClassLabel
-        What the explanations keep or change: the predicted class of a classifier.
+        What the explanations keep or change: the predicted class of a classifier, or the answer of a regressor to its
+        ``Decision``, such as ``"above 10"``.
     output: float
-        The output of the model for the decision: the probability of the predicted class.
+        The output of the model for the decision: the probability of the predicted class, or the predicted value.
     lower: float
         The lower end of the confidence interval of ``output``.
     upper: float
         The upper end of the confidence interval of ``output``.
     score: float
-        The sum of the intercept and the scores, on the scale of the link: the log-odds of the second class.
+        The sum of the intercept and the scores, on the scale of the link: the log-odds of the second class, or the
+        predicted value.
     score_std: float
         The standard deviation of ``score``.
     margin: float
-        The margin of the decision, positive while the decision holds: the log-odds of the predicted class. The
-        margin means the same for every kind, and ``score`` keeps the scale of the link.
+        The margin of the decision, positive while the decision holds: the log-odds of the predicted class, or the
+        distance of the predicted value from the threshold, on the side of the decision. The margin means the same for
+        every kind, and ``score`` keeps the scale of the link.
+    threshold: float
+        The score at which the decision stops to hold: ``0`` for the log-odds of a classifier. The score is above it
+        when the decision says that the score is high.
+    output_kind: OutputKind
+        What ``output`` is.
 
     """
 
@@ -130,6 +147,8 @@ class Prediction:
     score: float
     score_std: float
     margin: float
+    threshold: float = 0.0
+    output_kind: OutputKind = OutputKind.PROBABILITY
 
 
 @attrs.frozen
@@ -161,9 +180,9 @@ class Counterfactual:
     changes: list[Change]
         The changes.
     new_decision: ClassLabel
-        The decision after the changes: the other class of a binary classifier.
+        The decision after the changes: the other class of a binary classifier, or the opposite answer of a regressor.
     new_output: float
-        The output of the model for the new decision: the probability of the other class.
+        The output of the model for the new decision: the probability of the other class, or the predicted value.
 
     """
 
@@ -230,10 +249,6 @@ def _bin_label(x_val: tuple[float, float] | str) -> str:
     if isinstance(x_val, tuple):
         return f"[{x_val[0]:.4g}, {x_val[1]:.4g})"
     return x_val
-
-
-def _sigmoid(logit: float) -> float:
-    return 1.0 / (1.0 + math.exp(-logit))
 
 
 def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGraph, value: FeatureValue) -> int:
@@ -354,8 +369,8 @@ def _plausible_bins(
     return np.logical_and(upper_edge > min_support, lower_edge < 1 - min_support)
 
 
-def _binary_kind(ebm: ExplainableBoostingModel) -> BinaryClassifier:
-    """Read the kind of an EBM, which must be a binary classifier.
+def _local_kind(ebm: ExplainableBoostingModel) -> LocalKind:
+    """Read the kind of an EBM for the local explanations.
 
     The model kind is the one place that reads ``link_`` and ``classes_``.
 
@@ -366,25 +381,23 @@ def _binary_kind(ebm: ExplainableBoostingModel) -> BinaryClassifier:
 
     Returns
     -------
-    BinaryClassifier
-        The kind, with the two classes.
+    LocalKind
+        The class of the kind.
 
     Raises
     ------
     UnsupportedModelError
-        If the model is not a binary classifier, or its kind is unknown.
+        If the model is not a binary classifier or a regressor, or its kind is unknown.
 
     """
-    message = "Local explanations need a binary classifier."
+    message = "Local explanations need a binary classifier or a regressor."
     try:
-        kind = model_kind(ebm)
+        return local_kind(model_kind(ebm))
     except UnsupportedModelError as error:
+        if str(error).startswith(message):
+            raise
         msg = f"{message} {error}"
         raise UnsupportedModelError(msg) from error
-    if not isinstance(kind, BinaryClassifier):
-        msg = f"{message} Got a {type(kind).__name__}."
-        raise UnsupportedModelError(msg)
-    return kind
 
 
 def _features(
@@ -474,13 +487,14 @@ def _robust_scores(
     return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
 
 
-def _counterfactual(
+def _counterfactual(  # ruff: ignore[too-many-arguments] -- the margin, the sort direction, the confidence and the decision after the flip are separate inputs
     features: Sequence[_Feature],
     intercept: float,
     sign: int,
     z: float,
     *,
     new_decision: ClassLabel,
+    new_output: Callable[[float], float],
 ) -> Counterfactual | None:
     """Minimum change required: the features with the largest possible drop in favour of the outcome, until it flips.
 
@@ -489,13 +503,15 @@ def _counterfactual(
     features : Sequence[_Feature]
         The features.
     intercept : float
-        The intercept of the model.
+        The intercept of the model minus the threshold of the decision.
     sign : int
-        ``1`` if the outcome is the positive class, ``-1`` otherwise.
+        ``1`` if the decision says that the score is high, ``-1`` otherwise.
     z : float
         Standard deviations to move the scores by.
     new_decision : ClassLabel
-        The class that the prediction flips to.
+        The decision after the changes.
+    new_output : Callable[[float], float]
+        The output of the model for the new decision, from the margin after the changes.
 
     Returns
     -------
@@ -515,16 +531,14 @@ def _counterfactual(
     if not flips.size:
         return None
     changes = ranked[: flips[0] + 1]
-    new_logit = intercept + sum(f.current for f in features)
-    for _, best, feature in changes:
-        new_logit += float(feature.scores[best]) - feature.current
+    new_margin = margin + sign * sum(float(f.scores[best]) - f.current for _, best, f in changes)
     return Counterfactual(
         changes=[
             Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current)
             for _, best, f in changes
         ],
         new_decision=new_decision,
-        new_output=_sigmoid(-sign * new_logit),  # the class that the prediction flips to is the opposite one
+        new_output=new_output(new_margin),
     )
 
 
@@ -569,9 +583,9 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     features : Sequence[_Feature]
         The features.
     intercept : float
-        The intercept of the model.
+        The intercept of the model minus the threshold of the decision.
     sign : int
-        ``1`` if the outcome is the positive class, ``-1`` otherwise.
+        ``1`` if the decision says that the score is high, ``-1`` otherwise.
     z : float
         Standard deviations to move the scores by.
 
@@ -612,9 +626,9 @@ def _completions(
     order : Sequence[_Feature]
         The features in the order they are revealed.
     intercept : float
-        The intercept of the model.
+        The intercept of the model minus the threshold of the decision.
     sign : int
-        ``1`` if the outcome is the positive class, ``-1`` otherwise.
+        ``1`` if the decision says that the score is high, ``-1`` otherwise.
     options : LocalOptions
         Uses ``n_samples``, ``seed`` and ``max_steps``.
 
@@ -643,10 +657,11 @@ def compute_local_facts(
     instance: Mapping[str, FeatureValue],
     options: LocalOptions | None = None,
 ) -> LocalFacts:
-    """Compute the three local explanations of one prediction of a binary EBM without interactions.
+    """Compute the three local explanations of one prediction of a binary classifier or a regressor.
 
-    The function also raises an ``UnsupportedModelError`` for an EBM that is not a binary classifier without
-    interactions, and an ``InvalidInstanceError`` for an instance that lacks a value or has an unknown category.
+    The function raises an ``UnsupportedModelError`` for an EBM that is not a binary classifier or a regressor, and
+    for an EBM with interactions. It raises an ``InvalidInstanceError`` for an instance that lacks a value or has an
+    unknown category. A regressor explains the answer to ``LocalOptions.decision``.
 
     Parameters
     ----------
@@ -673,22 +688,31 @@ def compute_local_facts(
         msg = f"confidence_level must be in [0, 1). Got {options.confidence_level}."
         raise OptionRangeError(msg)
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
-    classes = _binary_kind(ebm).classes
+    kind = _local_kind(ebm)
     features = _features(ebm, instance, options.min_support)
     intercept = float(np.ravel(ebm.intercept_)[0])
-    logit = intercept + sum(f.current for f in features)
-    logit_std = math.sqrt(sum(float(f.stds[f.bin_index]) ** 2 for f in features))
-    sign = 1 if logit > 0 else -1
-    # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
-    lower, upper = sorted((_sigmoid(sign * (logit - z * logit_std)), _sigmoid(sign * (logit + z * logit_std))))
+    score = intercept + sum(f.current for f in features)
+    score_std = math.sqrt(sum(float(f.stds[f.bin_index]) ** 2 for f in features))
+    frame = kind.frame(
+        score,
+        score_std,
+        intercept=intercept,
+        confidence_level=options.confidence_level,
+        decision=options.decision,
+    )
+    sign = frame.side.sign
+    # every algorithm sees the margin sign * (baseline + sum of the scores), which is positive while the decision holds
+    baseline = intercept - frame.side.threshold
     prediction = Prediction(
-        decision=classes[int(logit > 0)],
-        output=_sigmoid(sign * logit),
-        lower=lower,
-        upper=upper,
-        score=logit,
-        score_std=logit_std,
-        margin=sign * logit,
+        decision=frame.side.label,
+        output=frame.output,
+        lower=frame.lower,
+        upper=frame.upper,
+        score=score,
+        score_std=score_std,
+        margin=sign * (score - frame.side.threshold),
+        threshold=frame.side.threshold,
+        output_kind=kind.output_kind,
     )
     order = [step.feature for step in _fixing_order(features, sign, z)]
     return LocalFacts(
@@ -698,8 +722,15 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_counterfactual(features, intercept, sign, z, new_decision=classes[int(logit <= 0)]),
-        sufficient_reason=_sufficient_reason(features, intercept, sign, z),
-        completions=_completions(features, order, intercept, sign, options),
+        counterfactual=_counterfactual(
+            features,
+            baseline,
+            sign,
+            z,
+            new_decision=frame.side.opposite,
+            new_output=frame.output_after,
+        ),
+        sufficient_reason=_sufficient_reason(features, baseline, sign, z),
+        completions=_completions(features, order, baseline, sign, options),
         confidence_level=options.confidence_level,
     )

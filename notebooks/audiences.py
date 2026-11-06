@@ -330,11 +330,11 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
             return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
         @_override
-        def class_output(self, output) -> dict[str, JSONValue]:
+        def class_output(self, output, output_kind) -> dict[str, JSONValue]:
             return {"likelihood": likelihood_word(output)}
 
         @_override
-        def margin(self, reason) -> dict[str, JSONValue]:
+        def margin(self, reason, output_kind) -> dict[str, JSONValue]:
             return {}
 
         @_override

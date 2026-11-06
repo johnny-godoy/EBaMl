@@ -50,6 +50,15 @@ def test_exactly_one_of_instance_and_row_is_needed(
         explain_prediction(ModelStore(ebm=ebm, data=data), **arguments)  # pyrefly: ignore[bad-argument-type] -- the test passes bad argument combinations on purpose
 
 
-def test_a_regressor_has_no_local_facts_yet(regression_ebm: ExplainableBoostingRegressor) -> None:
-    with pytest.raises(UnsupportedModelError, match="binary classifier"):
-        explain_prediction(ModelStore(ebm=regression_ebm), instance={"a": 0.5, "c": "x"})
+def test_a_regressor_keeps_the_answer_to_the_average_prediction(regression_ebm: ExplainableBoostingRegressor) -> None:
+    explanation = explain_prediction(ModelStore(ebm=regression_ebm), instance={"a": 0.5, "c": "x"})
+    assert explanation.facts.prediction.decision in {
+        f"above {regression_ebm.intercept_:.4g}",
+        f"at most {regression_ebm.intercept_:.4g}",
+    }
+    assert "predicted_value" in explanation.texts.prediction
+
+
+def test_a_multiclass_classifier_has_no_local_facts_yet(multiclass_ebm: ExplainableBoostingClassifier) -> None:
+    with pytest.raises(UnsupportedModelError, match="binary classifier or a regressor"):
+        explain_prediction(ModelStore(ebm=multiclass_ebm), instance={})
