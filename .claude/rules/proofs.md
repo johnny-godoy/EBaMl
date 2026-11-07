@@ -53,6 +53,12 @@ One Lake project serves all topics. Add a topic. Do not add a project.
    when a page has no iframe. Add the page to the nav in `zensical.toml`.
 6. Run `prek run --all-files`, then `cd proofs && lake build`, then compile the paper
    (`typst compile --root papers papers/<topic>/paper.typ`).
+7. Look at the compiled PDF. A successful compile does not show a layout error, such as a long code name that runs into
+   the next column of a table. Render each page to an image (`pdftoppm -r 75 -png <paper>.pdf <prefix>`), put two pages
+   side by side if you wish, and read each image with the image viewer. Check each page for text that overlaps or leaves
+   its column, a table row that a page break splits, a line that is stretched by a long unbreakable word, and a formula
+   that is cut off. Fix the cause in `proofs/papers/style.typ` when it applies to every paper, and render the pages
+   again. Do this check after every change of the paper, and after a change of the style.
 
 ## Keep the proof true
 
