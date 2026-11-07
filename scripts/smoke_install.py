@@ -7,7 +7,7 @@ the published version after the upload.
 
 The smoke test checks that the installed version is the expected one, that ``ebaml`` comes from the environment and
 not from a checkout, that the generated ``baml_sdk`` imports, and that the graph of a small EBM converts to text and
-the text parses. It sends no request to an LLM provider.
+the text parses. With the ``mcp`` extra, it also runs ``ebaml-mcp --help``. It sends no request to an LLM provider.
 
 Run it from the repo root: ``uv run python -m scripts.smoke_install dist/ebaml-1.2.3-py3-none-any.whl 1.2.3``.
 """
@@ -25,7 +25,9 @@ import cyclopts
 SMOKE_PROGRAM = """
 import importlib.metadata
 import shutil
+import subprocess
 import sys
+from pathlib import Path
 
 import numpy as np
 from interpret.glassbox import ExplainableBoostingClassifier
@@ -35,6 +37,7 @@ import baml_sdk
 from ebaml import EBMGraph, describe_graph
 
 expected_version = sys.argv[1]
+extras = sys.argv[2:]
 installed_version = importlib.metadata.version("ebaml")
 assert installed_version == expected_version, f"installed {installed_version}, expected {expected_version}"
 assert "site-packages" in ebaml.__file__, f"ebaml was not imported from the environment: {ebaml.__file__}"
@@ -50,6 +53,11 @@ graph = EBMGraph.from_ebm(ebm, feature_index=0)
 graph_text = graph.to_text()
 assert graph_text.strip(), "the text of the graph is empty"
 EBMGraph.from_text(graph_text)
+if "mcp" in extras:
+    server = Path(sys.executable).parent / "ebaml-mcp"
+    result = subprocess.run([server, "--help"], check=False, capture_output=True, text=True)
+    assert result.returncode == 0, f"ebaml-mcp --help exited with {result.returncode}: {result.stderr[-800:]}"
+    assert "ebaml" in result.stdout.lower(), "the ebaml-mcp command printed no help"
 print(f"smoke test passed: ebaml {installed_version}")
 """
 
@@ -97,7 +105,7 @@ def install_command(uv: str, environment: Path, requirement: str, extras: Sequen
     elif extras:
         name, separator, version = requirement.partition("==")
         target = f"{name}[{','.join(extras)}]{separator}{version}"
-    return [uv, "pip", "install", "--python", str(environment / "bin" / "python"), target]
+    return [uv, "pip", "install", "--refresh", "--python", str(environment / "bin" / "python"), target]
 
 
 def _run(command: Sequence[str], *, environment: Mapping[str, str] | None, working_directory: Path) -> None:
@@ -175,7 +183,7 @@ def smoke_install(requirement: str, expected_version: str, *, extras: Sequence[s
         _run([uv, "venv", "--python", "3.13", str(environment)], environment=None, working_directory=workspace)
         _run(install_command(uv, environment, requirement, extras), environment=None, working_directory=workspace)
         _run(
-            [str(environment / "bin" / "python"), "-I", "-c", SMOKE_PROGRAM, expected_version],
+            [str(environment / "bin" / "python"), "-I", "-c", SMOKE_PROGRAM, expected_version, *extras],
             environment=clean_environment(home),
             working_directory=home,
         )

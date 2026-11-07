@@ -83,6 +83,7 @@ def test_install_command_passes_a_requirement_as_it_is(tmp_path: Path) -> None:
         "/bin/uv",
         "pip",
         "install",
+        "--refresh",
         "--python",
         str(tmp_path / "venv" / "bin" / "python"),
         "ebaml==1.2.3",
@@ -138,4 +139,6 @@ def test_missing_uv_stops(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_extras_reach_the_install_step(fake_run: FakeRun) -> None:
     smoke_install.main(["ebaml==1.2.3", "1.2.3", "--extras", "mcp"])
-    assert fake_run.calls[1].command[-1] == "ebaml[mcp]==1.2.3"
+    install, smoke = fake_run.calls[1:]
+    assert install.command[-1] == "ebaml[mcp]==1.2.3"
+    assert smoke.command[-2:] == ["1.2.3", "mcp"]
