@@ -13,8 +13,12 @@ runs:
         cache-dependency-glob: uv.lock
     - name: Install BAML toolchain
       shell: bash
-      run: | # nosemgrep: yaml.github-actions.security.gha-curl-pipe-shell.gha-curl-pipe-shell -- BAML publishes no pinned release or checksum, only this installer
-        curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s
+      # The installer takes the newest toolchain unless it gets a version. A toolchain newer than the baml-bridge of
+      # uv.lock writes a baml_sdk that baml-bridge cannot read (see scripts/baml_toolchain.py), so install the version
+      # that the lock file pins for baml-bridge.
+      run: | # nosemgrep: yaml.github-actions.security.gha-curl-pipe-shell.gha-curl-pipe-shell -- BAML publishes no checksum for its installer, so the version is the only pin
+        version="$(python3 scripts/baml_toolchain.py)"
+        curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s -- --version "$version"
         echo "$HOME/.baml/bin" >> "$GITHUB_PATH"
     # The project build needs src/baml_sdk, so generate before the sync. Without generation, skip installing the project.
     - name: Generate BAML SDK

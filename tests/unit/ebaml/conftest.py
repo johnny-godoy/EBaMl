@@ -201,6 +201,23 @@ def _sdk_functions() -> dict[str, ast.FunctionDef]:
     return {node.name: node for node in _sdk_stub().body if isinstance(node, ast.FunctionDef)}
 
 
+@functools.cache
+def _sdk_async_functions() -> frozenset[str]:
+    return frozenset(node.name for node in _sdk_stub().body if isinstance(node, ast.AsyncFunctionDef))
+
+
+def sdk_function_names() -> frozenset[str]:
+    """List the functions that the generated stub declares, whether they are plain or ``async``.
+
+    Returns
+    -------
+    frozenset[str]
+        The names.
+
+    """
+    return frozenset(_sdk_functions()) | _sdk_async_functions()
+
+
 class _UnknownNameError(LookupError):
     """The annotation names a type that exists only in the stub, such as ``UNSET``."""
 
@@ -284,6 +301,12 @@ def sdk_signature(name: str) -> inspect.Signature:
         The parameters, with their types, and the return type.
 
     """
+    # ebaml calls each SDK function as a plain function. A toolchain that writes `async def name` (and `name_sync`)
+    # makes the call return a coroutine, and no fake notices, because a fake returns the value at once.
+    assert name not in _sdk_async_functions(), (
+        f"baml_sdk.{name} is async in the generated stub, but ebaml calls it as a plain function. "
+        "Generate the SDK with the toolchain that baml-bridge expects (python3 scripts/baml_toolchain.py)."
+    )
     node = _sdk_functions()[name]
     arguments = node.args
     required = len(arguments.args) - len(arguments.defaults)

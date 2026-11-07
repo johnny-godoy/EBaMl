@@ -1,5 +1,6 @@
 """Tests for the LLM descriptors."""
 
+import ast
 import inspect
 from collections.abc import Sequence
 from pathlib import Path
@@ -31,6 +32,7 @@ from tests.unit.ebaml.conftest import (
     returning,
     same_type,
     sdk_fields,
+    sdk_function_names,
     sdk_signature,
 )
 
@@ -1315,3 +1317,30 @@ def test_sample_graph_tokens_turns_a_missing_key_into_an_error_with_fix_steps(mo
     monkeypatch.setattr(baml_sdk, "sample_graph_tokens", fake_sdk("sample_graph_tokens", refuse))
     with pytest.raises(MissingAPIKeyError):
         descriptors.sample_graph_tokens("GRAPH")
+
+
+def _sdk_names_used_by_descriptors() -> set[str]:
+    tree = ast.parse(Path(descriptors.__file__).read_text(encoding="utf-8"))
+    return {
+        node.attr
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "baml_sdk"
+    }
+
+
+def test_the_sdk_functions_that_descriptors_calls_are_plain_functions() -> None:
+    # A toolchain newer than the baml-bridge of uv.lock writes `async def` for every function. The fakes of the other
+    # tests return a value at once, so only this check sees that the real call would return a coroutine.
+    functions = _sdk_names_used_by_descriptors() & sdk_function_names()
+    assert functions, "descriptors.py calls no function of baml_sdk"
+    for name in sorted(functions):
+        sdk_signature(name)
+
+
+def test_an_async_sdk_function_fails_the_fake_with_the_way_to_fix_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = ast.parse("async def describe(x: int) -> str: ...\ndef describe_sync(x: int) -> str: ...\n")
+    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_stub", lambda: stub)
+    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_functions", lambda: {"describe_sync": stub.body[1]})
+    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_functions", lambda: frozenset({"describe"}))
+    with pytest.raises(AssertionError, match=r"baml_sdk\.describe is async.*scripts/baml_toolchain\.py"):
+        sdk_signature("describe")

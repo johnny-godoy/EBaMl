@@ -32,7 +32,7 @@ uv run --group docs python -m scripts.build_docs         # build the docs like C
 uv run --group docs python -m scripts.build_docs serve   # preview the docs; the first run exports the notebooks and is slow
 ```
 
-`ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
+CI installs the BAML toolchain of the `baml-bridge` version in `uv.lock` (`scripts/baml_toolchain.py`), because a newer toolchain writes a `baml_sdk` that the locked `baml-bridge` cannot read. `ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
 `baml` and pytest, then, in pull requests, mutation testing of the changed lines. A weekly workflow runs all modules, one job each, when code changed that week. A second weekly workflow runs trivy on the lockfile and opens an issue for a fixable HIGH or CRITICAL CVE.
 </commands>
 
