@@ -183,6 +183,7 @@ dev = [
     "cosmic-ray>=8.7.0",
     "cyclopts>=5.2.0",
     "deptry>=0.25.1",
+    "griffelib>=2.4.0",
     "hypothesis>=6.170.1",
     "import-linter>=2.15",
     "marimo>=0.25.1",
