@@ -137,6 +137,20 @@ class LocalKind(abc.ABC):
         """
 
 
+def _reject_decision(decision: Decision | None) -> None:
+    """Raise an error if a classifier gets a decision.
+
+    Raises
+    ------
+    OptionRangeError
+        If ``decision`` is not ``None``, because only a regressor accepts one.
+
+    """
+    if decision is not None:
+        msg = "A classifier has its predicted class as the decision. Only a regressor accepts a decision."
+        raise OptionRangeError(msg)
+
+
 def _z(confidence_level: float) -> float:
     return statistics.NormalDist().inv_cdf((1 + confidence_level) / 2)
 
@@ -162,9 +176,7 @@ class BinaryLocal(LocalKind):
         confidence_level: float,
         decision: Decision | None,
     ) -> PredictionFrame:
-        if decision is not None:
-            msg = "A classifier has its predicted class as the decision. Only a regressor accepts a decision."
-            raise OptionRangeError(msg)
+        _reject_decision(decision)
         score, score_std = scores[0], score_stds[0]
         sign = 1 if score > 0 else -1
         z = _z(confidence_level)
@@ -243,9 +255,7 @@ class MulticlassLocal(LocalKind):
         confidence_level: float,
         decision: Decision | None,
     ) -> PredictionFrame:
-        if decision is not None:
-            msg = "A classifier has its predicted class as the decision. Only a regressor accepts a decision."
-            raise OptionRangeError(msg)
+        _reject_decision(decision)
         winner = int(np.argmax(scores))  # the first class on a tie
         spread = _z(confidence_level) * np.asarray(score_stds, dtype=float)
         against = np.asarray(scores, dtype=float) + spread
