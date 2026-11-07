@@ -131,7 +131,8 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "ch": "f0"}],
-        "minimum_number_of_changes": 1,
+        "number_of_changes": 1,
+        "is_smallest_set": True,
         "after_the_changes": {"predicted_class": 1, "co": 0.7},
         "fl": True,
     }
@@ -176,7 +177,8 @@ def test_layperson_text_of_the_explanations() -> None:
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)"}],
-        "minimum_number_of_changes": 1,
+        "number_of_changes": 1,
+        "is_smallest_set": True,
         "after_the_changes": {"predicted_class": 1, "likelihood": "likely"},
         "flip_holds_even_if_the_model_is_somewhat_off": True,
     }
@@ -199,7 +201,8 @@ def test_data_scientist_text_of_the_explanations() -> None:
     assert orjson.loads(texts.counterfactual) == {
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
-        "minimum_number_of_changes": 1,
+        "number_of_changes": 1,
+        "is_smallest_set": True,
         "after_the_changes": {"predicted_class": 1, "probability": 0.7},
         "flip_holds_at_confidence": 0.95,
     }
@@ -239,6 +242,14 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
 def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_level: float, *, holds: bool) -> None:
     texts = local_text.facts_to_texts(_text_facts_with_everything(confidence_level))
     assert orjson.loads(texts.counterfactual)["flip_holds_even_if_the_model_is_somewhat_off"] is holds
+
+
+def test_a_counterfactual_of_a_target_class_is_not_called_the_smallest() -> None:
+    facts = _text_facts_with_everything(0.95)
+    assert facts.counterfactual is not None
+    target = attrs.evolve(facts, counterfactual=attrs.evolve(facts.counterfactual, minimum=False))
+    assert orjson.loads(local_text.facts_to_texts(facts).counterfactual)["is_smallest_set"] is True
+    assert orjson.loads(local_text.facts_to_texts(target).counterfactual)["is_smallest_set"] is False
 
 
 def test_a_minimal_set_is_not_called_the_smallest() -> None:

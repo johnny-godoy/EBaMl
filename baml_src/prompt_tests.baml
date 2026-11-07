@@ -86,7 +86,7 @@ function live_data_scientist_guidance() -> string {
 function live_layperson_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "effect": "strongly towards this prediction"}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "effect": "moderately towards this prediction"}, {"feature": "age", "value": "[35, 42)", "effect": "slightly towards this prediction"}], "likelihood": "very likely"}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "minimum_number_of_changes": 1, "after_the_changes": {"predicted_class": "loan approved", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"predicted_class": "loan approved", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"]}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": "likely"}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": "almost certain"}]}`,
     }
@@ -95,7 +95,7 @@ function live_layperson_facts() -> LocalFactTexts {
 function live_data_scientist_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "score": 1.12, "std": 0.15}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "score": 0.31, "std": 0.08}, {"feature": "age", "value": "[35, 42)", "score": 0.04, "std": 0.03}], "probability": 0.83, "confidence_interval": [0.74, 0.89], "confidence_level": 0.95, "logit": 1.37}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "minimum_number_of_changes": 1, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}]}`,
     }
@@ -105,9 +105,20 @@ function live_data_scientist_facts() -> LocalFactTexts {
 function live_regressor_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"decision": "above 250000", "contributions_largest_first": [{"feature": "living_area", "value": "[160, 190)", "effect": "strongly towards this prediction"}, {"feature": "age_of_house", "value": "[5, 10)", "effect": "slightly towards this prediction"}], "predicted_value": 312000.0}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "living_area", "from": "[160, 190)", "to": "[60, 80)"}], "minimum_number_of_changes": 1, "after_the_changes": {"decision": "at most 250000", "predicted_value": 198000.0}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "living_area", "from": "[160, 190)", "to": "[60, 80)"}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"decision": "at most 250000", "predicted_value": 198000.0}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
         sufficient_reason: `{"exists": true, "features": ["living_area"], "features_not_needed": ["age_of_house"]}`,
         completions: `{"steps": [{"known_features": ["living_area"], "share_with_same_prediction": "almost certain"}]}`,
+    }
+}
+
+// The facts of one prediction of a multiclass classifier, for a layperson: the counterfactual asks for a chosen class, so
+// its set is not the smallest.
+function live_multiclass_facts() -> LocalFactTexts {
+    LocalFactTexts {
+        prediction: `{"predicted_class": "standard plan", "contributions_largest_first": [{"feature": "monthly_usage", "value": "[20, 30)", "effect": "strongly towards this prediction"}, {"feature": "contract_length", "value": "[1, 2)", "effect": "slightly towards this prediction"}], "likelihood": "likely"}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "monthly_usage", "from": "[20, 30)", "to": "[90, 100)"}], "number_of_changes": 1, "is_smallest_set": false, "after_the_changes": {"predicted_class": "premium plan", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true}`,
+        sufficient_reason: `{"exists": true, "features": ["monthly_usage"], "is_smallest_set": true, "features_not_needed": ["contract_length"]}`,
+        completions: `{"steps": [{"known_features": ["monthly_usage"], "share_with_same_prediction": "very likely"}]}`,
     }
 }
 
@@ -187,6 +198,23 @@ testset "Live" {
         log_reply(text);
         assert.is_true(text.to_lower_case().includes("area"));
         assert.is_true(baml.regex.new("198[,. ]?000|198k").has_match(text));
+        assert.is_true(count_sentences(text) <= 3)
+    }
+
+    test "multiclass counterfactual of a target class: names the new class, and does not call the set the smallest" {
+        let text = LocalCounterfactual(
+            "The model recommends a plan to each customer, mainly from the monthly usage.",
+            live_multiclass_facts(),
+            live_layperson_guidance(),
+            3,
+            default_graph_options(),
+        );
+        log_reply(text);
+        assert.is_true(text.to_lower_case().includes("premium"));
+        assert.is_true(text.to_lower_case().includes("usage"));
+        assert.is_true(
+            !text.to_lower_case().includes("smallest") && !text.to_lower_case().includes("fewest"),
+        );
         assert.is_true(count_sentences(text) <= 3)
     }
 

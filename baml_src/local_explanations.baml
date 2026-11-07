@@ -19,7 +19,7 @@ class LocalExplanationText {
 }
 
 function local_system_msg(expert_description: string) -> string {
-    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. A prediction is a class or a number. For a number, the facts name the decision as a question about the predicted value, such as "above 10", and a flip means that the value crosses the limit of the question. Answer in plain prose paragraphs, because a person reads your answer.`
+    `You are ${expert_description}. You explain individual predictions of a Generalized Additive Model (GAM). You receive an explanation of the whole model and facts about one prediction that were computed exactly from the model. State only effects, values and probabilities that appear in these facts, because the reader acts on your words and an invented number would mislead. A prediction is a class or a number. For a number, the facts name the decision as a question about the predicted value, such as "above 10", and a flip means that the value crosses the limit of the question. For a class, a flip means that another class becomes the predicted class, and "after_the_changes" names it. Answer in plain prose paragraphs, because a person reads your answer.`
 }
 
 // The guidance comes from the Audience of the Python caller (ebaml.local.audience), so a user can add an audience
@@ -69,8 +69,9 @@ function local_user_msg(
 function counterfactual_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, what would have to change for the prediction to be different.
-                The facts list the smallest set of input changes that flips the prediction (a minimum change required), and whether the flip survives the model's uncertainty.
-                This set is exact, not a guess: no smaller set of changes flips the prediction, because the model adds up one independent effect per input.
+                The facts list a set of input changes that flips the prediction (a minimum change required), and whether the flip survives the model's uncertainty.
+                If "is_smallest_set" is true, this is exact, not a guess: no smaller set of changes flips the prediction, because the model adds up one independent effect per input.
+                If "is_smallest_set" is false, the facts ask for a chosen class. Call the set a small set of changes that reaches that class, and do not call it the smallest or the fewest, because the reader would believe a claim that the facts do not make.
                 Only realistic alternative values were considered (rare extreme values are left out), and the flip holds even if the model's effects are at the unfavourable edge of their confidence interval.
                 Suggest only the changes that the facts list, because they are the only ones that the model supports.
                 If no change flips the prediction, say that the prediction cannot be changed by altering the inputs.
