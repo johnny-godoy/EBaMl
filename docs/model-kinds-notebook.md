@@ -2,8 +2,8 @@
 
 A [marimo](https://marimo.io) notebook that fits a binary classifier, a multiclass classifier and a regressor on the
 same features of the iris data. It shows the kind that `model_kind` reads for each model, how the scores become the
-output, the graph text of each kind, the fields of the local explanations, and the error for the kinds that the local
-explanations do not accept.
+output, the graph text of each kind, the local explanations of each kind, and the error for a target class that the
+model cannot reach.
 
 - Everything up to "Put it in words" runs without an API key and sends no request. The iris data comes with
   scikit-learn, so the notebook downloads nothing.

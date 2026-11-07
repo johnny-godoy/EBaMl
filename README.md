@@ -20,7 +20,7 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | Graph descriptions (`describe_graph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Model summary (`describe_ebm`) | ✅ | ✅ | ✅ | ⚠️ |
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
-| Local explanations (`explain_instance`) | ✅ | ✅ | ❌ | ❌ |
+| Local explanations (`explain_instance`) | ✅ | ✅ | ✅ | ❌ |
 | MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
 
 ✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
