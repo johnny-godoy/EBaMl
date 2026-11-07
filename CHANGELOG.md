@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.4.3'></a>
+## [0.4.3] - 2026-11-06
+
+### Added
+
+- `ebaml-mcp` takes `--host` and `--port` for the `streamable-http` transport. The defaults are `127.0.0.1` and `8000`.
+
 <a id='changelog-0.4.2'></a>
 ## [0.4.2] - 2026-11-06
 
