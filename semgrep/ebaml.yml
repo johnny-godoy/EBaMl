@@ -1,5 +1,5 @@
 # In-house rules for the design points that ruff and import-linter cannot see. Each rule has a test in
-# semgrep/ebaml.py; run `uv run semgrep --test semgrep` to check them. The layer limits live in pyproject.toml
+# semgrep/ebaml.py; run `uvx --python 3.13 --from semgrep==1.183.0 semgrep --test semgrep` to check them. The layer limits live in pyproject.toml
 # ([tool.importlinter]); the rules for them are in .claude/rules/architecture.md.
 rules:
   - id: ebaml-no-kwargs-bag
