@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.5.1'></a>
+## [0.5.1] - 2026-11-07
+
+### Changed
+
+- The `mcp` extra requires `mcp>=2.3.0`, and `ebaml-mcp` runs on the `MCPServer` class of `mcp` 2. The tool names and
+  argument schemas are the same.
+
+- The lower bounds of the dependencies are the releases that the tests cover: `narwhals>=2.28.0`, `pandas>=3.1.0`, and,
+  for the `mcp` extra, `cyclopts>=5.3.2`, `joblib>=1.6.0` and `polars>=2.1.0`.
+
+### Security
+
+- The `mcp` extra and the project environment hold `mcp` 2.3.0 and the fixed `opentelemetry` releases, because the
+  dependency overrides that held semgrep's old pins are gone.
+
 <a id='changelog-0.5.0'></a>
 ## [0.5.0] - 2026-11-07
 
