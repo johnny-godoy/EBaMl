@@ -35,11 +35,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The server for agents. Only ebaml.mcp imports these packages.
+# The server for agents. Only ebaml.mcp imports these packages. ebaml.mcp uses MCPServer, which mcp 1.x lacks, so the
+# lower bound of mcp is a 2.x release.
 mcp = [
     "cyclopts>=5.2.0",
     "joblib>=1.5.0",
-    "mcp>=1.30.0,<2",
+    "mcp>=2.3.0",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.0.0",
     "skops>=0.16.0",
@@ -172,6 +173,7 @@ dev = [
     "hypothesis>=6.170.1",
     "import-linter>=2.15",
     "marimo>=0.25.1",
+    "mcp>=2.3.0",
     "pandas-stubs>=3.0.5.260914",
     "polars>=2.0.0",
     "pyarrow>=26.0.0",

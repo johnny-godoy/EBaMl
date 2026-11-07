@@ -147,11 +147,11 @@ def test_extras_reach_the_install_step(fake_run: FakeRun) -> None:
     assert smoke.command[-2:] == ["1.2.3", "mcp"]
 
 
-def test_mcp_extra_stays_below_mcp_2() -> None:
-    """The smoke test found that `ebaml-mcp` fails at start-up with mcp 2.x, which has no FastMCP."""
+def test_mcp_extra_requires_mcp_2() -> None:
+    """`ebaml-mcp` imports `MCPServer`, which mcp 1.x lacks, so the extra must not allow mcp 1.x."""
     pyproject = tomllib.loads((Path(__file__).resolve().parents[3] / "pyproject.toml").read_text(encoding="utf-8"))
     [requirement] = [item for item in pyproject["project"]["optional-dependencies"]["mcp"] if item.startswith("mcp>")]
-    assert "<2" in requirement
+    assert requirement.startswith("mcp>=2.")
 
 
 def test_the_lowest_resolution_reaches_the_install_step(fake_run: FakeRun) -> None:
