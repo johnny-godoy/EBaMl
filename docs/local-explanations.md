@@ -324,7 +324,8 @@ print(texts.counterfactual)
   "changes": [
     {"feature": "sex", "from": "male", "to": "female", "score_change": 2.437}
   ],
-  "minimum_number_of_changes": 1,
+  "number_of_changes": 1,
+  "is_smallest_set": true,
   "after_the_changes": {"predicted_class": 1, "probability": 0.589},
   "flip_holds_at_confidence": 0.95
 }
@@ -336,7 +337,8 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 {
   "flip_possible": true,
   "changes": [{"feature": "sex", "from": "male", "to": "female"}],
-  "minimum_number_of_changes": 1,
+  "number_of_changes": 1,
+  "is_smallest_set": true,
   "after_the_changes": {"predicted_class": 1, "likelihood": "about as likely as not"},
   "flip_holds_even_if_the_model_is_somewhat_off": true
 }
