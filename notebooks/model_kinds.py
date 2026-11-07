@@ -15,14 +15,14 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
     from sklearn.datasets import load_iris
 
-    from ebaml import EBMGraph, LocalOptions, UnsupportedModelError, compute_local_facts, describe_graph, model_kind
+    from ebaml import EBMGraph, LocalOptions, OptionRangeError, compute_local_facts, describe_graph, model_kind
 
     return (
         EBMGraph,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
         LocalOptions,
-        UnsupportedModelError,
+        OptionRangeError,
         attrs,
         compute_local_facts,
         describe_graph,
@@ -160,17 +160,24 @@ def _(EBMGraph, mo, models, petal_index) -> None:
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    ## Local explanations of the binary classifier
+    ## Local explanations of each kind
 
-    The local explanations take a binary classifier. Their result types have field names that fit every kind:
+    The result types of the local explanations have field names that fit every kind. Pick a kind below to see the
+    fields for that kind. The facts come from Python and send no request.
 
-    - `Prediction.decision` is the predicted class, and `Prediction.output` is its probability.
-    - `Prediction.score` is the sum of the scores on the scale of the link: the log-odds of the second class.
-    - `Prediction.margin` is the log-odds of the predicted class. It is positive while the decision holds, so it means
-      the same thing for every decision. When the decision is `False`, the margin is the opposite of the score.
-    - `Counterfactual.new_decision` is the class that the prediction changes to, and `new_output` is its probability.
+    - `Prediction.decision` is the predicted class. For a regressor, it is the answer to a question, such as "above 1".
+    - `Prediction.output` is the probability of that class. For a regressor, it is the predicted value.
+    - `Prediction.margin` is positive while the decision holds. It is the log-odds of the predicted class for a binary
+      classifier, the smallest score gap to another class for a multiclass classifier, and the distance to the threshold
+      for a regressor.
+    - `Counterfactual.new_decision` is the class that is predicted after the changes. For a regressor, it is the other
+      answer.
     - `SufficientReason.minimum` tells whether no smaller set of features fixes the decision. It is always true for a
-      binary classifier.
+      binary classifier. For the other kinds, it depends on the search that `LocalOptions.reason_search` names.
+
+    A multiclass classifier has one margin for each other class: the score of the predicted class minus the score of
+    that class. The option `target_class` asks for the changes that lead to a chosen class. Its set of changes is never
+    marked as the smallest.
 
     The iris data has only 150 flowers, so the confidence intervals of the scores are wide. At a high confidence level,
     most flowers have no counterfactual and no sufficient reason. Flower 70 is a versicolor near the border with the
@@ -179,17 +186,42 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(features, mo):
+def _(features, mo, models):
+    kind_choice = mo.ui.dropdown(list(models), value="binary", label="Model")
     flower = mo.ui.slider(0, len(features) - 1, value=70, label="Flower", show_value=True)
     confidence = mo.ui.slider(0.0, 0.99, step=0.01, value=0.0, label="Confidence level", show_value=True)
-    mo.vstack([flower, confidence])
-    return confidence, flower
+    target = mo.ui.dropdown(
+        ["no target", *models["multiclass"].classes_],
+        value="no target",
+        label="Target class (multiclass only)",
+    )
+    mo.vstack([kind_choice, flower, confidence, target])
+    return confidence, flower, kind_choice, target
 
 
 @app.cell
-def _(LocalOptions, compute_local_facts, confidence, features, flower, models):
+def _(
+    LocalOptions,
+    OptionRangeError,
+    compute_local_facts,
+    confidence,
+    features,
+    flower,
+    kind_choice,
+    mo,
+    models,
+    target,
+):
     instance = features.row(flower.value, named=True)
-    facts = compute_local_facts(models["binary"], instance, LocalOptions(confidence_level=confidence.value))
+    chosen_target = target.value if kind_choice.value == "multiclass" and target.value != "no target" else None
+    try:
+        facts = compute_local_facts(
+            models[kind_choice.value],
+            instance,
+            LocalOptions(confidence_level=confidence.value, target_class=chosen_target),
+        )
+    except OptionRangeError as option_error:
+        mo.stop(predicate=True, output=mo.callout(mo.md(f"`OptionRangeError`: {option_error}"), kind="danger"))
     return facts, instance
 
 
@@ -213,7 +245,7 @@ def _(attrs, facts, instance, mo) -> None:
         sections.extend([
             mo.md(
                 f"The counterfactual changes the decision to **{counterfactual.new_decision}**, with output"
-                f" **{counterfactual.new_output:.2f}**:",
+                f" **{counterfactual.new_output:.2f}**. `minimum` is **{counterfactual.minimum}**:",
             ),
             mo.ui.table([attrs.asdict(change) for change in counterfactual.changes], selection=None),
         ])
@@ -232,23 +264,27 @@ def _(attrs, facts, instance, mo) -> None:
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    ## The other kinds
+    ## A setup error and its fix
 
-    The local explanations of regressors and multiclass classifiers are not available yet. The documentation page
-    "Local explanations" defines what they will mean. A call with such a model raises `UnsupportedModelError` before any
-    LLM call, and the message names the kind of the model.
+    A `target_class` needs a multiclass classifier, and it must be another class of the model. Each other call raises
+    an `OptionRangeError` before any LLM call. The message names the cause. To fix it, pass a class of the model that
+    is not the predicted class, or leave the option out.
     """)
 
 
 @app.cell
-def _(UnsupportedModelError, compute_local_facts, instance, mo, models) -> None:
+def _(LocalOptions, OptionRangeError, compute_local_facts, instance, mo, models) -> None:
+    attempts = {
+        "binary classifier, target `virginica`": (models["binary"], "virginica"),
+        "multiclass classifier, target `tulip`": (models["multiclass"], "tulip"),
+    }
     errors = []
-    for other_name in ("multiclass", "regressor"):
+    for label, (attempted_model, target_class) in attempts.items():
         try:
-            compute_local_facts(models[other_name], instance)
-            errors.append(mo.md(f"`{other_name}`: no error."))
-        except UnsupportedModelError as unsupported:
-            errors.append(mo.callout(mo.md(f"`{other_name}`: `UnsupportedModelError`: {unsupported}"), kind="danger"))
+            compute_local_facts(attempted_model, instance, LocalOptions(target_class=target_class))
+            errors.append(mo.md(f"{label}: no error."))
+        except OptionRangeError as option_error:
+            errors.append(mo.callout(mo.md(f"{label}: `OptionRangeError`: {option_error}"), kind="danger"))
     mo.vstack(errors)
 
 
