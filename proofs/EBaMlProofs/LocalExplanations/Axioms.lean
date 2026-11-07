@@ -1,5 +1,6 @@
 import EBaMlProofs.LocalExplanations.Model
 import EBaMlProofs.LocalExplanations.Regressor
+import EBaMlProofs.LocalExplanations.Multiclass
 
 /-!
 # Axiom check
@@ -26,3 +27,11 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum
 #print axioms EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space
 #print axioms EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.logit_marginModel
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.winner_iff
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.marginModel_eps
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.canFlipClass_iff
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.min_change_class
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff
+#print axioms EBaMlProofs.LocalExplanations.sd_sum_bound
