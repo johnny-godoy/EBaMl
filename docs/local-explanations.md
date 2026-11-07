@@ -204,9 +204,8 @@ print(facts.prediction.decision, round(facts.prediction.output, 2))
 print(facts.sufficient_reason)
 ```
 
-A multiclass classifier accepts no `decision`. The facts of a multiclass classifier have no proof yet: the
-[proof page](local-explanations-proof.md) lists the claims that the proof of the binary classifier and the regressor
-covers.
+A multiclass classifier accepts no `decision`. The [proof page](local-explanations-proof.md) lists the claims that the
+proof covers for a multiclass classifier. On an exact tie between the two highest classes, the proof does not apply.
 
 ## Audience
 
@@ -376,8 +375,6 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
   [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind) say what the
   explanations of each kind mean. The [model kinds notebook](model-kinds-notebook.md) shows the fields of the result
   types.
-- **The multiclass facts have no proof yet.** The exact claims of the binary classifier and the regressor hold for the
-  margins of a multiclass classifier by the same argument, but the Lean proof covers only the binary model.
 - **No interactions.** Fit with `interactions=0`. With pairwise terms the effects no longer add up per feature, so the
   greedy solutions would not be exact; the function raises `ValueError` instead of answering approximately.
 - **Every input is needed.** A missing value, a feature name that is absent or a category not seen in training raises

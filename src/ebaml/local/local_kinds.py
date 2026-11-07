@@ -236,6 +236,7 @@ class MulticlassLocal(LocalKind):
     The class ``c`` holds while the score of ``c`` is above the score of every other class ``j``. Each difference
     ``s_c - s_j`` is a margin. EBMs store no covariance between the scores of two classes, so the standard deviation
     of a margin is the sum of the two standard deviations. For any correlation, the sum is an upper bound.
+    The proof is in ``proofs/papers/local-explanations/paper.typ``.
     """
 
     classes: tuple[ClassLabel, ...]

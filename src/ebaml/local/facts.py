@@ -13,8 +13,8 @@ exactly by sorting the features by how much they move the margin, and the third 
 their training distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
 ``ebaml.local.fact_text`` puts the facts in words for the prompts in ``baml_src/local_explanations.baml``.
 The proof that the first two are exact is in ``proofs/papers/local-explanations/paper.typ``. It covers a binary
-classifier and a regressor, which uses the same algorithms on the margin of its decision, and it covers the searches of
-``ebaml.local.reason_search`` for a decision with several margins.
+classifier, a multiclass classifier and a regressor, which use the same algorithms on the margin of their decision, and
+it covers the searches of ``ebaml.local.reason_search`` for a decision with several margins.
 
 The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
 the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason
