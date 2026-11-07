@@ -1,0 +1,62 @@
+name: Install check (weekly)
+
+# A user installs the newest release of each dependency that the requirements allow, and the lockfile hides what that
+# release does. This run builds the wheel from main every week and installs it in a clean environment two ways, as a
+# user gets it (the newest releases) and with the oldest release that each direct requirement allows (the lower bounds).
+# Each install runs the smoke test of scripts/smoke_install.py. It opens an issue when one fails, and it adds a comment
+# to that issue on later runs while the issue stays open, so one open problem gives one issue.
+on:
+  schedule:
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  install:
+    name: install (${{ matrix.resolution }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        resolution: [highest, lowest-direct]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup # the wheel must contain the generated baml_sdk
+      - run: uv build --wheel
+      - name: Install the wheel in a clean environment and run the smoke test
+        run: |
+          version="$(uv version --short --frozen)"
+          uv run --frozen --only-group dist python -m scripts.smoke_install dist/*.whl "$version" \
+            --extras mcp --resolution "${{ matrix.resolution }}"
+
+  report:
+    name: report
+    needs: [install]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open an issue, or comment on the open one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "The weekly install check failed. A release of a dependency, or a lower bound, may break the package. Run: $run_url" > /tmp/issue.md
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Weekly install check"' \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Weekly install check failed ($(date -u +%F))" \
+              --body-file /tmp/issue.md
+          fi
