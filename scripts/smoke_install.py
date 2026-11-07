@@ -19,6 +19,7 @@ import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import cyclopts
 
@@ -79,7 +80,13 @@ def clean_environment(home: Path) -> dict[str, str]:
     return {"HOME": str(home), "PATH": os.pathsep.join(["/usr/bin", "/bin"]), "PYTHONNOUSERSITE": "1"}
 
 
-def install_command(uv: str, environment: Path, requirement: str, extras: Sequence[str]) -> list[str]:
+def install_command(
+    uv: str,
+    environment: Path,
+    requirement: str,
+    extras: Sequence[str],
+    resolution: Literal["highest", "lowest-direct"] = "highest",
+) -> list[str]:
     """Write the command that installs the distribution into the environment.
 
     Parameters
@@ -92,6 +99,9 @@ def install_command(uv: str, environment: Path, requirement: str, extras: Sequen
         A path of a wheel or a source distribution, or a requirement such as ``ebaml==1.2.3``.
     extras : Sequence[str]
         The names of the optional dependency groups to install with it.
+    resolution : Literal["highest", "lowest-direct"]
+        ``"highest"`` installs the newest release of each dependency that the requirements allow. ``"lowest-direct"``
+        installs the oldest release that each direct requirement allows, to test the lower bounds.
 
     Returns
     -------
@@ -105,7 +115,8 @@ def install_command(uv: str, environment: Path, requirement: str, extras: Sequen
     elif extras:
         name, separator, version = requirement.partition("==")
         target = f"{name}[{','.join(extras)}]{separator}{version}"
-    return [uv, "pip", "install", "--refresh", "--python", str(environment / "bin" / "python"), target]
+    python = str(environment / "bin" / "python")
+    return [uv, "pip", "install", "--refresh", "--resolution", resolution, "--python", python, target]
 
 
 def _run(command: Sequence[str], *, environment: Mapping[str, str] | None, working_directory: Path) -> None:
@@ -148,7 +159,13 @@ app: cyclopts.App = cyclopts.App(
 
 
 @app.default
-def smoke_install(requirement: str, expected_version: str, *, extras: Sequence[str] = ()) -> int:
+def smoke_install(
+    requirement: str,
+    expected_version: str,
+    *,
+    extras: Sequence[str] = (),
+    resolution: Literal["highest", "lowest-direct"] = "highest",
+) -> int:
     """Install a distribution in a clean environment and test the installed package.
 
     Parameters
@@ -159,6 +176,8 @@ def smoke_install(requirement: str, expected_version: str, *, extras: Sequence[s
         The version that the installed package must report.
     extras : Sequence[str]
         The optional dependency groups to install with the package, for example ``mcp``.
+    resolution : Literal["highest", "lowest-direct"]
+        Which release of each dependency to install. ``"lowest-direct"`` tests the lower bounds of the requirements.
 
     Returns
     -------
@@ -181,7 +200,11 @@ def smoke_install(requirement: str, expected_version: str, *, extras: Sequence[s
         home = workspace / "home"
         home.mkdir()
         _run([uv, "venv", "--python", "3.13", str(environment)], environment=None, working_directory=workspace)
-        _run(install_command(uv, environment, requirement, extras), environment=None, working_directory=workspace)
+        _run(
+            install_command(uv, environment, requirement, extras, resolution),
+            environment=None,
+            working_directory=workspace,
+        )
         _run(
             [str(environment / "bin" / "python"), "-I", "-c", SMOKE_PROGRAM, expected_version, *extras],
             environment=clean_environment(home),
