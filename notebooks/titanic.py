@@ -80,7 +80,8 @@ def _(mo) -> None:
 
 @app.cell
 def _(fetch_openml, pl):
-    titanic = pl.from_pandas(fetch_openml("titanic", version=1, as_frame=True, parser="auto").frame)
+    # The liac-arff parser reads the categories as text. The pandas parser of scikit-learn 1.9 fails on pandas 3.1.
+    titanic = pl.from_pandas(fetch_openml("titanic", version=1, as_frame=True, parser="liac-arff").frame)
     # `boat` and `body` only exist for the survivors and the dead, so they would leak the label; the rest of the
     # dropped columns are free text or have too many distinct values to fit in the context window of an LLM
     features = titanic.select("pclass", "sex", "age", "sibsp", "parch", "fare", "embarked").with_columns(
