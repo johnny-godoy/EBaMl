@@ -6,6 +6,9 @@ output_type = "python/pydantic"
 output_dir = "src"
 naming_convention = "preserve-case"
 
+[toolchain]
+version = "0.23.0"
+
 # [scripts]
 # dev = "-f main"
 
