@@ -9,7 +9,7 @@ OpenRouter's `openrouter/free`, which needs `OPENROUTER_API_KEY`.
 </project>
 
 <commands>
-Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.23 or later. Put `~/.baml/bin` first on `PATH`,
+Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.23 or later. `baml.toml` pins the toolchain to the `baml-bridge` version that `pyproject.toml` requires, because the wheel ships a generated `baml_sdk` (`scripts/check_toolchain_pin.py`). Put `~/.baml/bin` first on `PATH`,
 because older `baml` versions lack `describe`.
 
 ```bash
@@ -24,6 +24,8 @@ uv run pytest README.md docs src --no-cov   # the code examples of the docs and 
 prek run --all-files               # all hooks: ruff, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, uv lock --check
 uv run python -m scripts.check_abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
 uvx prek run --hook-stage manual check-new-clones   # fails on a copy-paste clone that origin/main lacks; needs Node.js and origin/main
+uv run --only-group dist python -m scripts.smoke_install dist/ebaml-X.Y.Z-py3-none-any.whl X.Y.Z --extras mcp   # install a built file in a clean environment; the release workflow runs it
+uv run python -m scripts.check_api_breaks --base origin/main   # a break of ebaml.__all__ needs a **BREAKING:** fragment
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
 uv run python scripts/live_openrouter.py   # optional live test; sends real requests
