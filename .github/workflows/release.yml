@@ -115,6 +115,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: test "$(uv version --short --frozen)" = "$VERSION"
       - run: uv build
+      - name: Check that the build left the working tree clean
+        run: test -z "$(git status --porcelain)"
       - name: Check the wheel contains the generated SDK
         run: unzip -l dist/*.whl | grep -q 'baml_sdk/__init__.py'
       - name: Check the metadata of the files
