@@ -15,6 +15,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
 | `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
+| `baml_toolchain.py` | Prints the version of `baml-bridge` in `uv.lock`. The setup action of CI installs the BAML toolchain of that version, because a newer toolchain writes a `baml_sdk` that `baml-bridge` cannot read. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `fit_token_weights.py` | Collects the token counts of real requests to a model, and fits the weights of its token estimate. `collect` costs money. `fit` sends nothing. |
