@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.4.4'></a>
+## [0.4.4] - 2026-11-07
+
+### Added
+
+- `explain_instance` and `compute_local_facts` explain a prediction of a regressor. `LocalOptions(decision=...)` sets the question about the predicted value: `Threshold(value)`, or `Interval(low, high)` for a prediction below or above the interval. The default asks whether the value is above the average prediction. The sufficient reason and the counterfactual of a regressor have no proof yet, and an interval that contains the prediction raises `UnsupportedModelError`.
+- The MCP tool `explain_prediction` explains a regressor.
+
+- A regressor can explain the answer "inside" of `Interval(low, high)`. `LocalOptions.reason_search` chooses how to find the sufficient reason of such a decision: `Minimal()` (the default) returns a set from which no input can be removed, and `ExactOrMinimal()` returns the smallest set up to a limit on the number of features.
+- The sufficient reason text says whether the set is the smallest or only minimal, and the prompt tells the LLM to use the matching word.
+
+### Changed
+
+- **BREAKING:** `Audience.class_output` and `Audience.margin` take the `OutputKind` of the model as a second argument. A custom audience must add it. `Prediction` has two new fields, `threshold` and `output_kind`, and `points_towards` reads the threshold.
+- The error for a multiclass classifier says: "Local explanations need a binary classifier or a regressor."
+- The local prompts tell the LLM that a prediction can be a number, and the layperson guidance allows the predicted value and the limits of the question.
+
+- **BREAKING:** `Interval` is open at the low end and closed at the high end, as `Threshold` is. The answers are "at most `low`", "above `low` and at most `high`" and "above `high`". `Side` holds a tuple of `Margin` objects in place of one sign and one threshold.
+
 <a id='changelog-0.4.3'></a>
 ## [0.4.3] - 2026-11-06
 
