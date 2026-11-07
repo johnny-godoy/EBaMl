@@ -28,9 +28,10 @@ to review.
    public module an `__all__`. Ask the user about each name that you are not sure of, before you change it.
 2. **Write the contract.** Add a page `docs/stability.md` (and a `zensical.toml` entry) that lists what the public API
    covers, what it does not cover, and the deprecation policy. Link it from the README.
-3. **Check the Python API.** Add a CI step that runs `griffe check ebaml --against v1.0.0` (griffe is in the docs
-   group) once the tag exists, so a breaking change of a public name fails CI. Until the tag exists, check against the
-   base branch.
+3. **Check the Python API.** `scripts/check_api_breaks.py` compares `ebaml.__all__` with the base branch through griffe, and
+   it passes a break only if a fragment has a **BREAKING** entry. Extend it for 1.0.0: compare with the last released tag
+   when a pull request targets a release, and fail a break that has no MAJOR version. Until `v1.0.0` exists, the base
+   branch is the reference.
 4. **Check the BAML entry points.** Add a snapshot test of the signatures of the public `baml_sdk` functions, read from
    the generated stub as `tests/unit/ebaml/conftest.py` does, so a changed BAML signature shows in review.
 5. **Check the MCP schemas.** The snapshot test in `tests/unit/ebaml/mcp/test_server.py` exists. Make sure CI runs it.
@@ -39,7 +40,23 @@ to review.
 7. **Update the rules.** Rewrite "Current state, not history" in `.claude/rules/writing-style.md`: the docs describe
    the current state, and deprecated items stay in the docs, marked as deprecated, until their removal. Update
    `CLAUDE.md` if it mentions the pre-1.0 policy.
-8. **Update the user docs.** Make the README table "Supported models" true, and remove "Full support is on the roadmap"
+8. **Test every claimed platform and Python version.** Until 1.0.0, CI runs Linux with Python 3.13 only, so a pull request
+   does not pay for a platform that no user needs. Before 1.0.0, add the matrix and decide what the package claims:
+   - Add a matrix of operating systems (Linux, macOS, Windows) and Python versions (3.13 and each later release that
+     exists) to the pytest gate, or to a gate that runs the unit tests and `scripts/smoke_install.py`. A full matrix on
+     each pull request costs runner time. Prefer a schedule and the release workflow, and keep Linux with one Python
+     version on each pull request.
+   - Run `scripts/smoke_install.py` on each matrix entry in the release workflow, so a release installs on every claimed
+     platform. The script uses `bin/python`, so make it find `Scripts/python.exe` on Windows.
+   - Make the claim match the result. Set the classifiers `Operating System ::` and `Programming Language :: Python ::`
+     of `pyproject.toml` to what the matrix passes, and lower or raise `requires-python` the same way. Update the
+     "Requirements" list of the README and the table "Compatibility" of `docs/releasing.md`.
+9. **Version the documentation.** The site shows `main`. Publish a copy for each released version, with a selector, or
+   write on the site which version it shows. Check that Zensical supports versions before you choose.
+10. **Write the migration guide.** Add `docs/migration.md` with one section for each MAJOR version, linked from the
+    changelog entries that carry **BREAKING**. Add a second reviewer to the ruleset of `main` if the project has a second
+    maintainer by then (`docs/releasing.md`, "Review rules").
+11. **Update the user docs.** Make the README table "Supported models" true, and remove "Full support is on the roadmap"
    where it does not apply.
 </steps>
 
@@ -52,6 +69,9 @@ merge. From then on, `scripts/release.py` raises the MAJOR, MINOR or PATCH numbe
 
 <done>
 - Every public name is documented in `docs/api.md`, and every other name is private.
-- A change of a public name, a BAML entry point or an MCP schema fails a check in CI.
+- A change of a public name, a BAML entry point or an MCP schema fails a check in CI. `scripts/check_api_breaks.py`
+  already fails a break of `ebaml.__all__` without a **BREAKING** fragment. Extend it to compare with the last tag, and to
+  fail a break without a MAJOR version.
+- CI and the release workflow cover every platform and Python version that the package claims.
 - `prek run --all-files`, `uv run pytest`, mutation testing and the strict docs build pass.
 </done>
