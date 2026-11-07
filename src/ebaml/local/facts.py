@@ -159,6 +159,11 @@ class LocalOptions:
         interval" has. ``Minimal`` (the default) returns a set from which no feature can be removed. ``ExactOrMinimal``
         returns the smallest set when the number of features is at most its limit. A decision with one margin ignores
         this option, because sorting finds its smallest set exactly.
+    target_class: ClassLabel | None
+        For a multiclass classifier, the class that the counterfactual must reach. ``None`` (the default) asks for the
+        fewest changes after which the class is no longer the predicted class. A class asks for changes after which
+        every margin of that class holds at once. ``reason_search`` chooses the features, and the result is never
+        marked as the smallest set. Another kind of model accepts ``None`` only.
 
     """
 
@@ -169,6 +174,7 @@ class LocalOptions:
     min_support: float = 0.01
     decision: Decision | None = None
     reason_search: ReasonSearch = attrs.field(factory=Minimal)
+    target_class: ClassLabel | None = None
 
 
 @attrs.frozen
@@ -911,6 +917,155 @@ def _smallest_counterfactual(
     return min(found, key=lambda counterfactual: len(counterfactual.changes), default=None)
 
 
+@attrs.frozen
+class _Option:
+    """The bin that one feature moves to, and how much it raises each margin of a target class."""
+
+    bin_index: int
+    gains: list[float]
+
+
+def _best_option(views: Sequence[_Feature], z: float) -> _Option:
+    """Pick the bin of a feature that raises the margins of the target class the most, and lowers none of them.
+
+    The scores of the new bin move by ``z`` deviations against the target class, as in ``_counterfactual``. The bin of
+    the instance is always a candidate, so the feature can stay as it is.
+
+    Parameters
+    ----------
+    views : Sequence[_Feature]
+        The feature as seen by each margin of the target class.
+    z : float
+        Standard deviations to move the scores by.
+
+    Returns
+    -------
+    _Option
+        The chosen bin and its gain for each margin.
+
+    """
+    # one row for each bin and one column for each margin
+    guaranteed = np.stack([view.scores - z * view.stds - view.current for view in views], axis=1)
+    allowed = views[0].plausible & np.all(guaranteed >= 0, axis=1)
+    allowed[views[0].bin_index] = True
+    score = np.where(allowed, guaranteed.sum(axis=1), -np.inf)
+    best = int(np.argmax(score))
+    return _Option(best, guaranteed[best].tolist())
+
+
+@attrs.frozen
+class _Totals:
+    """The score and the intercept of each output of the model for the instance, and the confidence factor ``z``."""
+
+    scores: list[float]
+    intercepts: list[float]
+    z: float
+
+
+def _target_counterfactual(
+    features: Sequence[_Feature],
+    frame: PredictionFrame,
+    margins: Sequence[Margin],
+    totals: _Totals,
+    *,
+    search: ReasonSearch,
+) -> Counterfactual | None:
+    """Find a small set of changes after which every margin of the target class holds.
+
+    Each feature moves to one bin, chosen by ``_best_option``. The margins then form the covering problem of
+    ``ebaml.local.reason_search``, and ``search`` solves it. The set is the smallest only among these choices, so the
+    result has no proof of a smallest set.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    frame : PredictionFrame
+        The prediction.
+    margins : Sequence[Margin]
+        The margins of the target class against every other class.
+    totals : _Totals
+        The scores and the intercepts of the instance, and the standard deviations to move the scores by.
+    search : ReasonSearch
+        How to choose the features.
+
+    Returns
+    -------
+    Counterfactual | None
+        The changes, or None if no choice of bins makes every margin hold.
+
+    """
+    target, _ = margins[0].columns or (0, 0)
+    views = [[feature.against(margin.columns) for feature in features] for margin in margins]
+    options = [
+        _best_option([margin_views[index] for margin_views in views], totals.z) for index in range(len(features))
+    ]
+    worst = [
+        margin.offset(totals.intercepts) + sum(view.current for view in margin_views)
+        for margin, margin_views in zip(margins, views, strict=True)
+    ]
+    gains = [[option.gains[row] for option in options] for row in range(len(margins))]
+    selection = search.select(worst, gains)
+    if selection is None:
+        return None
+    changed = [(features[index], options[index].bin_index) for index in selection.indices]
+    new_scores = np.array(totals.scores, dtype=float)
+    for feature, bin_index in changed:
+        new_scores += feature.outputs(bin_index) - feature.outputs(feature.bin_index)
+    outcome = frame.after(margins[0], new_scores.tolist())
+    return Counterfactual(
+        changes=[
+            Change(
+                feature.name,
+                feature.label,
+                _bin_label(feature.graph.x_vals[bin_index]),
+                float(
+                    (feature.outputs(bin_index) - feature.outputs(feature.bin_index))[target]
+                    - (feature.outputs(bin_index) - feature.outputs(feature.bin_index))[frame.column],
+                ),
+            )
+            for feature, bin_index in changed
+        ],
+        new_decision=outcome.decision,
+        new_output=outcome.output,
+    )
+
+
+def _choose_counterfactual(
+    features: Sequence[_Feature],
+    frame: PredictionFrame,
+    totals: _Totals,
+    *,
+    kind: LocalKind,
+    options: LocalOptions,
+) -> Counterfactual | None:
+    """Find the counterfactual that the options ask for: the target class if there is one, else the smallest.
+
+    Parameters
+    ----------
+    features : Sequence[_Feature]
+        The features.
+    frame : PredictionFrame
+        The prediction.
+    totals : _Totals
+        The scores and the intercepts of the instance, and the standard deviations to move the scores by.
+    kind : LocalKind
+        The kind of the model.
+    options : LocalOptions
+        Uses ``target_class`` and ``reason_search``.
+
+    Returns
+    -------
+    Counterfactual | None
+        The counterfactual, or None if no change gives it.
+
+    """
+    if options.target_class is None:
+        return _smallest_counterfactual(features, frame, totals.scores, totals.intercepts, totals.z)
+    margins = kind.target_margins(options.target_class, frame)
+    return _target_counterfactual(features, frame, margins, totals, search=options.reason_search)
+
+
 def compute_local_facts(
     ebm: ExplainableBoostingModel,
     instance: Mapping[str, FeatureValue],
@@ -975,6 +1130,13 @@ def compute_local_facts(
         output_kind=kind.output_kind,
     )
     order = _reveal_order(features, bounds, z)
+    counterfactual = _choose_counterfactual(
+        features,
+        frame,
+        _Totals(scores, intercepts, z),
+        kind=kind,
+        options=options,
+    )
     return LocalFacts(
         prediction=prediction,
         contributions=sorted(
@@ -990,7 +1152,7 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_smallest_counterfactual(features, frame, scores, intercepts, z),
+        counterfactual=counterfactual,
         sufficient_reason=_reason(features, bounds, z, options.reason_search),
         completions=_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,

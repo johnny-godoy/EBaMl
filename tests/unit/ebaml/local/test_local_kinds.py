@@ -7,7 +7,16 @@ import pytest
 from ebaml.core.exceptions import OptionRangeError, UnsupportedModelError
 from ebaml.graphs.model_kinds import BinaryClassifier, MulticlassClassifier, Regressor
 from ebaml.local.decisions import Interval, Margin, Side, Threshold
-from ebaml.local.local_kinds import BinaryLocal, MulticlassLocal, Outcome, OutputKind, RegressorLocal, local_kind
+from ebaml.local.local_kinds import (
+    BinaryLocal,
+    LocalKind,
+    MulticlassLocal,
+    Outcome,
+    OutputKind,
+    PredictionFrame,
+    RegressorLocal,
+    local_kind,
+)
 from tests.unit.ebaml.conftest import UnknownKind
 
 Z95 = 1.959963984540054
@@ -119,6 +128,35 @@ def test_the_output_kind_of_each_kind() -> None:
 def test_local_kind_selects_the_class_of_the_model_kind() -> None:
     assert local_kind(BinaryClassifier(("no", "yes"))) == BinaryLocal(("no", "yes"))
     assert local_kind(Regressor()) == RegressorLocal()
+
+
+def _multiclass_frame() -> tuple[MulticlassLocal, PredictionFrame]:
+    kind = MulticlassLocal(("a", "b", "c"))
+    return kind, kind.frame([0.0, 2.0, 1.0], [0.0] * 3, intercepts=[0.0] * 3, confidence_level=0.0, decision=None)
+
+
+def test_the_margins_of_a_target_class_compare_it_with_every_other_class() -> None:
+    kind, frame = _multiclass_frame()
+    assert kind.target_margins("c", frame) == (Margin(1, 0.0, "a", (2, 0)), Margin(1, 0.0, "b", (2, 1)))
+
+
+def test_a_target_class_must_be_a_class_of_the_model() -> None:
+    kind, frame = _multiclass_frame()
+    with pytest.raises(OptionRangeError, match="is not a class of the model"):
+        kind.target_margins("z", frame)
+
+
+def test_the_predicted_class_is_not_a_target_class() -> None:
+    kind, frame = _multiclass_frame()
+    with pytest.raises(OptionRangeError, match="predicted class already"):
+        kind.target_margins("b", frame)
+
+
+@pytest.mark.parametrize("kind", [BinaryLocal(("no", "yes")), RegressorLocal()])
+def test_only_a_multiclass_classifier_accepts_a_target_class(kind: LocalKind) -> None:
+    frame = kind.frame([0.5], [0.0], intercepts=[0.0], confidence_level=0.0, decision=None)
+    with pytest.raises(OptionRangeError, match="needs a multiclass classifier"):
+        kind.target_margins("yes", frame)
 
 
 def test_local_kind_selects_the_class_of_a_multiclass_classifier() -> None:
