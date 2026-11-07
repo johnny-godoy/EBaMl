@@ -40,4 +40,6 @@ The default sits in the `*Base` lines at the top of `baml_src/talk_to_ebm.baml`:
 
 To add a provider for `model=`, add a builder function and a row in `client_builders` in `baml_src/model_spec.baml`.
 
+`docs/releasing.md` describes the release gates and how to recover from a failed release or ship a hotfix.
+
 Participation is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
