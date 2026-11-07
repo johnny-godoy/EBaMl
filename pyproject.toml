@@ -41,7 +41,7 @@ dependencies = [
 mcp = [
     "cyclopts>=5.2.0",
     "joblib>=1.5.0",
-    "mcp>=1.30.0,<2",
+    "mcp>=1.30.0",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.0.0",
     "skops>=0.16.0",
@@ -65,10 +65,10 @@ exclude-newer = "7 days"
 # exporter. The upper bound keeps mcp on 1.x. Remove the override once semgrep loosens its pins
 # (https://github.com/semgrep/semgrep/issues/12018).
 override-dependencies = [
-    "mcp>=1.30.0,<2",
-    "opentelemetry-api>=1.45.1,<2",
-    "opentelemetry-sdk>=1.45.1,<2",
-    "opentelemetry-exporter-otlp-proto-http>=1.45.1,<2",
+    "mcp>=1.30.0",
+    "opentelemetry-api>=1.45.1",
+    "opentelemetry-sdk>=1.45.1",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.1",
     "opentelemetry-instrumentation-requests>=0.66b0",
     "opentelemetry-instrumentation-threading>=0.66b0",
 ]
@@ -81,7 +81,7 @@ source-exclude = ["**/.gitignore"]
 wheel-exclude = ["**/.gitignore"]
 
 [build-system]
-requires = ["uv_build>=0.12.3,<0.13.0"]
+requires = ["uv_build>=0.12.3"]
 build-backend = "uv_build"
 
 [tool.ruff]
