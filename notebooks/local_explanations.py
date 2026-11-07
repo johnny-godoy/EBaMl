@@ -119,7 +119,8 @@ def _(mo) -> None:
 
 @app.cell
 def _(ExplainableBoostingClassifier, fetch_openml, pl, train_test_split):
-    titanic = pl.from_pandas(fetch_openml("titanic", version=1, as_frame=True, parser="auto").frame)
+    # The liac-arff parser reads the categories as text. The pandas parser of scikit-learn 1.9 fails on pandas 3.1.
+    titanic = pl.from_pandas(fetch_openml("titanic", version=1, as_frame=True, parser="liac-arff").frame)
     features = titanic.select("pclass", "sex", "age", "sibsp", "parch", "fare", "embarked").with_columns(
         pl.col("sex", "embarked").cast(pl.String),
     )
