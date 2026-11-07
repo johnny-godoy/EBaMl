@@ -9,7 +9,6 @@ app = marimo.App(width="medium")
 @app.cell
 def _():
     import asyncio
-    import contextlib
     import os
     import socket
     import sys
@@ -22,18 +21,15 @@ def _():
     import polars as pl
     import skops.io
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-    from mcp import ClientSession, StdioServerParameters
-    from mcp.client.stdio import stdio_client
-    from mcp.client.streamable_http import streamable_http_client
+    from mcp import Client, StdioServerParameters
 
     return (
-        ClientSession,
+        Client,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
         Path,
         StdioServerParameters,
         asyncio,
-        contextlib,
         mo,
         np,
         orjson,
@@ -41,8 +37,6 @@ def _():
         pl,
         skops,
         socket,
-        stdio_client,
-        streamable_http_client,
         sys,
         tempfile,
     )
@@ -125,25 +119,20 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(ClientSession, Path, StdioServerParameters, contextlib, stdio_client, sys):
+def _(Client, Path, StdioServerParameters, sys):
     # the ebaml-mcp script that `pip install "ebaml[mcp]"` puts next to the Python of this notebook
     command = str(Path(sys.executable).parent / "ebaml-mcp")
 
-    class open_session:  # ruff: ignore[invalid-class-name] -- it reads like a function in the cells: `async with open_session(...)`
-        """Start ebaml-mcp with the arguments, and give an initialized client session. Stop the server on exit."""
+    def open_session(*arguments: str, env: dict[str, str] | None = None) -> Client:
+        """Give a client of ebaml-mcp, started with the arguments. It stops the server when its block ends.
 
-        def __init__(self, *arguments: str, env: dict[str, str] | None = None) -> None:
-            self.parameters = StdioServerParameters(command=command, args=list(arguments), env=env)
-            self.stack = contextlib.AsyncExitStack()
+        Returns
+        -------
+        Client
+            The client. Use it in an ``async with`` block.
 
-        async def __aenter__(self) -> ClientSession:
-            read, write = await self.stack.enter_async_context(stdio_client(self.parameters))
-            session = await self.stack.enter_async_context(ClientSession(read, write))
-            await session.initialize()
-            return session
-
-        async def __aexit__(self, *exception_details: object) -> bool | None:
-            return await self.stack.__aexit__(*exception_details)
+        """
+        return Client(StdioServerParameters(command=command, args=list(arguments), env=env))
 
     return command, open_session
 
@@ -215,7 +204,7 @@ async def _(budget_slider, data_file, feature_picker, mo, model_file, open_sessi
             {"feature": feature_picker.value, "max_tokens": budget_slider.value},
         )
     graph_text = graph_result.content[0].text
-    mo.callout(graph_text, kind="danger") if graph_result.isError else mo.md(
+    mo.callout(graph_text, kind="danger") if graph_result.is_error else mo.md(
         f"**{len(graph_text)}** characters.\n\n```text\n{graph_text}\n```",
     )
 
@@ -300,13 +289,12 @@ def _(mo) -> None:
 @app.cell
 async def _(
     asyncio,
-    ClientSession,
+    Client,
     command,
     data_file,
     mo,
     model_file,
     socket,
-    streamable_http_client,
 ):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
@@ -330,14 +318,7 @@ async def _(
     try:
         for _attempt in range(60):
             try:
-                async with (
-                    streamable_http_client(f"http://127.0.0.1:{free_port}/mcp") as (read, write, _),
-                    ClientSession(
-                        read,
-                        write,
-                    ) as http_session,
-                ):
-                    await http_session.initialize()
+                async with Client(f"http://127.0.0.1:{free_port}/mcp") as http_session:
                     http_names = [tool.name for tool in (await http_session.list_tools()).tools]
                 break
             except (OSError, ExceptionGroup):
@@ -418,7 +399,7 @@ async def _(mo, open_session, orjson, other_files, other_instances):
                 "features with a graph": ", ".join(feature["name"] for feature in kind_features),
                 "skipped terms": ", ".join(kind_summary["skipped_terms"]) or "none",
                 "explain_prediction": "tool error: " + kind_explain.content[0].text.split(".")[0]
-                if kind_explain.isError
+                if kind_explain.is_error
                 else "works",
             },
         )
@@ -454,7 +435,7 @@ async def _(data_file, mo, model_file, open_session, other_files):
             {"instance": {"age": 30, "city": "north"}},
         )
     problem_rows = [
-        {"situation": situation, "tool error": result.isError, "message": result.content[0].text}
+        {"situation": situation, "tool error": result.is_error, "message": result.content[0].text}
         for situation, result in problems.items()
     ]
     mo.ui.table(problem_rows, selection=None, label="Tool errors", wrapped_columns=["message"])
@@ -598,7 +579,7 @@ async def _(api_key, data_file, describe_button, feature_picker, mo, model_file,
         env={"PATH": os.environ["PATH"], "OPENROUTER_API_KEY": api_key},
     ) as llm_session:
         llm_result = await llm_session.call_tool("describe_feature", {"feature": feature_picker.value})
-    mo.callout(llm_result.content[0].text, kind="danger" if llm_result.isError else "neutral")
+    mo.callout(llm_result.content[0].text, kind="danger" if llm_result.is_error else "neutral")
 
 
 if __name__ == "__main__":
