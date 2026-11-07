@@ -1056,6 +1056,7 @@ dev = [
     { name = "vulture" },
 ]
 dist = [
+    { name = "cyclopts" },
     { name = "pydistcheck" },
     { name = "twine" },
 ]
@@ -1120,6 +1121,7 @@ dev = [
     { name = "vulture", specifier = ">=2.16" },
 ]
 dist = [
+    { name = "cyclopts", specifier = ">=5.2.0" },
     { name = "pydistcheck", specifier = ">=0.10.0" },
     { name = "twine", specifier = ">=6.2.0" },
 ]

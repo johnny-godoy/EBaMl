@@ -217,8 +217,10 @@ commits = [
 release = [
     "scriv>=1.8.0",
 ]
-# the release workflow installs only this group to check the built files before the upload
+# the release workflow installs only this group to check the built files before the upload, and the published version
+# after it (scripts/smoke_install.py needs cyclopts)
 dist = [
+    "cyclopts>=5.2.0",
     "pydistcheck>=0.10.0",
     "twine>=6.2.0",
 ]
