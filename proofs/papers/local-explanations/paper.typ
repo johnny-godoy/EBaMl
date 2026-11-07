@@ -17,18 +17,19 @@
 
 #v(1em)
 
-*Summary.* EBaMl explains one prediction of a binary or regression Explainable Boosting Machine (EBM) in two exact ways. The
+*Summary.* EBaMl explains one prediction of a binary, multiclass or regression Explainable Boosting Machine (EBM) in two exact ways. The
 _minimum change required_ is the fewest features to change so that the prediction flips. The _minimum sufficient
 reason_ is the fewest features to fix so that no values of the other features can flip the prediction. Both queries
 come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
-covering problem, and the paper proves what two searches return. A Lean 4 file @lean4 checks every statement, and the
+covering problem, and the paper proves what two searches return. A multiclass classifier has one margin for each rival
+class, so it uses the same results. A Lean 4 file @lean4 checks every statement, and the
 appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
 
-The proof covers a binary EBM and a regressor, both without interaction terms. The score of such a model is a sum of
+The proof covers a binary EBM, a multiclass EBM and a regressor, all without interaction terms. The score of such a model is a sum of
 one term per feature, and this is the only fact that the proof needs.
 
 *Claim 1 (minimum change required).* The function `_counterfactual` returns a set of features whose change flips
@@ -50,6 +51,13 @@ this number (Theorem 6).
 *Claim 5 (searches).* For a decision with several margins, `Minimal` returns a sufficient set from which no feature
 can be removed, and `ExactOrMinimal` returns a smallest sufficient set when the number of features is at most its
 limit. `Minimal` does not claim a smallest set, except for a set of at most one feature (Theorems 4 and 5, Corollary 3).
+
+*Claim 6 (multiclass classifier).* For a multiclass classifier, the predicted class $w$ has one margin for each rival
+class $j$: the score of $w$ minus the score of $j$, with the deviation $sigma_w + sigma_j$. The fewest features that
+change the predicted class are the fewest of the answers for the rivals, and `_smallest_counterfactual` returns this
+number (Theorem 7). A set keeps the class iff it is sufficient for the margin of every rival, so Claim 5 holds for the
+sufficient reason of a multiclass classifier (Lemma 11). The sum $sigma_w + sigma_j$ is an upper bound of the deviation
+of the margin for any correlation between the two scores (Lemma 12).
 
 The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The text of the module docstring
 differs a little from the code for the counterfactual. @sec-limits explains the difference.
@@ -571,6 +579,105 @@ $W_k$ and $h_(k,i)$, and the class `Minimal` or `ExactOrMinimal` does the search
 )
 
 
+= Multiclass classifiers <sec-multiclass>
+
+A multiclass EBM has one score $s_(k,i) (v)$ for each class $k$, each feature $i$ and each bin $v$, and one intercept
+$b_k$ for each class. The score of the class $k$ at the instance is $S_k = b_k + sum_i s_(k,i) (c_i)$. The predicted
+class $w$ has the highest score. `MulticlassLocal.frame` gives it one margin for each rival $j != w$: the sign is $1$,
+the threshold is $0$, and `Margin.columns` names the pair $(w, j)$. The code reads the scores, the intercepts and the
+deviations of the pair in `_Feature.against`, `Margin.offset` and `Margin.value`.
+
+Let $m_j$ be the model of @sec-model with the intercept $b_w - b_j$, the scores $s_(w,i) - s_(j,i)$, the deviations
+$sigma_(w,i) + sigma_(j,i)$, and the same plausible bins and instance bins. The deviation of a difference of two scores
+has no covariance term, because an EBM stores no covariance between the scores of two classes.
+
+#lemma("the winner", [
+  (a) The logit of $m_j$ is $S_w - S_j$. (b) Every logit of $m_j$ with $j != w$ is positive iff $S_j < S_w$ for every
+  rival. (c) When the logit of $m_j$ is positive, the sign of $m_j$ is $1$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Multiclass.lean", "EBaMlProofs.LocalExplanations.Multiclass.logit_marginModel (a)", "EBaMlProofs.LocalExplanations.Multiclass.winner_iff (b)", "EBaMlProofs.LocalExplanations.Multiclass.marginModel_eps (c)"))
+
+#proof[
+  (a) $(b_w - b_j) + sum_i (s_(w,i) (c_i) - s_(j,i) (c_i)) = S_w - S_j$. (b) follows from (a). (c) The sign is $1$
+  iff the logit is above $0$.
+]
+
+Lemma 10 shows that the models $m_j$ are the margins of the code, and it holds only when the predicted class wins
+every pair strictly. @sec-limits discusses the tie.
+
+#theorem("the class changes", [
+  Let $S_w > S_j$ for every rival $j$. Let a set $S$ _change the class_ if some admissible change of $S$ makes the
+  robust margin of some $m_j$ negative. Then (a) $S$ changes the class iff it can flip the margin of $m_j$ for some
+  rival $j$. Let the rival $j_0$ have the position $k$ of Theorem 2, and let every other rival either have no set that
+  flips its margin, or need at least $k$ features. Then (b) the set of the first $k$ features of $j_0$, moved to the
+  bins $beta$, changes the class, and no set of fewer than $k$ features changes it. (c) If no set can flip the margin
+  of any rival, no set changes the class.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Multiclass.lean", "EBaMlProofs.LocalExplanations.Multiclass.canFlipClass_iff (a)", "EBaMlProofs.LocalExplanations.Multiclass.min_change_class (b)", "EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none (c)"))
+
+#proof[
+  *ASSUME:* $S_w > S_j$ for every rival, and the positions of Theorem 2.
+  *PROVE:* (a)–(c).
+
+  #step(1, "1", [(a) holds. A change $(S, v)$ changes the class iff $R_j (S, v) < 0$ for some rival $j$. The plausible
+    bins and the set $S$ are the same for every rival, so the change flips the margin of $m_j$ iff $S$ can flip it.])
+  #step(1, "2", [(b) holds.])
+  #step(2, "1", [The first $k$ features of $j_0$, moved to the bins $beta$, flip the margin of $m_(j_0)$ by Theorem 2(a).
+    So they change the class by $chevron.l 1 chevron.r 1$.])
+  #step(2, "2", [A set $S$ that changes the class can flip the margin of some rival $j$ by $chevron.l 1 chevron.r 1$.
+    By the assumption on the rivals, either this is impossible, or $|S| >= k$.])
+  #step(2, "3", [*Q.E.D.* by $chevron.l 2 chevron.r 1$ and $chevron.l 2 chevron.r 2$.])
+  #step(1, "3", [(c) holds by $chevron.l 1 chevron.r 1$.])
+  #step(1, "4", [*Q.E.D.* by $chevron.l 1 chevron.r 1$ to $chevron.l 1 chevron.r 3$.])
+]
+
+Each rival has its own position $k_j$ from Theorem 2, or no position. The rival with the smallest position is $j_0$, and
+the other rivals have a larger position or none, so the assumption of Theorem 7 holds. The code takes the first rival
+when two rivals have the same position (`min` in `_smallest_counterfactual`). The size is the same, and the named
+features may differ.
+
+The sufficient reason of the predicted class has one condition for each rival, so it is a covering problem.
+
+#lemma("several rivals", [
+  A set $F$ is sufficient for the covering problem of the rivals iff $F$ is sufficient for each model $m_j$ with
+  $j != w$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Multiclass.lean", "EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff"))
+
+#proof[
+  This is Lemma 9 for the family of the models $m_j$, indexed by the rivals.
+]
+
+Lemma 11 puts the sufficient reason of a multiclass classifier under Theorems 4 and 5, as Lemma 9 does for the
+answer "inside". The function `_gain_table` computes the numbers, and the class `Minimal` or `ExactOrMinimal` does the
+search. The flag `minimum` has the same meaning as in Claim 5.
+
+#lemma("the deviation of a margin", [
+  Let $sigma_x, sigma_y >= 0$ be the deviations of two scores, and let $rho in [-1, 1]$ be their correlation. The
+  variance of their difference, $sigma_x^2 + sigma_y^2 - 2 rho sigma_x sigma_y$, is at most $(sigma_x + sigma_y)^2$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Multiclass.lean", "EBaMlProofs.LocalExplanations.sd_sum_bound"))
+
+#proof[
+  The difference of the two sides is $2 (1 + rho) sigma_x sigma_y >= 0$.
+]
+
+Lemma 12 shows that the sum $sigma_w + sigma_j$ is at least the deviation of the margin for every correlation. The model
+of @sec-model takes the deviation of each margin as given, so the proof covers the code with this sum.
+
+*Correspondence of symbols to the code* for this section.
+
+#table(
+  columns: (auto, 1fr, auto),
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [*Symbol*], [*Computed by*], [*Function*],
+  [$w$], [`int(np.argmax(scores))`], [`MulticlassLocal.frame`],
+  [margin of $m_j$], [`Margin(1, 0.0, self.classes[rival], (winner, rival))`], [`MulticlassLocal.frame`],
+  [$b_w - b_j$], [`intercepts[winner] - intercepts[rival]`], [`Margin.offset`],
+  [$s_(w,i) - s_(j,i)$], [`scores[:, winner] - scores[:, rival]`], [`_Feature.scores`],
+  [$sigma_(w,i) + sigma_(j,i)$], [`stds[:, winner] + stds[:, rival]`], [`_Feature.stds`],
+  [the answer for a rival], [`_counterfactual(... margin.offset(intercepts), margin.sign, ...)`], [`_smallest_counterfactual`],
+  [the rival with the smallest position], [`min(found, key=lambda c: len(c.changes), default=None)`], [`_smallest_counterfactual`],
+  [$W_j (emptyset)$, $h_(j,i)$], [`_robust_scores(f.against(bound.columns), ...)`], [`_gain_table`],
+)
+
 = Limits <sec-limits>
 
 The proof does not cover the following points.
@@ -601,8 +708,16 @@ The proof does not cover the following points.
 - *The confidence of a decision with several margins.* Each margin moves by $z$ deviations against its own claim, as in
   @sec-model. The proof covers this definition, which is the code. EBMs store no covariance between the scores of two
   margins, and the proof does not need one.
-- *Multiclass classifiers.* A multiclass classifier has one margin for each other class. The shift of Lemma 7 does not
-  describe it, and the proof of this paper does not cover it.
+- *Ties between classes.* Lemma 10 needs $S_w > S_j$ for every rival. When two classes have the same top score, the code
+  takes the first class, and its margin against the other is $0$. The proof does not cover this case, and
+  `points_towards` reads the direction of a contribution wrongly there. A tie of two floating-point scores has no
+  meaning.
+- *The class $j$ as target.* The proof covers the counterfactual "the predicted class is no longer $w$". It does not
+  cover a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once.
+- *The probability of the new class.* `Counterfactual.new_output` of a multiclass classifier is the softmax probability
+  from the mean scores after the change. It is a report and not an optimality claim, as for a binary classifier.
+- *The correlation between classes.* Lemma 12 shows an upper bound for the deviation of a margin. The code uses the
+  bound, so the claims are conservative, and the proof does not state how much.
 - *Interaction terms.* With interaction terms the score is not a sum of one term per feature, and the greedy rule
   is not minimal. Take three features $a$, $b$ and $c$ with bins in ${0, 1}$, and the instance $(0, 0, 0)$. Let the
   score be $f = 1 - 0.6 a - 0.6 b + u(b, c)$, where $u(b, c) = -2$ for $(b, c) = (0, 1)$ and $u(b, c) = 0$
@@ -616,10 +731,11 @@ The proof does not cover the following points.
 = Computer check <sec-computer>
 
 The Lean 4 library in `proofs/` states each lemma, theorem and corollary of @sec-abstract, @sec-application,
-@sec-covering and @sec-regressor and proves it with the Mathlib library @mathlib2020. The file
+@sec-covering, @sec-regressor and @sec-multiclass and proves it with the Mathlib library @mathlib2020. The file
 `EBaMlProofs/LocalExplanations/Greedy.lean` holds the abstract part, the file `EBaMlProofs/LocalExplanations/Model.lean`
 holds the model and the two theorems, the file `EBaMlProofs/LocalExplanations/Covering.lean` holds the problem of several
-margins, and the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside". The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
+margins, the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside", and the file
+`EBaMlProofs/LocalExplanations/Multiclass.lean` holds the models of the rivals. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
 axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
 
 A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
@@ -644,7 +760,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`cfcd113a95964b867a90c049199b2d69acc4d103`],
+  [Lean sources checked at commit], [`035d4e6cbefbd846fb4d70e08b431b9c959c356b`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -660,7 +776,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout cfcd113a95964b867a90c049199b2d69acc4d103
+git checkout 035d4e6cbefbd846fb4d70e08b431b9c959c356b
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
@@ -674,24 +790,32 @@ This takes tens of minutes, and the result is the same.
 with `error`. The file `Axioms.lean` prints these lines, in this order:
 
 ```text
-info: EBaMlProofs/LocalExplanations/Axioms.lean:11:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:16:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:17:0: 'EBaMlProofs.LocalExplanations.Model.shift_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:18:0: 'EBaMlProofs.LocalExplanations.Model.shift_margin_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:19:0: 'EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:20:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInside_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:21:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:22:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:23:0: 'EBaMlProofs.LocalExplanations.problemOfModels_sufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:24:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:25:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:26:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:27:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:28:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:16:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:17:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:18:0: 'EBaMlProofs.LocalExplanations.Model.shift_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:19:0: 'EBaMlProofs.LocalExplanations.Model.shift_margin_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:20:0: 'EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:21:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInside_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:22:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:23:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:24:0: 'EBaMlProofs.LocalExplanations.problemOfModels_sufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:25:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:26:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:27:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:28:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:29:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:30:0: 'EBaMlProofs.LocalExplanations.Multiclass.logit_marginModel' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:31:0: 'EBaMlProofs.LocalExplanations.Multiclass.winner_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:32:0: 'EBaMlProofs.LocalExplanations.Multiclass.marginModel_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:33:0: 'EBaMlProofs.LocalExplanations.Multiclass.canFlipClass_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:34:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:35:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:36:0: 'EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:37:0: 'EBaMlProofs.LocalExplanations.sd_sum_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
@@ -706,6 +830,7 @@ stands for a Lean namespace:
 - `Greedy.` stands for `EBaMlProofs.LocalExplanations.Greedy.`
 - `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`
 - `Covering.` stands for `EBaMlProofs.LocalExplanations.Covering.Problem.`
+- `MC.` stands for `EBaMlProofs.LocalExplanations.Multiclass.`
 - `LE.` stands for `EBaMlProofs.LocalExplanations.`
 
 #table(
@@ -739,4 +864,10 @@ stands for a Lean namespace:
   [Theorem 6 (c)], [`Model.min_change_inside`], [`Regressor.lean`],
   [Theorem 6 (d)], [`Model.min_change_inside_none`], [`Regressor.lean`],
   [Lemma 9 (several margins)], [`LE.problemOfModels_sufficient`], [`Regressor.lean`],
+  [Lemma 10 (the winner)], [`MC.logit_marginModel`, `MC.winner_iff`, `MC.marginModel_eps`], [`Multiclass.lean`],
+  [Theorem 7 (a)], [`MC.canFlipClass_iff`], [`Multiclass.lean`],
+  [Theorem 7 (b)], [`MC.min_change_class`], [`Multiclass.lean`],
+  [Theorem 7 (c)], [`MC.min_change_class_none`], [`Multiclass.lean`],
+  [Lemma 11 (several rivals)], [`MC.sufficient_class_iff`], [`Multiclass.lean`],
+  [Lemma 12 (deviation)], [`LE.sd_sum_bound`], [`Multiclass.lean`],
 )
