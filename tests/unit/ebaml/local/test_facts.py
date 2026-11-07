@@ -365,6 +365,102 @@ def test_multiclass_counterfactual_changes_the_predicted_class(row: int) -> None
     assert facts.counterfactual.new_output == pytest.approx(float(after.max()), abs=1e-6)
 
 
+def _changed_row(instance: dict[str, FeatureValue], counterfactual: local.Counterfactual) -> pd.DataFrame:
+    """Return the instance with each changed feature set to the lower end of its new bin.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row.
+
+    """
+    changed = {
+        **instance,
+        **{change.feature: float(change.to_value.strip("[)").split(",")[0]) for change in counterfactual.changes},
+    }
+    return pd.DataFrame([changed])
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
+def test_a_target_counterfactual_reaches_the_target_class(row: int, target: int) -> None:
+    model, frame = _multiclass_model()
+    instance = instance_of(frame, row)
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    assume(target != predicted)
+    options = local.LocalOptions(confidence_level=0.0, min_support=0.0, target_class=int(model.classes_[target]))
+    facts = local.compute_local_facts(model, instance, options)
+    if facts.counterfactual is None:
+        return
+    counterfactual = facts.counterfactual
+    assert counterfactual.new_decision == model.classes_[target]
+    assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
+    assert 1 <= len(counterfactual.changes) <= 3
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
+def test_a_target_counterfactual_with_the_minimal_search_has_no_feature_to_revert(row: int, target: int) -> None:
+    model, frame = _multiclass_model()
+    instance = instance_of(frame, row)
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    assume(target != predicted)
+    options = local.LocalOptions(confidence_level=0.0, min_support=0.0, target_class=int(model.classes_[target]))
+    counterfactual = local.compute_local_facts(model, instance, options).counterfactual
+    assume(counterfactual is not None)
+    assert counterfactual is not None
+    for change in counterfactual.changes:
+        fewer = local.Counterfactual(
+            [other for other in counterfactual.changes if other != change],
+            counterfactual.new_decision,
+            counterfactual.new_output,
+        )
+        assert model.predict(_changed_row(instance, fewer))[0] != model.classes_[target]
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
+def test_the_exact_search_of_a_target_counterfactual_is_not_larger_than_the_minimal_one(row: int, target: int) -> None:
+    model, frame = _multiclass_model()
+    instance = instance_of(frame, row)
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    assume(target != predicted)
+    base = {"confidence_level": 0.0, "min_support": 0.0, "target_class": int(model.classes_[target])}
+    minimal = local.compute_local_facts(model, instance, local.LocalOptions(**base)).counterfactual
+    exact = local.compute_local_facts(
+        model,
+        instance,
+        local.LocalOptions(**base, reason_search=ExactOrMinimal()),
+    ).counterfactual
+    assert (minimal is None) == (exact is None)
+    if minimal is not None and exact is not None:
+        assert len(exact.changes) <= len(minimal.changes)
+
+
+def test_a_target_class_is_none_when_no_choice_of_bins_reaches_it() -> None:
+    model, frame = _multiclass_model()
+    row = 0
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    target = (predicted + 1) % 3
+    options = local.LocalOptions(confidence_level=0.999999, min_support=0.0, target_class=int(model.classes_[target]))
+    facts = local.compute_local_facts(model, instance_of(frame, row), options)
+    assert facts.counterfactual is None
+
+
+def test_a_target_class_that_the_model_does_not_have_is_rejected() -> None:
+    model, frame = _multiclass_model()
+    with pytest.raises(OptionRangeError, match="is not a class of the model"):
+        local.compute_local_facts(model, instance_of(frame, 0), local.LocalOptions(target_class=99))
+
+
+def test_a_binary_classifier_rejects_a_target_class(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> None:
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
+    ebm = fit_ebm(frame, (frame["a"] > 0).astype(int), interactions=0, random_state=0)
+    with pytest.raises(OptionRangeError, match="needs a multiclass classifier"):
+        local.compute_local_facts(ebm, instance_of(frame, 0), local.LocalOptions(target_class=1))
+
+
 def test_multiclass_prediction_reports_the_predicted_class() -> None:
     model, frame = _multiclass_model()
     facts = local.compute_local_facts(model, instance_of(frame, 0), local.LocalOptions(confidence_level=0.0))

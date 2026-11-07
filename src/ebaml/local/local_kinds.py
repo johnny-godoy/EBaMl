@@ -18,7 +18,7 @@ import functools
 import math
 import statistics
 from collections.abc import Callable, Sequence
-from typing import override
+from typing import NoReturn, override
 
 import attrs
 import numpy as np
@@ -136,6 +136,34 @@ class LocalKind(abc.ABC):
 
         """
 
+    @abc.abstractmethod
+    def target_margins(self, target: ClassLabel, frame: PredictionFrame) -> tuple[Margin, ...]:
+        """Return the margins that must hold for a chosen class to be the predicted class.
+
+        Parameters
+        ----------
+        target: ClassLabel
+            The class that the counterfactual must reach.
+        frame: PredictionFrame
+            The prediction.
+
+        Returns
+        -------
+        tuple[Margin, ...]
+            One margin for each other class.
+
+        Raises
+        ------
+        OptionRangeError
+            If the kind has no use for a target class, the class is unknown, or it is the predicted class already.
+
+        """
+
+
+def _reject_target(target: ClassLabel) -> NoReturn:
+    msg = f"A target class needs a multiclass classifier. Got the target {target!r} for another kind of model."
+    raise OptionRangeError(msg)
+
 
 def _reject_decision(decision: Decision | None) -> None:
     """Raise an error if a classifier gets a decision.
@@ -160,6 +188,10 @@ class BinaryLocal(LocalKind):
     """A binary classifier. The decision is the predicted class, and the threshold is the log-odds zero."""
 
     classes: tuple[ClassLabel, ClassLabel]
+
+    @override
+    def target_margins(self, target: ClassLabel, frame: PredictionFrame) -> tuple[Margin, ...]:
+        _reject_target(target)
 
     @property
     @override
@@ -196,6 +228,10 @@ class BinaryLocal(LocalKind):
 @attrs.frozen
 class RegressorLocal(LocalKind):
     """A regressor. The default decision is whether the value is above the average prediction, the intercept."""
+
+    @override
+    def target_margins(self, target: ClassLabel, frame: PredictionFrame) -> tuple[Margin, ...]:
+        _reject_target(target)
 
     @property
     @override
@@ -245,6 +281,21 @@ class MulticlassLocal(LocalKind):
     @override
     def output_kind(self) -> OutputKind:
         return OutputKind.CLASS_PROBABILITY
+
+    @override
+    def target_margins(self, target: ClassLabel, frame: PredictionFrame) -> tuple[Margin, ...]:
+        if target not in self.classes:
+            msg = f"The target class {target!r} is not a class of the model. The classes are {list(self.classes)}."
+            raise OptionRangeError(msg)
+        column = self.classes.index(target)
+        if column == frame.column:
+            msg = f"The target class {target!r} is the predicted class already, so no change is needed."
+            raise OptionRangeError(msg)
+        return tuple(
+            Margin(1, 0.0, self.classes[rival], (column, rival))
+            for rival in range(len(self.classes))
+            if rival != column
+        )
 
     @override
     def frame(

@@ -188,6 +188,10 @@ of `j`. Each margin is a sum of one term for each feature, as the margin of a bi
 - The sufficient reason must keep every margin positive at the same time, so `LocalOptions.reason_search` chooses the
   search, as for the answer "inside" of a regressor. `Minimal()` is the default.
 - The completions are estimated by sampling, as for every kind.
+- `LocalOptions.target_class` asks for the changes after which a chosen class is the predicted class. All the margins
+  of that class must then hold at once. Each feature moves to the bin that raises these margins the most and lowers
+  none, and `reason_search` chooses the features. The set is the smallest only among these bins, so the result has no
+  proof of a smallest set.
 - EBMs store no covariance between the scores of two classes. The confidence interval of a margin therefore uses the sum
   of the two standard deviations, which is an upper bound for any correlation.
 
@@ -202,6 +206,13 @@ multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 facts = compute_local_facts(multiclass, instance)
 print(facts.prediction.decision, round(facts.prediction.output, 2))
 print(facts.sufficient_reason)
+```
+
+To ask for the changes that lead to another class, pass that class as `target_class`:
+
+```python
+other = next(label for label in multiclass.classes_ if label != facts.prediction.decision)
+print(compute_local_facts(multiclass, instance, LocalOptions(target_class=other)).counterfactual)
 ```
 
 A multiclass classifier accepts no `decision`. The [proof page](local-explanations-proof.md) lists the claims that the
