@@ -14,6 +14,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
+| `check_toolchain_pin.py` | Fails unless `baml.toml`, the `baml-bridge` requirement of `pyproject.toml` and `uv.lock` name one BAML toolchain version. |
 | `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
 | `baml_toolchain.py` | Prints the version of `baml-bridge` in `uv.lock`. The setup action of CI installs the BAML toolchain of that version, because a newer toolchain writes a `baml_sdk` that `baml-bridge` cannot read. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |

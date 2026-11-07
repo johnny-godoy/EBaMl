@@ -1064,7 +1064,7 @@ release = [
 [package.metadata]
 requires-dist = [
     { name = "attrs", specifier = ">=26.1.0" },
-    { name = "baml-bridge", specifier = ">=0.23.0" },
+    { name = "baml-bridge", specifier = "==0.23.0" },
     { name = "beartype", specifier = ">=0.23.1" },
     { name = "cyclopts", marker = "extra == 'mcp'", specifier = ">=5.2.0" },
     { name = "interpret", specifier = ">=0.7.8" },

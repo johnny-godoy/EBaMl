@@ -219,6 +219,15 @@ hooks = [
     priority = 40,
   },
   {
+    id = "check-toolchain-pin",
+    name = "BAML toolchain, baml-bridge and uv.lock name one version",
+    language = "system",
+    entry = "uv run python -m scripts.check_toolchain_pin",
+    files = "^(baml\\.toml|pyproject\\.toml|uv\\.lock)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "check-ruleset",
     name = "required checks of the ruleset report on every pull request",
     language = "system",
