@@ -13,6 +13,7 @@ To add a question, write a new subclass of ``Decision``. No other code changes.
 
 import abc
 import math
+from collections.abc import Sequence
 from typing import override
 
 import attrs
@@ -26,7 +27,8 @@ class Margin:
     """One condition of a claim, as a number that is positive while the claim holds.
 
     The margin is ``sign * (score - threshold)``. A margin of zero belongs to the claim only when ``sign`` is ``-1``, as
-    the logit zero belongs to the negative class.
+    the logit zero belongs to the negative class. A model with several outputs has a margin for each pair of outputs:
+    ``columns`` names the pair, and the margin is the score of the first output minus the score of the second.
 
     Attributes
     ----------
@@ -36,20 +38,24 @@ class Margin:
         The score at which the condition stops to hold.
     opposite: ClassLabel
         The claim after this margin becomes negative.
+    columns: tuple[int, int] | None
+        The two outputs of the model that the margin compares, or ``None`` for a model with one output. The margin then
+        has ``sign`` ``1`` and ``threshold`` ``0``.
 
     """
 
     sign: int
     threshold: float
     opposite: ClassLabel
+    columns: tuple[int, int] | None = None
 
-    def value(self, score: float) -> float:
-        """Return the margin of a score.
+    def value(self, scores: Sequence[float]) -> float:
+        """Return the margin of the scores of a prediction.
 
         Parameters
         ----------
-        score: float
-            The score of the prediction.
+        scores: Sequence[float]
+            The score of each output of the model.
 
         Returns
         -------
@@ -57,7 +63,47 @@ class Margin:
             The margin, positive while the condition holds.
 
         """
-        return self.sign * (score - self.threshold)
+        if self.columns is None:
+            return self.sign * (scores[0] - self.threshold)
+        winner, rival = self.columns
+        return scores[winner] - scores[rival]
+
+    def limit(self, scores: Sequence[float]) -> float:
+        """Return the score at which the margin stops to hold, when no other score changes.
+
+        Parameters
+        ----------
+        scores: Sequence[float]
+            The score of each output of the model.
+
+        Returns
+        -------
+        float
+            The threshold of a model with one output, or the score of the rival output of a margin of two outputs.
+
+        """
+        if self.columns is None:
+            return self.threshold
+        return scores[self.columns[1]]
+
+    def offset(self, intercepts: Sequence[float]) -> float:
+        """Return the part of the margin that no feature changes: the intercepts, minus the threshold.
+
+        Parameters
+        ----------
+        intercepts: Sequence[float]
+            The intercept of each output of the model.
+
+        Returns
+        -------
+        float
+            The intercept of the margin before the sign.
+
+        """
+        if self.columns is None:
+            return intercepts[0] - self.threshold
+        winner, rival = self.columns
+        return intercepts[winner] - intercepts[rival]
 
 
 @attrs.frozen
@@ -76,13 +122,13 @@ class Side:
     label: ClassLabel
     margins: tuple[Margin, ...]
 
-    def binding(self, score: float) -> Margin:
+    def binding(self, scores: Sequence[float]) -> Margin:
         """Return the margin that is closest to failing.
 
         Parameters
         ----------
-        score: float
-            The score of the prediction.
+        scores: Sequence[float]
+            The score of each output of the model.
 
         Returns
         -------
@@ -90,7 +136,7 @@ class Side:
             The margin with the smallest value.
 
         """
-        return min(self.margins, key=lambda margin: margin.value(score))
+        return min(self.margins, key=lambda margin: margin.value(scores))
 
 
 def _number(value: float) -> str:
@@ -137,7 +183,7 @@ class Threshold(Decision):
     Examples
     --------
     >>> Threshold(10.0).side(12.5)
-    Side(label='above 10', margins=(Margin(sign=1, threshold=10.0, opposite='at most 10'),))
+    Side(label='above 10', margins=(Margin(sign=1, threshold=10.0, opposite='at most 10', columns=None),))
     >>> Threshold(10.0).side(10.0).label
     'at most 10'
 

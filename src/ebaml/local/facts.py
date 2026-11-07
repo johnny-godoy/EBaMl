@@ -21,7 +21,6 @@ the direction that makes the claim harder to prove, so a counterfactual flips th
 keeps it, even if the scores sit at the edge of their confidence interval.
 """
 
-import functools
 import math
 import operator
 import statistics
@@ -38,8 +37,8 @@ from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, Unsupp
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
-from ebaml.local.decisions import Decision
-from ebaml.local.local_kinds import LocalKind, OutputKind, PredictionFrame, local_kind
+from ebaml.local.decisions import Decision, Margin
+from ebaml.local.local_kinds import LocalKind, Outcome, OutputKind, PredictionFrame, local_kind
 from ebaml.local.reason_search import Minimal, ReasonSearch, by_smallest_gain
 
 
@@ -53,16 +52,73 @@ class _Feature:
     bin_index: int
     value: FeatureValue
     plausible: np.ndarray  # bins with enough training support to be offered as alternatives
+    columns: tuple[int, int] | None = None  # the two outputs of a multiclass margin that this view compares
 
     @property
     def scores(self) -> npt.NDArray[np.float64]:
-        """Score of every bin. A binary classifier and a regressor have one score per bin."""
-        return np.asarray(self.graph.scores, dtype=float)
+        """Score of every bin. A view of a multiclass margin has the difference of the scores of its two classes."""
+        scores = np.asarray(self.graph.scores, dtype=float)
+        if self.columns is None:
+            return scores
+        winner, rival = self.columns
+        return scores[:, winner] - scores[:, rival]
 
     @property
     def stds(self) -> npt.NDArray[np.float64]:
-        """Standard deviation of the score of every bin."""
-        return np.asarray(self.graph.stds, dtype=float)
+        """Standard deviation of the score of every bin. A view of a margin has the sum of the two deviations."""
+        stds = np.asarray(self.graph.stds, dtype=float)
+        if self.columns is None:
+            return stds
+        winner, rival = self.columns
+        return stds[:, winner] + stds[:, rival]
+
+    def outputs(self, bin_index: int) -> npt.NDArray[np.float64]:
+        """Return the score of one bin for every output of the model.
+
+        Parameters
+        ----------
+        bin_index: int
+            The bin.
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            One score for a binary classifier and a regressor, one for each class otherwise.
+
+        """
+        return np.atleast_1d(np.asarray(self.graph.scores, dtype=float)[bin_index])
+
+    def output_stds(self, bin_index: int) -> npt.NDArray[np.float64]:
+        """Return the standard deviation of the score of one bin for every output of the model.
+
+        Parameters
+        ----------
+        bin_index: int
+            The bin.
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            One deviation for each output.
+
+        """
+        return np.atleast_1d(np.asarray(self.graph.stds, dtype=float)[bin_index])
+
+    def against(self, columns: tuple[int, int] | None) -> "_Feature":
+        """Return the feature as seen by one margin.
+
+        Parameters
+        ----------
+        columns: tuple[int, int] | None
+            The two outputs that the margin compares, or ``None`` for a model with one output.
+
+        Returns
+        -------
+        _Feature
+            The same feature, whose scores are those of the margin.
+
+        """
+        return attrs.evolve(self, columns=columns)
 
     @property
     def current(self) -> float:
@@ -142,8 +198,9 @@ class Prediction:
         distance of the predicted value from the threshold, on the side of the decision. The margin means the same for
         every kind, and ``score`` keeps the scale of the link.
     threshold: float
-        The score at which the decision stops to hold: ``0`` for the log-odds of a classifier. The score is above it
-        when the decision says that the score is high.
+        The score at which the decision stops to hold: ``0`` for the log-odds of a binary classifier, and the highest
+        score of the other classes for a multiclass classifier. The score is above it when the decision says that the
+        score is high.
     output_kind: OutputKind
         What ``output`` is.
 
@@ -399,7 +456,7 @@ def _local_kind(ebm: ExplainableBoostingModel) -> LocalKind:
         If the model is not a binary classifier or a regressor, or its kind is unknown.
 
     """
-    message = "Local explanations need a binary classifier or a regressor."
+    message = "Local explanations need a classifier or a regressor."
     try:
         return local_kind(model_kind(ebm))
     except UnsupportedModelError as error:
@@ -496,14 +553,13 @@ def _robust_scores(
     return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
 
 
-def _counterfactual(  # ruff: ignore[too-many-arguments] -- the margin, the sort direction, the confidence and the decision after the flip are separate inputs
+def _counterfactual(
     features: Sequence[_Feature],
     intercept: float,
     sign: int,
     z: float,
     *,
-    new_decision: ClassLabel,
-    new_output: Callable[[float], float],
+    after: Callable[[float, Sequence[tuple[_Feature, int]]], Outcome],
 ) -> Counterfactual | None:
     """Minimum change required: the features with the largest possible drop in favour of the outcome, until it flips.
 
@@ -517,10 +573,9 @@ def _counterfactual(  # ruff: ignore[too-many-arguments] -- the margin, the sort
         ``1`` if the decision says that the score is high, ``-1`` otherwise.
     z : float
         Standard deviations to move the scores by.
-    new_decision : ClassLabel
-        The decision after the changes.
-    new_output : Callable[[float], float]
-        The output of the model for the new decision, from the margin after the changes.
+    after : Callable[[float, Sequence[tuple[_Feature, int]]], Outcome]
+        The decision and the output of the model after the changes, from the margin after the changes and from each
+        changed feature with the bin that it takes.
 
     Returns
     -------
@@ -541,13 +596,14 @@ def _counterfactual(  # ruff: ignore[too-many-arguments] -- the margin, the sort
         return None
     changes = ranked[: flips[0] + 1]
     new_margin = margin + sign * sum(float(f.scores[best]) - f.current for _, best, f in changes)
+    outcome = after(new_margin, [(f, best) for _, best, f in changes])
     return Counterfactual(
         changes=[
             Change(f.name, f.label, _bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current)
             for _, best, f in changes
         ],
-        new_decision=new_decision,
-        new_output=new_output(new_margin),
+        new_decision=outcome.decision,
+        new_output=outcome.output,
     )
 
 
@@ -621,10 +677,14 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
 
 @attrs.frozen
 class _Bound:
-    """One margin of the decision: ``sign * (intercept + the scores)`` is positive while the margin holds."""
+    """One margin of the decision: ``sign * (intercept + the scores)`` is positive while the margin holds.
+
+    ``columns`` names the two outputs that a margin of a multiclass classifier compares, and ``None`` otherwise.
+    """
 
     intercept: float
     sign: int
+    columns: tuple[int, int] | None = None
 
 
 def _completions(
@@ -653,16 +713,17 @@ def _completions(
 
     """
     rng = np.random.default_rng(options.seed)
-    sampled = {}
-    for f in features:
-        bins = rng.choice(len(f.weights), size=options.n_samples, p=f.weights / f.weights.sum())
-        sampled[f.name] = f.scores[bins]
-    current = {f.name: f.current for f in features}
+    sampled_bins = {
+        f.name: rng.choice(len(f.weights), size=options.n_samples, p=f.weights / f.weights.sum()) for f in features
+    }
     steps = []
     for k in range(min(options.max_steps, len(order)) + 1):
         known = {f.name for f in order[:k]}
-        total = sum(current[n] if n in known else sampled[n] for n in current)
-        holds = np.all([(bound.intercept + total > 0) == (bound.sign == 1) for bound in bounds], axis=0)
+        holds = np.ones(options.n_samples, dtype=bool)
+        for bound in bounds:
+            views = [f.against(bound.columns) for f in features]
+            total = sum(v.current if v.name in known else v.scores[sampled_bins[v.name]] for v in views)
+            holds &= (bound.intercept + total > 0) == (bound.sign == 1)
         steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean(holds))))
     return steps
 
@@ -696,7 +757,7 @@ def _gain_table(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float
     worst: list[float] = []
     gains: list[list[float]] = []
     for bound in bounds:
-        guaranteed = [_robust_scores(f, bound.sign, z, towards_outcome=True) for f in features]
+        guaranteed = [_robust_scores(f.against(bound.columns), bound.sign, z, towards_outcome=True) for f in features]
         worst.append(bound.sign * bound.intercept + sum(float(scores.min()) for scores in guaranteed))
         gains.append([
             float(scores[f.bin_index] - scores.min()) for f, scores in zip(features, guaranteed, strict=True)
@@ -764,7 +825,8 @@ def _reason(
 
     """
     if len(bounds) == 1:
-        return _sufficient_reason(features, bounds[0].intercept, bounds[0].sign, z)
+        views = [f.against(bounds[0].columns) for f in features]
+        return _sufficient_reason(views, bounds[0].intercept, bounds[0].sign, z)
     return _several_margins_reason(features, _gain_table(features, bounds, z), search)
 
 
@@ -787,14 +849,17 @@ def _reveal_order(features: Sequence[_Feature], bounds: Sequence[_Bound], z: flo
 
     """
     if len(bounds) == 1:
-        return [step.feature for step in _fixing_order(features, bounds[0].sign, z)]
+        views = [f.against(bounds[0].columns) for f in features]
+        by_name = {f.name: f for f in features}
+        return [by_name[step.feature.name] for step in _fixing_order(views, bounds[0].sign, z)]
     return [features[index] for index in by_smallest_gain(_gain_table(features, bounds, z).gains)]
 
 
 def _smallest_counterfactual(
     features: Sequence[_Feature],
     frame: PredictionFrame,
-    intercept: float,
+    scores: Sequence[float],
+    intercepts: Sequence[float],
     z: float,
 ) -> Counterfactual | None:
     """Find the fewest changes after which one margin of the decision fails.
@@ -808,8 +873,10 @@ def _smallest_counterfactual(
         The features.
     frame : PredictionFrame
         The decision, with its margins.
-    intercept : float
-        The intercept of the model.
+    scores : Sequence[float]
+        The score of each output of the model for the instance.
+    intercepts : Sequence[float]
+        The intercept of each output of the model.
     z : float
         Standard deviations to move the scores by.
 
@@ -821,13 +888,23 @@ def _smallest_counterfactual(
     """
     found = []
     for margin in frame.side.margins:
+
+        def after(
+            _new_margin: float,
+            replaced: Sequence[tuple[_Feature, int]],
+            margin: Margin = margin,
+        ) -> Outcome:
+            new_scores = np.array(scores, dtype=float)
+            for feature, bin_index in replaced:
+                new_scores += feature.outputs(bin_index) - feature.outputs(feature.bin_index)
+            return frame.after(margin, new_scores.tolist())
+
         counterfactual = _counterfactual(
-            features,
-            intercept - margin.threshold,
+            [feature.against(margin.columns) for feature in features],
+            margin.offset(intercepts),
             margin.sign,
             z,
-            new_decision=margin.opposite,
-            new_output=functools.partial(frame.output_after, margin),
+            after=after,
         )
         if counterfactual is not None:
             found.append(counterfactual)
@@ -872,40 +949,48 @@ def compute_local_facts(
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
     kind = _local_kind(ebm)
     features = _features(ebm, instance, options.min_support)
-    intercept = float(np.ravel(ebm.intercept_)[0])
-    score = intercept + sum(f.current for f in features)
-    score_std = math.sqrt(sum(float(f.stds[f.bin_index]) ** 2 for f in features))
+    intercepts = np.ravel(ebm.intercept_).tolist()
+    scores = (np.array(intercepts) + sum(f.outputs(f.bin_index) for f in features)).tolist()
+    score_stds = np.sqrt(sum(f.output_stds(f.bin_index) ** 2 for f in features)).tolist()
     frame = kind.frame(
-        score,
-        score_std,
-        intercept=intercept,
+        scores,
+        score_stds,
+        intercepts=intercepts,
         confidence_level=options.confidence_level,
         decision=options.decision,
     )
     margins = frame.side.margins
-    binding = frame.side.binding(score)
+    binding = frame.side.binding(scores)
     # every algorithm sees the margin sign * (intercept - threshold + the scores), which is positive while it holds
-    bounds = [_Bound(intercept - margin.threshold, margin.sign) for margin in margins]
+    bounds = [_Bound(margin.offset(intercepts), margin.sign, margin.columns) for margin in margins]
     prediction = Prediction(
         decision=frame.side.label,
         output=frame.output,
         lower=frame.lower,
         upper=frame.upper,
-        score=score,
-        score_std=score_std,
-        margin=binding.value(score),
-        threshold=binding.threshold,
+        score=scores[frame.column],
+        score_std=score_stds[frame.column],
+        margin=binding.value(scores),
+        threshold=binding.limit(scores),
         output_kind=kind.output_kind,
     )
     order = _reveal_order(features, bounds, z)
     return LocalFacts(
         prediction=prediction,
         contributions=sorted(
-            (Contribution(f.name, f.label, f.current, float(f.stds[f.bin_index])) for f in features),
+            (
+                Contribution(
+                    f.name,
+                    f.label,
+                    float(f.outputs(f.bin_index)[frame.column]),
+                    float(f.output_stds(f.bin_index)[frame.column]),
+                )
+                for f in features
+            ),
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=_smallest_counterfactual(features, frame, intercept, z),
+        counterfactual=_smallest_counterfactual(features, frame, scores, intercepts, z),
         sufficient_reason=_reason(features, bounds, z, options.reason_search),
         completions=_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,

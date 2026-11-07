@@ -41,14 +41,14 @@ def test_a_value_inside_the_interval_has_a_margin_for_each_end(value: float) -> 
 
 
 def test_the_margin_is_the_signed_distance_from_its_threshold() -> None:
-    assert Margin(1, 10.0, "x").value(12.5) == pytest.approx(2.5)
-    assert Margin(-1, 10.0, "x").value(12.5) == pytest.approx(-2.5)
+    assert Margin(1, 10.0, "x").value([12.5]) == pytest.approx(2.5)
+    assert Margin(-1, 10.0, "x").value([12.5]) == pytest.approx(-2.5)
 
 
 def test_the_binding_margin_is_the_one_closest_to_failing() -> None:
     side = Interval(10, 20).side(18.0)
-    assert side.binding(18.0) == side.margins[1]
-    assert side.binding(11.0) == side.margins[0]
+    assert side.binding([18.0]) == side.margins[1]
+    assert side.binding([11.0]) == side.margins[0]
 
 
 @pytest.mark.parametrize(("low", "high"), [(1.0, 1.0), (2.0, 1.0)])
@@ -61,3 +61,13 @@ def test_an_interval_needs_low_below_high(low: float, high: float) -> None:
 def test_the_ends_of_an_interval_are_finite(low: float, high: float) -> None:
     with pytest.raises(OptionRangeError, match="needs a finite number"):
         Interval(low, high)
+
+
+def test_a_margin_of_two_outputs_is_the_difference_of_their_scores() -> None:
+    margin = Margin(1, 0.0, "c", (2, 0))
+    assert margin.value([0.5, 9.0, 2.0]) == pytest.approx(1.5)
+    assert margin.offset([0.25, 9.0, 1.0]) == pytest.approx(0.75)
+
+
+def test_the_margin_of_one_output_subtracts_the_threshold_from_the_intercept() -> None:
+    assert Margin(-1, 10.0, "x").offset([12.5]) == pytest.approx(2.5)

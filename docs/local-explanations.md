@@ -176,6 +176,38 @@ print(facts.prediction.decision, round(facts.prediction.output, 1))
 regressor use the same sorting algorithms as the explanations of a classifier. The
 [proof page](local-explanations-proof.md) says which claims have a proof.
 
+## Multiclass classifiers
+
+A multiclass classifier has one score for each class. The decision is the predicted class `c`. The class holds while its
+score is above the score of every other class `j`, so each pair `(c, j)` is one margin: the score of `c` minus the score
+of `j`. Each margin is a sum of one term for each feature, as the margin of a binary classifier is.
+
+- The counterfactual is the fewest changes after which another class has a higher score than `c`. It is the smallest of
+  the answers for the margins, so sorting finds it for each margin. `new_decision` is the class that is predicted
+  after the changes.
+- The sufficient reason must keep every margin positive at the same time, so `LocalOptions.reason_search` chooses the
+  search, as for the answer "inside" of a regressor. `Minimal()` is the default.
+- The completions are estimated by sampling, as for every kind.
+- EBMs store no covariance between the scores of two classes. The confidence interval of a margin therefore uses the sum
+  of the two standard deviations, which is an upper bound for any correlation.
+
+<!-- invisible-code-block: python
+import numpy as np
+
+y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "old")
+multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
+-->
+
+```python
+facts = compute_local_facts(multiclass, instance)
+print(facts.prediction.decision, round(facts.prediction.output, 2))
+print(facts.sufficient_reason)
+```
+
+A multiclass classifier accepts no `decision`. The facts of a multiclass classifier have no proof yet: the
+[proof page](local-explanations-proof.md) lists the claims that the proof of the binary classifier and the regressor
+covers.
+
 ## Audience
 
 An audience is an instance of a subclass of `Audience`. Two audiences ship with the package. Pass one as an object, or
@@ -340,10 +372,12 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
 
 ## Limits
 
-- **Binary classifiers and regressors only.** A multiclass classifier raises `UnsupportedModelError`, which is a
-  `ValueError`. The [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind)
-  say what the explanations of multiclass classifiers will mean. The [model kinds notebook](model-kinds-notebook.md)
-  shows the fields of the result types and the error for the other kinds.
+- **Classifiers and regressors only.** Another kind of model raises `UnsupportedModelError`, which is a `ValueError`. The
+  [definitions for every model kind](local-explanations-proof.md#definitions-for-every-model-kind) say what the
+  explanations of each kind mean. The [model kinds notebook](model-kinds-notebook.md) shows the fields of the result
+  types.
+- **The multiclass facts have no proof yet.** The exact claims of the binary classifier and the regressor hold for the
+  margins of a multiclass classifier by the same argument, but the Lean proof covers only the binary model.
 - **No interactions.** Fit with `interactions=0`. With pairwise terms the effects no longer add up per feature, so the
   greedy solutions would not be exact; the function raises `ValueError` instead of answering approximately.
 - **Every input is needed.** A missing value, a feature name that is absent or a category not seen in training raises
