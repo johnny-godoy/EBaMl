@@ -66,6 +66,14 @@ hooks = [
     priority = 41,
   },
   {
+    id = "marimo-check",
+    name = "marimo check",
+    language = "system",
+    entry = "uv run marimo check --strict",
+    files = "^notebooks/.*\\.py$",
+    priority = 41,
+  },
+  {
     id = "vulture",
     name = "vulture",
     language = "system",
