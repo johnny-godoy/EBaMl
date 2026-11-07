@@ -85,6 +85,8 @@ def test_install_command_passes_a_requirement_as_it_is(tmp_path: Path) -> None:
         "pip",
         "install",
         "--refresh",
+        "--resolution",
+        "highest",
         "--python",
         str(tmp_path / "venv" / "bin" / "python"),
         "ebaml==1.2.3",
@@ -150,3 +152,8 @@ def test_mcp_extra_stays_below_mcp_2() -> None:
     pyproject = tomllib.loads((Path(__file__).resolve().parents[3] / "pyproject.toml").read_text(encoding="utf-8"))
     [requirement] = [item for item in pyproject["project"]["optional-dependencies"]["mcp"] if item.startswith("mcp>")]
     assert "<2" in requirement
+
+
+def test_the_lowest_resolution_reaches_the_install_step(fake_run: FakeRun) -> None:
+    smoke_install.main(["ebaml==1.2.3", "1.2.3", "--resolution", "lowest-direct"])
+    assert fake_run.calls[1].command[4:6] == ["--resolution", "lowest-direct"]
