@@ -11,6 +11,18 @@
   show raw: set text(size: 9pt)
   show link: set text(fill: rgb("#1a4f8b"))
   show table: set par(justify: false)
+  show table.cell: set block(breakable: false)
+  // Inline code in a table cell has no space to break at, so a long name can run into the next column.
+  // Set it as monospace text with a zero-width space after each ".", "_", "(", "," and "/", which allows a line break.
+  // The result is text and not raw, so the rule does not apply to its own output.
+  show table: it => {
+    show raw.where(block: false): code => text(
+      font: ("DejaVu Sans Mono", "Liberation Mono"),
+      size: 9pt,
+      code.text.replace(regex("[._(,/]"), piece => piece.text + sym.zws),
+    )
+    it
+  }
   body
 }
 

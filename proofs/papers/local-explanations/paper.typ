@@ -28,8 +28,8 @@ appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
 
-The proof covers a binary EBM without interaction terms. The score of such a model is a sum of one term per feature,
-and this is the only fact that the proof needs.
+The proof covers a binary EBM and a regressor, both without interaction terms. The score of such a model is a sum of
+one term per feature, and this is the only fact that the proof needs.
 
 *Claim 1 (minimum change required).* The function `_counterfactual` returns a set of features whose change flips
 the prediction. No set with fewer features has a change that flips the prediction. If the function returns `None`, no
@@ -700,9 +700,13 @@ must not appear. To search for it, run `lake build 2>&1 | grep -c sorry`. The ex
 
 The last command writes `papers/local-explanations/paper.pdf` and prints nothing.
 
-*Statements and Lean names.* The directory is `proofs/EBaMlProofs/LocalExplanations/`. In the table, `Greedy.` stands for
-`EBaMlProofs.LocalExplanations.Greedy.` and `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`, `Covering.` stands for
-`EBaMlProofs.LocalExplanations.Covering.Problem.`, and `LE.` stands for `EBaMlProofs.LocalExplanations.`.
+*Statements and Lean names.* The directory is `proofs/EBaMlProofs/LocalExplanations/`. In the table, each prefix
+stands for a Lean namespace:
+
+- `Greedy.` stands for `EBaMlProofs.LocalExplanations.Greedy.`
+- `Model.` stands for `EBaMlProofs.LocalExplanations.Model.`
+- `Covering.` stands for `EBaMlProofs.LocalExplanations.Covering.Problem.`
+- `LE.` stands for `EBaMlProofs.LocalExplanations.`
 
 #table(
   columns: (auto, 1fr, auto),
