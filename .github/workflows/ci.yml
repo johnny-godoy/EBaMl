@@ -117,6 +117,12 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
           uv run python -m scripts.check_new_clones --base "origin/${BASE_REF}" 2>&1 | tee -a "$CI_LOGS/prek.log"
+      - name: Check that a break of the public API has a changelog entry
+        # griffe loads the base revision from git, so the base branch must exist locally (the step above fetched it).
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: uv run python -m scripts.check_api_breaks --base "origin/${BASE_REF}" 2>&1 | tee -a "$CI_LOGS/prek.log"
       - uses: ./.github/actions/failure-report
         if: failure()
         with:

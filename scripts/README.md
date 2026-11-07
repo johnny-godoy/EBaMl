@@ -11,6 +11,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_abstractions.py` | Checks `architecture/abstractions.yml` against the source, and searches the registry and the public symbols (`--check`, `--list`, `--search WORD...`). |
 | `check_contract_overlap.py` | Fails when two registered `Protocol` or `ABC` classes of one context have identical signatures. Other overlaps are warnings. |
 | `check_new_clones.py` | Fails when the change adds a copy-paste clone to `src/ebaml` that a base revision (`origin/main`) lacks. Needs Node.js. |
+| `check_api_breaks.py` | Fails when a change breaks the public API (`ebaml.__all__`) against a base revision and no changelog fragment has a `**BREAKING:**` entry. |
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
 | `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
