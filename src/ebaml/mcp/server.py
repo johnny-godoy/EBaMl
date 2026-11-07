@@ -14,8 +14,8 @@ import attrs
 import cyclopts
 import orjson
 import structlog
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 from ebaml.core.custom_types import FeatureValue, JSONValue
 from ebaml.core.exceptions import EBaMlError
@@ -61,10 +61,7 @@ def _tool_errors() -> Generator[None]:
 def create_server(
     store: ModelStore,
     llm: ModelOptions | None = None,
-    *,
-    host: str = "127.0.0.1",
-    port: int = 8000,
-) -> FastMCP:
+) -> MCPServer:
     """Create the server and register the tools.
 
     Parameters
@@ -73,18 +70,14 @@ def create_server(
         The session.
     llm: ModelOptions, optional
         The LLM. Without it, the server has no LLM tools.
-    host: str, default="127.0.0.1"
-        The address that the ``streamable-http`` transport listens on. The ``stdio`` transport ignores it.
-    port: int, default=8000
-        The port that the ``streamable-http`` transport listens on. The ``stdio`` transport ignores it.
 
     Returns
     -------
-    FastMCP
+    MCPServer
         The server.
 
     """
-    server = FastMCP("ebaml", instructions=_INSTRUCTIONS, host=host, port=port)
+    server = MCPServer("ebaml", instructions=_INSTRUCTIONS)
 
     @server.tool()
     def get_model_summary() -> str:
@@ -191,7 +184,7 @@ def create_server(
     return server
 
 
-def _register_llm_tools(server: FastMCP, store: ModelStore, llm: ModelOptions) -> None:
+def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:
     @server.tool()
     def describe_feature(feature: str) -> str:
         """Ask a language model to describe the graph of one feature in words. This costs money and takes seconds.
@@ -259,7 +252,12 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     # structlog prints to stdout by default, and a stdio server speaks JSON-RPC there, so a log line would corrupt it
     structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
     store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None)
-    create_server(store, ModelOptions.parse(llm) if llm else None, host=host, port=port).run(transport=transport)
+    server = create_server(store, ModelOptions.parse(llm) if llm else None)
+    # The stdio transport takes no address, and the streamable-http transport takes it when it runs.
+    if transport == "streamable-http":
+        server.run(transport="streamable-http", host=host, port=port)
+    else:
+        server.run(transport="stdio")
 
 
 def main(argv: Sequence[str] | None = None) -> None:

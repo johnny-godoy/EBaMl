@@ -14,13 +14,9 @@ import pytest
 import skops.io
 import structlog
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamable_http_client
-from mcp.server.fastmcp import FastMCP
-from mcp.shared.memory import create_connected_server_and_client_session
-from mcp.types import TextContent, TextResourceContents
-from pydantic import AnyUrl
+from mcp import Client, StdioServerParameters
+from mcp.server.mcpserver import MCPServer
+from mcp_types import TextContent, TextResourceContents
 
 from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.llm.options import ModelOptions
@@ -35,21 +31,21 @@ pytestmark = pytest.mark.anyio
 SNAPSHOT = Path(__file__).parent / "tool_schemas.json"
 
 
-async def _call(server: FastMCP, name: str, arguments: dict[str, object] | None = None) -> tuple[bool, str]:
-    async with create_connected_server_and_client_session(server._mcp_server) as session:
+async def _call(server: MCPServer, name: str, arguments: dict[str, object] | None = None) -> tuple[bool, str]:
+    async with Client(server) as session:
         result = await session.call_tool(name, arguments or {})
     (content,) = result.content
     assert isinstance(content, TextContent)
-    return result.isError, content.text
+    return result.is_error, content.text
 
 
 @pytest.fixture
-def binary_server(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> FastMCP:
+def binary_server(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> MCPServer:
     ebm, data = continuous_ebm
     return create_server(ModelStore(ebm=ebm, data=as_frame(data)))
 
 
-async def test_summary_of_a_binary_classifier(binary_server: FastMCP) -> None:
+async def test_summary_of_a_binary_classifier(binary_server: MCPServer) -> None:
     is_error, text = await _call(binary_server, "get_model_summary")
     summary = orjson.loads(text)
     assert not is_error
@@ -59,7 +55,7 @@ async def test_summary_of_a_binary_classifier(binary_server: FastMCP) -> None:
     assert summary["skipped_terms"] == []
 
 
-async def test_features_are_sorted_by_importance(binary_server: FastMCP) -> None:
+async def test_features_are_sorted_by_importance(binary_server: MCPServer) -> None:
     _, text = await _call(binary_server, "list_features")
     features = orjson.loads(text)
     importances = [feature["importance"] for feature in features]
@@ -68,22 +64,22 @@ async def test_features_are_sorted_by_importance(binary_server: FastMCP) -> None
     assert features[0]["name"] == "a"
 
 
-async def test_get_graph_returns_the_graph_text(binary_server: FastMCP) -> None:
+async def test_get_graph_returns_the_graph_text(binary_server: MCPServer) -> None:
     is_error, text = await _call(binary_server, "get_graph", {"feature": "a"})
     assert not is_error
     assert "a" in text
     assert "min_max" not in text
 
 
-async def test_get_graph_with_an_unknown_feature_is_a_tool_error(binary_server: FastMCP) -> None:
+async def test_get_graph_with_an_unknown_feature_is_a_tool_error(binary_server: MCPServer) -> None:
     is_error, text = await _call(binary_server, "get_graph", {"feature": "zzz"})
     assert is_error
     assert "no feature 'zzz'" in text
 
 
-async def test_graph_resource_matches_the_default_tool(binary_server: FastMCP) -> None:
-    async with create_connected_server_and_client_session(binary_server._mcp_server) as session:
-        resource = await session.read_resource(AnyUrl("ebm://graphs/a"))
+async def test_graph_resource_matches_the_default_tool(binary_server: MCPServer) -> None:
+    async with Client(binary_server) as session:
+        resource = await session.read_resource("ebm://graphs/a")
     (content,) = resource.contents
     assert isinstance(content, TextResourceContents)
     _, text = await _call(binary_server, "get_graph", {"feature": "a"})
@@ -105,7 +101,7 @@ async def test_explain_prediction_by_instance_and_by_row(
     assert set(result["texts"]) == {"prediction", "counterfactual", "sufficient_reason", "completions"}
 
 
-async def test_explain_prediction_errors_are_tool_errors(binary_server: FastMCP) -> None:
+async def test_explain_prediction_errors_are_tool_errors(binary_server: MCPServer) -> None:
     both = await _call(binary_server, "explain_prediction", {"row": 0, "instance": {"a": 1}})
     none = await _call(binary_server, "explain_prediction")
     missing_row = await _call(binary_server, "explain_prediction", {"row": 100_000})
@@ -196,9 +192,7 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     options = ModelOptions(provider="ollama", model="llama3")
     names = {}
     for label, llm in (("without", None), ("with", options)):
-        async with create_connected_server_and_client_session(
-            create_server(ModelStore(ebm=ebm), llm)._mcp_server,
-        ) as session:
+        async with Client(create_server(ModelStore(ebm=ebm), llm)) as session:
             names[label] = {tool.name for tool in (await session.list_tools()).tools}
     assert names["with"] - names["without"] == {"describe_feature", "describe_model"}
     server = create_server(ModelStore(ebm=ebm), options)
@@ -229,14 +223,14 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
     monkeypatch.setattr(llm_tools_module, "describe_graph", fake_describe_graph)
     monkeypatch.setattr(llm_tools_module, "describe_ebm", fake_describe_ebm)
     server = create_server(ModelStore(ebm=ebm), options)
-    async with create_connected_server_and_client_session(server._mcp_server) as session:
+    async with Client(server) as session:
         feature = await session.call_tool("describe_feature", {"feature": "b"})
         missing = await session.call_tool("describe_feature", {"feature": "zzz"})
         first = await session.call_tool("describe_model", {})
         second = await session.call_tool("describe_model", {})
     texts = [result.content[0].text for result in (feature, first, second)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
     assert texts == ["words about feature 1", "words about the model, call 1", "words about the model, call 1"]
-    assert missing.isError
+    assert missing.is_error
     assert graph_calls == [(1, options)]
     assert model_calls == [options]
 
@@ -247,12 +241,12 @@ async def test_tool_schemas_match_the_snapshot(
     """The names and argument schemas of the tools are public API from 1.0.0. Regenerate the snapshot on purpose."""
     ebm, _ = continuous_ebm
     server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
-    async with create_connected_server_and_client_session(server._mcp_server) as session:
+    async with Client(server) as session:
         tools = (await session.list_tools()).tools
-        templates = (await session.list_resource_templates()).resourceTemplates
+        templates = (await session.list_resource_templates()).resource_templates
     current = {
-        "tools": {tool.name: tool.inputSchema for tool in sorted(tools, key=lambda tool: tool.name)},
-        "resource_templates": [template.uriTemplate for template in templates],
+        "tools": {tool.name: tool.input_schema for tool in sorted(tools, key=lambda tool: tool.name)},
+        "resource_templates": [template.uri_template for template in templates],
     }
     expected = orjson.loads(SNAPSHOT.read_bytes())
     assert current == expected
@@ -266,12 +260,12 @@ def test_main_loads_the_model_and_runs_the_server(
     ebm, data = continuous_ebm
     joblib.dump(ebm, tmp_path / "model.joblib")
     data.to_csv(tmp_path / "data.csv", index=False)
-    started: list[tuple[FastMCP, str]] = []
+    started: list[tuple[MCPServer, str]] = []
 
-    def fake_run(self: FastMCP, transport: str) -> None:
+    def fake_run(self: MCPServer, transport: str, **_address: str | int) -> None:
         started.append((self, transport))
 
-    monkeypatch.setattr(FastMCP, "run", fake_run)
+    monkeypatch.setattr(MCPServer, "run", fake_run)
     main(["--model", str(tmp_path / "model.joblib"), "--data", str(tmp_path / "data.csv"), "--llm", "ollama/llama3"])
     main(["--model", str(tmp_path / "model.joblib"), "--transport", "streamable-http"])
     assert [transport for _, transport in started] == ["stdio", "streamable-http"]
@@ -289,10 +283,10 @@ def test_log_events_go_to_stderr_and_never_to_the_protocol_channel(
     ebm, _ = continuous_ebm
     skops.io.dump(ebm, tmp_path / "model.skops")
 
-    def fake_run(_self: FastMCP, transport: str) -> None:
+    def fake_run(_self: MCPServer, transport: str, **_address: str | int) -> None:
         structlog.get_logger("probe").info("probe_event", transport=transport)
 
-    monkeypatch.setattr(FastMCP, "run", fake_run)
+    monkeypatch.setattr(MCPServer, "run", fake_run)
     try:
         main(["--model", str(tmp_path / "model.skops"), "--transport", transport])
         captured = capsys.readouterr()
@@ -309,15 +303,21 @@ def test_main_passes_the_host_and_the_port_to_the_server(
 ) -> None:
     ebm, _ = continuous_ebm
     skops.io.dump(ebm, tmp_path / "model.skops")
-    listening: list[tuple[str, int]] = []
+    listening: list[tuple[str, str | None, int | None]] = []
 
-    def fake_run(self: FastMCP, transport: str) -> None:  # ruff: ignore[unused-function-argument] -- the signature of FastMCP.run
-        listening.append((self.settings.host, self.settings.port))
+    def fake_run(_self: MCPServer, transport: str, host: str | None = None, port: int | None = None) -> None:
+        listening.append((transport, host, port))
 
-    monkeypatch.setattr(FastMCP, "run", fake_run)
-    main(["--model", str(tmp_path / "model.skops"), "--transport", "streamable-http"])
-    main(["--model", str(tmp_path / "model.skops"), "--host", "0.0.0.0", "--port", "9123"])  # ruff: ignore[hardcoded-bind-all-interfaces] -- the test checks the option, and the server does not start
-    assert listening == [("127.0.0.1", 8000), ("0.0.0.0", 9123)]  # ruff: ignore[hardcoded-bind-all-interfaces] -- the value that the test passed
+    monkeypatch.setattr(MCPServer, "run", fake_run)
+    model = str(tmp_path / "model.skops")
+    main(["--model", model, "--transport", "streamable-http"])
+    main(["--model", model, "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "9123"])  # ruff: ignore[hardcoded-bind-all-interfaces] -- the test checks the option, and the server does not start
+    main(["--model", model, "--host", "0.0.0.0", "--port", "9123"])  # ruff: ignore[hardcoded-bind-all-interfaces] -- the test checks that stdio ignores the address
+    assert listening == [
+        ("streamable-http", "127.0.0.1", 8000),
+        ("streamable-http", "0.0.0.0", 9123),  # ruff: ignore[hardcoded-bind-all-interfaces] -- the value that the test passed
+        ("stdio", None, None),
+    ]
 
 
 def test_main_rejects_an_unknown_transport(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -331,9 +331,9 @@ async def test_no_tool_takes_a_path(continuous_ebm: tuple[ExplainableBoostingCla
     """Loading a pickle runs code, so only the user names a file, at start. No tool argument may name one."""
     ebm, _ = continuous_ebm
     server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
-    async with create_connected_server_and_client_session(server._mcp_server) as session:
+    async with Client(server) as session:
         tools = (await session.list_tools()).tools
-    argument_names = {name for tool in tools for name in tool.inputSchema.get("properties", {})}
+    argument_names = {name for tool in tools for name in tool.input_schema.get("properties", {})}
     assert not {name for name in argument_names if any(part in name for part in ("path", "file", "dir", "url"))}
 
 
@@ -404,8 +404,7 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
     """Start ``ebaml-mcp`` as a client does. This needs no LLM key, because the command has no ``--llm``."""
     model, data = saved_files
     parameters = StdioServerParameters(command=_command(), args=["--model", str(model), "--data", str(data)])
-    async with stdio_client(parameters) as (read, write), ClientSession(read, write) as session:
-        await session.initialize()
+    async with Client(parameters) as session:
         names = {tool.name for tool in (await session.list_tools()).tools}
         summary = await session.call_tool("get_model_summary", {})
         features = await session.call_tool("list_features", {})
@@ -413,7 +412,7 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
         explanation = await session.call_tool("explain_prediction", {"row": 0})
     texts = [result.content[0].text for result in (summary, features, graph, explanation)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
     assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction"}
-    assert not any(result.isError for result in (summary, features, graph, explanation))
+    assert not any(result.is_error for result in (summary, features, graph, explanation))
     assert orjson.loads(texts[0])["kind"] == "BinaryClassifier"
     assert orjson.loads(texts[1])[0]["name"] == "a"
     assert "Feature Name: a" in texts[2]
@@ -445,8 +444,7 @@ async def _tool_names_when_ready(url: str) -> set[str]:
     """
     for _attempt in range(60):
         try:
-            async with streamable_http_client(url) as (read, write, _), ClientSession(read, write) as session:
-                await session.initialize()
+            async with Client(url) as session:
                 return {tool.name for tool in (await session.list_tools()).tools}
         except (OSError, ExceptionGroup):
             await asyncio.sleep(0.5)
