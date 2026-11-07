@@ -45,6 +45,6 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 
 - Fix the code when a guard fails. Do not add an exception to a guard to make it pass.
 - Give each new semgrep rule a test in `semgrep/ebaml.py`, with one line that must match and one that must not. Run
-  `uv run semgrep --test semgrep`.
+  `uvx --python 3.13 --from semgrep==1.183.0 semgrep --test semgrep`.
 - Add a new import limit as a contract in `pyproject.toml`, not as a semgrep rule, because import-linter sees the
   whole import graph.
