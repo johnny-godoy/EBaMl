@@ -36,11 +36,12 @@ dependencies = [
 
 [project.optional-dependencies]
 # The server for agents. Only ebaml.mcp imports these packages. The lower bound of mcp matches the override in
-# the uv override list, so the extra keeps the fixed release after the override goes away.
+# the uv override list, so the extra keeps the fixed release after the override goes away. The upper bound keeps a
+# user on mcp 1.x: mcp 2.0 renamed FastMCP, and the override does not apply to a user of the package.
 mcp = [
     "cyclopts>=5.2.0",
     "joblib>=1.5.0",
-    "mcp>=1.30.0",
+    "mcp>=1.30.0,<2",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.0.0",
     "skops>=0.16.0",

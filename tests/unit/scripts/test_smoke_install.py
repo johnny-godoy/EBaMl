@@ -1,6 +1,7 @@
 """Tests for the clean-environment smoke test of a distribution."""
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the fake replaces subprocess.run, nothing runs
+import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -142,3 +143,10 @@ def test_extras_reach_the_install_step(fake_run: FakeRun) -> None:
     install, smoke = fake_run.calls[1:]
     assert install.command[-1] == "ebaml[mcp]==1.2.3"
     assert smoke.command[-2:] == ["1.2.3", "mcp"]
+
+
+def test_mcp_extra_stays_below_mcp_2() -> None:
+    """The smoke test found that `ebaml-mcp` fails at start-up with mcp 2.x, which has no FastMCP."""
+    pyproject = tomllib.loads((Path(__file__).resolve().parents[3] / "pyproject.toml").read_text(encoding="utf-8"))
+    [requirement] = [item for item in pyproject["project"]["optional-dependencies"]["mcp"] if item.startswith("mcp>")]
+    assert "<2" in requirement
