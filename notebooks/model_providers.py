@@ -282,20 +282,24 @@ def _(mo) -> None:
 
 @app.cell
 def _(InvalidOptionError, describe_graph, ebm, mo, sex_index) -> None:
+    provider_failure = None
     try:
         describe_graph(ebm, sex_index, model="not-a-provider/some-model")
     except InvalidOptionError as error:
-        mo.callout(mo.md(f"`InvalidOptionError`: {error}"), kind="danger")
+        provider_failure = mo.callout(mo.md(f"`InvalidOptionError`: {error}"), kind="danger")
+    provider_failure
 
 
 @app.cell
 def _(MissingAPIKeyError, ModelOptions, describe_graph, ebm, mo, sex_index) -> None:
     # the variable name is made up, so the environment cannot have it
     unset = ModelOptions(provider="openai", model="gpt-4o-mini", api_key_env="EBAML_NOTEBOOK_UNSET_KEY")
+    key_failure = None
     try:
         describe_graph(ebm, sex_index, model=unset)
     except MissingAPIKeyError as error:
-        mo.callout(mo.md(f"`MissingAPIKeyError`: {error}"), kind="danger")
+        key_failure = mo.callout(mo.md(f"`MissingAPIKeyError`: {error}"), kind="danger")
+    key_failure
 
 
 if __name__ == "__main__":

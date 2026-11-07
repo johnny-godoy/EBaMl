@@ -5,6 +5,9 @@ import marimo
 __generated_with = "0.25.2"
 app = marimo.App(width="medium")
 
+with app.setup:
+    from typing import override
+
 
 @app.cell
 def _():
@@ -168,12 +171,10 @@ def _(mo) -> None:
 
 @app.cell
 def _(Layperson):
-    from typing import override as _override
-
     class Eli5(Layperson):
         """A layperson who is a child: short sentences and one everyday comparison."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader is a child of about ten, so use short sentences, ordinary words and one comparison from "
@@ -185,7 +186,7 @@ def _(Layperson):
     class Executive(Layperson):
         """A layperson who decides: the bottom line first, then the inputs that matter."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader is a chief executive who has one minute, so open with the bottom line in one sentence. "
@@ -197,7 +198,7 @@ def _(Layperson):
     class SimplifiedEnglish(Layperson):
         """A layperson who reads Simplified Technical English (ASD-STE100)."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader needs text with one meaning, so write in Simplified Technical English (ASD-STE100): one "
@@ -234,30 +235,28 @@ def _(mo) -> None:
 
 @app.cell
 def _(DataScientist, JSONValue, round_value):
-    from typing import override as _override
-
     class LoanOfficer(DataScientist):
         """A reader who needs the chance of the outcome as a percentage, and nothing else about the model."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader is a loan officer who decides with percentages, so quote the percentage from the facts "
                 "and skip the statistics of the model, because scores and intervals do not help the decision."
             )
 
-        @_override
+        @override
         def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
             return {}
 
-        @_override
+        @override
         def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
             return {"percent": round_value(100 * prediction.output)}
 
     class MLEngineer(DataScientist):
         """A reader who debugs the model and wants the signal-to-noise ratio of each effect."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader is a machine learning engineer who debugs the model, so quote the score and the "
@@ -265,7 +264,7 @@ def _(DataScientist, JSONValue, round_value):
                 "may be noise from the training data."
             )
 
-        @_override
+        @override
         def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
             ratio = abs(contribution.score) / contribution.std if contribution.std > 0 else None
             return {
@@ -300,12 +299,10 @@ def _(mo) -> None:
 
 @app.cell
 def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
-    from typing import override as _override
-
     class Regulator(Audience):
         """A reader who checks the direction of the effects and wants no probability."""
 
-        @_override
+        @override
         def guidance(self) -> str:
             return (
                 "The reader is a model regulator who checks the direction of every effect, so say for each input "
@@ -313,32 +310,32 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
                 "number of the model, because the regulator judges the logic of the model and not its calibration."
             )
 
-        @_override
+        @override
         def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
             direction = "towards" if points_towards(contribution, prediction) else "against"
             return {"direction": direction, "size": strength_word(contribution.score)}
 
-        @_override
+        @override
         def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
             return {}
 
-        @_override
+        @override
         def change(self, change) -> dict[str, JSONValue]:
             return {"direction": "up" if change.score_change > 0 else "down"}
 
-        @_override
+        @override
         def flip(self, confidence_level) -> dict[str, JSONValue]:
             return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
-        @_override
+        @override
         def class_output(self, output, output_kind) -> dict[str, JSONValue]:
             return {"likelihood": likelihood_word(output)}
 
-        @_override
+        @override
         def margin(self, reason, output_kind) -> dict[str, JSONValue]:
             return {}
 
-        @_override
+        @override
         def share(self, share: float) -> str:
             return "most" if share > 1 / 2 else "few"
 
@@ -442,10 +439,8 @@ def _(mo) -> None:
 
 @app.cell
 def _(Audience, mo) -> None:
-    from typing import override as _override
-
     class Forgetful(Audience):
-        @_override
+        @override
         def guidance(self) -> str:
             return "The reader is a manager."
 
