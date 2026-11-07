@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.5.0'></a>
+## [0.5.0] - 2026-11-07
+
+### Added
+
+- A Lean proof and a paper cover the local explanations of regressors: the shift of the intercept, the counterfactual of the answer "inside an interval", and the two searches of the sufficient reason (`Minimal` and `ExactOrMinimal`). The "Proof of the local explanations" page states what the proof shows and what it leaves out.
+
+### Fixed
+
+- A fresh `pip install ebaml` no longer installs a `baml-bridge` that rejects the generated `baml_sdk` with a version
+  skew error. `ebaml` now requires `baml-bridge==0.23.0`, the version of the toolchain that generates the SDK.
+
+- The wheel and the source distribution no longer contain the `.gitignore` file that `baml generate` writes into
+  `baml_sdk`.
+
+- `pip install "ebaml[mcp]"` no longer installs `mcp` 2.x, which has no `FastMCP` and made `ebaml-mcp` fail at start-up.
+  The `mcp` extra now requires `mcp>=1.30.0,<2`.
+
 <a id='changelog-0.4.4'></a>
 ## [0.4.4] - 2026-11-07
 
