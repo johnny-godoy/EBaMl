@@ -7,7 +7,7 @@ states what a proof shows, and where to read it.
 
 ## What is proved
 
-The proof covers a binary EBM and a regressor without interaction terms. The score of such a model is a sum of one
+The proof covers a binary EBM, a multiclass EBM and a regressor without interaction terms. The score of such a model is a sum of one
 term per feature.
 
 - **Minimum change required.** `_counterfactual` returns a set of features whose change flips the prediction. No set
@@ -24,6 +24,13 @@ term per feature.
   a smallest sufficient set when it runs, and its search visits at most 2 to the power of the number of features. A
   result of `Minimal` with at most one feature is also a smallest set. `Minimal` makes no other claim about the size.
 
+- **Multiclass classifiers.** The predicted class `c` has one margin for each rival class `j`: the score of `c` minus the
+  score of `j`. Each margin is the binary model with the intercept `b_c - b_j`, the scores `s_c - s_j` and the
+  deviations `σ_c + σ_j`. The counterfactual "the predicted class is no longer `c`" has as many features as the
+  smallest of the answers for the rivals, and `_smallest_counterfactual` returns this number. A set keeps the class
+  iff it is sufficient for every margin, so the claims of `Minimal` and `ExactOrMinimal` above hold for the sufficient
+  reason. The sum of the two deviations is an upper bound of the deviation of the margin for any correlation.
+
 Both claims come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the
 threshold. For the counterfactual, the numbers are the *drops* of the features. For the sufficient reason, they are
@@ -37,17 +44,19 @@ the *gains*.
 - A change that lands exactly on the threshold. The robust margin is then zero, and the code does not count it as a
   flip. A classifier has the same convention at the log-odds zero.
 - The order of `Minimal`. The proof allows any order, and it proves only that no feature can be removed.
-- Multiclass classifiers.
+- A tie between the two highest classes of a multiclass classifier. The code takes the first class, and the margin is
+  then zero. The proof needs a strict winner.
+- The counterfactual with a chosen target class `j`. The proof covers "the predicted class is no longer `c`".
 - The confidence level of the counterfactual. Only the features that the counterfactual changes move by `z` standard
   deviations. The other features keep their mean scores, and the proof covers this behavior.
 
 ## Definitions for every model kind
 
-`explain_instance` accepts binary classifiers and regressors. The definitions below set what the explanations of each
-kind mean. The result types of `ebaml.local` can hold all of them. The binary classifier and the regressor have a proof.
-A regressor uses the same sorting algorithms on a shifted intercept for each margin, and the answer "inside" uses the
-search strategies below. For the multiclass classifier, the words "exact" and "smallest" below state the claims that a
-proof must check. They are not proved.
+`explain_instance` accepts binary classifiers, multiclass classifiers and regressors. The definitions below set what the
+explanations of each kind mean. The result types of `ebaml.local` hold all of them, and each kind has a proof. A
+regressor uses the same sorting algorithms on a shifted intercept for each margin, and the answer "inside" uses the
+search strategies below. A multiclass classifier uses them on the margin of each rival class. The counterfactual with a
+chosen target class `j` has no proof.
 
 ### Notation
 
@@ -112,6 +121,7 @@ this bound.
 | `Prediction.decision` | The predicted class. | The decision, for example "above `t`". | The predicted class. |
 | `Prediction.output`, `lower`, `upper` | The probability of the class, and its interval. | The predicted value, and its interval. | The probability of the class, and its interval. |
 | `Prediction.score`, `score_std` | The log-odds of the second class. | The predicted value. | The score of the predicted class. |
+| `Prediction.threshold` | `0`, the log-odds zero. | The threshold of the binding margin. | The highest score of the other classes. |
 | `Prediction.margin` | The log-odds of the predicted class. | The margin of the decision. | The smallest margin. |
 | `Counterfactual.new_decision` | The other class. | The other decision. | The new predicted class. |
 | `Counterfactual.new_output` | The probability of the new class. | The new predicted value. | The probability of the new class. |
