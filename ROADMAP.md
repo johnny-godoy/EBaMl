@@ -31,6 +31,9 @@ EBaMl will reach three goals:
 | 0.10.0 | Editing of every model kind. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 0.6.0, 0.9.0 | Planned |
 | **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.10.0 | Planned |
 
+Before 1.0.0, pull requests run on Linux with Python 3.13 only. The plan of 1.0.0 adds the other operating systems and
+Python versions, and it makes the package claim only what the matrix passes.
+
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
 model that has them. The README table "Supported models" shows the state of each feature. Full support needs a
 two-dimensional graph text and new proofs of the local explanations.
