@@ -25,11 +25,11 @@ dependencies = [
     "baml-bridge==0.23.0",
     "beartype>=0.23.1",
     "interpret>=0.7.8",
-    "narwhals>=2.27.1",
+    "narwhals>=2.28.0",
     "numpy>=2.5.4",
     "orjson>=3.13.0",
     # only ebaml.core.custom_types imports it, for the type of pd.NA
-    "pandas>=3.0.6",
+    "pandas>=3.1.0",
     "scipy>=1.18.1",
     "structlog>=26.1.0",
 ]
@@ -38,11 +38,11 @@ dependencies = [
 # The server for agents. Only ebaml.mcp imports these packages. ebaml.mcp uses MCPServer, which mcp 1.x lacks, so the
 # lower bound of mcp is a 2.x release.
 mcp = [
-    "cyclopts>=5.2.0",
-    "joblib>=1.5.0",
+    "cyclopts>=5.3.2",
+    "joblib>=1.6.0",
     "mcp>=2.3.0",
     # ebaml.mcp reads the CSV file of --data with polars
-    "polars>=2.0.0",
+    "polars>=2.1.0",
     "skops>=0.16.0",
 ]
 
@@ -67,7 +67,7 @@ source-exclude = ["**/.gitignore"]
 wheel-exclude = ["**/.gitignore"]
 
 [build-system]
-requires = ["uv_build>=0.12.3"]
+requires = ["uv_build>=0.13.6"]
 build-backend = "uv_build"
 
 [tool.ruff]
@@ -167,25 +167,25 @@ select = ["ALL"]
 [dependency-groups]
 dev = [
     "cosmic-ray>=8.7.0",
-    "cyclopts>=5.2.0",
+    "cyclopts>=5.3.2",
     "deptry>=0.25.1",
-    "griffelib>=2.4.0",
-    "hypothesis>=6.170.1",
+    "griffelib>=2.4.1",
+    "hypothesis>=6.170.14",
     "import-linter>=2.15",
-    "marimo>=0.25.1",
+    "marimo>=0.25.2",
     "mcp>=2.3.0",
-    "pandas-stubs>=3.0.5.260914",
-    "polars>=2.0.0",
+    "pandas-stubs>=3.1.0.261029",
+    "polars>=2.1.0",
     "pyarrow>=26.0.0",
     "pyrefly>=1.4.0",
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
     "pyyaml>=6.0.3",
-    "ruff>=0.17.0",
+    "ruff>=0.17.3",
     "scipy-stubs>=1.18.1.1",
     "skops>=0.16.0",
     "sybil>=10.1.0",
-    "types-pyyaml>=6.0.12.20260906",
+    "types-pyyaml>=6.0.12.20261030",
     "typst>=0.15.0",
     "vulture>=2.16",
     { include-group = "commits" },
@@ -193,13 +193,13 @@ dev = [
     { include-group = "dist" },
 ]
 docs = [
-    "mkdocstrings[python]>=1.0.7",
-    "zensical>=0.0.71",
+    "mkdocstrings[python]>=1.0.8",
+    "zensical>=0.0.74",
 ]
 # the commit-msg hook and the commits workflow install only this group to check commit messages
 commits = [
-    "commitizen>=4.19.2",
-    "cyclopts>=5.2.0",
+    "commitizen>=4.19.3",
+    "cyclopts>=5.3.2",
 ]
 # the release workflow installs only this group to collect the changelog fragments
 release = [
@@ -208,9 +208,9 @@ release = [
 # the release workflow installs only this group to check the built files before the upload, and the published version
 # after it (scripts/smoke_install.py needs cyclopts)
 dist = [
-    "cyclopts>=5.2.0",
-    "pydistcheck>=0.10.0",
-    "twine>=6.2.0",
+    "cyclopts>=5.3.2",
+    "pydistcheck>=0.11.3",
+    "twine>=7.0.0",
 ]
 
 [tool.vulture]
