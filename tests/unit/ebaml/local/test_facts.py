@@ -1,5 +1,6 @@
 """Tests for the deterministic local explanations."""
 
+import functools
 import itertools
 import math
 import re
@@ -9,7 +10,7 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
-from hypothesis import assume, given
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
@@ -18,9 +19,9 @@ from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, Unsupp
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
 from ebaml.local.decisions import Interval, Threshold
-from ebaml.local.local_kinds import OutputKind
+from ebaml.local.local_kinds import Outcome, OutputKind
 from ebaml.local.reason_search import ExactOrMinimal, Minimal, ReasonSearch
-from tests.unit.ebaml.conftest import fake_model, instance_of, returning
+from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
@@ -195,16 +196,16 @@ def _feature(
     return local._Feature("f", graph, weights, bin_index, "v", np.array(plausible or [True] * len(scores)))
 
 
-def _probability_after(margin: float) -> float:
-    """Return the probability of the opposite class from the log-odds margin of the class that holds.
+def _probability_after(margin: float, _replaced: Sequence[tuple[local._Feature, int]]) -> Outcome:
+    """Return the other class, with its probability from the log-odds margin of the class that holds.
 
     Returns
     -------
-    float
-        The probability.
+    Outcome
+        The other class and its probability.
 
     """
-    return 1 / (1 + math.exp(margin))
+    return Outcome("other", 1 / (1 + math.exp(margin)))
 
 
 def test_counterfactual_is_none_when_no_change_flips() -> None:
@@ -215,8 +216,7 @@ def test_counterfactual_is_none_when_no_change_flips() -> None:
             intercept=0.0,
             sign=1,
             z=0.0,
-            new_decision="other",
-            new_output=_probability_after,
+            after=_probability_after,
         )
         is None
     )
@@ -229,8 +229,7 @@ def test_counterfactual_skips_unplausible_bins() -> None:
         intercept=0.0,
         sign=1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert [c.feature for c in counterfactual.changes] == ["f"]
@@ -242,12 +241,151 @@ def test_sufficient_reason_is_none_when_not_even_all_features_guarantee() -> Non
     assert local._sufficient_reason(features, intercept=0.0, sign=1, z=1.96) is None
 
 
-def test_rejects_multiclass(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> None:
+@functools.cache
+def _multiclass_model() -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+    """Fit a three-class model on a small grid, so that each feature has few bins and a search can try every one.
+
+    Returns
+    -------
+    tuple[ExplainableBoostingClassifier, pd.DataFrame]
+        The model and its training data.
+
+    """
     rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
-    ebm = fit_ebm(frame, rng.integers(0, 3, 300), interactions=0, random_state=0)
-    with pytest.raises(UnsupportedModelError, match="binary classifier or a regressor"):
-        local.compute_local_facts(ebm, instance_of(frame, 0))
+    frame = pd.DataFrame(rng.integers(0, 4, size=(240, 3)).astype(float), columns=["a", "b", "c"])
+    target = (frame["a"] + frame["b"] + rng.integers(0, 2, 240) > 3).astype(int) + (frame["c"] > 2).astype(int)
+    model = ExplainableBoostingClassifier(interactions=0, random_state=0).fit(frame, target)
+    return model, frame
+
+
+def _margin_views(
+    features: Sequence[local._Feature],
+    winner: int,
+    intercepts: Sequence[float],
+) -> list[tuple[float, list[local._Feature]]]:
+    """Return the intercept and the views of every margin of the class ``winner`` against its rivals.
+
+    Returns
+    -------
+    list[tuple[float, list[local._Feature]]]
+        One pair for each rival class.
+
+    """
+    return [
+        (intercepts[winner] - intercepts[rival], [feature.against((winner, rival)) for feature in features])
+        for rival in range(len(intercepts))
+        if rival != winner
+    ]
+
+
+def _brute_force_counterfactual_size(views: Sequence[tuple[float, list[local._Feature]]]) -> int | None:
+    """Try every set of features and every plausible bin for each, and return the fewest features that flip.
+
+    Returns
+    -------
+    int | None
+        The fewest features, or ``None`` if no change flips the class.
+
+    """
+    feature_count = len(views[0][1])
+    for size in range(1, feature_count + 1):
+        for chosen in itertools.combinations(range(feature_count), size):
+            bin_choices = [np.flatnonzero(views[0][1][index].plausible) for index in chosen]
+            for bins in itertools.product(*bin_choices):
+                for intercept, feature_views in views:
+                    margin = intercept + sum(view.current for view in feature_views)
+                    for index, bin_index in zip(chosen, bins, strict=True):
+                        margin += feature_views[index].scores[bin_index] - feature_views[index].current
+                    if margin < 0:
+                        return size
+    return None
+
+
+def _brute_force_reason_size(views: Sequence[tuple[float, list[local._Feature]]]) -> int | None:
+    """Try every set of fixed features, and return the fewest that keep every margin positive for all completions.
+
+    Returns
+    -------
+    int | None
+        The fewest features, or ``None`` if no set is sufficient.
+
+    """
+    feature_count = len(views[0][1])
+    for size in range(feature_count + 1):
+        for fixed in itertools.combinations(range(feature_count), size):
+            free = [index for index in range(feature_count) if index not in fixed]
+            bin_choices = [np.flatnonzero(views[0][1][index].plausible) for index in free]
+            holds = True
+            for bins in itertools.product(*bin_choices):
+                for intercept, feature_views in views:
+                    margin = intercept + sum(feature_views[index].current for index in fixed)
+                    margin += sum(
+                        feature_views[index].scores[bin_index] for index, bin_index in zip(free, bins, strict=True)
+                    )
+                    holds = holds and margin > 0
+            if holds:
+                return size
+    return None
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239))
+def test_multiclass_facts_are_the_smallest_by_brute_force(row: int) -> None:
+    model, frame = _multiclass_model()
+    options = local.LocalOptions(confidence_level=0.0, min_support=0.0, reason_search=ExactOrMinimal(max_features=10))
+    facts = local.compute_local_facts(model, instance_of(frame, row), options)
+    features = local._features(model, instance_of(frame, row), 0.0)
+    intercepts = np.ravel(model.intercept_).tolist()
+    winner = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    views = _margin_views(features, winner, intercepts)
+    expected_flip = _brute_force_counterfactual_size(views)
+    expected_reason = _brute_force_reason_size(views)
+    assert facts.prediction.decision == model.classes_[winner]
+    assert (None if facts.counterfactual is None else len(facts.counterfactual.changes)) == expected_flip
+    assert (None if facts.sufficient_reason is None else len(facts.sufficient_reason.features)) == expected_reason
+    if facts.sufficient_reason is not None:
+        assert facts.sufficient_reason.minimum
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239))
+def test_multiclass_counterfactual_changes_the_predicted_class(row: int) -> None:
+    model, frame = _multiclass_model()
+    instance = instance_of(frame, row)
+    facts = local.compute_local_facts(model, instance, local.LocalOptions(confidence_level=0.0, min_support=0.0))
+    if facts.counterfactual is None:
+        return
+    changed = {
+        **instance,
+        **{change.feature: float(change.to_value.strip("[)").split(",")[0]) for change in facts.counterfactual.changes},
+    }
+    after = model.predict_proba(pd.DataFrame([changed]))[0]
+    assert model.classes_[int(np.argmax(after))] == facts.counterfactual.new_decision
+    assert facts.counterfactual.new_decision != facts.prediction.decision
+    assert facts.counterfactual.new_output == pytest.approx(float(after.max()), abs=1e-6)
+
+
+def test_multiclass_prediction_reports_the_predicted_class() -> None:
+    model, frame = _multiclass_model()
+    facts = local.compute_local_facts(model, instance_of(frame, 0), local.LocalOptions(confidence_level=0.0))
+    probabilities = model.predict_proba(frame.iloc[[0]])[0]
+    winner = int(np.argmax(probabilities))
+    prediction = facts.prediction
+    assert prediction.decision == model.classes_[winner]
+    assert prediction.output == pytest.approx(float(probabilities[winner]), abs=1e-6)
+    assert (prediction.lower, prediction.upper) == pytest.approx((prediction.output, prediction.output))
+    # the class holds while its score is above the best score of the other classes
+    assert prediction.threshold == pytest.approx(prediction.score - prediction.margin)
+    assert prediction.margin > 0
+    assert prediction.output_kind is OutputKind.CLASS_PROBABILITY
+
+
+def test_multiclass_completions_fall_to_the_share_of_the_class() -> None:
+    model, frame = _multiclass_model()
+    options = local.LocalOptions(confidence_level=0.0, max_steps=3, n_samples=2000)
+    facts = local.compute_local_facts(model, instance_of(frame, 0), options)
+    assert facts.completions[-1].share >= facts.completions[0].share
+    assert 0.0 <= facts.completions[0].share <= 1.0
 
 
 # The tests below use hand-built features and hand-computed numbers, so each expected value is checked by arithmetic
@@ -465,11 +603,16 @@ def test_features_read_the_bin_weights_of_the_term_of_each_feature(monkeypatch: 
     assert features[0].weights.tolist() == [1.0, 3.0]
 
 
+def test_facts_reject_a_model_kind_that_has_no_local_class(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(local, "model_kind", returning(UnknownKind()))
+    with pytest.raises(UnsupportedModelError, match=r"^Local explanations need a classifier or a regressor\. Got a"):
+        local.compute_local_facts(_model_features(term_features=[(0,)], classes=["a", "b"], link="logit"), {})
+
+
 @pytest.mark.parametrize(
     ("classes", "link", "detail"),
     [
         (["only"], "logit", "An EBM with the logit link needs two classes"),
-        (["a", "b", "c"], "mlogit", "Got a MulticlassClassifier"),
         (["a", "b"], "probit", "EBaMl reads the links"),
     ],
 )
@@ -477,7 +620,7 @@ def test_facts_reject_other_than_a_binary_classifier_or_a_regressor(classes: lis
     model = _model_features(term_features=[(0,), (1,)], classes=classes, link=link)
     with pytest.raises(
         UnsupportedModelError,
-        match=rf"^Local explanations need a binary classifier or a regressor\. {detail}",
+        match=rf"^Local explanations need a classifier or a regressor\. {detail}",
     ):
         local.compute_local_facts(model, {})
 
@@ -533,8 +676,7 @@ def test_counterfactual_changes_the_biggest_drop_first() -> None:
         intercept=0.5,
         sign=1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", -3.0)]
@@ -549,8 +691,7 @@ def test_counterfactual_of_the_negative_class() -> None:
         intercept=-0.5,
         sign=-1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert counterfactual.changes == [local.Change("f1", "f10", "f11", 3.0)]
@@ -565,8 +706,7 @@ def test_counterfactual_uses_as_many_changes_as_it_takes() -> None:
         intercept=0.0,
         sign=1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f3", "f1", "f2"]
@@ -581,8 +721,7 @@ def test_counterfactual_with_two_changes() -> None:
             intercept=0.0,
             sign=1,
             z=0.0,
-            new_decision="other",
-            new_output=_probability_after,
+            after=_probability_after,
         )
         is None
     )
@@ -593,8 +732,7 @@ def test_counterfactual_with_two_changes() -> None:
         intercept=1.5,
         sign=1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert [change.feature for change in counterfactual.changes] == ["f1", "f2"]
@@ -607,8 +745,7 @@ def test_counterfactual_probability_of_the_new_class() -> None:
         intercept=1.5,
         sign=1,
         z=0.0,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assert counterfactual is not None
     assert counterfactual.new_output == pytest.approx(_sig(1.5))
@@ -621,8 +758,7 @@ def test_counterfactual_is_none_for_a_tie() -> None:
             intercept=0.0,
             sign=1,
             z=0.0,
-            new_decision="other",
-            new_output=_probability_after,
+            after=_probability_after,
         )
         is None
     )
@@ -633,8 +769,7 @@ def test_counterfactual_is_none_for_a_tie() -> None:
             intercept=0.0,
             sign=1,
             z=0.0,
-            new_decision="other",
-            new_output=_probability_after,
+            after=_probability_after,
         )
         is None
     )
@@ -649,8 +784,7 @@ def test_counterfactual_asks_for_the_worst_case_of_the_other_class() -> None:
             intercept=1.8,
             sign=1,
             z=1.0,
-            new_decision="other",
-            new_output=_probability_after,
+            after=_probability_after,
         )
         is None
     )
@@ -762,8 +896,7 @@ def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None
         0.25,
         1,
         Z95,
-        new_decision="no",
-        new_output=_probability_after,
+        after=lambda margin, _replaced: Outcome("no", _probability_after(margin, _replaced).output),
     )
     assert facts.sufficient_reason == local._sufficient_reason(features, 0.25, 1, Z95)
 
@@ -785,8 +918,7 @@ def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None
         -0.25,
         -1,
         z,
-        new_decision="yes",
-        new_output=_probability_after,
+        after=lambda margin, _replaced: Outcome("yes", _probability_after(margin, _replaced).output),
     )
 
 
@@ -869,8 +1001,7 @@ def test_the_changes_of_a_counterfactual_flip_the_prediction(
         intercept,
         sign,
         z,
-        new_decision="other",
-        new_output=_probability_after,
+        after=_probability_after,
     )
     assume(counterfactual is not None)
     assert counterfactual is not None

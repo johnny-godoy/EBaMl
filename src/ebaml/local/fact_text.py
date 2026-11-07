@@ -31,7 +31,11 @@ class FactTexts:
 
 
 # the key of the decision: a class for a classifier, an answer to a question about the value for a regressor
-_DECISION_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "predicted_class", OutputKind.VALUE: "decision"}
+_DECISION_KEYS: Mapping[OutputKind, str] = {
+    OutputKind.PROBABILITY: "predicted_class",
+    OutputKind.CLASS_PROBABILITY: "predicted_class",
+    OutputKind.VALUE: "decision",
+}
 
 _DEFAULT_AUDIENCE = Layperson()
 

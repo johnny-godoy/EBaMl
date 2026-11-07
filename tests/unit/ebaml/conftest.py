@@ -10,12 +10,13 @@ import types
 import typing
 from collections.abc import Callable, MutableMapping, MutableSequence
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 
 import interpret
 import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
 import narwhals as nw
 import numpy as np
+import numpy.typing as npt
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 from beartype.door import is_bearable
@@ -23,6 +24,7 @@ from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostin
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureValue, Frame
+from ebaml.graphs.model_kinds import ModelKind
 
 # `baml generate` writes the signatures of the SDK functions only to this stub. At run time each function takes
 # (*args, **kwargs), so inspect.signature cannot see the parameters.
@@ -479,3 +481,14 @@ def as_frame(data: pd.DataFrame) -> Frame:
 
     """
     return nw.from_native(data)  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a pandas frame
+
+
+class UnknownKind(ModelKind):
+    """A model kind that no local class registers. It lets a test reach the error for an unknown kind."""
+
+    outputs = ["x"]  # ruff: ignore[mutable-class-default] -- a test double that overrides an abstract property with a plain value
+    score_meaning = "x"
+
+    @override
+    def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:
+        return np.asarray(scores, dtype=np.float64)

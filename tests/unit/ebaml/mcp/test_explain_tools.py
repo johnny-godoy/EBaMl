@@ -4,10 +4,11 @@ import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas fr
 import pytest
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
-from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
+from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.local.audience import DataScientist
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import compute_local_facts
+from ebaml.local.local_kinds import OutputKind
 from ebaml.mcp.explain_tools import explain_prediction
 from ebaml.mcp.model_store import ModelStore
 from tests.unit.ebaml.conftest import as_frame, instance_of
@@ -59,6 +60,15 @@ def test_a_regressor_keeps_the_answer_to_the_average_prediction(regression_ebm: 
     assert "predicted_value" in explanation.texts.prediction
 
 
-def test_a_multiclass_classifier_has_no_local_facts_yet(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    with pytest.raises(UnsupportedModelError, match="binary classifier or a regressor"):
-        explain_prediction(ModelStore(ebm=multiclass_ebm), instance={})
+def test_a_multiclass_classifier_has_a_predicted_class_and_a_class_score(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    explanation = explain_prediction(
+        ModelStore(ebm=multiclass_ebm),
+        instance={"a": 2.0, "c": "x"},
+        audience="data_scientist",
+    )
+    assert explanation.facts.prediction.decision == "high"
+    assert explanation.facts.prediction.output_kind is OutputKind.CLASS_PROBABILITY
+    assert "class_score" in explanation.texts.prediction
+    assert "predicted_class" in explanation.texts.prediction

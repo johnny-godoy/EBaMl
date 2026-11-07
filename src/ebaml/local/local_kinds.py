@@ -8,6 +8,8 @@ does it for each model kind (``ebaml.graphs.model_kinds``), so ``facts`` never t
 - ``BinaryLocal`` keeps the predicted class. The margin is the log-odds of that class.
 - ``RegressorLocal`` keeps the answer to a ``Decision`` (``ebaml.local.decisions``). The margin is the distance of the
   predicted value from the threshold.
+- ``MulticlassLocal`` keeps the predicted class ``c``. It has one margin for each other class ``j``: the score of ``c``
+  minus the score of ``j``. The class holds while every margin is positive.
 """
 
 import abc
@@ -15,14 +17,17 @@ import enum
 import functools
 import math
 import statistics
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import override
 
 import attrs
+import numpy as np
+import numpy.typing as npt
+import scipy
 
 from ebaml.core.custom_types import ClassLabel
 from ebaml.core.exceptions import OptionRangeError, UnsupportedModelError
-from ebaml.graphs.model_kinds import BinaryClassifier, ModelKind, Regressor
+from ebaml.graphs.model_kinds import BinaryClassifier, ModelKind, MulticlassClassifier, Regressor
 from ebaml.local.decisions import Decision, Margin, Side, Threshold
 
 
@@ -30,7 +35,25 @@ class OutputKind(enum.Enum):
     """What the output of the model is, so that the text can name it."""
 
     PROBABILITY = "probability"
+    CLASS_PROBABILITY = "class_probability"
     VALUE = "value"
+
+
+@attrs.frozen
+class Outcome:
+    """What the model says after some changes.
+
+    Attributes
+    ----------
+    decision: ClassLabel
+        The decision after the changes.
+    output: float
+        The output of the model for that decision.
+
+    """
+
+    decision: ClassLabel
+    output: float
 
 
 @attrs.frozen
@@ -40,23 +63,28 @@ class PredictionFrame:
     Attributes
     ----------
     side: Side
-        The decision that holds, its opposite, and the margin.
+        The decision that holds, its opposite, and the margins.
+    column: int
+        The output of the model that ``Prediction.score`` reports: the predicted class of a classifier with several
+        outputs, otherwise the only output.
     output: float
         The output of the model for the decision.
     lower: float
         The lower end of the confidence interval of ``output``.
     upper: float
         The upper end of the confidence interval of ``output``.
-    output_after: Callable[[Margin, float], float]
-        The output of the model for the opposite decision, from the value of a margin after some changes.
+    after: Callable[[Margin, Sequence[float]], Outcome]
+        The decision and the output of the model after some changes, from the failed margin and the score of each
+        output after the changes.
 
     """
 
     side: Side
+    column: int
     output: float
     lower: float
     upper: float
-    output_after: Callable[[Margin, float], float]
+    after: Callable[[Margin, Sequence[float]], Outcome]
 
 
 def _sigmoid(logit: float) -> float:
@@ -74,23 +102,23 @@ class LocalKind(abc.ABC):
     @abc.abstractmethod
     def frame(
         self,
-        score: float,
-        score_std: float,
+        scores: Sequence[float],
+        score_stds: Sequence[float],
         *,
-        intercept: float,
+        intercepts: Sequence[float],
         confidence_level: float,
         decision: Decision | None,
     ) -> PredictionFrame:
-        """Turn the score of one prediction into a margin.
+        """Turn the scores of one prediction into margins.
 
         Parameters
         ----------
-        score: float
-            The intercept and the scores of the features, on the scale of the link.
-        score_std: float
-            The standard deviation of ``score``.
-        intercept: float
-            The intercept of the model.
+        scores: Sequence[float]
+            For each output of the model, the intercept and the scores of the features, on the scale of the link.
+        score_stds: Sequence[float]
+            The standard deviation of each score.
+        intercepts: Sequence[float]
+            The intercept of each output of the model.
         confidence_level: float
             The confidence level of the interval of the output, in ``[0, 1)``.
         decision: Decision | None
@@ -127,28 +155,29 @@ class BinaryLocal(LocalKind):
     @override
     def frame(
         self,
-        score: float,
-        score_std: float,
+        scores: Sequence[float],
+        score_stds: Sequence[float],
         *,
-        intercept: float,
+        intercepts: Sequence[float],
         confidence_level: float,
         decision: Decision | None,
     ) -> PredictionFrame:
         if decision is not None:
             msg = "A classifier has its predicted class as the decision. Only a regressor accepts a decision."
             raise OptionRangeError(msg)
+        score, score_std = scores[0], score_stds[0]
         sign = 1 if score > 0 else -1
         z = _z(confidence_level)
         # the probability of the predicted class is the sigmoid of the logit seen from that class, which is sign * logit
         lower, upper = sorted((_sigmoid(sign * (score - z * score_std)), _sigmoid(sign * (score + z * score_std))))
         return PredictionFrame(
             side=Side(self.classes[int(score > 0)], (Margin(sign, 0.0, self.classes[int(score <= 0)]),)),
+            column=0,
             output=_sigmoid(sign * score),
             lower=lower,
             upper=upper,
-            output_after=lambda _margin, new_margin: _sigmoid(
-                -new_margin,
-            ),  # the opposite class has the opposite log-odds
+            # the opposite class has the opposite log-odds
+            after=lambda margin, new_scores: Outcome(margin.opposite, _sigmoid(-margin.sign * new_scores[0])),
         )
 
 
@@ -164,21 +193,79 @@ class RegressorLocal(LocalKind):
     @override
     def frame(
         self,
-        score: float,
-        score_std: float,
+        scores: Sequence[float],
+        score_stds: Sequence[float],
         *,
-        intercept: float,
+        intercepts: Sequence[float],
         confidence_level: float,
         decision: Decision | None,
     ) -> PredictionFrame:
-        side = (decision or Threshold(intercept)).side(score)
-        spread = _z(confidence_level) * score_std
+        score = scores[0]
+        side = (decision or Threshold(intercepts[0])).side(score)
+        spread = _z(confidence_level) * score_stds[0]
         return PredictionFrame(
             side=side,
+            column=0,
             output=score,
             lower=score - spread,
             upper=score + spread,
-            output_after=lambda margin, new_margin: margin.threshold + margin.sign * new_margin,
+            after=lambda margin, new_scores: Outcome(margin.opposite, new_scores[0]),
+        )
+
+
+def _probabilities(scores: npt.ArrayLike) -> npt.NDArray[np.float64]:
+    return np.asarray(scipy.special.softmax(np.asarray(scores, dtype=float)), dtype=np.float64)
+
+
+@attrs.frozen
+class MulticlassLocal(LocalKind):
+    """A multiclass classifier. The decision is the predicted class, and each other class is a rival.
+
+    The class ``c`` holds while the score of ``c`` is above the score of every other class ``j``. Each difference
+    ``s_c - s_j`` is a margin. EBMs store no covariance between the scores of two classes, so the standard deviation
+    of a margin is the sum of the two standard deviations. For any correlation, the sum is an upper bound.
+    """
+
+    classes: tuple[ClassLabel, ...]
+
+    @property
+    @override
+    def output_kind(self) -> OutputKind:
+        return OutputKind.CLASS_PROBABILITY
+
+    @override
+    def frame(
+        self,
+        scores: Sequence[float],
+        score_stds: Sequence[float],
+        *,
+        intercepts: Sequence[float],
+        confidence_level: float,
+        decision: Decision | None,
+    ) -> PredictionFrame:
+        if decision is not None:
+            msg = "A classifier has its predicted class as the decision. Only a regressor accepts a decision."
+            raise OptionRangeError(msg)
+        winner = int(np.argmax(scores))  # the first class on a tie
+        spread = _z(confidence_level) * np.asarray(score_stds, dtype=float)
+        against = np.asarray(scores, dtype=float) + spread
+        against[winner] = scores[winner] - spread[winner]
+        towards = np.asarray(scores, dtype=float) - spread
+        towards[winner] = scores[winner] + spread[winner]
+        rivals = [rival for rival in range(len(self.classes)) if rival != winner]
+        margins = tuple(Margin(1, 0.0, self.classes[rival], (winner, rival)) for rival in rivals)
+
+        def after(_margin: Margin, new_scores: Sequence[float]) -> Outcome:
+            new_winner = int(np.argmax(new_scores))
+            return Outcome(self.classes[new_winner], float(_probabilities(new_scores)[new_winner]))
+
+        return PredictionFrame(
+            side=Side(self.classes[winner], margins),
+            column=winner,
+            output=float(_probabilities(scores)[winner]),
+            lower=float(_probabilities(against)[winner]),
+            upper=float(_probabilities(towards)[winner]),
+            after=after,
         )
 
 
@@ -197,13 +284,18 @@ def local_kind(kind: ModelKind) -> LocalKind:
         If the local explanations do not support the kind.
 
     """
-    msg = f"Local explanations need a binary classifier or a regressor. Got a {type(kind).__name__}."
+    msg = f"Local explanations need a classifier or a regressor. Got a {type(kind).__name__}."
     raise UnsupportedModelError(msg)
 
 
 @local_kind.register(BinaryClassifier)
 def _binary(kind: BinaryClassifier) -> LocalKind:
     return BinaryLocal(kind.classes)
+
+
+@local_kind.register(MulticlassClassifier)
+def _multiclass(kind: MulticlassClassifier) -> LocalKind:
+    return MulticlassLocal(kind.classes)
 
 
 @local_kind.register(Regressor)

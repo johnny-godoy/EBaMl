@@ -127,12 +127,22 @@ def _predicted_value(
 # The rule for each kind of output. A new kind of output is a new row.
 _PLAIN_OUTPUT: Mapping[OutputKind, Callable[[float], dict[str, JSONValue]]] = {
     OutputKind.PROBABILITY: _likelihood,
+    OutputKind.CLASS_PROBABILITY: _likelihood,
     OutputKind.VALUE: _predicted_value,
 }
-_OUTPUT_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "probability", OutputKind.VALUE: "predicted_value"}
-_SCORE_KEYS: Mapping[OutputKind, str] = {OutputKind.PROBABILITY: "logit", OutputKind.VALUE: "score"}
+_OUTPUT_KEYS: Mapping[OutputKind, str] = {
+    OutputKind.PROBABILITY: "probability",
+    OutputKind.CLASS_PROBABILITY: "probability",
+    OutputKind.VALUE: "predicted_value",
+}
+_SCORE_KEYS: Mapping[OutputKind, str] = {
+    OutputKind.PROBABILITY: "logit",
+    OutputKind.CLASS_PROBABILITY: "class_score",
+    OutputKind.VALUE: "score",
+}
 _MARGIN_KEYS: Mapping[OutputKind, str] = {
     OutputKind.PROBABILITY: "guaranteed_margin_logit",
+    OutputKind.CLASS_PROBABILITY: "guaranteed_margin_score",
     OutputKind.VALUE: "guaranteed_margin",
 }
 

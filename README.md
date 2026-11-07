@@ -27,7 +27,7 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 `describe_graph` and `describe_ebm` log an `interactions_skipped` warning that names them. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
-The MCP server reads every kind of model. Its explain tool works for binary classifiers and regressors.
+The MCP server reads every kind of model. Its explain tool works for every kind of model without interactions.
 ## Setup
 
 <!-- --8<-- [start:setup] -->
@@ -211,7 +211,7 @@ The facts are computed exactly from the scores and confidence intervals of the E
 them in words. They are the three queries of [arXiv:2010.12265](https://arxiv.org/abs/2010.12265): minimum change
 required, minimum sufficient reason and count completions. `audience="layperson"` (default) gives no model numbers;
 `audience="data_scientist"` quotes scores, probabilities and confidence intervals. Subclass `ebaml.Audience` to add a
-reader with its own rules. Pass `language="French"` (any language name) to get the explanations in that language. It supports binary classifiers and regressors
+reader with its own rules. Pass `language="French"` (any language name) to get the explanations in that language. It supports every kind of model
 without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
 and `notebooks/local_explanations.py` walks through them on the Titanic data.
 
