@@ -17,6 +17,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `check_toolchain_pin.py` | Fails unless `baml.toml`, the `baml-bridge` requirement of `pyproject.toml` and `uv.lock` name one BAML toolchain version. |
 | `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
 | `baml_toolchain.py` | Prints the version of `baml-bridge` in `uv.lock`. The setup action of CI installs the BAML toolchain of that version, because a newer toolchain writes a `baml_sdk` that `baml-bridge` cannot read. |
+| `smoke_install.py` | Installs a wheel, an sdist or a published version in a clean environment, with no `baml` command, and runs a smoke test of the installed package. |
 | `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 | `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
 | `fit_token_weights.py` | Collects the token counts of real requests to a model, and fits the weights of its token estimate. `collect` costs money. `fit` sends nothing. |
