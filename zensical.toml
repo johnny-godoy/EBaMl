@@ -27,6 +27,7 @@ nav = [
     { "Multiclass scores" = "multiclass-scores-proof.md" },
   ] },
   { Benchmark = "benchmark.md" },
+  { Releasing = "releasing.md" },
   { "API reference" = "api.md" },
   { Changelog = "changelog.md" },
 ]

@@ -33,10 +33,27 @@ The MCP server reads every kind of model. Its explain tool works for binary clas
 <!-- --8<-- [start:setup] -->
 ### Requirements
 
-- Python 3.13 or later and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-- The BAML toolchain 0.23 or later (step 1).
+- Python 3.13 or later. CI tests Linux with Python 3.13 only. Other systems and later Python versions are not tested
+  yet.
+- A package installer such as [pip](https://pip.pypa.io) or [uv](https://docs.astral.sh/uv/getting-started/installation/).
 - An API key for an LLM provider. The default is [OpenRouter](https://openrouter.ai)'s free router, which needs no
   paid plan. You can use another provider instead, see "Choosing the model".
+- The BAML toolchain 0.23, only in a source checkout (step 1).
+
+### Install from PyPI
+
+```bash
+pip install ebaml            # or: uv add ebaml
+pip install "ebaml[mcp]"     # with the MCP server, or: uv add "ebaml[mcp]"
+```
+
+The wheel holds the generated SDK, so it needs no BAML toolchain. Then set the API key (step 3), and go on with
+"Usage". The wheel needs one version of `baml-bridge`, and it pins that version. To change a prompt or the provider in a
+`.baml` file, work from a source checkout.
+
+### Work from a source checkout
+
+Steps 1, 2, 4, 5 and 6 are for a source checkout. Step 3 also applies to an installation from PyPI.
 
 ### 1. Install the BAML toolchain
 
@@ -125,7 +142,7 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `baml: command not found` | The profile line from step 1 is not loaded. Open a new shell or run `. "$HOME/.baml/env"`. |
+| `baml: command not found` | In a source checkout, the profile line from step 1 is not loaded. Open a new shell or run `. "$HOME/.baml/env"`. |
 | `unknown command: describe` (or `generate add`, `agent`) | An older `baml` is first on `PATH`. See step 1. |
 | `SDKUnavailableError`, or `ModuleNotFoundError: baml_sdk` | The SDK is not generated or has the wrong version, and `ebaml` could not fix it. The message of the error lists the steps. Run `baml generate` (step 4). |
 | `MissingAPIKeyError` | The key of the provider is not exported in this shell. The message names the variable. See "Choosing the model" for the variable of each provider. |
