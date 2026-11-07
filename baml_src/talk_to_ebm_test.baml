@@ -216,7 +216,8 @@ test "local_system_msg names the expert and forbids invented facts" {
     let msg = local_system_msg("a credit risk analyst");
     assert.is_true(msg.includes("You are a credit risk analyst."));
     assert.is_true(msg.includes("invented number"));
-    assert.is_true(msg.includes("a question about the predicted value"))
+    assert.is_true(msg.includes("a question about the predicted value"));
+    assert.is_true(msg.includes("another class becomes the predicted class"))
 }
 
 test "local_user_msg orders the global explanation, dataset, prediction, facts, guidance and question" {
@@ -240,6 +241,8 @@ test "local_user_msg orders the global explanation, dataset, prediction, facts, 
 test "question functions state the sentence limit and their own query" {
     assert.is_true(counterfactual_question(3).includes("at most 3 sentences"));
     assert.is_true(counterfactual_question(3).includes("minimum change required"));
+    assert.is_true(counterfactual_question(3).includes("is_smallest_set"));
+    assert.is_true(counterfactual_question(3).includes("do not call it the smallest or the fewest"));
     assert.is_true(sufficient_reason_question(4).includes("at most 4 sentences"));
     assert.is_true(sufficient_reason_question(4).includes("sufficient reason"));
     assert.is_true(sufficient_reason_question(4).includes("is_smallest_set"));

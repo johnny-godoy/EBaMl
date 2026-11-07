@@ -255,12 +255,16 @@ class Counterfactual:
         The decision after the changes: the other class of a binary classifier, or the opposite answer of a regressor.
     new_output: float
         The output of the model for the new decision: the probability of the other class, or the predicted value.
+    minimum: bool
+        True if no smaller set of changes gives the new decision. False for the counterfactual of a chosen target
+        class, which has no proof of a smallest set.
 
     """
 
     changes: list[Change]
     new_decision: ClassLabel
     new_output: float
+    minimum: bool = True
 
 
 @attrs.frozen
@@ -1028,6 +1032,7 @@ def _target_counterfactual(
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
+        minimum=False,
     )
 
 
