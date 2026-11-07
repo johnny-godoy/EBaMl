@@ -31,4 +31,5 @@ a unit test cannot do both.
   the run command, the link to the guide, and the iframe.
 - Add the page to the nav in `zensical.toml`.
 - Link the notebook from the guide of the feature.
+- Run `uv run marimo check --strict notebooks`. The `marimo-check` hook runs it too, and it finds duplicate names across cells, cycles and output that marimo hides.
 - Run `uv run --group docs python -m scripts.build_docs`. The build exports each notebook, so a broken cell fails it.
