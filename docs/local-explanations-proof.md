@@ -31,7 +31,12 @@ term per feature.
   iff it is sufficient for every margin, so the claims of `Minimal` and `ExactOrMinimal` above hold for the sufficient
   reason. The sum of the two deviations is an upper bound of the deviation of the margin for any correlation.
 
-Both claims come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
+- **Hardness.** The sufficient reason of several margins contains Set Cover. A set of features is sufficient for the
+  reduction iff the matching sets cover every element, and a multiclass classifier with one rival class for each
+  element has this problem as its sufficient reason. The decision problem is NP-complete, so a polynomial algorithm for
+  the smallest sufficient set exists only if P = NP. The cost of `ExactOrMinimal` is therefore expected.
+
+Both claims of the first two items come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the
 threshold. For the counterfactual, the numbers are the *drops* of the features. For the sufficient reason, they are
 the *gains*.
@@ -47,6 +52,11 @@ the *gains*.
 - A tie between the two highest classes of a multiclass classifier. The code takes the first class, and the margin is
   then zero. The proof needs a strict winner.
 - The counterfactual with a chosen target class `j`. The proof covers "the predicted class is no longer `c`".
+- The running time of the reduction, and the membership of the decision problem in NP. Lean checks that the reduction
+  is correct. The paper argues the running time and the membership in a few lines, and it cites Karp for the
+  NP-hardness of Set Cover.
+- A fixed number of margins that is larger than one. The reduction needs one margin for each element, so a classifier
+  needs one rival class for each element.
 - The confidence level of the counterfactual. Only the features that the counterfactual changes move by `z` standard
   deviations. The other features keep their mean scores, and the proof covers this behavior.
 
@@ -93,7 +103,7 @@ of the other features.
 - **One margin.** This is the binary problem, so sorting finds the smallest set exactly.
 - **Several margins.** The decision holds for every completion when the worst case of each margin is positive. Each
   margin gives one linear condition, so the smallest set that meets all of them is a covering problem. Sorting does
-  not solve it in general. A strategy object selects the search:
+  not solve it in general, and the problem is NP-hard. A strategy object selects the search:
 
   | Strategy | Result | Claim |
   | --- | --- | --- |
