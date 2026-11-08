@@ -41,3 +41,7 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff
 #print axioms EBaMlProofs.LocalExplanations.Hardness.sufficient_of_shape
 #print axioms EBaMlProofs.LocalExplanations.Hardness.sufficient_reason_iff_cover
+#print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.isOptimum_iff
+#print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.isApprox_iff
+#print axioms EBaMlProofs.LocalExplanations.Hardness.multiclass_isOptimum_iff
+#print axioms EBaMlProofs.LocalExplanations.Hardness.multiclass_isApprox_iff
