@@ -23,11 +23,11 @@ reason_ is the fewest features to fix so that no values of the other features ca
 come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
-covering problem, and the paper proves what two searches return. A multiclass classifier has one margin for each rival
+covering problem. The code solves it with a MIP solver or a greedy search, and the paper states what a result proves. A multiclass classifier has one margin for each rival
 class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover, and it has the same hardness of
 approximation.
-A Lean 4 file @lean4 checks every statement except two facts about running time (@sec-limits), and the
-appendix tells the reader how to repeat the check.
+A Lean 4 file @lean4 checks every statement except two facts about running time and the statements about the
+solvers (@sec-solvers, @sec-limits), and the appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
 
@@ -50,9 +50,12 @@ with no new proof (@sec-regressor, Lemmas 7 and 8). The code does this shift in 
 fewest features that flip it are the fewest of the two answers for the margins, and `_smallest_counterfactual` returns
 this number (Theorem 6).
 
-*Claim 5 (searches).* For a decision with several margins, `Minimal` returns a sufficient set from which no feature
-can be removed, and `ExactOrMinimal` returns a smallest sufficient set when the number of features is at most its
-limit. `Minimal` does not claim a smallest set, except for a set of at most one feature (Theorems 4 and 5, Corollary 3).
+*Claim 5 (searches).* For a decision with several margins, the code builds a covering problem, and a `CoveringSearch`
+of `covering_solvers.py` solves it. Each set that a search returns is sufficient, because the code checks it with the
+definition of @sec-covering. The flag `minimum` is true only if the solver reports a proved optimum, or if the size of
+the set equals a lower bound (Theorem 5, Corollary 3, Lemma 17). A proved optimum rests on the certificate of the solver,
+which Lean does not check, and on floating-point tolerances (@sec-solvers). The removal pass of `Greedy` returns a set
+from which no feature can be removed (Theorem 4).
 
 *Claim 6 (multiclass classifier).* For a multiclass classifier, the predicted class $w$ has one margin for each rival
 class $j$: the score of $w$ minus the score of $j$, with the deviation $sigma_w + sigma_j$. The fewest features that
@@ -412,8 +415,8 @@ margin this is the definition of @sec-model.
   $W_k + sum_(i in G) h_(k,i) >= W_k + sum_(i in F) h_(k,i) > 0$.
 ]
 
-The search `Minimal` has two passes. The first pass orders the features by their smallest gain over the margins and
-adds them until the set is sufficient. The second pass, _prune_, visits the added features from the last to the first.
+The search `Greedy` (`greedy_cover`) has two passes. The first pass adds the feature with the largest gain of coverage
+(@sec-solvers) until the set is sufficient. The second pass, _prune_, visits the added features from the last to the first.
 It removes a feature when the set stays sufficient without it. The proof allows any order in both passes. Let
 $"prune"(l, C)$ be the result for a list $l$ of features and a set $C$ at the start of the second pass.
 
@@ -445,15 +448,17 @@ $"prune"(l, C)$ be the result for a list $l$ of features and a set $C$ at the st
   #step(1, "3", [*Q.E.D.* The assumption of the theorem is the invariant for $C$, because each $f in C$ is in $l$.])
 ]
 
-The search `ExactOrMinimal` tries the sets by size and returns the first sufficient set.
+A MIP solver that ends with the status `OPTIMAL` claims two facts: its set $F$ is sufficient, and no set with fewer
+features is sufficient. The next theorem is the form of this claim that the code uses. A search by size, as the
+brute-force oracle of the tests does, visits at most $2^n$ sets. The code does not search by size.
 
 #theorem("the exact search", [
   Let $F$ be sufficient, and let no set with fewer than $|F|$ features be sufficient. Then each sufficient set has
-  at least $|F|$ features. The search visits at most $2^n$ sets for $n$ features.
+  at least $|F|$ features. A search by size visits at most $2^n$ sets for $n$ features.
 ], lean: ("proofs/EBaMlProofs/LocalExplanations/Covering.lean", "EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum", "EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space"))
 
 #proof[
-  A sufficient set $G$ with $|G| < |F|$ would contradict the assumption. The sets that the search visits are
+  A sufficient set $G$ with $|G| < |F|$ would contradict the assumption. The sets that a search by size visits are
   subsets of $I$, and there are $2^n$ of them.
 ]
 
@@ -467,11 +472,14 @@ The search `ExactOrMinimal` tries the sets by size and returns the first suffici
   not empty, and $|G| >= 1 >= |R|$.
 ]
 
-The code sets the flag `minimum` of the result of `Minimal` to `len(chosen) <= 1`. Corollary 3 proves this flag. The
-code does not claim a smallest set for a larger result, and the proof shows no such claim. An example shows why. Take
-two margins with $W = (-6, -2)$ and four features with the gains $h_1 = (2, 2)$, $h_2 = (2, 2)$, $h_3 = (3, 3)$ and
-$h_4 = (5, 1)$ for the two margins. The first pass adds the features $3, 1, 2$ (in the order of the smallest gain)
-and the set is sufficient. No feature can be removed, but $\{3, 4\}$ is also sufficient and has fewer features.
+Each search of the code checks the empty set first. When the empty set is not sufficient, the lower bound of the
+search is at least $1$ (`max(1, ...)` in `_lp_bound`). So a result with one feature reaches the bound, and its flag
+`minimum` is true. Corollary 3 proves this case. For a larger result, the flag rests on the solver or on the bound of
+Lemma 17. An example shows that the two passes of `Greedy` alone do not give a smallest set. Take three margins with
+$W = (-3/2, -5/2, -7/2)$ and four features with the gains $h_1 = (2, 2, 0)$, $h_2 = (2, 0, 2)$, $h_3 = (1, 2, 3)$
+and $h_4 = (0, 3, 3)$. The first pass adds the features $3, 1, 2$, and the set is sufficient. No feature can be
+removed, but $\{2, 4\}$ is also sufficient and has fewer features. The test problem `GREEDY_IS_NOT_OPTIMAL` is this
+example.
 
 = Regressors and the answer inside an interval <sec-regressor>
 
@@ -566,8 +574,9 @@ The sufficient reason of a decision with the margins $m_k$ is a covering problem
   the problem for the margin $k$. The gains of a model are not negative, so the data form a problem.
 ]
 
-Lemma 9 puts the sufficient reason of "inside" under Theorems 4 and 5. The function `_gain_table` computes the numbers
-$W_k$ and $h_(k,i)$, and the class `Minimal` or `ExactOrMinimal` does the search.
+Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 and Corollary 3. The function
+`_gain_table` computes the numbers $W_k$ and $h_(k,i)$, and `_several_margins_reason` gives them to the search of
+`LocalOptions.search` as a problem with one alternative for each feature.
 
 *Correspondence of symbols to the code* for this section.
 
@@ -582,10 +591,11 @@ $W_k$ and $h_(k,i)$, and the class `Minimal` or `ExactOrMinimal` does the search
   [$min(k_1, k_2)$], [`min(found, key=lambda c: len(c.changes), default=None)`], [`_smallest_counterfactual`],
   [$W_k (emptyset)$], [`bound.sign * bound.intercept + sum(scores.min() ...)`], [`_gain_table`],
   [$h_(k,i)$], [`scores[f.bin_index] - scores.min()`], [`_gain_table`],
-  [first pass of `Minimal`], [`for feature in [None, *order]` until `_guaranteed(...) > 0`], [`Minimal.select`],
-  [$"prune"$], [`for feature in reversed(list(chosen))`], [`Minimal.select`],
-  [the exact search], [`itertools.combinations(order, size)` for each size], [`ExactOrMinimal.select`],
-  [the flag `minimum`], [`minimum=len(chosen) <= 1` and `minimum=True`], [`Minimal.select`, `ExactOrMinimal.select`],
+  [first pass of `Greedy`], [`_next_pick` until `problem.sufficient(picked)`], [`greedy_cover`],
+  [$"prune"$], [`for pick in reversed(list(picked))`], [`greedy_cover`],
+  [$F$ is sufficient], [`all(margin > 0 for margin in self.margins(choices))`], [`CoveringProblem.sufficient`],
+  [the bound $1$ of Corollary 3], [`max(1, math.ceil(...))`], [`_lp_bound`],
+  [the flag `minimum`], [`proved or len(ordered) <= lower_bound`], [`_cover`],
 )
 
 
@@ -655,9 +665,9 @@ The sufficient reason of the predicted class has one condition for each rival, s
   This is Lemma 9 for the family of the models $m_j$, indexed by the rivals.
 ]
 
-Lemma 11 puts the sufficient reason of a multiclass classifier under Theorems 4 and 5, as Lemma 9 does for the
-answer "inside". The function `_gain_table` computes the numbers, and the class `Minimal` or `ExactOrMinimal` does the
-search. The flag `minimum` has the same meaning as in Claim 5.
+Lemma 11 puts the sufficient reason of a multiclass classifier under Lemma 6, Theorems 4 and 5 and Corollary 3, as
+Lemma 9 does for the answer "inside". The function `_gain_table` computes the numbers, and the search of
+`LocalOptions.search` solves the problem. The flag `minimum` has the same meaning as in Claim 5.
 
 #lemma("the deviation of a margin", [
   Let $sigma_x, sigma_y >= 0$ be the deviations of two scores, and let $rho in [-1, 1]$ be their correlation. The
@@ -690,9 +700,9 @@ of @sec-model takes the deviation of each margin as given, so the proof covers t
 
 = The sufficient reason of several margins is NP-hard <sec-hardness>
 
-@sec-covering shows that sorting does not solve the covering problem, and that `ExactOrMinimal` costs $2^n$ steps. This
-section shows that the cost is not a weakness of the search. The covering problem contains Set Cover, so each exact
-algorithm for it is also an exact algorithm for Set Cover.
+@sec-covering shows that sorting does not solve the covering problem. This section shows that no fast exact algorithm
+exists unless P = NP, which is why the code uses a MIP solver with a time limit. The covering problem contains Set
+Cover, so each exact algorithm for it is also an exact algorithm for Set Cover.
 
 An instance of _Set Cover_ has a finite set $U$ of elements, a finite family of sets $S_i subset.eq U$ with an index
 $i in I$, and a number $K$. The question is whether some $F subset.eq I$ with $|F| <= K$ has $union.big_(i in F) S_i = U$.
@@ -837,14 +847,15 @@ bounds $x_i <= 1$, after one change: for rational numbers with the common denomi
 $W_k + sum_(i in F) h_(k,i) > 0$ is the same as $W_k + sum_(i in F) h_(k,i) >= 1/q$. Kolliopoulos and Young
 @kolliopoulos2005 give a polynomial-time algorithm with the ratio $O(log m)$ for such programs. So, with the bins fixed,
 the covering problem and Set Cover have the same approximability up to a constant factor. This paper does not prove the
-guarantee of Kolliopoulos and Young, and the code does not implement it: `Minimal` has no guarantee on the ratio, and
-`ExactOrMinimal` visits $2^n$ sets. The choice of one bin for each feature adds a constraint that is not a covering
-constraint, and the paper states nothing about its approximability.
+guarantee of Kolliopoulos and Young, and the code does not implement it. The search `Greedy` follows the greedy of
+Chvátal with the coverage of Wolsey @wolsey1982 for real gains, but EBaMl proves no ratio for it (@sec-solvers). The
+counterfactual of a chosen class picks at most one bin for each feature. This constraint is not a covering constraint,
+and the paper states nothing about its approximability.
 
-*Meaning for the code.* The class `ExactOrMinimal` has a cost of $2^n$ steps, and the flag `minimum` of `Minimal` is
-false for more than one feature. Both facts match the hardness. The test
+*Meaning for the code.* The searches of `covering_solvers.py` run a MIP solver with a time limit, or the greedy, and
+the flag `minimum` needs a proof of the solver or the lower bound of Lemma 17. Both facts match the hardness. The test
 `test_the_exact_search_solves_set_cover_through_the_reduction_of_the_proof` runs the reduction on small instances and
-compares the size of `ExactOrMinimal` with the size of a smallest cover.
+compares the size of `Exact`, with each of its three engines, with the size of a smallest cover.
 
 *Correspondence of symbols to the code* for this section.
 
@@ -853,10 +864,124 @@ compares the size of `ExactOrMinimal` with the size of a smallest cover.
   stroke: 0.4pt + luma(160),
   inset: 5pt,
   [*Symbol*], [*Computed by*], [*Function*],
-  [$W_k$], [`worst = [-0.5] * element_count`], [the test of the reduction],
-  [$h_(k,i)$], [`1.0 if element in members else 0.0`], [the test of the reduction],
-  [the smallest sufficient set], [`ExactOrMinimal().select(worst, gains)`], [`ExactOrMinimal.select`],
+  [$W_k$], [`[-0.5] * ELEMENT_COUNT`], [`_set_cover_problem` of the test],
+  [$h_(k,i)$], [`1.0 if element in members else 0.0`], [`_set_cover_problem` of the test],
+  [the smallest sufficient set], [`strategy.solve(_set_cover_problem(sets), seed=0)`], [`Exact.solve`],
   [a cover of the smallest size], [`min(size for size ... if set().union(*chosen) >= set(elements))`], [the test of the reduction],
+)
+
+= Solvers, the greedy and the lower bound <sec-solvers>
+
+This section states what the searches of `covering_solvers.py` prove. Lean checks none of its statements. The proofs
+are on paper only, and @sec-limits lists this fact.
+
+*The problem of the code.* `CoveringProblem` extends the problem of @sec-covering. The features are _groups_, and each
+group has a finite list of _alternatives_ $a$ with a gain $h_(k,a)$ for each margin $k$. A gain can be negative. A
+_set of picks_ takes at most one alternative from each group, and its size is the number of picks. It is sufficient iff
+$W_k + sum_(a "picked") h_(k,a) > 0$ for each $k$. The sufficient reason has one alternative for each group, with the
+gains of `_gain_table`, which are not negative. This is the problem of @sec-covering. The counterfactual of a chosen
+class $j$ has one alternative for each plausible bin $v$ other than the bin of the instance, with the gain
+$s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alternatives` computes it.
+
+#lemma("an alternative with no positive gain", [
+  Let the alternative $a$ have $h_(k,a) <= 0$ for each margin $k$. If a sufficient set of picks contains $a$, then the
+  set without $a$ is sufficient and has one pick fewer.
+])
+
+#proof[
+  Each margin of the set without $a$ is the margin of the set plus $-h_(k,a) >= 0$, so it stays positive.
+]
+
+#lemma("a dominated alternative", [
+  Let $a$ and $b$ be two alternatives of one group with $h_(k,a) <= h_(k,b)$ for each margin $k$. If a sufficient set of
+  picks contains $a$, then the set with $b$ in place of $a$ is sufficient and has the same size.
+])
+
+#proof[
+  The set picks at most one alternative of the group, so it does not contain $b$, and the swap keeps one pick in the
+  group. Each margin changes by $h_(k,b) - h_(k,a) >= 0$, so it stays positive.
+]
+
+#corollary("the reduction of the code", [
+  Let `reduce_problem` remove each alternative with no positive gain, and each alternative $a$ that another alternative
+  $b$ of its group dominates, where $b$ has a larger gain for some margin or $b$ comes first. Then the smallest size of a
+  sufficient set is the same before and after the removal, and a sufficient set exists before iff one exists after.
+])
+
+#proof[
+  *ASSUME:* a sufficient set $F$ of the problem. *PROVE:* a sufficient set of the reduced problem with at most $|F|$
+  picks. The reduced problem has fewer alternatives, so its sets are sets of the problem, and the other direction is
+  clear.
+  #step(1, "1", [Remove from $F$ each alternative with no positive gain. The set stays sufficient, and it does not grow,
+    by Lemma 15.])
+  #step(1, "2", [The relation "$b$ dominates $a$" of the statement is a strict order on the useful alternatives of a
+    group, so each removed alternative $a$ has a dominating alternative that is not removed: a maximal one above $a$.
+    Swap each such $a$ for it. The set stays sufficient, and its size stays, by Lemma 16.])
+  #step(1, "3", [*Q.E.D.* The result uses only the alternatives that stay.])
+]
+
+The reduction does not compare alternatives of different groups. Two groups may be needed together: with one margin,
+$W = -3/2$ and two groups with the gain $1$ each, both groups are needed, and the removal of one of them leaves no
+sufficient set. So the rule "remove a feature that another feature dominates" of set cover does not hold for this
+problem. The test `test_the_reduction_keeps_two_groups_with_equal_gains` is this example.
+
+#lemma("the lower bound of the LP", [
+  Let $L$ be the optimum of the linear program that minimizes $sum_a x_a$ over $0 <= x_a <= 1$, with
+  $sum_(a in g) x_a <= 1$ for each group $g$ and $sum_a h_(k,a) x_a >= -W_k$ for each margin $k$. Then each
+  sufficient set of picks has at least $ceil(L)$ picks.
+])
+
+#proof[
+  Let $F$ be a sufficient set of picks, and let $x_a = 1$ for $a in F$ and $x_a = 0$ otherwise. Then $x$ meets each
+  constraint, because $F$ takes at most one alternative of each group and $W_k + sum_(a in F) h_(k,a) > 0 >= 0$. Hence
+  $|F| = sum_a x_a >= L$, and $|F| >= ceil(L)$ because $|F|$ is an integer.
+]
+
+The code solves the LP of Lemma 17 with GLOP, after a division of each margin by the largest absolute value of its
+numbers, which does not change the set of solutions. GLOP returns $L$ up to its tolerances, so the code subtracts
+$10^(-6)$ before the rounding up (`_lp_bound`). The bound therefore holds up to the tolerances of GLOP. If GLOP proves
+the LP infeasible, Lemma 17 shows that no sufficient set exists, and the search returns `None`.
+
+*What a solver proves.* The MIP of the code asks each margin to be at least $epsilon$ times the size of its numbers, in
+place of positive, because a solver works with tolerances. The first $epsilon$ is $10^(-6)$. The code checks each set
+of the solver in Python with the definition above. If the check fails, it solves again with an $epsilon$ that is 100
+times larger, and it tries three values. When the greedy found a set of size $g$, the MIP also asks for at most $g - 1$
+picks. A solver that ends with the status `OPTIMAL` then proves its set smallest among the sets whose margins reach
+$epsilon$, and a solver that proves this MIP infeasible proves the set of the greedy smallest in the same sense
+(Theorem 5). A set whose smallest margin is positive but below $epsilon$ times the size of its numbers can be missed. In
+that case the flag `minimum` can be true for a set that is not the smallest. Lean does not check the certificate of a
+solver, and no solver on PyPI gives an exact answer in rational numbers.
+
+*The time limit.* If the time limit ends before the solver proves the optimum, the code returns the smaller of the set of
+the solver and the set of the greedy, and `minimum` is true only if its size equals the bound of Lemma 17. If no set is
+known, the problem of the sufficient reason returns all its features, which Lemma 6 shows to be sufficient when any set
+is, and the counterfactual of a chosen class raises `SearchLimitError`, because `None` would claim that no set exists.
+
+*The greedy.* Let $d_k = epsilon - W_k$ be the deficit of the margin $k$ and $c_k(F)$ the sum of the positive parts of
+the gains of $F$ for $k$. The coverage of $F$ is $sum_(k : d_k > 0) min(1, c_k(F) \/ d_k)$. Each step adds the
+alternative of an unused group with the largest gain of coverage, and the lowest position on a tie. The search keeps
+the last gain of each alternative in a heap and computes a gain again only at the top, as Minoux does @minoux1978. The
+gain of an alternative never grows when the set grows, because each term $min(h^+, max(d_k - c_k, 0)) \/ d_k$ falls
+when $c_k$ grows. So the lazy search picks what the plain search picks, and the test
+`test_the_lazy_greedy_picks_what_the_plain_greedy_picks` compares them. Wolsey @wolsey1982 proves a ratio for the greedy
+of a submodular cover function. This paper has not checked his statement against the code, with its removal pass and
+its $epsilon$, and a group with several alternatives is outside his setting. So EBaMl claims no ratio for `Greedy`. Its
+guarantee is the bound of Lemma 17.
+
+*Correspondence of symbols to the code* for this section.
+
+#table(
+  columns: (auto, 1fr, auto),
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [*Symbol*], [*Computed by*], [*Function*],
+  [$h_(k,a)$ of a chosen class], [`view.scores[bin_index] - z * view.stds[bin_index] - view.current`], [`_alternatives`],
+  [Lemmas 15 and 16], [`any(gain > 0 ...)` and `_dominates(...)`], [`reduce_problem`],
+  [$L$], [`result.objective_value()` of GLOP], [`_lp_bound`],
+  [$ceil(L)$], [`math.ceil(result.objective_value() - _ROUNDING_TOLERANCE)`], [`_lp_bound`],
+  [$epsilon$], [`_FIRST_EPSILON`, times `_EPSILON_STEP`], [`_SolverSearch._improve`],
+  [at most $g - 1$ picks], [`fast_sum(built.variables.values()) <= len(greedy) - 1`], [`_SolverSearch._run`],
+  [the coverage gain], [`min(max(gain, 0.0), max(deficit - margin_covered, 0.0)) / deficit`], [`_coverage_gain`],
 )
 
 = Limits <sec-limits>
@@ -881,8 +1006,8 @@ The proof does not cover the following points.
   $0$, so the code does not count it as a flip, although the value is then "at most $tau$". This is the same
   convention as the logit $0$ of a classifier. Every change that the code finds does flip the decision (Lemma 8), and
   "fewest" counts the changes that cross $tau$ strictly. A point mass at $tau$ has no meaning in floating point.
-- *The order of `Minimal`.* The proof allows any order in both passes of `Minimal`. It proves a set from which no feature
-  can be removed, and it proves nothing about how large that set is, except for at most one feature (Corollary 3).
+- *The order of `Greedy`.* The proof allows any order in both passes of `Greedy`. It proves a set from which no feature
+  can be removed (Theorem 4). About the size, it proves only Corollary 3 and the bound of Lemma 17.
 - *The running time in the hardness result.* Lean checks that the reduction is correct (Theorem 8). It does not check
   that the reduction runs in polynomial time, that the decision problem is in NP (Corollary 4), or Karp's theorem
   @karp1972. The proof of Corollary 4 argues the first two in a few lines, and the third is a citation. Corollary 5 uses Corollary
@@ -890,13 +1015,17 @@ The proof does not cover the following points.
   that corollary as the number of elements, which is how its proof counts. A reader who wants another measure of size
   must check the translation of $ln n$.
 - *The upper bound.* The ratio $O(log m)$ of Kolliopoulos and Young @kolliopoulos2005 and the ratio $1 + ln m$ of
-  Chvátal @chvatal1979 are citations. The paper proves neither, and the code implements neither.
+  Chvátal @chvatal1979 are citations. The paper proves neither. The code implements a greedy of the kind of Chvátal
+  (`Greedy`), and it claims no ratio for it.
 - *The number of margins.* The reduction needs one margin for each element, so a classifier needs one rival class for
   each element. A classifier with few classes has few margins. The paper proves nothing about a fixed number of margins
   that is larger than one. One margin is the case that sorting solves exactly (Theorem 3).
-- *The cost of `ExactOrMinimal`.* The search visits at most $2^n$ sets (Theorem 5). The code limits $n$ with
-  `max_features`, and above the limit it returns the result of `Minimal` with the flag `minimum` false. The proof does
-  not model this switch, but each branch has its own statement.
+- *The solvers.* A proved optimum rests on the certificate of HiGHS, SCIP or CP-SAT, which Lean does not check, and on
+  their floating-point tolerances. A set whose smallest margin is positive but below $epsilon$ times the size of its
+  numbers can be missed, so the flag `minimum` can be wrong in that case (@sec-solvers). The lower bound depends on the
+  tolerances of GLOP. Lemmas 15 to 17 and Corollary 6 are proved on paper, and Lean checks none of them.
+- *The statement `card_search_space`.* Theorem 5 keeps the bound $2^n$ of a search by size. No function of the code
+  searches by size, so this part describes the oracle of the tests only.
 - *The confidence of a decision with several margins.* Each margin moves by $z$ deviations against its own claim, as in
   @sec-model. The proof covers this definition, which is the code. EBMs store no covariance between the scores of two
   margins, and the proof does not need one.
@@ -904,12 +1033,12 @@ The proof does not cover the following points.
   takes the first class, and its margin against the other is $0$. The proof does not cover this case, and
   `points_towards` reads the direction of a contribution wrongly there. A tie of two floating-point scores has no
   meaning.
-- *The class $j$ as target.* The proof covers the counterfactual "the predicted class is no longer $w$". It does not
-  cover a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once. The code
-  solves it with the covering searches of @sec-covering (`_target_counterfactual`), after it fixes one bin for each
-  feature. The reduction of @sec-hardness applies to its gain table by the same argument, but the Lean model does not
-  contain this counterfactual. The fixed bins are a second reason why the set is not always a smallest set: the
-  bin with the largest sum of gains can cover less than another bin does alone.
+- *The class $j$ as target.* The Lean model covers the counterfactual "the predicted class is no longer $w$". It does
+  not contain a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once. The code solves
+  it as a problem of @sec-solvers with one alternative for each plausible bin (`_target_counterfactual`), so the search
+  runs over every choice of bins. Lemmas 15 to 17 apply to it. Theorems 4 and 5 model one alternative for each feature
+  with gains that are not negative, so they do not apply. The reduction of @sec-hardness applies to its gain table by
+  the same argument.
 - *The probability of the new class.* `Counterfactual.new_output` of a multiclass classifier is the softmax probability
   from the mean scores after the change. It is a report and not an optimality claim, as for a binary classifier.
 - *The correlation between classes.* Lemma 12 shows an upper bound for the deviation of a margin. The code uses the
@@ -933,7 +1062,8 @@ holds the model and the two theorems, the file `EBaMlProofs/LocalExplanations/Co
 margins, the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside", and the file
 `EBaMlProofs/LocalExplanations/Multiclass.lean` holds the models of the rivals, and the file
 `EBaMlProofs/LocalExplanations/Hardness.lean` holds the reduction from Set Cover. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
-axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
+axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`. The statements of @sec-solvers
+have no Lean file.
 
 A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
 by hand. @sec-appendix gives the exact commands,
@@ -1084,4 +1214,8 @@ stands for a Lean namespace:
   [Theorem 9 (multiclass)], [`HD.multiclass`, `HD.sufficient_reason_iff_cover`], [`Hardness.lean`],
   [Theorem 10 (approximation ratio)], [`HD.SetCover.isOptimum_iff`, `HD.SetCover.isApprox_iff`, `HD.multiclass_isOptimum_iff`, `HD.multiclass_isApprox_iff`], [`Hardness.lean`],
   [Corollary 5 (same hardness)], [Not checked in Lean (@sec-limits)], [none],
+  [Lemma 15 (no positive gain)], [Not checked in Lean (@sec-solvers)], [none],
+  [Lemma 16 (a dominated alternative)], [Not checked in Lean (@sec-solvers)], [none],
+  [Corollary 6 (the reduction of the code)], [Not checked in Lean (@sec-solvers)], [none],
+  [Lemma 17 (the lower bound of the LP)], [Not checked in Lean (@sec-solvers)], [none],
 )

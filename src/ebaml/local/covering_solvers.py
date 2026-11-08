@@ -299,8 +299,8 @@ def _next_pick(  # ruff: ignore[too-many-arguments] -- the lazy greedy keeps its
 def reduce_problem(problem: CoveringProblem) -> list[list[int]]:
     """Remove the alternatives that no smallest set needs, and return the positions that stay.
 
-    Two rules remove an alternative. Each keeps the smallest size and the existence of a sufficient set
-    (``proofs/EBaMlProofs/LocalExplanations/Reduction.lean``):
+    Two rules remove an alternative. Each keeps the smallest size and the existence of a sufficient set (Corollary 6 of
+    ``proofs/papers/local-explanations/paper.typ``, proved on paper and not checked in Lean):
 
     - An alternative with no positive gain: a set without it has margins at least as large, and one pick fewer.
     - An alternative that another alternative of its own group dominates: the other one has a gain at least as large
