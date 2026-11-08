@@ -65,3 +65,16 @@ def test_import_loads_neither_the_sdk_nor_the_descriptors() -> None:
         check=True,
     )
     assert result.stdout.split() == ["False", "False"]
+
+
+def test_import_loads_ortools_and_not_highspy() -> None:
+    # highspy and ortools each ship a HiGHS library, and a process that loads both fails with an undefined symbol.
+    # ebaml reaches HiGHS through the MathOpt API of ortools only.
+    code = "import sys, ebaml; print('ortools.math_opt.python.mathopt' in sys.modules, 'highspy' in sys.modules)"
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv, never untrusted input
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert result.stdout.split() == ["True", "False"]

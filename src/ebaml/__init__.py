@@ -32,6 +32,7 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     ProviderUnreachableError,
     RateLimitedError,
     SDKUnavailableError,
+    SearchLimitError,
     TokenFitError,
     UnsupportedModelError,
 )
@@ -54,6 +55,14 @@ from ebaml.local.audience import (  # ruff: ignore[module-import-not-at-top-of-f
     resolve_audience,
     round_value,
     strength_word,
+)
+from ebaml.local.covering_solvers import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+    CoveringSearch,
+    Engine,
+    Exact,
+    Greedy,
+    Heuristic,
+    Stochastic,
 )
 from ebaml.local.decisions import Decision, Interval, Threshold  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.local.fact_text import FactTexts, facts_to_texts  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
@@ -83,6 +92,7 @@ __all__ = [
     "CompletionStep",
     "Contribution",
     "Counterfactual",
+    "CoveringSearch",
     "DataScientist",
     "Decision",
     "EBMGraph",
@@ -91,10 +101,14 @@ __all__ = [
     "EBMGraphSimplificationError",
     "EBMGraphTokenLimitError",
     "EBaMlError",
+    "Engine",
+    "Exact",
     "FactTexts",
     "FeatureType",
     "GraphOptions",
     "GraphTextError",
+    "Greedy",
+    "Heuristic",
     "Interval",
     "InvalidInstanceError",
     "InvalidOptionError",
@@ -116,6 +130,8 @@ __all__ = [
     "RateLimitedError",
     "Regressor",
     "SDKUnavailableError",
+    "SearchLimitError",
+    "Stochastic",
     "SufficientReason",
     "Threshold",
     "TokenFitError",
