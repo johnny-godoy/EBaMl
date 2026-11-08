@@ -10,11 +10,14 @@ Interpretability through the Lens of Computational Complexity" (arXiv:2010.12265
 An EBM without interactions is a sum of one score per feature. The decision of a prediction is a margin: a sum of one
 term per feature, positive while the decision holds (``ebaml.local.local_kinds``). The first two explanations are solved
 exactly by sorting the features by how much they move the margin, and the third by sampling the unknown features from
-their training distribution with a fixed seed. Nothing here calls an LLM, and nothing here renders text:
-``ebaml.local.fact_text`` puts the facts in words for the prompts in ``baml_src/local_explanations.baml``.
-The proof that the first two are exact is in ``proofs/papers/local-explanations/paper.typ``. It covers a binary
-classifier, a multiclass classifier and a regressor, which use the same algorithms on the margin of their decision, and
-it covers the searches of ``ebaml.local.reason_search`` for a decision with several margins.
+their training distribution with a fixed seed. A decision with several margins, and the counterfactual of a chosen
+class, are covering problems that sorting does not solve. A ``CoveringSearch`` of ``ebaml.local.covering_solvers``
+solves them. Nothing here calls an LLM, and nothing here renders text: ``ebaml.local.fact_text`` puts the facts in words
+for the prompts in ``baml_src/local_explanations.baml``.
+
+The proof that the sorting algorithms are exact is in ``proofs/papers/local-explanations/paper.typ``. It covers a binary
+classifier, a multiclass classifier and a regressor, which use the same algorithms on the margin of their decision. For
+a covering problem, the paper states what a result of a solver proves and what it does not.
 
 The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
 the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason
@@ -37,9 +40,10 @@ from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, Unsupp
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
+from ebaml.local.covering_solvers import CoveringProblem, CoveringSearch, Exact
 from ebaml.local.decisions import Decision, Margin
 from ebaml.local.local_kinds import LocalKind, Outcome, OutputKind, PredictionFrame, local_kind
-from ebaml.local.reason_search import Minimal, ReasonSearch, by_smallest_gain
+from ebaml.local.reason_search import by_smallest_gain
 
 
 @attrs.frozen
@@ -154,16 +158,16 @@ class LocalOptions:
         The question about the predicted value of a regressor that the explanations keep, such as ``Threshold(10)`` or
         ``Interval(10, 20)``. ``None`` asks whether the value is above the intercept, the average prediction. A
         classifier has its predicted class as the decision, so it accepts ``None`` only.
-    reason_search: ReasonSearch
-        How to choose the features of a sufficient reason when the decision has several margins, as "inside an
-        interval" has. ``Minimal`` (the default) returns a set from which no feature can be removed. ``ExactOrMinimal``
-        returns the smallest set when the number of features is at most its limit. A decision with one margin ignores
-        this option, because sorting finds its smallest set exactly.
+    search: CoveringSearch
+        How to solve the covering problems: the sufficient reason of a decision with several margins, as "inside an
+        interval" has, and the counterfactual of ``target_class``. ``Exact()`` (the default) proves the smallest set
+        with HiGHS, unless its time limit ends first. ``Heuristic``, ``Stochastic`` and ``Greedy`` are faster and
+        prove less. A decision with one margin ignores this option, because sorting finds its smallest set exactly.
     target_class: ClassLabel | None
         For a multiclass classifier, the class that the counterfactual must reach. ``None`` (the default) asks for the
-        fewest changes after which the class is no longer the predicted class. A class asks for changes after which
-        every margin of that class holds at once. ``reason_search`` chooses the features, and the result is never
-        marked as the smallest set. Another kind of model accepts ``None`` only.
+        fewest changes after which the class is no longer the predicted class. A class asks for the fewest changes
+        after which every margin of that class holds at once, over every choice of bins. ``search`` finds the changes.
+        Another kind of model accepts ``None`` only.
 
     """
 
@@ -173,7 +177,7 @@ class LocalOptions:
     seed: int = 0
     min_support: float = 0.01
     decision: Decision | None = None
-    reason_search: ReasonSearch = attrs.field(factory=Minimal)
+    search: CoveringSearch = attrs.field(factory=Exact)
     target_class: ClassLabel | None = None
 
 
@@ -256,15 +260,19 @@ class Counterfactual:
     new_output: float
         The output of the model for the new decision: the probability of the other class, or the predicted value.
     minimum: bool
-        True if no smaller set of changes gives the new decision. False for the counterfactual of a chosen target
-        class, which has no proof of a smallest set.
+        True if no smaller set of changes gives the new decision. Sorting proves it for the default counterfactual. For
+        a chosen target class, the search proves it, or the size equals ``lower_bound``.
+    lower_bound: int
+        No set of fewer changes gives the new decision. It equals the number of changes when ``minimum`` is true by a
+        proof of sorting or of the solver.
 
     """
 
     changes: list[Change]
     new_decision: ClassLabel
     new_output: float
-    minimum: bool = True
+    minimum: bool
+    lower_bound: int
 
 
 @attrs.frozen
@@ -278,14 +286,18 @@ class SufficientReason:
     guaranteed_margin: float
         The worst case of the margin of the decision when these inputs keep their values.
     minimum: bool
-        True if no smaller set fixes the decision. False if the set is only minimal: no input of the set can be
-        removed. The set of a binary classifier is always the minimum.
+        True if no smaller set fixes the decision: sorting proves it for a decision with one margin, and the search
+        proves it, or the size equals ``lower_bound``, for several margins.
+    lower_bound: int
+        No set of fewer inputs fixes the decision. It is the LP bound of the search for several margins, and the size of
+        the set for one margin.
 
     """
 
     features: list[str]
     guaranteed_margin: float
     minimum: bool
+    lower_bound: int
 
 
 @attrs.frozen
@@ -614,6 +626,8 @@ def _counterfactual(
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
+        minimum=True,  # sorting finds the smallest set of a decision with one margin, as the paper proves
+        lower_bound=len(changes),
     )
 
 
@@ -682,6 +696,7 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
         features=[step.feature.name for step in order[:count]],
         guaranteed_margin=float(margins[count]),
         minimum=True,  # the greedy set of a binary classifier is the smallest, as the paper proves
+        lower_bound=count,
     )
 
 
@@ -740,7 +755,7 @@ def _completions(
 
 @attrs.frozen
 class _GainTable:
-    """The numbers of the covering problem of a decision with several margins (``ebaml.local.reason_search``)."""
+    """The numbers of the covering problem of a decision with several margins."""
 
     worst: list[float]
     gains: list[list[float]]
@@ -778,9 +793,12 @@ def _gain_table(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float
 def _several_margins_reason(
     features: Sequence[_Feature],
     table: _GainTable,
-    search: ReasonSearch,
+    search: CoveringSearch,
+    seed: int,
 ) -> SufficientReason | None:
     """Choose a sufficient reason for a decision with several margins, with the search of the user.
+
+    Each feature is a group with one alternative: the feature keeps its value.
 
     Parameters
     ----------
@@ -788,8 +806,10 @@ def _several_margins_reason(
         The features.
     table : _GainTable
         The worst cases and the gains.
-    search : ReasonSearch
+    search : CoveringSearch
         How to choose the features.
+    seed : int
+        The seed of the solver.
 
     Returns
     -------
@@ -797,13 +817,15 @@ def _several_margins_reason(
         The reason, or None if even all the features do not guarantee the decision.
 
     """
-    selection = search.select(table.worst, table.gains)
-    if selection is None:
+    groups = [[[margin_gains[index] for margin_gains in table.gains]] for index in range(len(features))]
+    cover = search.solve(CoveringProblem(table.worst, groups), seed=seed)
+    if cover is None:
         return None
     return SufficientReason(
-        features=[features[index].name for index in selection.indices],
-        guaranteed_margin=selection.guaranteed_margin,
-        minimum=selection.minimum,
+        features=[features[choice.group].name for choice in cover.choices],
+        guaranteed_margin=cover.guaranteed_margin,
+        minimum=cover.minimum,
+        lower_bound=cover.lower_bound,
     )
 
 
@@ -811,7 +833,7 @@ def _reason(
     features: Sequence[_Feature],
     bounds: Sequence[_Bound],
     z: float,
-    search: ReasonSearch,
+    options: LocalOptions,
 ) -> SufficientReason | None:
     """Choose the sufficient reason of a decision.
 
@@ -825,8 +847,8 @@ def _reason(
         The margins of the decision.
     z : float
         Standard deviations to move the scores by.
-    search : ReasonSearch
-        How to choose the features when the decision has several margins.
+    options : LocalOptions
+        Uses ``search`` and ``seed`` when the decision has several margins.
 
     Returns
     -------
@@ -837,7 +859,7 @@ def _reason(
     if len(bounds) == 1:
         views = [f.against(bounds[0].columns) for f in features]
         return _sufficient_reason(views, bounds[0].intercept, bounds[0].sign, z)
-    return _several_margins_reason(features, _gain_table(features, bounds, z), search)
+    return _several_margins_reason(features, _gain_table(features, bounds, z), options.search, options.seed)
 
 
 def _reveal_order(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float) -> list[_Feature]:
@@ -922,18 +944,18 @@ def _smallest_counterfactual(
 
 
 @attrs.frozen
-class _Option:
-    """The bin that one feature moves to, and how much it raises each margin of a target class."""
+class _Alternatives:
+    """The bins that one feature can move to, and how much each bin raises each margin of a target class."""
 
-    bin_index: int
-    gains: list[float]
+    bins: list[int]
+    gains: list[list[float]]
 
 
-def _best_option(views: Sequence[_Feature], z: float) -> _Option:
-    """Pick the bin of a feature that raises the margins of the target class the most, and lowers none of them.
+def _alternatives(views: Sequence[_Feature], z: float) -> _Alternatives:
+    """List the plausible bins of a feature, other than the bin of the instance, with their gains for each margin.
 
-    The scores of the new bin move by ``z`` deviations against the target class, as in ``_counterfactual``. The bin of
-    the instance is always a candidate, so the feature can stay as it is.
+    The scores of the new bin move by ``z`` deviations against the target class, as in ``_counterfactual``. A gain can
+    be negative: a bin that lowers one margin can still be part of the smallest set.
 
     Parameters
     ----------
@@ -944,17 +966,17 @@ def _best_option(views: Sequence[_Feature], z: float) -> _Option:
 
     Returns
     -------
-    _Option
-        The chosen bin and its gain for each margin.
+    _Alternatives
+        The bins and, for each bin, its gain for each margin.
 
     """
-    # one row for each bin and one column for each margin
-    guaranteed = np.stack([view.scores - z * view.stds - view.current for view in views], axis=1)
-    allowed = views[0].plausible & np.all(guaranteed >= 0, axis=1)
-    allowed[views[0].bin_index] = True
-    score = np.where(allowed, guaranteed.sum(axis=1), -np.inf)
-    best = int(np.argmax(score))
-    return _Option(best, guaranteed[best].tolist())
+    first = views[0]
+    bins = [int(bin_index) for bin_index in np.flatnonzero(first.plausible) if bin_index != first.bin_index]
+    gains = [
+        [float(view.scores[bin_index] - z * view.stds[bin_index] - view.current) for view in views]
+        for bin_index in bins
+    ]
+    return _Alternatives(bins, gains)
 
 
 @attrs.frozen
@@ -972,13 +994,13 @@ def _target_counterfactual(
     margins: Sequence[Margin],
     totals: _Totals,
     *,
-    search: ReasonSearch,
+    options: LocalOptions,
 ) -> Counterfactual | None:
-    """Find a small set of changes after which every margin of the target class holds.
+    """Find the fewest changes after which every margin of the target class holds.
 
-    Each feature moves to one bin, chosen by ``_best_option``. The margins then form the covering problem of
-    ``ebaml.local.reason_search``, and ``search`` solves it. The set is the smallest only among these choices, so the
-    result has no proof of a smallest set.
+    Each feature is a group, and each of its plausible bins other than the bin of the instance is an alternative. A set
+    of changes moves each changed feature to one bin. ``options.search`` solves this covering problem over every choice
+    of bins.
 
     Parameters
     ----------
@@ -990,29 +1012,31 @@ def _target_counterfactual(
         The margins of the target class against every other class.
     totals : _Totals
         The scores and the intercepts of the instance, and the standard deviations to move the scores by.
-    search : ReasonSearch
-        How to choose the features.
+    options : LocalOptions
+        Uses ``search`` and ``seed``.
 
     Returns
     -------
     Counterfactual | None
-        The changes, or None if no choice of bins makes every margin hold.
+        The changes, or None if the search proves that no choice of bins makes every margin hold.
 
     """
     target, _ = margins[0].columns or (0, 0)
     views = [[feature.against(margin.columns) for feature in features] for margin in margins]
-    options = [
-        _best_option([margin_views[index] for margin_views in views], totals.z) for index in range(len(features))
+    alternatives = [
+        _alternatives([margin_views[index] for margin_views in views], totals.z) for index in range(len(features))
     ]
     worst = [
         margin.offset(totals.intercepts) + sum(view.current for view in margin_views)
         for margin, margin_views in zip(margins, views, strict=True)
     ]
-    gains = [[option.gains[row] for option in options] for row in range(len(margins))]
-    selection = search.select(worst, gains)
-    if selection is None:
+    problem = CoveringProblem(worst, [feature_alternatives.gains for feature_alternatives in alternatives])
+    cover = options.search.solve(problem, seed=options.seed)
+    if cover is None:
         return None
-    changed = [(features[index], options[index].bin_index) for index in selection.indices]
+    changed = [
+        (features[choice.group], alternatives[choice.group].bins[choice.alternative]) for choice in cover.choices
+    ]
     new_scores = np.array(totals.scores, dtype=float)
     for feature, bin_index in changed:
         new_scores += feature.outputs(bin_index) - feature.outputs(feature.bin_index)
@@ -1032,7 +1056,8 @@ def _target_counterfactual(
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
-        minimum=False,
+        minimum=cover.minimum,
+        lower_bound=cover.lower_bound,
     )
 
 
@@ -1057,7 +1082,7 @@ def _choose_counterfactual(
     kind : LocalKind
         The kind of the model.
     options : LocalOptions
-        Uses ``target_class`` and ``reason_search``.
+        Uses ``target_class``, ``search`` and ``seed``.
 
     Returns
     -------
@@ -1068,7 +1093,7 @@ def _choose_counterfactual(
     if options.target_class is None:
         return _smallest_counterfactual(features, frame, totals.scores, totals.intercepts, totals.z)
     margins = kind.target_margins(options.target_class, frame)
-    return _target_counterfactual(features, frame, margins, totals, search=options.reason_search)
+    return _target_counterfactual(features, frame, margins, totals, options=options)
 
 
 def compute_local_facts(
@@ -1158,7 +1183,7 @@ def compute_local_facts(
             reverse=True,
         ),
         counterfactual=counterfactual,
-        sufficient_reason=_reason(features, bounds, z, options.reason_search),
+        sufficient_reason=_reason(features, bounds, z, options),
         completions=_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,
     )

@@ -6,7 +6,9 @@ import math
 import re
 from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
+from typing import override
 
+import attrs
 import numpy as np
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
@@ -18,9 +20,18 @@ from ebaml.core.custom_types import FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
+from ebaml.local.covering_solvers import (
+    Cover,
+    CoveringProblem,
+    CoveringSearch,
+    Engine,
+    Exact,
+    Greedy,
+    Heuristic,
+    Stochastic,
+)
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
-from ebaml.local.reason_search import ExactOrMinimal, Minimal, ReasonSearch
 from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
@@ -332,7 +343,7 @@ def _brute_force_reason_size(views: Sequence[tuple[float, list[local._Feature]]]
 @given(row=st.integers(0, 239))
 def test_multiclass_facts_are_the_smallest_by_brute_force(row: int) -> None:
     model, frame = _multiclass_model()
-    options = local.LocalOptions(confidence_level=0.0, min_support=0.0, reason_search=ExactOrMinimal(max_features=10))
+    options = local.LocalOptions(confidence_level=0.0, min_support=0.0)
     facts = local.compute_local_facts(model, instance_of(frame, row), options)
     features = local._features(model, instance_of(frame, row), 0.0)
     intercepts = np.ravel(model.intercept_).tolist()
@@ -400,7 +411,7 @@ def test_a_target_counterfactual_reaches_the_target_class(row: int, target: int)
 
 @settings(max_examples=40, deadline=None)
 @given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
-def test_a_target_counterfactual_with_the_minimal_search_has_no_feature_to_revert(row: int, target: int) -> None:
+def test_a_target_counterfactual_has_no_feature_to_revert(row: int, target: int) -> None:
     model, frame = _multiclass_model()
     instance = instance_of(frame, row)
     predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
@@ -410,31 +421,84 @@ def test_a_target_counterfactual_with_the_minimal_search_has_no_feature_to_rever
     assume(counterfactual is not None)
     assert counterfactual is not None
     for change in counterfactual.changes:
-        fewer = local.Counterfactual(
-            [other for other in counterfactual.changes if other != change],
-            counterfactual.new_decision,
-            counterfactual.new_output,
-        )
+        fewer = attrs.evolve(counterfactual, changes=[other for other in counterfactual.changes if other != change])
         assert model.predict(_changed_row(instance, fewer))[0] != model.classes_[target]
 
 
+def _brute_force_target_size(features: Sequence[local._Feature], scores: Sequence[float], target: int) -> int | None:
+    """Try every set of features and every plausible bin for each, and return the fewest changes that make a class win.
+
+    Returns
+    -------
+    int | None
+        The fewest changes, or ``None`` if no choice of bins makes the target class win.
+
+    """
+    for size in range(1, len(features) + 1):
+        for chosen in itertools.combinations(range(len(features)), size):
+            bin_choices = [
+                [
+                    int(bin_index)
+                    for bin_index in np.flatnonzero(features[index].plausible)
+                    if bin_index != features[index].bin_index
+                ]
+                for index in chosen
+            ]
+            for bins in itertools.product(*bin_choices):
+                new_scores = np.array(scores, dtype=float)
+                for index, bin_index in zip(chosen, bins, strict=True):
+                    new_scores += features[index].outputs(bin_index) - features[index].outputs(
+                        features[index].bin_index,
+                    )
+                if all(new_scores[target] > new_scores[rival] for rival in range(len(scores)) if rival != target):
+                    return size
+    return None
+
+
+TARGET_SEARCHES: list[CoveringSearch] = [
+    Exact(),
+    Exact(Engine.SCIP),
+    Exact(Engine.CP_SAT),
+    Heuristic(),
+    Stochastic(),
+    Greedy(),
+]
+
+
 @settings(max_examples=40, deadline=None)
-@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
-def test_the_exact_search_of_a_target_counterfactual_is_not_larger_than_the_minimal_one(row: int, target: int) -> None:
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]), search=st.sampled_from(TARGET_SEARCHES))
+def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
+    row: int,
+    target: int,
+    search: CoveringSearch,
+) -> None:
     model, frame = _multiclass_model()
     instance = instance_of(frame, row)
     predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
     assume(target != predicted)
-    base = {"confidence_level": 0.0, "min_support": 0.0, "target_class": int(model.classes_[target])}
-    minimal = local.compute_local_facts(model, instance, local.LocalOptions(**base)).counterfactual
-    exact = local.compute_local_facts(
-        model,
-        instance,
-        local.LocalOptions(**base, reason_search=ExactOrMinimal()),
-    ).counterfactual
-    assert (minimal is None) == (exact is None)
-    if minimal is not None and exact is not None:
-        assert len(exact.changes) <= len(minimal.changes)
+    options = local.LocalOptions(
+        confidence_level=0.0,
+        min_support=0.0,
+        target_class=int(model.classes_[target]),
+        search=search,
+    )
+    counterfactual = local.compute_local_facts(model, instance, options).counterfactual
+    features = local._features(model, instance, 0.0)
+    logits: np.ndarray = model.decision_function(frame.iloc[[row]])
+    scores: list[float] = logits[0].tolist()
+    smallest = _brute_force_target_size(features, scores, target)
+    if smallest is None:
+        assert counterfactual is None
+        return
+    assert counterfactual is not None
+    assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
+    assert len(counterfactual.changes) >= smallest
+    assert counterfactual.lower_bound <= smallest
+    if counterfactual.minimum:
+        assert len(counterfactual.changes) == smallest
+    if isinstance(search, Exact):
+        assert counterfactual.minimum
+        assert len(counterfactual.changes) == smallest
 
 
 def _target_feature(name: str, rows: list[list[float]]) -> local._Feature:
@@ -450,11 +514,11 @@ def _target_feature(name: str, rows: list[list[float]]) -> local._Feature:
     return local._Feature(name, graph, np.ones(len(rows)), 0, f"{name}0", np.ones(len(rows), dtype=bool))
 
 
-def test_a_target_counterfactual_is_not_always_the_smallest_set() -> None:
+@pytest.mark.parametrize("engine", list(Engine))
+def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two(engine: Engine) -> None:
     # Bin 1 of f0 alone makes c0 win against both rivals. Bin 2 of f0 has the larger sum of gains over the two margins
-    # (13 against 12), so _best_option picks it, and it covers neither margin alone. Both searches then need f1 as
-    # well, so they return 2 changes where 1 change is enough. This is why the counterfactual of a target class has
-    # minimum False, and the flag may become True only together with a proof.
+    # (13 against 12), and it covers neither margin alone, so a search that keeps only that bin needs f1 as well. The
+    # covering problem has every bin as an alternative, so the search finds the one change and proves it smallest.
     features = [
         _target_feature("f0", [[0, 0, 0], [10, 0, 8], [6, 0, -1]]),
         _target_feature("f1", [[0, 0, 0], [4, 0, 4]]),
@@ -465,26 +529,36 @@ def test_a_target_counterfactual_is_not_always_the_smallest_set() -> None:
     frame = kind.frame(scores, [0.0] * 3, intercepts=intercepts, confidence_level=0.0, decision=None)
     margins = kind.target_margins("c0", frame)
     totals = local._Totals(scores, intercepts, 0.0)
+    assert _brute_force_target_size(features, scores, 0) == 1
+    options = local.LocalOptions(search=Exact(engine))
+    counterfactual = local._target_counterfactual(features, frame, margins, totals, options=options)
+    assert counterfactual is not None
+    assert counterfactual.new_decision == "c0"
+    assert [(change.feature, change.to_value) for change in counterfactual.changes] == [("f0", "f01")]
+    assert counterfactual.minimum is True
+    assert counterfactual.lower_bound == 1
 
-    def wins(bins: tuple[int, ...]) -> bool:
-        new = np.array(scores, dtype=float)
-        for feature, bin_index in zip(features, bins, strict=True):
-            new += feature.outputs(bin_index) - feature.outputs(0)
-        output_scores: list[float] = new.tolist()
-        return output_scores[0] > max(output_scores[1:])
 
-    smallest = min(
-        sum(bin_index != 0 for bin_index in bins)
-        for bins in itertools.product(*[range(len(feature.scores)) for feature in features])
-        if wins(bins)
-    )
-    assert smallest == 1
-    for search in (Minimal(), ExactOrMinimal()):
-        counterfactual = local._target_counterfactual(features, frame, margins, totals, search=search)
-        assert counterfactual is not None
-        assert counterfactual.new_decision == "c0"
-        assert len(counterfactual.changes) == 2 > smallest
-        assert counterfactual.minimum is False
+@attrs.frozen
+class _SeedSpy(Greedy):
+    """A greedy search that records the seed of each call."""
+
+    seeds: list[int] = attrs.field(factory=list)
+
+    @override
+    def solve(self, problem: CoveringProblem, *, seed: int) -> Cover | None:
+        self.seeds.append(seed)
+        return super().solve(problem, seed=seed)
+
+
+def test_the_searches_get_the_seed_of_the_options(
+    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+) -> None:
+    ebm, _ = categorical_regressor
+    spy = _SeedSpy()
+    options = local.LocalOptions(confidence_level=0, min_support=0, decision=Interval(-1.5, 1.5), seed=13, search=spy)
+    local.compute_local_facts(ebm, {"f0": "q", "f1": "q", "f2": "q"}, options)
+    assert spy.seeds == [13]
 
 
 def test_a_target_class_is_none_when_no_choice_of_bins_reaches_it() -> None:
@@ -948,7 +1022,7 @@ def test_sufficient_reason_fixes_the_largest_gains_first() -> None:
     features = [_hand("f3", [0.5, 0.0]), _hand("f1", [2.0, -1.0]), _hand("f2", [1.0, -0.5])]
     # the worst case is -1.5 (-1, -0.5 and 0); the gains are 3 (f1), 1.5 (f2) and 0.5 (f3)
     reason = local._sufficient_reason(features, intercept=0.0, sign=1, z=0.0)
-    assert reason == local.SufficientReason(["f1"], 1.5, minimum=True)
+    assert reason == local.SufficientReason(["f1"], 1.5, minimum=True, lower_bound=1)
 
 
 def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> None:
@@ -957,6 +1031,7 @@ def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> Non
         [],
         1.0,
         minimum=True,
+        lower_bound=0,
     )
 
 
@@ -966,6 +1041,7 @@ def test_sufficient_reason_needs_a_margin_above_zero() -> None:
         ["f"],
         1.0,
         minimum=True,
+        lower_bound=1,
     )
     # when the margin stays at 0, the outcome is not certain
     assert local._sufficient_reason([_hand("f", [0.0, 0.0])], 0.0, 1, 0.0) is None
@@ -1306,12 +1382,12 @@ def _interval_answer(interval: Interval, value: float) -> Callable[[float], bool
 
 
 @pytest.mark.parametrize("interval", [Interval(-1.5, 1.5), Interval(-0.7, 0.7), Interval(-3.5, 3.5)])
-@pytest.mark.parametrize("search", [Minimal(), ExactOrMinimal()])
+@pytest.mark.parametrize("search", [Exact(), Greedy()], ids=repr)
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_regressor_interval_matches_brute_force(
     categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
     row: tuple[str, ...],
-    search: ReasonSearch,
+    search: CoveringSearch,
     interval: Interval,
 ) -> None:
     ebm, _ = categorical_regressor
@@ -1321,7 +1397,7 @@ def test_regressor_interval_matches_brute_force(
     facts = local.compute_local_facts(
         ebm,
         instance,
-        local.LocalOptions(confidence_level=0, min_support=0, decision=interval, reason_search=search),
+        local.LocalOptions(confidence_level=0, min_support=0, decision=interval, search=search),
     )
     flip, _ = _brute_force_regressor(ebm, row, holds)
     assert (facts.counterfactual is None) == (flip is None)
@@ -1339,9 +1415,10 @@ def test_regressor_interval_matches_brute_force(
     # minimal: no feature can be removed
     assert not any(sufficient[chosen - {feature}] for feature in chosen)
     smallest = min(len(subset) for subset, ok in sufficient.items() if ok)
+    assert reason.lower_bound <= smallest
     if reason.minimum:
         assert len(chosen) == smallest
-    if isinstance(search, ExactOrMinimal):
+    if isinstance(search, Exact):
         assert reason.minimum
         assert len(chosen) == smallest
 
@@ -1390,4 +1467,4 @@ def test_a_classifier_rejects_a_decision(categorical_ebm: tuple[ExplainableBoost
 def test_no_reason_with_several_margins_when_all_features_are_not_enough() -> None:
     features = [_feature([0.5, -2.0], 0, std=1.0), _feature([0.5, -2.0], 0, std=1.0)]
     bounds = [local._Bound(0.0, 1), local._Bound(0.0, -1)]
-    assert local._reason(features, bounds, 1.96, Minimal()) is None
+    assert local._reason(features, bounds, 1.96, local.LocalOptions()) is None
