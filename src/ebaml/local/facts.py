@@ -43,7 +43,6 @@ from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.local.covering_solvers import CoveringProblem, CoveringSearch, Exact
 from ebaml.local.decisions import Decision, Margin
 from ebaml.local.local_kinds import LocalKind, Outcome, OutputKind, PredictionFrame, local_kind
-from ebaml.local.reason_search import by_smallest_gain
 
 
 @attrs.frozen
@@ -862,6 +861,27 @@ def _reason(
     return _several_margins_reason(features, _gain_table(features, bounds, z), options.search, options.seed)
 
 
+def _by_smallest_gain(gains: Sequence[Sequence[float]]) -> list[int]:
+    """Order the features by the smallest gain over the margins, largest first.
+
+    A feature that helps one margin and does nothing for another one is no help for the claim, so the smallest gain is
+    the measure.
+
+    Parameters
+    ----------
+    gains : Sequence[Sequence[float]]
+        For each margin, the gain of each feature.
+
+    Returns
+    -------
+    list[int]
+        The positions of the features.
+
+    """
+    feature_count = len(gains[0])
+    return sorted(range(feature_count), key=lambda feature: -min(margin_gains[feature] for margin_gains in gains))
+
+
 def _reveal_order(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float) -> list[_Feature]:
     """Order the features by how much knowing their value guarantees, largest first.
 
@@ -884,7 +904,7 @@ def _reveal_order(features: Sequence[_Feature], bounds: Sequence[_Bound], z: flo
         views = [f.against(bounds[0].columns) for f in features]
         by_name = {f.name: f for f in features}
         return [by_name[step.feature.name] for step in _fixing_order(views, bounds[0].sign, z)]
-    return [features[index] for index in by_smallest_gain(_gain_table(features, bounds, z).gains)]
+    return [features[index] for index in _by_smallest_gain(_gain_table(features, bounds, z).gains)]
 
 
 def _smallest_counterfactual(
