@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.0'></a>
+## [0.6.0] - 2026-11-08
+
+### Added
+
+- `LocalOptions.target_class` asks, for a multiclass classifier, for the changes after which a chosen class is the predicted class. `reason_search` chooses the features. The result is never marked as the smallest set, and it has no proof.
+
+### Changed
+
+- The counterfactual prompt tells the LLM when the set of changes is not the smallest, and that a flip of a class means that another class becomes the predicted class. The counterfactual facts have the key `is_smallest_set`, and the key `minimum_number_of_changes` is now `number_of_changes`.
+- `Counterfactual.minimum` is false for the counterfactual of a chosen target class.
+
 <a id='changelog-0.5.2'></a>
 ## [0.5.2] - 2026-11-08
 
