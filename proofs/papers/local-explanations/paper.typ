@@ -24,7 +24,8 @@ come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `sr
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
 covering problem, and the paper proves what two searches return. A multiclass classifier has one margin for each rival
-class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover.
+class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover, and it has the same hardness of
+approximation.
 A Lean 4 file @lean4 checks every statement except two facts about running time (@sec-limits), and the
 appendix tells the reader how to repeat the check.
 
@@ -63,8 +64,10 @@ of the margin for any correlation between the two scores (Lemma 12).
 *Claim 7 (hardness).* The covering problem of several margins contains Set Cover. A set of features is sufficient for
 the problem of the reduction iff the matching sets cover every element (Theorem 8). A multiclass classifier with one
 rival class for each element has this problem as its sufficient reason (Theorem 9). The decision problem is NP-complete
-(Corollary 4), so an algorithm that finds a smallest sufficient set in polynomial time exists only if P = NP. The claim
-covers the gain table of the sufficient reason. It does not cover the counterfactual of a chosen class (@sec-limits).
+(Corollary 4), so an algorithm that finds a smallest sufficient set in polynomial time exists only if P = NP. The
+reduction keeps the optimum and the approximation ratio (Theorem 10). So the hardness of approximation of Set Cover
+@dinur2014 holds for the sufficient reason (Corollary 5). The claim covers the gain table of the sufficient reason.
+It does not cover the counterfactual of a chosen class (@sec-limits).
 
 The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The text of the module docstring
 differs a little from the code for the counterfactual. @sec-limits explains the difference.
@@ -739,12 +742,6 @@ sets, and the answers are equal.
   not checked in Lean (@sec-limits).
 ]
 
-The reduction keeps the size of the answer: the smallest cover and the smallest sufficient set have the same size. So
-each hardness result for the size of a cover holds for the size of a sufficient set. Dinur and Steurer @dinur2014 prove
-that, unless P = NP, no algorithm with a polynomial time guarantees a cover that is at most $(1 - epsilon) ln |U|$ times
-the smallest, for each $epsilon > 0$. Hence the same limit holds for the smallest sufficient set. This sentence is a
-consequence of the cited result, and Lean does not check it.
-
 Theorem 8 is about an abstract table of gains. The next two statements show that a multiclass classifier of the model
 of @sec-model produces this table. The first one is about a binary model with two bins for each feature.
 
@@ -786,6 +783,63 @@ of @sec-model produces this table. The first one is about a binary model with tw
 
 If an element lies in no set, no cover exists, and a check in linear time finds this case. So the restriction of
 Theorem 9 does not change the hardness.
+
+The reduction also keeps the quality of an answer. For a property $P$ of sets of features, the _optimum_ is the smallest
+size of a set with $P$. A set $F$ is a _$rho$-approximate_ set if $F$ has $P$ and $|F| <= rho$ times the optimum. The
+properties "sufficient" and "cover" are the two cases of this section.
+
+#theorem("the approximation ratio", [
+  Let each element of $U$ lie in some set $S_i$. Then the following hold, both for the problem of the reduction and for
+  the multiclass classifier $M(I)$ of Theorem 9.
+  + A number $o$ is the smallest size of a sufficient set iff $o$ is the smallest size of a cover.
+  + For each $rho$, a set $F$ is a $rho$-approximate sufficient set iff $F$ is a $rho$-approximate cover.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Hardness.lean", "EBaMlProofs.LocalExplanations.Hardness.SetCover.isOptimum_iff", "EBaMlProofs.LocalExplanations.Hardness.SetCover.isApprox_iff", "EBaMlProofs.LocalExplanations.Hardness.multiclass_isOptimum_iff", "EBaMlProofs.LocalExplanations.Hardness.multiclass_isApprox_iff"))
+
+#proof[
+  By Theorems 8 and 9, the sufficient sets are exactly the covers. The optimum and the $rho$-approximate sets depend
+  only on which sets have the property, so they are the same for both properties.
+]
+
+Theorem 10 says that the reduction is _strict_: it maps each solution to itself, and it keeps both the optimum and the
+ratio. So each guarantee of an approximation algorithm for one problem is the same guarantee for the other. The next
+statement uses this fact for the lower bound.
+
+#corollary("the same hardness of approximation as Set Cover", [
+  Let $rho$ be a function of the number $m$ of margins. Suppose that a polynomial-time algorithm gets a covering problem
+  with $m$ margins that has a sufficient set, and returns a sufficient set with at most $rho(m)$ times the smallest
+  number of features. Then a polynomial-time algorithm gets a Set Cover instance with $m$ elements and returns a cover
+  with at most $rho(m)$ times the smallest size. Hence, for each $alpha > 0$, it is NP-hard to find a sufficient set with
+  at most $(1 - alpha) ln m$ times the smallest number of features. This holds for a covering problem with rational
+  numbers, and for a multiclass classifier with one rival class for each element.
+])
+
+#proof[
+  *ASSUME:* an algorithm $A$ as in the statement. *PROVE:* an algorithm for Set Cover with the same ratio.
+  #step(1, "1", [Given a Set Cover instance, check in linear time that each element lies in a set. If not, no cover
+    exists, and the algorithm says so.])
+  #step(1, "2", [Otherwise build the problem of the reduction in linear time. It has $m$ margins, and a sufficient set
+    exists by Theorem 8, because the set of all indices is a cover.])
+  #step(1, "3", [Run $A$ and return its set. By Theorem 10, this set is a cover with at most $rho(m)$ times the smallest
+    size of a cover.])
+  #step(1, "4", [*Q.E.D.* For the second sentence, take $rho(m) = (1 - alpha) ln m$. By Corollary 1.5 of Dinur and
+    Steurer @dinur2014, for each $alpha > 0$ it is NP-hard to approximate Set Cover within $(1 - alpha) ln n$ for an
+    instance of size $n$. We read $n$ as the number of elements, as the proof of that corollary does. So an algorithm
+    $A$ with this ratio would give a polynomial-time algorithm for an NP-hard problem. The last sentence follows from
+    Theorem 9 in the same way.])
+]
+
+Lean checks Theorem 10, and the paper cites Corollary 1.5 of @dinur2014 as stated. The proof of Corollary 5 uses that
+corollary and the linear time of the reduction. Lean checks neither of them (@sec-limits).
+
+*The upper bound.* Set Cover has a polynomial-time algorithm with the ratio $1 + ln m$ @chvatal1979. For the covering
+problem with rational numbers and one fixed bin for each feature, the problem is a covering integer program with the
+bounds $x_i <= 1$, after one change: for rational numbers with the common denominator $q$, the condition
+$W_k + sum_(i in F) h_(k,i) > 0$ is the same as $W_k + sum_(i in F) h_(k,i) >= 1/q$. Kolliopoulos and Young
+@kolliopoulos2005 give a polynomial-time algorithm with the ratio $O(log m)$ for such programs. So, with the bins fixed,
+the covering problem and Set Cover have the same approximability up to a constant factor. This paper does not prove the
+guarantee of Kolliopoulos and Young, and the code does not implement it: `Minimal` has no guarantee on the ratio, and
+`ExactOrMinimal` visits $2^n$ sets. The choice of one bin for each feature adds a constraint that is not a covering
+constraint, and the paper states nothing about its approximability.
 
 *Meaning for the code.* The class `ExactOrMinimal` has a cost of $2^n$ steps, and the flag `minimum` of `Minimal` is
 false for more than one feature. Both facts match the hardness. The test
@@ -831,8 +885,12 @@ The proof does not cover the following points.
   can be removed, and it proves nothing about how large that set is, except for at most one feature (Corollary 3).
 - *The running time in the hardness result.* Lean checks that the reduction is correct (Theorem 8). It does not check
   that the reduction runs in polynomial time, that the decision problem is in NP (Corollary 4), or Karp's theorem
-  @karp1972. The proof of Corollary 4 argues the first two in a few lines, and the third is a citation. The statement
-  about the approximation ratio is a consequence of @dinur2014 and is not proved here.
+  @karp1972. The proof of Corollary 4 argues the first two in a few lines, and the third is a citation. Corollary 5 uses Corollary
+  1.5 of @dinur2014 as stated. Lean does not check it, and the paper does not re-prove it. The paper reads the size $n$ in
+  that corollary as the number of elements, which is how its proof counts. A reader who wants another measure of size
+  must check the translation of $ln n$.
+- *The upper bound.* The ratio $O(log m)$ of Kolliopoulos and Young @kolliopoulos2005 and the ratio $1 + ln m$ of
+  Chvátal @chvatal1979 are citations. The paper proves neither, and the code implements neither.
 - *The number of margins.* The reduction needs one margin for each element, so a classifier needs one rival class for
   each element. A classifier with few classes has few margins. The paper proves nothing about a fixed number of margins
   that is larger than one. One margin is the case that sorting solves exactly (Theorem 3).
@@ -899,7 +957,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`193d3690adff8b5bc517506ff1d9c6e618c127d6`],
+  [Lean sources checked at commit], [`d6a95b038f97ad644dddcef7f2fa55a40c318803`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -915,7 +973,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 193d3690adff8b5bc517506ff1d9c6e618c127d6
+git checkout d6a95b038f97ad644dddcef7f2fa55a40c318803
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
@@ -960,6 +1018,10 @@ info: EBaMlProofs/LocalExplanations/Axioms.lean:40:0: 'EBaMlProofs.LocalExplanat
 info: EBaMlProofs/LocalExplanations/Axioms.lean:41:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:42:0: 'EBaMlProofs.LocalExplanations.Hardness.sufficient_of_shape' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:43:0: 'EBaMlProofs.LocalExplanations.Hardness.sufficient_reason_iff_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:44:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.isOptimum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:45:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.isApprox_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:46:0: 'EBaMlProofs.LocalExplanations.Hardness.multiclass_isOptimum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:47:0: 'EBaMlProofs.LocalExplanations.Hardness.multiclass_isApprox_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
@@ -1020,4 +1082,6 @@ stands for a Lean namespace:
   [Corollary 4 (NP-completeness)], [Not checked in Lean (@sec-limits)], [none],
   [Lemma 14 (the shape)], [`HD.sufficient_of_shape`], [`Hardness.lean`],
   [Theorem 9 (multiclass)], [`HD.multiclass`, `HD.sufficient_reason_iff_cover`], [`Hardness.lean`],
+  [Theorem 10 (approximation ratio)], [`HD.SetCover.isOptimum_iff`, `HD.SetCover.isApprox_iff`, `HD.multiclass_isOptimum_iff`, `HD.multiclass_isApprox_iff`], [`Hardness.lean`],
+  [Corollary 5 (same hardness)], [Not checked in Lean (@sec-limits)], [none],
 )
