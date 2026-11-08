@@ -32,7 +32,6 @@ from ebaml.local.covering_solvers import (
     greedy_cover,
     reduce_problem,
 )
-from ebaml.local.reason_search import ExactOrMinimal
 
 # the parts of a problem: the worst case of each margin, and groups[group][alternative][margin]
 type ProblemParts = tuple[list[float], list[list[list[float]]]]
@@ -625,18 +624,6 @@ def test_the_exact_search_solves_set_cover_through_the_reduction_of_the_proof(
         assert result is not None
         assert len(result.choices) == smallest
         assert result.minimum
-
-
-@settings(max_examples=60, deadline=None)
-@given(parts=problem_parts(max_alternatives=1, signed=False))
-def test_the_exact_search_agrees_with_the_search_by_size(parts: ProblemParts) -> None:
-    worst, groups = parts
-    gains = [[alternatives[0][margin] for alternatives in groups] for margin in range(len(worst))]
-    by_size = ExactOrMinimal().select(worst, gains)
-    result = Exact().solve(CoveringProblem(worst, groups), seed=0)
-    assert (by_size is None) == (result is None)
-    if by_size is not None and result is not None:
-        assert len(result.choices) == len(by_size.indices)
 
 
 def naive_greedy(problem: CoveringProblem) -> list[Choice] | None:

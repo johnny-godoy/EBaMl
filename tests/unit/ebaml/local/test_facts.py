@@ -1468,3 +1468,7 @@ def test_no_reason_with_several_margins_when_all_features_are_not_enough() -> No
     features = [_feature([0.5, -2.0], 0, std=1.0), _feature([0.5, -2.0], 0, std=1.0)]
     bounds = [local._Bound(0.0, 1), local._Bound(0.0, -1)]
     assert local._reason(features, bounds, 1.96, local.LocalOptions()) is None
+
+
+def test_the_reveal_order_of_several_margins_ranks_by_the_smallest_gain() -> None:
+    assert local._by_smallest_gain([[1.0, 4.0, 2.0], [3.0, 4.0, 0.5]]) == [1, 0, 2]
