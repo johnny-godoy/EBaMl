@@ -67,3 +67,26 @@ kolliopoulos2005:
     issue: 4
   page-range: "495-505"
   url: https://arxiv.org/abs/cs/0205030
+
+wolsey1982:
+  type: article
+  title: "An Analysis of the Greedy Algorithm for the Submodular Set Covering Problem"
+  author: ["Wolsey, Laurence A."]
+  date: 1982
+  parent:
+    type: periodical
+    title: "Combinatorica"
+    volume: 2
+    issue: 4
+  page-range: "385-393"
+
+minoux1978:
+  type: article
+  title: "Accelerated Greedy Algorithms for Maximizing Submodular Set Functions"
+  author: ["Minoux, Michel"]
+  date: 1978
+  parent:
+    type: book
+    title: "Optimization Techniques, Lecture Notes in Control and Information Sciences"
+    volume: 7
+  page-range: "234-243"
