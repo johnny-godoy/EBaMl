@@ -117,3 +117,7 @@ class ProviderUnreachableError(LLMRequestError):
 
 class TokenFitError(EBaMlError, ValueError):
     """Exception raised when the token weights cannot be fitted or read, for example from an empty list of samples."""
+
+
+class SearchLimitError(EBaMlError):
+    """Exception raised when a covering search ends at its limit with no set and no proof that no set exists."""

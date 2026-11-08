@@ -29,6 +29,8 @@ dependencies = [
     "numpy>=2.5.4",
     "orjson>=3.13.0",
     # only ebaml.core.custom_types imports it, for the type of pd.NA
+    # only ebaml.local.covering_solvers imports it: the MathOpt models and their solvers HiGHS, SCIP and CP-SAT
+    "ortools>=9.15.6755",
     "pandas>=3.1.0",
     "scipy>=1.18.1",
     "structlog>=26.1.0",
@@ -280,6 +282,18 @@ ignore_imports = [
     "ebaml.llm.descriptors -> baml_bridge",
     "ebaml.llm.provider_errors -> baml_bridge",
 ]
+
+[[tool.importlinter.contracts]]
+name = "Only local.covering_solvers imports OR-Tools"
+type = "forbidden"
+source_modules = ["ebaml"]
+forbidden_modules = ["ortools"]
+# reason: covering_solvers is the one module that builds and solves the MathOpt models, so a change of solver library
+# stays in one place. import-linter sees an external package only at its top level, so the entry names ortools.
+ignore_imports = ["ebaml.local.covering_solvers -> ortools"]
+# reason: ebaml.local.facts and the layers above call the searches of covering_solvers, so only a direct import is
+# wrong.
+allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
 name = "The benchmark stands alone"

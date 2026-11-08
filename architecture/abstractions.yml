@@ -154,6 +154,14 @@ capabilities:
     keywords: [explain, instance, prediction, local, llm]
     status: active
 
+  - id: covering-search
+    responsibility: Solve the covering problem of a fact with several margins with a chosen search and a lower bound
+    owner: ebaml.local
+    symbol: ebaml.local.covering_solvers:CoveringSearch
+    consumers: [ebaml.local, ebaml.llm]
+    keywords: [covering, solver, search, sufficient, reason, counterfactual, margins, ortools]
+    status: active
+
   - id: benchmark-usage
     responsibility: Describe the tokens that a provider reports for a benchmark reply, as a contract
     owner: ebaml.benchmark
