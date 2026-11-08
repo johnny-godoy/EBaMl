@@ -75,9 +75,9 @@ def _(mo) -> None:
        the audience leaves out is a number that the LLM cannot repeat.
     2. **It tells the LLM how to write.** The method `guidance` returns the instruction, with its reason.
 
-    All eight methods are abstract, so an author decides on every model number. There are two ways in. **Subclass a
+    All nine methods are abstract, so an author decides on every model number. There are two ways in. **Subclass a
     built-in audience** and override the one method that differs: this is the short way. **Subclass `Audience`** and
-    write all eight methods: this is the way for an audience with new rules.
+    write all nine methods: this is the way for an audience with new rules.
 
     This notebook builds six audiences for six readers (a child, a chief executive, a reader of Simplified Technical
     English, a loan officer, a machine learning engineer and a regulator). It shows the facts that each one produces,
@@ -156,7 +156,7 @@ def _(mo) -> None:
     ## 1. The short way: subclass a built-in audience
 
     Some readers need the facts of a layperson (words, no model numbers) and a different instruction. For each of them,
-    the class below subclasses `Layperson` and overrides `guidance`. The other seven methods stay as they are. The
+    the class below subclasses `Layperson` and overrides `guidance`. The other eight methods stay as they are. The
     readers differ in role and style:
 
     - `Eli5` is a child. The text uses short sentences and one everyday comparison.
@@ -282,7 +282,7 @@ def _(mo) -> None:
 
     A regulator checks that the model uses the right inputs in the right direction. This reader wants the direction and
     the size of each effect, in words, and no probability at all, because a probability depends on the threshold of the
-    bank. The class below subclasses `Audience` itself, so it writes all eight methods. Each one answers the question
+    bank. The class below subclasses `Audience` itself, so it writes all nine methods. Each one answers the question
     "which number does this reader get?". The answers are in the table:
 
     | Method | Keys of this audience |
@@ -333,6 +333,10 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
 
         @override
         def margin(self, reason, output_kind) -> dict[str, JSONValue]:
+            return {}
+
+        @override
+        def lower_bound(self, lower_bound, items) -> dict[str, JSONValue]:
             return {}
 
         @override
@@ -432,7 +436,7 @@ def _(InvalidOptionError, mo) -> None:
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    **A missing method.** The eight methods are abstract. If you forget one, Python refuses to build the audience, and
+    **A missing method.** The nine methods are abstract. If you forget one, Python refuses to build the audience, and
     the error names the method. This is the reason for the design: an audience cannot leak a model number by omission.
     """)
 

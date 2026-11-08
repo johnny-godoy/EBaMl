@@ -3,9 +3,9 @@
 ``Audience`` is the base class. A subclass fills in the rules of one kind of reader:
 
 - ``guidance`` is the instruction that tells the LLM how to write for this reader.
-- ``contribution``, ``prediction``, ``change``, ``flip``, ``class_output``, ``margin`` and ``share`` return the keys
-  that the audience adds to the facts of the prompt. Each is abstract, so the author of an audience decides on every
-  model number.
+- ``contribution``, ``prediction``, ``change``, ``flip``, ``class_output``, ``margin``, ``lower_bound`` and ``share``
+  return the keys that the audience adds to the facts of the prompt. Each is abstract, so the author of an audience
+  decides on every model number.
 
 ``Layperson`` and ``DataScientist`` are the two audiences that ship with the package. To change one rule, subclass one
 of them and override one method. Pass an instance of any subclass as ``audience=`` to ``explain_instance`` or to
@@ -224,6 +224,14 @@ class Audience(abc.ABC):
         """Return the keys that describe the margin of the sufficient reason."""
 
     @abc.abstractmethod
+    def lower_bound(
+        self,
+        lower_bound: int,
+        items: str,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        """Return the keys that give the fewest ``items`` (``"changes"`` or ``"features"``) that any set needs."""
+
+    @abc.abstractmethod
     def share(self, share: float) -> float | str:
         """Return the share of completions with the same prediction."""
 
@@ -287,6 +295,15 @@ class Layperson(Audience):
         reason: SufficientReason,
         output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {}
+
+    @override
+    def lower_bound(
+        self,
+        lower_bound: int,
+        items: str,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        # a bound on an unknown smallest size confuses this reader more than it helps
         return {}
 
     @override
@@ -355,6 +372,15 @@ class DataScientist(Audience):
         output_kind: OutputKind,
     ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {_MARGIN_KEYS[output_kind]: round_value(reason.guaranteed_margin)}
+
+    @override
+    def lower_bound(
+        self,
+        lower_bound: int,
+        items: str,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        # the gap to the bound tells this reader how much to trust a set that is not proved smallest
+        return {f"smallest_possible_number_of_{items}": lower_bound}
 
     @override
     def share(self, share: float) -> float | str:

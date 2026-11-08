@@ -115,6 +115,10 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
             return {"m": reason.features}
 
         @override
+        def lower_bound(self, lower_bound: int, items: str) -> dict[str, JSONValue]:
+            return {f"lb_{items}": lower_bound}
+
+        @override
         def share(self, share: float) -> str:
             return f"s{share}"
 
@@ -133,6 +137,7 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "ch": "f0"}],
         "number_of_changes": 1,
         "is_smallest_set": True,
+        "lb_changes": 1,
         "after_the_changes": {"predicted_class": 1, "co": 0.7},
         "fl": True,
     }
@@ -140,6 +145,7 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
         "exists": True,
         "features": ["f0"],
         "is_smallest_set": True,
+        "lb_features": 1,
         "features_not_needed": ["f1"],
         "m": ["f0"],
     }
@@ -203,6 +209,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
         "number_of_changes": 1,
         "is_smallest_set": True,
+        "smallest_possible_number_of_changes": 1,
         "after_the_changes": {"predicted_class": 1, "probability": 0.7},
         "flip_holds_at_confidence": 0.95,
     }
@@ -210,6 +217,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
         "exists": True,
         "features": ["f0"],
         "is_smallest_set": True,
+        "smallest_possible_number_of_features": 1,
         "features_not_needed": ["f1"],
         "guaranteed_margin_logit": 0.988,
     }
@@ -261,3 +269,31 @@ def test_a_minimal_set_is_not_called_the_smallest() -> None:
         sufficient_reason=local.SufficientReason(["f0"], 0.5, minimum=False, lower_bound=1),
     )
     assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_smallest_set"] is False
+
+
+@pytest.mark.parametrize(
+    ("audience", "keys"),
+    [
+        (Layperson(), set()),
+        (DataScientist(), {"smallest_possible_number_of_changes", "smallest_possible_number_of_features"}),
+    ],
+)
+def test_only_a_data_scientist_gets_the_lower_bound_of_a_set(audience: Audience, keys: set[str]) -> None:
+    facts = _text_facts_with_everything(0.95)
+    assert facts.counterfactual is not None
+    unproved = attrs.evolve(
+        facts,
+        counterfactual=attrs.evolve(facts.counterfactual, minimum=False, lower_bound=0),
+        sufficient_reason=local.SufficientReason(["f0", "f1"], 0.5, minimum=False, lower_bound=1),
+    )
+    texts = local_text.facts_to_texts(unproved, audience)
+    counterfactual = orjson.loads(texts.counterfactual)
+    sufficient = orjson.loads(texts.sufficient_reason)
+    found = (set(counterfactual) | set(sufficient)) & {
+        "smallest_possible_number_of_changes",
+        "smallest_possible_number_of_features",
+    }
+    assert found == keys
+    if keys:
+        assert counterfactual["smallest_possible_number_of_changes"] == 0
+        assert sufficient["smallest_possible_number_of_features"] == 1

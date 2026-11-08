@@ -242,13 +242,24 @@ test "question functions state the sentence limit and their own query" {
     assert.is_true(counterfactual_question(3).includes("at most 3 sentences"));
     assert.is_true(counterfactual_question(3).includes("minimum change required"));
     assert.is_true(counterfactual_question(3).includes("is_smallest_set"));
-    assert.is_true(counterfactual_question(3).includes("do not call it the smallest or the fewest"));
+    assert.is_true(counterfactual_question(3).includes("keep its size out of the answer"));
     assert.is_true(sufficient_reason_question(4).includes("at most 4 sentences"));
     assert.is_true(sufficient_reason_question(4).includes("sufficient reason"));
     assert.is_true(sufficient_reason_question(4).includes("is_smallest_set"));
-    assert.is_true(sufficient_reason_question(4).includes("call the set minimal"));
+    assert.is_true(sufficient_reason_question(4).includes("keep its size out of the answer"));
     assert.is_true(completions_question(6).includes("at most 6 sentences"));
     assert.is_true(completions_question(6).includes("count completions"))
+}
+
+test "the questions explain the lower bound and why a set is not proved smallest" {
+    assert.is_true(counterfactual_question(3).includes("smallest_possible_number_of_changes"));
+    assert.is_true(
+        counterfactual_question(3).includes("ended at its time limit or was a fast search"),
+    );
+    assert.is_true(counterfactual_question(3).includes("you may state the gap"));
+    assert.is_true(sufficient_reason_question(3).includes("smallest_possible_number_of_features"));
+    assert.is_true(sufficient_reason_question(3).includes("did not prove the size"));
+    assert.is_true(sufficient_reason_question(3).includes("you may state the gap"))
 }
 
 test "each local function gets its own facts, question and system role" {

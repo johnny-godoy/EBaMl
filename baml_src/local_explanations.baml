@@ -70,8 +70,9 @@ function counterfactual_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, what would have to change for the prediction to be different.
                 The facts list a set of input changes that flips the prediction (a minimum change required), and whether the flip survives the model's uncertainty.
-                If "is_smallest_set" is true, this is exact, not a guess: no smaller set of changes flips the prediction, because the model adds up one independent effect per input.
-                If "is_smallest_set" is false, the facts ask for a chosen class. Call the set a small set of changes that reaches that class, and do not call it the smallest or the fewest, because the reader would believe a claim that the facts do not make.
+                If "is_smallest_set" is true, this is exact, not a guess: no smaller set of changes gives the new prediction, because the model adds up one independent effect per input and the computation proves the size.
+                If "is_smallest_set" is false, the facts ask for a chosen class, and the search ended at its time limit or was a fast search, so it did not prove the size. Describe the set as a set of changes that reaches that class, and keep its size out of the answer, because any word about the size reads as a claim that the facts do not make.
+                If the facts give "smallest_possible_number_of_changes", no set reaches the new prediction with fewer changes than that number. When "is_smallest_set" is false, you may state the gap between "number_of_changes" and that number, because the gap tells this reader how far the set can be from the smallest one.
                 Only realistic alternative values were considered (rare extreme values are left out), and the flip holds even if the model's effects are at the unfavourable edge of their confidence interval.
                 Suggest only the changes that the facts list, because they are the only ones that the model supports.
                 If no change flips the prediction, say that the prediction cannot be changed by altering the inputs.
@@ -82,8 +83,9 @@ function sufficient_reason_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, which inputs are enough to settle the prediction.
                 The facts list a set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome.
-                If "is_smallest_set" is true, this is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input.
-                If "is_smallest_set" is false, call the set minimal: no input can be removed from it, but a set with fewer inputs may exist. Do not call it the smallest, because the reader would believe a claim that the facts do not make.
+                If "is_smallest_set" is true, this is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input and the computation proves the size.
+                If "is_smallest_set" is false, the search ended at its time limit or was a fast search, so it did not prove the size. Call the set a set of inputs that is enough, and keep its size out of the answer, because any word about the size reads as a claim that the facts do not make.
+                If the facts give "smallest_possible_number_of_features", no set with fewer inputs than that number guarantees the outcome. When "is_smallest_set" is false, you may state the gap between the number of listed inputs and that number, because the gap tells this reader how far the set can be from the smallest one.
                 The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval.
                 Present it as a statement about this model, not about the real world.
                 If there is no such set, say that every input matters.
