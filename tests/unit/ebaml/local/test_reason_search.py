@@ -11,6 +11,7 @@ from ebaml.local.reason_search import ExactOrMinimal, Minimal, Selection, by_sma
 
 MARGIN_COUNT = 3
 FEATURE_COUNT = 5
+ELEMENT_COUNT = 5
 GAIN: st.SearchStrategy[float] = st.integers(min_value=0, max_value=8).map(float)
 WORST: st.SearchStrategy[float] = st.integers(min_value=-12, max_value=2).map(float)
 
@@ -121,3 +122,40 @@ def test_features_are_ordered_by_their_smallest_gain() -> None:
 def test_the_limit_of_the_exact_search_is_not_negative() -> None:
     with pytest.raises(ValueError, match="max_features"):
         ExactOrMinimal(max_features=-1)
+
+
+@st.composite
+def set_covers(draw: st.DrawFn) -> list[frozenset[int]]:
+    """Draw a family of sets over the elements ``0`` to ``ELEMENT_COUNT - 1``.
+
+    Returns
+    -------
+    list[frozenset[int]]
+        The elements of each set.
+
+    """
+    set_count = draw(st.integers(min_value=1, max_value=FEATURE_COUNT + 2))
+    return [draw(st.frozensets(st.integers(min_value=0, max_value=ELEMENT_COUNT - 1))) for _ in range(set_count)]
+
+
+@given(set_covers())
+def test_the_exact_search_solves_set_cover_through_the_reduction_of_the_proof(sets: list[frozenset[int]]) -> None:
+    # Theorem 8 of proofs/EBaMlProofs/LocalExplanations/Hardness.lean: a margin for each element with the worst case
+    # -1/2, and a feature for each set with the gain 1 for its elements. A sufficient set is then a cover, so the
+    # minimum sufficient set is a minimum cover, and the covering problem is as hard as Set Cover.
+    elements = range(ELEMENT_COUNT)
+    worst = [-0.5] * ELEMENT_COUNT
+    gains = [[1.0 if element in members else 0.0 for members in sets] for element in elements]
+    selection = ExactOrMinimal().select(worst, gains)
+    covers = [
+        size
+        for size in range(len(sets) + 1)
+        for chosen in itertools.combinations(sets, size)
+        if set().union(*chosen) >= set(elements)
+    ]
+    if not covers:
+        assert selection is None
+    else:
+        assert selection is not None
+        assert len(selection.indices) == min(covers)
+        assert selection.minimum
