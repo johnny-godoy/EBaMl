@@ -24,7 +24,8 @@ come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `sr
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
 covering problem, and the paper proves what two searches return. A multiclass classifier has one margin for each rival
-class, so it uses the same results. A Lean 4 file @lean4 checks every statement, and the
+class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover.
+A Lean 4 file @lean4 checks every statement except two facts about running time (@sec-limits), and the
 appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
@@ -58,6 +59,12 @@ change the predicted class are the fewest of the answers for the rivals, and `_s
 number (Theorem 7). A set keeps the class iff it is sufficient for the margin of every rival, so Claim 5 holds for the
 sufficient reason of a multiclass classifier (Lemma 11). The sum $sigma_w + sigma_j$ is an upper bound of the deviation
 of the margin for any correlation between the two scores (Lemma 12).
+
+*Claim 7 (hardness).* The covering problem of several margins contains Set Cover. A set of features is sufficient for
+the problem of the reduction iff the matching sets cover every element (Theorem 8). A multiclass classifier with one
+rival class for each element has this problem as its sufficient reason (Theorem 9). The decision problem is NP-complete
+(Corollary 4), so an algorithm that finds a smallest sufficient set in polynomial time exists only if P = NP. The claim
+covers the gain table of the sufficient reason. It does not cover the counterfactual of a chosen class (@sec-limits).
 
 The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The text of the module docstring
 differs a little from the code for the counterfactual. @sec-limits explains the difference.
@@ -678,6 +685,126 @@ of @sec-model takes the deviation of each margin as given, so the proof covers t
   [$W_j (emptyset)$, $h_(j,i)$], [`_robust_scores(f.against(bound.columns), ...)`], [`_gain_table`],
 )
 
+= The sufficient reason of several margins is NP-hard <sec-hardness>
+
+@sec-covering shows that sorting does not solve the covering problem, and that `ExactOrMinimal` costs $2^n$ steps. This
+section shows that the cost is not a weakness of the search. The covering problem contains Set Cover, so each exact
+algorithm for it is also an exact algorithm for Set Cover.
+
+An instance of _Set Cover_ has a finite set $U$ of elements, a finite family of sets $S_i subset.eq U$ with an index
+$i in I$, and a number $K$. The question is whether some $F subset.eq I$ with $|F| <= K$ has $union.big_(i in F) S_i = U$.
+Such an $F$ is a _cover_. Karp @karp1972 proves that this question is NP-complete.
+
+The reduction makes one margin for each element and one feature for each set. For each $k in U$ and $i in I$, let
+$W_k = -1/2$, and let $h_(k,i) = 1$ if $k in S_i$ and $h_(k,i) = 0$ otherwise. The gains are not negative, so the
+numbers form a problem in the sense of @sec-covering. The table has $|U| |I|$ entries, so the reduction needs a time
+that is linear in the size of the instance.
+
+#lemma("counting the gains", [
+  Let $k in U$ and $F subset.eq I$. Then $sum_(i in F) h_(k,i) > 1/2$ iff some $i in F$ has $k in S_i$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Hardness.lean", "EBaMlProofs.LocalExplanations.Hardness.SetCover.half_lt_sum_iff"))
+
+#proof[
+  The sum is the number of sets in $F$ that hold $k$. This number is an integer, so it is greater than $1/2$ iff it is
+  at least $1$, that is, iff some set in $F$ holds $k$.
+]
+
+#theorem("the reduction", [
+  A set $F subset.eq I$ is sufficient for the problem of the reduction iff $F$ is a cover. Hence a cover of at most $K$
+  sets exists iff a sufficient set of at most $K$ features exists.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Hardness.lean", "EBaMlProofs.LocalExplanations.Hardness.SetCover.sufficient_iff_cover", "EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff"))
+
+#proof[
+  *ASSUME:* an instance of Set Cover and a set $F$. *PROVE:* $F$ is sufficient iff $F$ is a cover.
+  #step(1, "1", [$F$ is sufficient iff $-1/2 + sum_(i in F) h_(k,i) > 0$ for each $k in U$. This is the definition
+    of @sec-covering with $W_k = -1/2$.])
+  #step(1, "2", [For each $k in U$, $-1/2 + sum_(i in F) h_(k,i) > 0$ iff $sum_(i in F) h_(k,i) > 1/2$.])
+  #step(1, "3", [For each $k in U$, this holds iff some $i in F$ has $k in S_i$, by Lemma 13.])
+  #step(1, "4", [*Q.E.D.* The three steps say that $F$ is sufficient iff each element lies in a set of $F$. The second
+    statement of the theorem follows, because the same $F$ serves both questions and $|F|$ is the same.])
+]
+
+The second statement of Theorem 8 is the claim of a reduction. It maps a question about covers to a question about sufficient
+sets, and the answers are equal.
+
+#corollary("NP-completeness", [
+  The question "does a sufficient set of at most $K$ features exist" for a problem with rational numbers is
+  NP-complete.
+])
+
+#proof[
+  The question is in NP: a set $F$ of features is a certificate, and a check of the sums takes a time that is
+  polynomial in the size of the problem. The question is NP-hard: Set Cover is NP-hard @karp1972, and Theorem 8 reduces
+  it to this question in linear time. Lean checks Theorem 8. The membership in NP and the time of the reduction are
+  not checked in Lean (@sec-limits).
+]
+
+The reduction keeps the size of the answer: the smallest cover and the smallest sufficient set have the same size. So
+each hardness result for the size of a cover holds for the size of a sufficient set. Dinur and Steurer @dinur2014 prove
+that, unless P = NP, no algorithm with a polynomial time guarantees a cover that is at most $(1 - epsilon) ln |U|$ times
+the smallest, for each $epsilon > 0$. Hence the same limit holds for the smallest sufficient set. This sentence is a
+consequence of the cited result, and Lean does not check it.
+
+Theorem 8 is about an abstract table of gains. The next two statements show that a multiclass classifier of the model
+of @sec-model produces this table. The first one is about a binary model with two bins for each feature.
+
+#lemma("a model of the shape of the reduction", [
+  Let $m$ be a binary model with $z = 0$, with the intercept $b = -1/2$, and with two bins for each feature, both
+  plausible. Let the instance have the bin that scores $a_i >= 0$, and let the other bin score $0$. If
+  $sum_i a_i > 1/2$, then $F$ is sufficient iff $sum_(i in F) a_i > 1/2$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Hardness.lean", "EBaMlProofs.LocalExplanations.Hardness.sufficient_of_shape"))
+
+#proof[
+  *ASSUME:* the model of the lemma. *PROVE:* $F$ is sufficient iff $sum_(i in F) a_i > 1/2$.
+  #step(1, "1", [The logit is $-1/2 + sum_i a_i > 0$, so $epsilon = 1$.])
+  #step(1, "2", [Because $z = 0$ and $epsilon = 1$, the guaranteed score $g_i(v)$ is the score $s_i(v)$.])
+  #step(1, "3", [For each feature $i$, $min_(v in P_i) g_i(v) = min(a_i, 0) = 0$, because $a_i >= 0$.])
+  #step(1, "4", [Hence $W(emptyset) = epsilon b + sum_i 0 = -1/2$, and $h_i = g_i(c_i) - 0 = a_i$.])
+  #step(1, "5", [*Q.E.D.* Lemma 5 gives that $F$ is sufficient iff $1/2 < sum_(i in F) a_i$.])
+]
+
+#theorem("a multiclass classifier with the problem of the reduction", [
+  Let each element of $U$ lie in some set $S_i$. Let $M(I)$ be the multiclass classifier with the predicted class $w$ and
+  one rival class $j_k$ for each element $k in U$. Let it have $z = 0$, the intercepts $b_w = 0$ and $b_(j_k) = 1/2$, two
+  plausible bins for each feature with the instance in the bin "yes", $s_(w,i) = 0$, $s_(j_k,i)("yes") = -h_(k,i)$ and
+  $s_(j_k,i)("no") = 0$. Then a set $F$ is sufficient for the predicted class iff $F$ is a cover.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Hardness.lean", "EBaMlProofs.LocalExplanations.Hardness.sufficient_reason_iff_cover", "EBaMlProofs.LocalExplanations.Hardness.multiclass"))
+
+#proof[
+  *ASSUME:* an instance in which each element lies in a set, and a set $F$. *PROVE:* $F$ is sufficient iff $F$ is a
+  cover.
+  #step(1, "1", [$F$ is sufficient iff $F$ is sufficient for the margin model $m_(j_k)$ of each rival, by Lemma 11.])
+  #step(1, "2", [The model $m_(j_k)$ has $z = 0$, the intercept $b_w - b_(j_k) = -1/2$ and the scores
+    $s_(w,i) - s_(j_k,i)$. These scores are $h_(k,i)$ in the bin "yes" and $0$ in the bin "no".])
+  #step(1, "3", [The sum $sum_i h_(k,i)$ counts the sets that hold $k$. It is at least $1$, because $k$ lies in a set.
+    So the condition $sum_i a_i > 1/2$ of Lemma 14 holds for $a_i = h_(k,i)$.])
+  #step(1, "4", [By Lemma 14, $F$ is sufficient for $m_(j_k)$ iff $sum_(i in F) h_(k,i) > 1/2$. By Lemma 13, this holds iff
+    some $i in F$ has $k in S_i$.])
+  #step(1, "5", [*Q.E.D.* By $chevron.l 1 chevron.r 1$ and $chevron.l 1 chevron.r 4$, $F$ is sufficient iff each element lies in
+    a set of $F$.])
+]
+
+If an element lies in no set, no cover exists, and a check in linear time finds this case. So the restriction of
+Theorem 9 does not change the hardness.
+
+*Meaning for the code.* The class `ExactOrMinimal` has a cost of $2^n$ steps, and the flag `minimum` of `Minimal` is
+false for more than one feature. Both facts match the hardness. The test
+`test_the_exact_search_solves_set_cover_through_the_reduction_of_the_proof` runs the reduction on small instances and
+compares the size of `ExactOrMinimal` with the size of a smallest cover.
+
+*Correspondence of symbols to the code* for this section.
+
+#table(
+  columns: (auto, 1fr, auto),
+  stroke: 0.4pt + luma(160),
+  inset: 5pt,
+  [*Symbol*], [*Computed by*], [*Function*],
+  [$W_k$], [`worst = [-0.5] * element_count`], [the test of the reduction],
+  [$h_(k,i)$], [`1.0 if element in members else 0.0`], [the test of the reduction],
+  [the smallest sufficient set], [`ExactOrMinimal().select(worst, gains)`], [`ExactOrMinimal.select`],
+  [a cover of the smallest size], [`min(size for size ... if set().union(*chosen) >= set(elements))`], [the test of the reduction],
+)
+
 = Limits <sec-limits>
 
 The proof does not cover the following points.
@@ -702,6 +829,13 @@ The proof does not cover the following points.
   "fewest" counts the changes that cross $tau$ strictly. A point mass at $tau$ has no meaning in floating point.
 - *The order of `Minimal`.* The proof allows any order in both passes of `Minimal`. It proves a set from which no feature
   can be removed, and it proves nothing about how large that set is, except for at most one feature (Corollary 3).
+- *The running time in the hardness result.* Lean checks that the reduction is correct (Theorem 8). It does not check
+  that the reduction runs in polynomial time, that the decision problem is in NP (Corollary 4), or Karp's theorem
+  @karp1972. The proof of Corollary 4 argues the first two in a few lines, and the third is a citation. The statement
+  about the approximation ratio is a consequence of @dinur2014 and is not proved here.
+- *The number of margins.* The reduction needs one margin for each element, so a classifier needs one rival class for
+  each element. A classifier with few classes has few margins. The paper proves nothing about a fixed number of margins
+  that is larger than one. One margin is the case that sorting solves exactly (Theorem 3).
 - *The cost of `ExactOrMinimal`.* The search visits at most $2^n$ sets (Theorem 5). The code limits $n$ with
   `max_features`, and above the limit it returns the result of `Minimal` with the flag `minimum` false. The proof does
   not model this switch, but each branch has its own statement.
@@ -713,7 +847,11 @@ The proof does not cover the following points.
   `points_towards` reads the direction of a contribution wrongly there. A tie of two floating-point scores has no
   meaning.
 - *The class $j$ as target.* The proof covers the counterfactual "the predicted class is no longer $w$". It does not
-  cover a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once.
+  cover a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once. The code
+  solves it with the covering searches of @sec-covering (`_target_counterfactual`), after it fixes one bin for each
+  feature. The reduction of @sec-hardness applies to its gain table by the same argument, but the Lean model does not
+  contain this counterfactual. The fixed bins are a second reason why the set is not always a smallest set: the
+  bin with the largest sum of gains can cover less than another bin does alone.
 - *The probability of the new class.* `Counterfactual.new_output` of a multiclass classifier is the softmax probability
   from the mean scores after the change. It is a report and not an optimality claim, as for a binary classifier.
 - *The correlation between classes.* Lemma 12 shows an upper bound for the deviation of a margin. The code uses the
@@ -731,11 +869,12 @@ The proof does not cover the following points.
 = Computer check <sec-computer>
 
 The Lean 4 library in `proofs/` states each lemma, theorem and corollary of @sec-abstract, @sec-application,
-@sec-covering, @sec-regressor and @sec-multiclass and proves it with the Mathlib library @mathlib2020. The file
+@sec-covering, @sec-regressor, @sec-multiclass and @sec-hardness and proves it with the Mathlib library @mathlib2020. The file
 `EBaMlProofs/LocalExplanations/Greedy.lean` holds the abstract part, the file `EBaMlProofs/LocalExplanations/Model.lean`
 holds the model and the two theorems, the file `EBaMlProofs/LocalExplanations/Covering.lean` holds the problem of several
 margins, the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside", and the file
-`EBaMlProofs/LocalExplanations/Multiclass.lean` holds the models of the rivals. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
+`EBaMlProofs/LocalExplanations/Multiclass.lean` holds the models of the rivals, and the file
+`EBaMlProofs/LocalExplanations/Hardness.lean` holds the reduction from Set Cover. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
 axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`.
 
 A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
@@ -760,7 +899,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`035d4e6cbefbd846fb4d70e08b431b9c959c356b`],
+  [Lean sources checked at commit], [`193d3690adff8b5bc517506ff1d9c6e618c127d6`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -776,7 +915,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 035d4e6cbefbd846fb4d70e08b431b9c959c356b
+git checkout 193d3690adff8b5bc517506ff1d9c6e618c127d6
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
@@ -816,6 +955,11 @@ info: EBaMlProofs/LocalExplanations/Axioms.lean:34:0: 'EBaMlProofs.LocalExplanat
 info: EBaMlProofs/LocalExplanations/Axioms.lean:35:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:36:0: 'EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:37:0: 'EBaMlProofs.LocalExplanations.sd_sum_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:39:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.half_lt_sum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:40:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.sufficient_iff_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:41:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:42:0: 'EBaMlProofs.LocalExplanations.Hardness.sufficient_of_shape' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:43:0: 'EBaMlProofs.LocalExplanations.Hardness.sufficient_reason_iff_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
@@ -832,6 +976,7 @@ stands for a Lean namespace:
 - `Covering.` stands for `EBaMlProofs.LocalExplanations.Covering.Problem.`
 - `MC.` stands for `EBaMlProofs.LocalExplanations.Multiclass.`
 - `LE.` stands for `EBaMlProofs.LocalExplanations.`
+- `HD.` stands for `EBaMlProofs.LocalExplanations.Hardness.`
 
 #table(
   columns: (auto, 1fr, auto),
@@ -870,4 +1015,9 @@ stands for a Lean namespace:
   [Theorem 7 (c)], [`MC.min_change_class_none`], [`Multiclass.lean`],
   [Lemma 11 (several rivals)], [`MC.sufficient_class_iff`], [`Multiclass.lean`],
   [Lemma 12 (deviation)], [`LE.sd_sum_bound`], [`Multiclass.lean`],
+  [Lemma 13 (counting the gains)], [`HD.SetCover.half_lt_sum_iff`], [`Hardness.lean`],
+  [Theorem 8 (the reduction)], [`HD.SetCover.sufficient_iff_cover`, `HD.SetCover.min_size_iff`], [`Hardness.lean`],
+  [Corollary 4 (NP-completeness)], [Not checked in Lean (@sec-limits)], [none],
+  [Lemma 14 (the shape)], [`HD.sufficient_of_shape`], [`Hardness.lean`],
+  [Theorem 9 (multiclass)], [`HD.multiclass`, `HD.sufficient_reason_iff_cover`], [`Hardness.lean`],
 )

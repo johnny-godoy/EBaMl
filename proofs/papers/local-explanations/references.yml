@@ -20,3 +20,25 @@ lean4:
   author: ["de Moura, Leonardo", "Ullrich, Sebastian"]
   date: 2021
   url: https://lean-lang.org
+
+karp1972:
+  type: chapter
+  title: "Reducibility among Combinatorial Problems"
+  author: ["Karp, Richard M."]
+  date: 1972
+  parent:
+    type: book
+    title: "Complexity of Computer Computations"
+    editor: ["Miller, Raymond E.", "Thatcher, James W."]
+    publisher: "Plenum Press"
+  page-range: "85-103"
+
+dinur2014:
+  type: article
+  title: "Analytical Approach to Parallel Repetition"
+  author: ["Dinur, Irit", "Steurer, David"]
+  date: 2014
+  parent:
+    type: proceedings
+    title: "Proceedings of the 46th Annual ACM Symposium on Theory of Computing (STOC)"
+  page-range: "624-633"
