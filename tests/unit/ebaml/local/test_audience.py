@@ -11,7 +11,17 @@ from ebaml.local import facts as local
 from ebaml.local.local_kinds import OutputKind
 from tests.unit.ebaml.conftest import returning
 
-AUDIENCE_METHODS = ["guidance", "contribution", "prediction", "change", "flip", "class_output", "margin", "share"]
+AUDIENCE_METHODS = [
+    "guidance",
+    "contribution",
+    "prediction",
+    "change",
+    "flip",
+    "class_output",
+    "margin",
+    "lower_bound",
+    "share",
+]
 PROMPT_TESTS = Path(__file__).parents[4] / "baml_src" / "prompt_tests.baml"
 
 

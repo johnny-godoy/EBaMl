@@ -249,10 +249,10 @@ reader together, write your own audience (below).
 An audience has two jobs, and the base class `Audience` has one method for each part of them:
 
 - `guidance()` returns the instruction that tells the LLM how to write for this reader, and why.
-- `contribution`, `prediction`, `change`, `flip`, `class_output`, `margin` and `share` return the keys that the audience adds to one
-  kind of fact. `facts_to_texts` builds the keys that all audiences share (the names of the features, their values).
+- `contribution`, `prediction`, `change`, `flip`, `class_output`, `margin`, `lower_bound` and `share` return the keys that
+  the audience adds to one kind of fact. `facts_to_texts` builds the keys that all audiences share (the names of the features, their values).
 
-All eight methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
+All nine methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
 subclass it and override that method. This audience keeps the words of the layperson and writes for a chief executive:
 
 ```python

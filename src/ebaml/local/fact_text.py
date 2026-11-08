@@ -75,6 +75,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
         ]
         counterfactual["number_of_changes"] = len(cf.changes)
         counterfactual["is_smallest_set"] = cf.minimum
+        counterfactual |= audience.lower_bound(cf.lower_bound, "changes")
         # the class after the changes and its probability share one object, so the LLM cannot read the probability
         # as one of the old class
         counterfactual["after_the_changes"] = {decision_key: cf.new_decision} | audience.class_output(
@@ -89,6 +90,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     if sr is not None:
         sufficient["features"] = sr.features
         sufficient["is_smallest_set"] = sr.minimum
+        sufficient |= audience.lower_bound(sr.lower_bound, "features")
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)
 

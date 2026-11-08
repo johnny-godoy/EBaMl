@@ -111,8 +111,8 @@ function live_regressor_facts() -> LocalFactTexts {
     }
 }
 
-// The facts of one prediction of a multiclass classifier, for a layperson: the counterfactual asks for a chosen class, so
-// its set is not the smallest.
+// The facts of one prediction of a multiclass classifier, for a layperson: the counterfactual asks for a chosen class, and
+// the search did not prove that its set is the smallest.
 function live_multiclass_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "standard plan", "contributions_largest_first": [{"feature": "monthly_usage", "value": "[20, 30)", "effect": "strongly towards this prediction"}, {"feature": "contract_length", "value": "[1, 2)", "effect": "slightly towards this prediction"}], "likelihood": "likely"}`,
@@ -218,7 +218,7 @@ testset "Live" {
         assert.is_true(count_sentences(text) <= 3)
     }
 
-    test "minimal sufficient reason: the set is called minimal, not the smallest" {
+    test "sufficient reason with no proof of its size: the set is not called the smallest" {
         let facts = LocalFactTexts {
             prediction: live_regressor_facts().prediction,
             counterfactual: live_regressor_facts().counterfactual,
