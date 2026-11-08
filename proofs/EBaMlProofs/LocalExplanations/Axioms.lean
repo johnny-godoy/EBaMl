@@ -1,6 +1,7 @@
 import EBaMlProofs.LocalExplanations.Model
 import EBaMlProofs.LocalExplanations.Regressor
 import EBaMlProofs.LocalExplanations.Multiclass
+import EBaMlProofs.LocalExplanations.Hardness
 
 /-!
 # Axiom check
@@ -35,3 +36,8 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none
 #print axioms EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff
 #print axioms EBaMlProofs.LocalExplanations.sd_sum_bound
+#print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.half_lt_sum_iff
+#print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.sufficient_iff_cover
+#print axioms EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff
+#print axioms EBaMlProofs.LocalExplanations.Hardness.sufficient_of_shape
+#print axioms EBaMlProofs.LocalExplanations.Hardness.sufficient_reason_iff_cover

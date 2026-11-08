@@ -3,6 +3,7 @@ import EBaMlProofs.LocalExplanations.Model
 import EBaMlProofs.LocalExplanations.Covering
 import EBaMlProofs.LocalExplanations.Regressor
 import EBaMlProofs.LocalExplanations.Multiclass
+import EBaMlProofs.LocalExplanations.Hardness
 import EBaMlProofs.LocalExplanations.Axioms
 import EBaMlProofs.MulticlassScores.Softmax
 import EBaMlProofs.MulticlassScores.Model
