@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.5.2'></a>
+## [0.5.2] - 2026-11-08
+
+### Added
+
+- `explain_instance`, `compute_local_facts` and the MCP tool `explain_prediction` explain a prediction of a multiclass classifier without interactions. The decision is the predicted class. The counterfactual is the fewest changes after which another class has a higher score, and the sufficient reason keeps the class against every other class. `LocalOptions.reason_search` chooses the search of the sufficient reason. The Lean proof of these facts is not done yet.
+- `OutputKind.CLASS_PROBABILITY` names the output of a multiclass classifier. The texts for the data scientist call the score of the predicted class `class_score`.
+
 <a id='changelog-0.5.1'></a>
 ## [0.5.1] - 2026-11-07
 
