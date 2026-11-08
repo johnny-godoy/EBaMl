@@ -8,6 +8,8 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    import time
+
     import attrs
     import marimo as mo
     import numpy as np
@@ -15,14 +17,31 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
     from sklearn.datasets import load_iris
 
-    from ebaml import EBMGraph, LocalOptions, OptionRangeError, compute_local_facts, describe_graph, model_kind
+    from ebaml import (
+        EBMGraph,
+        Engine,
+        Exact,
+        Greedy,
+        Heuristic,
+        LocalOptions,
+        OptionRangeError,
+        Stochastic,
+        compute_local_facts,
+        describe_graph,
+        model_kind,
+    )
 
     return (
         EBMGraph,
+        Engine,
+        Exact,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
+        Greedy,
+        Heuristic,
         LocalOptions,
         OptionRangeError,
+        Stochastic,
         attrs,
         compute_local_facts,
         describe_graph,
@@ -31,6 +50,7 @@ def _():
         model_kind,
         np,
         pl,
+        time,
     )
 
 
@@ -173,11 +193,12 @@ def _(mo) -> None:
     - `Counterfactual.new_decision` is the class that is predicted after the changes. For a regressor, it is the other
       answer.
     - `SufficientReason.minimum` tells whether no smaller set of features fixes the decision. It is always true for a
-      binary classifier. For the other kinds, it depends on the search that `LocalOptions.reason_search` names.
+      binary classifier. For a decision with several margins, it depends on the search that `LocalOptions.search`
+      names, and `SufficientReason.lower_bound` gives the fewest features that any set needs.
 
     A multiclass classifier has one margin for each other class: the score of the predicted class minus the score of
-    that class. The option `target_class` asks for the changes that lead to a chosen class. Its set of changes is never
-    marked as the smallest.
+    that class. The option `target_class` asks for the fewest changes that lead to a chosen class, over every choice of
+    bins. The next section compares the searches.
 
     The iris data has only 150 flowers, so the confidence intervals of the scores are wide. At a high confidence level,
     most flowers have no counterfactual and no sufficient reason. Flower 70 is a versicolor near the border with the
@@ -259,6 +280,74 @@ def _(attrs, facts, instance, mo) -> None:
             ),
         )
     mo.vstack(sections)
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ## Choose the search
+
+    The sufficient reason of a multiclass classifier and the counterfactual of a target class are covering problems.
+    No fast exact algorithm solves them unless P = NP, so `LocalOptions.search` chooses how to solve them:
+
+    - `Exact(engine)` proves the smallest set with a MIP solver: HiGHS (the default), SCIP or CP-SAT.
+    - `Heuristic(engine)` stops at the first set that the solver finds.
+    - `Stochastic(seed)` runs the local search of CP-SAT with a fixed seed.
+    - `Greedy()` adds the input with the largest gain until the set is enough. It uses no solver.
+
+    The table runs each search on the flower and the confidence level above, with the target class `setosa` for the
+    counterfactual. It shows the size of each set, the flag `minimum`, the lower bound and the time. Each solver search
+    has a `time_limit` in seconds, and a set is marked as the smallest only if the solver proves it or the set reaches
+    the lower bound. The iris model has three features, so every search finds the same sets here. The searches differ
+    on models with many features.
+    """)
+
+
+@app.cell
+def _(
+    Engine,
+    Exact,
+    Greedy,
+    Heuristic,
+    LocalOptions,
+    Stochastic,
+    compute_local_facts,
+    confidence,
+    instance,
+    mo,
+    models,
+    time,
+):
+    searches = {
+        "Exact()": Exact(),
+        "Exact(Engine.SCIP)": Exact(Engine.SCIP),
+        "Exact(Engine.CP_SAT)": Exact(Engine.CP_SAT),
+        "Heuristic()": Heuristic(),
+        "Stochastic()": Stochastic(),
+        "Greedy()": Greedy(),
+    }
+    search_rows = []
+    for search_name, search in searches.items():
+        start = time.perf_counter()
+        search_facts = compute_local_facts(
+            models["multiclass"],
+            instance,
+            LocalOptions(confidence_level=confidence.value, target_class="setosa", search=search),
+        )
+        seconds = time.perf_counter() - start
+        target_change = search_facts.counterfactual
+        search_reason = search_facts.sufficient_reason
+        search_rows.append({
+            "search": search_name,
+            "changes to setosa": "none" if target_change is None else len(target_change.changes),
+            "changes: minimum": None if target_change is None else target_change.minimum,
+            "changes: lower bound": None if target_change is None else target_change.lower_bound,
+            "sufficient reason": "none" if search_reason is None else ", ".join(search_reason.features),
+            "reason: minimum": None if search_reason is None else search_reason.minimum,
+            "reason: lower bound": None if search_reason is None else search_reason.lower_bound,
+            "seconds": round(seconds, 3),
+        })
+    mo.ui.table(search_rows, selection=None)
 
 
 @app.cell

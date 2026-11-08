@@ -150,15 +150,22 @@ predicted class is the decision.
 
 The answer "inside" has two margins, one for each end of the interval. The counterfactual is the smaller of the two
 answers for the margins, and it is exact. The sufficient reason must keep both margins positive at the same time.
-Sorting does not find the smallest set for that, so `LocalOptions.reason_search` chooses the search:
+Sorting does not find the smallest set for that. The problem is a covering problem, and no fast exact algorithm for
+it exists unless P = NP ([proof page](local-explanations-proof.md)). `LocalOptions.search` chooses the search. The
+searches use the solvers of OR-Tools:
 
-| Search | Result | `sufficient_reason.minimum` |
+| Search | Result | `minimum` is true when |
 | --- | --- | --- |
-| `Minimal()` (default) | A set from which no input can be removed. | True only for a set of at most one input. |
-| `ExactOrMinimal(max_features=12)` | The smallest set, found by trying the sets by size. The cost grows as 2 to the power of the number of features. Above `max_features` it returns what `Minimal` returns. | True when the search runs. |
+| `Exact(engine=Engine.HIGHS, time_limit=10.0)` (default) | The smallest set, which a MIP solver proves. `engine` is `Engine.HIGHS`, `Engine.SCIP` or `Engine.CP_SAT`. | The solver proves the optimum before the time limit, or the size equals the lower bound. |
+| `Heuristic(engine=Engine.HIGHS, time_limit=10.0)` | The first set that the solver finds. | The size equals the lower bound, or the solver proves that the greedy set is the smallest. |
+| `Stochastic(seed=None, time_limit=10.0)` | The set of the local search of CP-SAT, with one worker and a fixed seed. `None` uses `LocalOptions.seed`. | The solver proves the optimum, or the size equals the lower bound. |
+| `Greedy()` | The set of the greedy algorithm of set cover, with no solver. It needs no time limit. | The size equals the lower bound. |
 
-A decision with one margin ignores `reason_search`, because sorting finds its smallest set exactly. When `minimum` is
-false, the prompt tells the LLM to call the set "minimal" and not "the smallest".
+Every search starts with the greedy set and reports a lower bound, `lower_bound`: no set has fewer inputs. The bound
+comes from the LP relaxation of the problem. If the time limit ends before the solver proves the optimum, the search
+returns the best set that it found, and `minimum` is false unless the set reaches the bound. A decision with one margin
+ignores `search`, because sorting finds its smallest set exactly. When `minimum` is false, the prompt tells the LLM not
+to call the set the smallest, and a data scientist gets the lower bound in the facts.
 
 <!-- invisible-code-block: python
 from ebaml import Threshold, LocalOptions
@@ -170,6 +177,18 @@ regressor = ExplainableBoostingRegressor(interactions=0).fit(X, X["age"] * 0.5 +
 ```python
 facts = compute_local_facts(regressor, instance, LocalOptions(decision=Threshold(30.0)))
 print(facts.prediction.decision, round(facts.prediction.output, 1))
+```
+
+The answer "inside" of an interval uses the search. This example asks for the greedy search, which is fast and proves
+less:
+
+```python
+from ebaml import Greedy, Interval
+
+options = LocalOptions(decision=Interval(20.0, 40.0), search=Greedy())
+reason = compute_local_facts(regressor, instance, options).sufficient_reason
+if reason is not None:
+    print(reason.features, reason.minimum, reason.lower_bound)
 ```
 
 `explain_instance` takes the same options with `local=LocalOptions(decision=Threshold(30.0))`. The explanations of a
@@ -185,13 +204,14 @@ of `j`. Each margin is a sum of one term for each feature, as the margin of a bi
 - The counterfactual is the fewest changes after which another class has a higher score than `c`. It is the smallest of
   the answers for the margins, so sorting finds it for each margin. `new_decision` is the class that is predicted
   after the changes.
-- The sufficient reason must keep every margin positive at the same time, so `LocalOptions.reason_search` chooses the
-  search, as for the answer "inside" of a regressor. `Minimal()` is the default.
+- The sufficient reason must keep every margin positive at the same time, so `LocalOptions.search` chooses the
+  search, as for the answer "inside" of a regressor. `Exact()` is the default.
 - The completions are estimated by sampling, as for every kind.
-- `LocalOptions.target_class` asks for the changes after which a chosen class is the predicted class. All the margins
-  of that class must then hold at once. Each feature moves to the bin that raises these margins the most and lowers
-  none, and `reason_search` chooses the features. The set is the smallest only among these bins, so the result has no
-  proof of a smallest set.
+- `LocalOptions.target_class` asks for the fewest changes after which a chosen class is the predicted class. All the
+  margins of that class must then hold at once. Each plausible bin of a feature is a possible change, and a set of
+  changes moves each changed feature to one bin. `LocalOptions.search` finds the set over every choice of bins. With
+  `Exact()`, the set is the smallest unless the time limit ends first. If the solver finds no set in its time limit and
+  cannot prove that none exists, `compute_local_facts` raises a `SearchLimitError`, which names the fix.
 - EBMs store no covariance between the scores of two classes. The confidence interval of a margin therefore uses the sum
   of the two standard deviations, which is an upper bound for any correlation.
 

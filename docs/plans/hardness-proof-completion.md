@@ -69,20 +69,24 @@ it is large.
    - If a library of polynomial-time reductions exists for Lean 4 and Mathlib at the pinned version, prefer it, and
      ask the user before you add a dependency.
 4. **The counterfactual of a chosen class.** Model `_target_counterfactual` in Lean: the margins of the target class,
-   the choice of one bin for each feature, and the covering problem after the choice. Prove two facts:
+   and the covering problem of `CoveringProblem` with one group for each feature and one alternative for each plausible
+   bin other than the bin of the instance (`_alternatives`). Prove two facts:
    - The problem contains the covering problem, so it is NP-hard and has the hardness of Corollary 5. Use the case in
      which each feature has one bin besides the bin of the instance.
-   - The choice of the bin with the largest sum of gains (`_best_option`) can miss the smallest set. State the
-     counterexample of `test_a_target_counterfactual_is_not_always_the_smallest_set` with its numbers, and prove it
-     with `norm_num` or `decide`.
+   - Lemmas 15 and 16 and Corollary 6 of the paper (the reduction of `reduce_problem`), and Lemma 17 (the lower bound
+     of the LP). The paper proves them on paper only. State the counterexample of
+     `test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two` with its numbers,
+     and prove with `norm_num` or `decide` that one change is enough there.
 5. **A fixed number of margins.** This is an open question for this project. Find out whether the covering problem
    with two margins is NP-hard, or whether an algorithm in polynomial time solves it. Search the literature on
    covering integer programs with a fixed number of constraints and a cardinality objective. Report the answer to
    the user before you prove anything, because the answer decides whether a proof or an algorithm follows.
-6. **The upper bound.** Do this stage only if the code implements an algorithm with a guarantee, because a proof of an
-   algorithm that the code does not run proves nothing about the code. If the user chooses the greedy rule by marginal
-   coverage for `Minimal`, prove its ratio (the bound of Wolsey for submodular cover) for gains that are integers after
-   a scaling. Keep the result of Kolliopoulos and Young as a citation.
+6. **The upper bound.** The search `Greedy` (`greedy_cover` in `covering_solvers.py`) is the greedy rule by marginal
+   coverage, with lazy evaluation and a removal pass. Read the paper of Wolsey first, and check its statement against
+   the code: the coverage `_coverage_gain`, the deficits with `ε`, the removal pass, and the problems with one
+   alternative for each group. Then prove its ratio (the bound of Wolsey for submodular cover) for gains that are
+   integers after a scaling. The groups with several alternatives are outside the bound. Keep the result of
+   Kolliopoulos and Young as a citation.
 </stages>
 
 <tests>
@@ -91,9 +95,10 @@ it is large.
 - Each published result is a hypothesis, never an `axiom`. A search for `axiom` in `proofs/EBaMlProofs` finds only the
   `#print axioms` lines.
 - For stage 4, a unit test runs the counterexample of the Lean theorem on `_target_counterfactual`. The test
-  `test_a_target_counterfactual_is_not_always_the_smallest_set` already does this, so keep its numbers and the Lean
-  theorem the same.
-- For stage 6, a unit test compares the greedy rule with `ExactOrMinimal` on small instances and checks the ratio.
+  `test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two` already does this, so
+  keep its numbers and the Lean theorem the same.
+- For stage 6, the tests of `tests/unit/ebaml/local/test_covering_solvers.py` compare `Greedy` with a brute-force oracle
+  on small instances. Add a check of the proved ratio there.
 </tests>
 
 <documentation>
@@ -108,7 +113,7 @@ it is large.
 
 <release>
 A stage that changes only `proofs/` and the docs has no user-visible change, so it needs no changelog fragment. A stage
-that changes `src/ebaml/` (stage 6) adds a fragment if the behavior of `Minimal` changes. Give each stage its own pull
+that changes `src/ebaml/` (stage 6) adds a fragment if the behavior of `Greedy` changes. Give each stage its own pull
 request, because each one is reviewed on its own.
 </release>
 
