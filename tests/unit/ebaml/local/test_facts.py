@@ -19,7 +19,7 @@ from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, Unsupp
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
 from ebaml.local.decisions import Interval, Threshold
-from ebaml.local.local_kinds import Outcome, OutputKind
+from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
 from ebaml.local.reason_search import ExactOrMinimal, Minimal, ReasonSearch
 from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, returning
 
@@ -435,6 +435,56 @@ def test_the_exact_search_of_a_target_counterfactual_is_not_larger_than_the_mini
     assert (minimal is None) == (exact is None)
     if minimal is not None and exact is not None:
         assert len(exact.changes) <= len(minimal.changes)
+
+
+def _target_feature(name: str, rows: list[list[float]]) -> local._Feature:
+    # a feature of a three-class model with one row of scores for each bin, the instance in bin 0, and no deviation
+    graph = EBMGraph(
+        name,
+        "nominal",
+        [f"{name}{bin_index}" for bin_index in range(len(rows))],
+        rows,
+        [[0.0] * 3] * len(rows),
+        classes=("c0", "c1", "c2"),
+    )
+    return local._Feature(name, graph, np.ones(len(rows)), 0, f"{name}0", np.ones(len(rows), dtype=bool))
+
+
+def test_a_target_counterfactual_is_not_always_the_smallest_set() -> None:
+    # Bin 1 of f0 alone makes c0 win against both rivals. Bin 2 of f0 has the larger sum of gains over the two margins
+    # (13 against 12), so _best_option picks it, and it covers neither margin alone. Both searches then need f1 as
+    # well, so they return 2 changes where 1 change is enough. This is why the counterfactual of a target class has
+    # minimum False, and the flag may become True only together with a proof.
+    features = [
+        _target_feature("f0", [[0, 0, 0], [10, 0, 8], [6, 0, -1]]),
+        _target_feature("f1", [[0, 0, 0], [4, 0, 4]]),
+    ]
+    intercepts = [0.0, 9.0, 1.0]
+    scores = [intercepts[output] + sum(f.outputs(0)[output] for f in features) for output in range(3)]
+    kind = MulticlassLocal(("c0", "c1", "c2"))
+    frame = kind.frame(scores, [0.0] * 3, intercepts=intercepts, confidence_level=0.0, decision=None)
+    margins = kind.target_margins("c0", frame)
+    totals = local._Totals(scores, intercepts, 0.0)
+
+    def wins(bins: tuple[int, ...]) -> bool:
+        new = np.array(scores, dtype=float)
+        for feature, bin_index in zip(features, bins, strict=True):
+            new += feature.outputs(bin_index) - feature.outputs(0)
+        output_scores: list[float] = new.tolist()
+        return output_scores[0] > max(output_scores[1:])
+
+    smallest = min(
+        sum(bin_index != 0 for bin_index in bins)
+        for bins in itertools.product(*[range(len(feature.scores)) for feature in features])
+        if wins(bins)
+    )
+    assert smallest == 1
+    for search in (Minimal(), ExactOrMinimal()):
+        counterfactual = local._target_counterfactual(features, frame, margins, totals, search=search)
+        assert counterfactual is not None
+        assert counterfactual.new_decision == "c0"
+        assert len(counterfactual.changes) == 2 > smallest
+        assert counterfactual.minimum is False
 
 
 def test_a_target_class_is_none_when_no_choice_of_bins_reaches_it() -> None:
