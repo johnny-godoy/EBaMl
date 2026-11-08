@@ -166,8 +166,8 @@ def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
     steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
     return attrs.evolve(
         _text_facts(1.4, [0.6, 0.1], confidence_level),
-        counterfactual=local.Counterfactual([change], new_decision=1, new_output=0.7),
-        sufficient_reason=local.SufficientReason(["f0"], 0.9876, minimum=True),
+        counterfactual=local.Counterfactual([change], new_decision=1, new_output=0.7, minimum=True, lower_bound=1),
+        sufficient_reason=local.SufficientReason(["f0"], 0.9876, minimum=True, lower_bound=1),
         completions=steps,
     )
 
@@ -230,6 +230,8 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
             [local.Change("f0", "1", "[2, 3)", -0.1)],
             new_decision="loan approved",
             new_output=0.82,
+            minimum=True,
+            lower_bound=1,
         ),
     )
     counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
@@ -244,7 +246,7 @@ def test_layperson_is_told_whether_the_flip_survives_model_error(confidence_leve
     assert orjson.loads(texts.counterfactual)["flip_holds_even_if_the_model_is_somewhat_off"] is holds
 
 
-def test_a_counterfactual_of_a_target_class_is_not_called_the_smallest() -> None:
+def test_a_counterfactual_that_is_not_proved_is_not_called_the_smallest() -> None:
     facts = _text_facts_with_everything(0.95)
     assert facts.counterfactual is not None
     target = attrs.evolve(facts, counterfactual=attrs.evolve(facts.counterfactual, minimum=False))
@@ -256,6 +258,6 @@ def test_a_minimal_set_is_not_called_the_smallest() -> None:
     facts = _text_facts_with_everything(0.95)
     minimal = attrs.evolve(
         facts,
-        sufficient_reason=local.SufficientReason(["f0"], 0.5, minimum=False),
+        sufficient_reason=local.SufficientReason(["f0"], 0.5, minimum=False, lower_bound=1),
     )
     assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_smallest_set"] is False
