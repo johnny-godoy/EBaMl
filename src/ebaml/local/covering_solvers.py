@@ -638,9 +638,9 @@ class Greedy(CoveringSearch):
 
     Examples
     --------
-    >>> problem = CoveringProblem([-1.0, -1.0], [[[2.0, 0.0]], [[0.0, 2.0]], [[1.5, 1.5]]])
+    >>> problem = CoveringProblem([-2.0], [[[1.0]], [[3.0]], [[2.0]]])
     >>> Greedy().solve(problem, seed=0)
-    Cover(choices=[Choice(group=2, alternative=0)], guaranteed_margin=0.5, lower_bound=1, minimum=True)
+    Cover(choices=[Choice(group=1, alternative=0)], guaranteed_margin=1.0, lower_bound=1, minimum=True)
 
     """
 
@@ -750,7 +750,19 @@ class _SolverSearch(CoveringSearch):
 
 
 @attrs.frozen
-class Exact(_SolverSearch):
+class _EngineSearch(_SolverSearch):
+    """A solver search that runs the engine that the user chooses."""
+
+    engine: Engine = Engine.HIGHS
+
+    @property
+    @override
+    def _engine(self) -> Engine:
+        return self.engine
+
+
+@attrs.frozen
+class Exact(_EngineSearch):
     """Prove the smallest set with a MIP solver, unless the time limit ends first.
 
     The gap tolerances are zero, so the solver ends only when it proves the optimum. If the time limit ends first, the
@@ -773,42 +785,20 @@ class Exact(_SolverSearch):
 
     """
 
-    engine: Engine = Engine.HIGHS
-
-    @property
-    @override
-    def _engine(self) -> Engine:
-        return self.engine
-
     @override
     def _settings(self, seed: int) -> _SearchSettings:
         return _SearchSettings(random_seed=seed, time_limit=self.time_limit, gap_tolerance=0.0)
 
 
 @attrs.frozen
-class Heuristic(_SolverSearch):
+class Heuristic(_EngineSearch):
     """Stop at the first set that the MIP solver finds, with the heuristics of the solver turned up.
 
     The solver looks only for a set smaller than the set of the greedy. The result is marked as the smallest set only
-    if its size equals the lower bound, or if the solver proves that the set of the greedy is the smallest.
-
-    Attributes
-    ----------
-    engine: Engine
-        The solver. The default is HiGHS.
-    time_limit: float
-        The most seconds that the solver runs. The default is 10.
-    solve_function: MathOptSolve
-        The function that solves the models. The default is ``mathopt.solve``. A test passes a double.
+    if its size equals the lower bound, or if the solver proves that the set of the greedy is the smallest. The
+    attributes ``engine``, ``time_limit`` and ``solve_function`` mean what they mean for ``Exact``.
 
     """
-
-    engine: Engine = Engine.HIGHS
-
-    @property
-    @override
-    def _engine(self) -> Engine:
-        return self.engine
 
     @override
     def _settings(self, seed: int) -> _SearchSettings:
