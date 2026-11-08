@@ -12,8 +12,12 @@ the polynomial size of the reduction are in the paper, and the NP-completeness o
   features is sufficient iff the matching sets cover every element.
 * `min_size_iff` is the decision form of Theorem 8: a cover of at most `K` sets exists iff a sufficient set of at most
   `K` features exists.
+* `IsOptimum` and `IsApprox` define the smallest size of a set and a `ρ`-approximate set for any property of sets.
+  `SetCover.isOptimum_iff` and `SetCover.isApprox_iff` are Theorem 10: the two properties "sufficient" and "cover" give
+  the same optimum and the same approximate sets.
 * `multiclass` is a multiclass classifier with one rival class for each element.
   `sufficient_reason_iff_cover` is Theorem 9: its sufficient reason is the problem of the reduction.
+  `multiclass_isOptimum_iff` and `multiclass_isApprox_iff` are Theorem 10 for the classifier.
 -/
 
 open Finset EBaMlProofs.LocalExplanations
@@ -24,6 +28,15 @@ namespace EBaMlProofs.LocalExplanations.Hardness
 structure SetCover (ι κ : Type) where
   /-- The elements of each set. -/
   sets : ι → Finset κ
+
+/-- `opt` is the size of a smallest set among the sets that satisfy `ok`. -/
+def IsOptimum {ι : Type} (ok : Finset ι → Prop) (opt : ℕ) : Prop :=
+  (∃ F, ok F ∧ F.card = opt) ∧ ∀ G, ok G → opt ≤ G.card
+
+/-- `F` satisfies `ok` and has at most `ρ` times the optimum `opt` as many elements: the guarantee of an
+approximation algorithm with the ratio `ρ`. -/
+def IsApprox {ι : Type} (ok : Finset ι → Prop) (ρ : ℝ) (opt : ℕ) (F : Finset ι) : Prop :=
+  ok F ∧ (F.card : ℝ) ≤ ρ * opt
 
 variable {ι κ : Type} [DecidableEq κ]
 
@@ -83,6 +96,21 @@ exists. So an algorithm for the minimum sufficient reason decides Set Cover. -/
 theorem min_size_iff (I : SetCover ι κ) (K : ℕ) :
     (∃ F : Finset ι, F.card ≤ K ∧ I.problem.Sufficient F) ↔ ∃ F : Finset ι, F.card ≤ K ∧ I.IsCover F := by
   simp only [sufficient_iff_cover]
+
+/-- The sufficient sets of the problem of the reduction are the covers, as one property of sets. -/
+theorem problem_sufficient_eq_cover (I : SetCover ι κ) : I.problem.Sufficient = I.IsCover :=
+  funext fun F => propext (sufficient_iff_cover I F)
+
+/-- Theorem 10, part 1. A number is the smallest size of a sufficient set iff it is the smallest size of a cover. -/
+theorem isOptimum_iff (I : SetCover ι κ) (opt : ℕ) :
+    IsOptimum I.problem.Sufficient opt ↔ IsOptimum I.IsCover opt := by
+  rw [problem_sufficient_eq_cover]
+
+/-- Theorem 10, part 2. A set is a `ρ`-approximate sufficient set iff it is a `ρ`-approximate cover. So each
+approximation guarantee for one problem is the same guarantee for the other. -/
+theorem isApprox_iff (I : SetCover ι κ) (ρ : ℝ) (opt : ℕ) (F : Finset ι) :
+    IsApprox I.problem.Sufficient ρ opt F ↔ IsApprox I.IsCover ρ opt F := by
+  rw [problem_sufficient_eq_cover]
 
 end SetCover
 
@@ -171,6 +199,22 @@ theorem sufficient_reason_iff_cover (I : SetCover ι κ) (hcov : ∀ k, ∃ i, k
     cases j with
     | none => exact absurd rfl hj
     | some k => exact (hmargin k).2 (h k)
+
+/-- The sufficient sets of `multiclass I` are the covers, as one property of sets. -/
+theorem multiclass_sufficient_eq_cover (I : SetCover ι κ) (hcov : ∀ k, ∃ i, k ∈ I.sets i) :
+    (multiclass I).problem.Sufficient = I.IsCover :=
+  funext fun F => propext (sufficient_reason_iff_cover I hcov F)
+
+/-- Theorem 10 for the classifier, part 1: the smallest sufficient set has the size of the smallest cover. -/
+theorem multiclass_isOptimum_iff (I : SetCover ι κ) (hcov : ∀ k, ∃ i, k ∈ I.sets i) (opt : ℕ) :
+    IsOptimum (multiclass I).problem.Sufficient opt ↔ IsOptimum I.IsCover opt := by
+  rw [multiclass_sufficient_eq_cover I hcov]
+
+/-- Theorem 10 for the classifier, part 2: a `ρ`-approximate sufficient set is a `ρ`-approximate cover. -/
+theorem multiclass_isApprox_iff (I : SetCover ι κ) (hcov : ∀ k, ∃ i, k ∈ I.sets i) (ρ : ℝ) (opt : ℕ)
+    (F : Finset ι) :
+    IsApprox (multiclass I).problem.Sufficient ρ opt F ↔ IsApprox I.IsCover ρ opt F := by
+  rw [multiclass_sufficient_eq_cover I hcov]
 
 end Shape
 
