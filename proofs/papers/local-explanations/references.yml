@@ -42,3 +42,28 @@ dinur2014:
     type: proceedings
     title: "Proceedings of the 46th Annual ACM Symposium on Theory of Computing (STOC)"
   page-range: "624-633"
+
+chvatal1979:
+  type: article
+  title: "A Greedy Heuristic for the Set-Covering Problem"
+  author: ["Chvátal, Vašek"]
+  date: 1979
+  parent:
+    type: periodical
+    title: "Mathematics of Operations Research"
+    volume: 4
+    issue: 3
+  page-range: "233-235"
+
+kolliopoulos2005:
+  type: article
+  title: "Approximation Algorithms for Covering/Packing Integer Programs"
+  author: ["Kolliopoulos, Stavros G.", "Young, Neal E."]
+  date: 2005
+  parent:
+    type: periodical
+    title: "Journal of Computer and System Sciences"
+    volume: 71
+    issue: 4
+  page-range: "495-505"
+  url: https://arxiv.org/abs/cs/0205030

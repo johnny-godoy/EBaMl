@@ -35,6 +35,10 @@ term per feature.
   reduction iff the matching sets cover every element, and a multiclass classifier with one rival class for each
   element has this problem as its sufficient reason. The decision problem is NP-complete, so a polynomial algorithm for
   the smallest sufficient set exists only if P = NP. The cost of `ExactOrMinimal` is therefore expected.
+- **The same approximability as Set Cover.** The sufficient sets of the reduction are exactly the covers. So the two
+  problems have the same smallest size and the same approximate solutions for every ratio. Lean checks this. The
+  hardness result of Dinur and Steurer for Set Cover then holds for the sufficient reason: for every `α > 0`, it is
+  NP-hard to find a sufficient set that is at most `(1 - α) ln m` times the smallest, with `m` margins.
 
 Both claims of the first two items come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the
@@ -55,6 +59,8 @@ the *gains*.
 - The running time of the reduction, and the membership of the decision problem in NP. Lean checks that the reduction
   is correct. The paper argues the running time and the membership in a few lines, and it cites Karp for the
   NP-hardness of Set Cover.
+- The hardness result of Dinur and Steurer and the algorithms of Chvátal and of Kolliopoulos and Young. The paper
+  cites them as stated. It proves none of them, and the code implements none of the two algorithms.
 - A fixed number of margins that is larger than one. The reduction needs one margin for each element, so a classifier
   needs one rival class for each element.
 - The confidence level of the counterfactual. Only the features that the counterfactual changes move by `z` standard
