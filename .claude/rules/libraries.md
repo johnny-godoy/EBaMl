@@ -38,6 +38,11 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
   that setup. Ruff bans the `doctest` import. Sybil reads the option flags of doctest, so its configuration keeps an
   inline ignore.
 
+## Progress bars (`progressbar2`)
+
+- Show the progress of a slow loop with `progressbar2` (`import progressbar`). Ruff bans `tqdm`, `alive_progress`,
+  `enlighten` and `rich.progress`. `.claude/rules/progress-bars.md` says when to add a bar and how to write and test it.
+
 ## Saved models (`skops.io`)
 
 - Save and load a fitted model with `skops.io`. It loads only the types that the caller trusts, so a file runs no code.
