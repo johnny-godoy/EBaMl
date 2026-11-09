@@ -75,7 +75,7 @@ function counterfactual_question(num_sentences: int) -> string {
                 If the facts give "smallest_possible_number_of_changes", no set reaches the new prediction with fewer changes than that number. When "is_smallest_set" is false, you may state the gap between "number_of_changes" and that number, because the gap tells this reader how far the set can be from the smallest one.
                 Only realistic alternative values were considered (rare extreme values are left out), and the flip holds even if the model's effects are at the unfavourable edge of their confidence interval.
                 Suggest only the changes that the facts list, because they are the only ones that the model supports.
-                If no change flips the prediction, say that the prediction cannot be changed by altering the inputs.
+                If no change flips the prediction, say that no change within the realistic values flips it, because the search covered only those values and the facts make no claim about other values.
     `
 }
 
@@ -88,7 +88,7 @@ function sufficient_reason_question(num_sentences: int) -> string {
                 If the facts give "smallest_possible_number_of_features", no set with fewer inputs than that number guarantees the outcome. When "is_smallest_set" is false, you may state the gap between the number of listed inputs and that number, because the gap tells this reader how far the set can be from the smallest one.
                 The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval.
                 Present it as a statement about this model, not about the real world.
-                If there is no such set, say that every input matters.
+                If there is no such set, say that the search found no set of inputs that settles the prediction under these conditions, because that result does not show that each single input is needed.
     `
 }
 
@@ -96,7 +96,7 @@ function completions_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, how the outcome gets more certain as the inputs become known.
                 The facts give the share of people who would get the same prediction when only the first inputs are known and the rest are unknown (count completions).
-                Describe how that share grows and which inputs make the biggest difference.
+                Describe how that share changes from step to step, and say so when it falls, because learning more inputs can lower the share and a sample adds noise. Name the inputs that make the biggest difference.
                 Unlike the other two explanations, these shares are estimates from a large random sample that treats the unknown inputs as independent and distributed as in the training data. Describe them as approximate, because they are not guarantees.
     `
 }
