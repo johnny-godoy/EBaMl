@@ -7,16 +7,10 @@ Import every public name from ``ebaml``. The names ``describe_graph``, ``describ
 from importlib.metadata import version
 from typing import TYPE_CHECKING, cast
 
-from beartype import BeartypeConf
-from beartype.claw import beartype_this_package
-
-# The hook must run before any submodule import, or those modules stay unchecked.
-# The numeric tower lets an int satisfy a float hint, as PEP 484 says.
-# Checking annotated variables is off, because structlog's lazy logger proxy does not match its own logger type.
-beartype_this_package(conf=BeartypeConf(is_pep484_tower=True, claw_is_pep526=False))  # ruff: ignore[non-empty-init-module] -- the hook must run before the submodule imports below
-
-from ebaml.core.custom_types import FeatureType, Normalization  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+# The hook module must load first, or the modules that load before it stay unchecked.
+import ebaml.core.beartype_hook  # ruff: ignore[unused-import] -- the import installs the beartype hook as a side effect
+from ebaml.core.custom_types import FeatureType, Normalization
+from ebaml.core.exceptions import (
     APIKeyRejectedError,
     EBaMlError,
     EBMGraphError,
@@ -36,17 +30,17 @@ from ebaml.core.exceptions import (  # ruff: ignore[module-import-not-at-top-of-
     TokenFitError,
     UnsupportedModelError,
 )
-from ebaml.graphs.ebm_graph import EBMGraph  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.graphs.model_kinds import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.model_kinds import (
     BinaryClassifier,
     ModelKind,
     MulticlassClassifier,
     Regressor,
     model_kind,
 )
-from ebaml.graphs.token_budget import check_token_budget  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.local.audience import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.graphs.token_budget import check_token_budget
+from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
+from ebaml.local.audience import (
     Audience,
     DataScientist,
     Layperson,
@@ -56,7 +50,7 @@ from ebaml.local.audience import (  # ruff: ignore[module-import-not-at-top-of-f
     round_value,
     strength_word,
 )
-from ebaml.local.covering_backend import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.local.covering_backend import (
     CoveringModel,
     MipBackend,
     ModelResult,
@@ -64,16 +58,16 @@ from ebaml.local.covering_backend import (  # ruff: ignore[module-import-not-at-
     SolveSettings,
     Stop,
 )
-from ebaml.local.covering_problem import Choice, Cover, CoveringProblem  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.local.covering_solvers import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.local.covering_problem import Choice, Cover, CoveringProblem
+from ebaml.local.covering_solvers import (
     CoveringSolver,
     GreedyCover,
     LocalSearchCover,
     MipCover,
 )
-from ebaml.local.decisions import Decision, Interval, Threshold  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.local.fact_text import FactTexts, facts_to_texts  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.local.facts import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.local.decisions import Decision, Interval, Threshold
+from ebaml.local.fact_text import FactTexts, facts_to_texts
+from ebaml.local.facts import (
     Change,
     CompletionStep,
     Contribution,
@@ -84,8 +78,8 @@ from ebaml.local.facts import (  # ruff: ignore[module-import-not-at-top-of-file
     SufficientReason,
     compute_local_facts,
 )
-from ebaml.local.local_kinds import OutputKind  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.local.local_kinds import OutputKind
+from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 
 if TYPE_CHECKING:
     from ebaml.llm.descriptors import LocalExplanation, describe_ebm, describe_graph, explain_instance

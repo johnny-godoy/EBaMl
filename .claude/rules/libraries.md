@@ -59,8 +59,9 @@ a banned import. An exception is an inline `# ruff: ignore[banned-api] -- <reaso
 
 ## Runtime type checks (`beartype`)
 
-- `src/ebaml/__init__.py` calls `beartype_this_package()` before it imports any submodule, so every function in `ebaml`
-  checks its hints. Keep that call first. A module imported earlier stays unchecked.
+- `src/ebaml/__init__.py` imports `ebaml.core.beartype_hook` before any other submodule. That module calls
+  `beartype_package("ebaml")`, so every function in `ebaml`
+  checks its hints. Keep that import first. A module imported earlier stays unchecked.
 - Do not add `@beartype` to a function in `ebaml`. The hook already covers it.
 - A hint that is wrong fails at run time. Fix the hint (see `types.md`), and do not remove the check.
 - Pytest turns `BeartypeClawDecorWarning` into an error, because beartype skips a function that it cannot decorate.
