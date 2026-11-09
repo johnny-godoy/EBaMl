@@ -7,9 +7,10 @@ whose change is internal (a refactor, a test-only edit) carries the label ``no-c
 ``uv run python -m scripts.check_fragment <base revision>``.
 """
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- git offers the changed paths of a branch only as a command
 import sys
 from collections.abc import Iterable, Sequence
+
+from scripts.fixed_command import run_fixed
 
 USER_VISIBLE = ("src/ebaml/", "baml_src/", "benchmark/")
 # every BAML test file, offline and live, lives under this directory
@@ -96,8 +97,7 @@ def _git_paths(base: str, diff_filter: str) -> list[str]:
 
     """
     command = ["git", "diff", "--name-only", f"--diff-filter={diff_filter}", f"{base}...HEAD"]
-    result = subprocess.run(command, capture_output=True, text=True, check=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- a fixed git argv; the base revision comes from the workflow
-    return result.stdout.split()
+    return run_fixed(command, check=True).stdout.split()
 
 
 def main(argv: Sequence[str]) -> int:

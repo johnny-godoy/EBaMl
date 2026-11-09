@@ -1,11 +1,12 @@
 """Tests for the check that a pull request with a change that users can see adds a changelog fragment."""
 
-import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the tests build a real git repository to diff
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from scripts import check_fragment
+
+from .conftest import GitRunner
 
 
 @pytest.mark.parametrize(
@@ -60,21 +61,9 @@ def test_an_internal_change_needs_no_fragment() -> None:
     assert check_fragment.fragment_problem(["tests/unit/x.py", "README.md"], []) is None
 
 
-GIT = shutil.which("git") or "git"
-
-
-def git(repo: Path, *args: str) -> None:
-    subprocess.run([GIT, "-C", str(repo), *args], check=True, capture_output=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed git argv in a temporary repository
-
-
 @pytest.fixture
-def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    git(tmp_path, "init", "-q", "-b", "main")
-    git(tmp_path, "config", "user.email", "test@example.com")
-    git(tmp_path, "config", "user.name", "test")
-    (tmp_path / "README.md").write_text("x")
-    git(tmp_path, "add", "-A")
-    git(tmp_path, "commit", "-q", "-m", "base")
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_repo: Callable[[Path], Path], git: GitRunner) -> Path:
+    make_repo(tmp_path)
     git(tmp_path, "checkout", "-q", "-b", "feature")
     (tmp_path / "src" / "ebaml").mkdir(parents=True)
     (tmp_path / "src" / "ebaml" / "a.py").write_text("x")
@@ -82,14 +71,14 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-def test_main_fails_without_a_fragment(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_fails_without_a_fragment(repo: Path, git: GitRunner, capsys: pytest.CaptureFixture[str]) -> None:
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "change")
     assert check_fragment.main(["main"]) == 1
     assert "src/ebaml/a.py" in capsys.readouterr().err
 
 
-def test_main_passes_with_a_fragment(repo: Path) -> None:
+def test_main_passes_with_a_fragment(repo: Path, git: GitRunner) -> None:
     (repo / "changelog.d").mkdir()
     (repo / "changelog.d" / "a.md").write_text("### Added\n\n- A.\n")
     git(repo, "add", "-A")

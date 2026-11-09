@@ -1,26 +1,10 @@
 """Tests for the check of new copy-paste clones."""
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the tests build a small git repository with the git command
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import pytest
 from scripts import check_new_clones
-
-GIT = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
-
-
-def git(root: Path, *arguments: str) -> None:
-    subprocess.run([*GIT, *arguments], cwd=root, check=True, capture_output=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed git argv in a test
-
-
-def make_repo(root: Path) -> Path:
-    root.mkdir()
-    git(root, "init", "-q", "-b", "main")
-    (root / "file.txt").write_text("x", encoding="utf-8")
-    git(root, "add", ".")
-    git(root, "commit", "-q", "-m", "base")
-    return root
 
 
 def fake_runner(exit_code: int, commands: list[Sequence[str]]) -> check_new_clones.Runner:
@@ -52,13 +36,17 @@ def test_version_and_options_equal_the_jscpd_hook() -> None:
         assert command[command.index(name) + 1] == value
 
 
-def test_revision_exists(tmp_path: Path) -> None:
+def test_revision_exists(tmp_path: Path, make_repo: Callable[[Path], Path]) -> None:
     root = make_repo(tmp_path / "repo")
     assert check_new_clones.revision_exists("main", root)
     assert not check_new_clones.revision_exists("origin/main", root)
 
 
-def test_missing_base_fails_with_the_fetch_command(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_missing_base_fails_with_the_fetch_command(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    make_repo: Callable[[Path], Path],
+) -> None:
     commands: list[Sequence[str]] = []
     root = make_repo(tmp_path / "repo")
     assert check_new_clones.main(["--base", "origin/main"], fake_runner(0, commands), root) == 2
@@ -66,7 +54,11 @@ def test_missing_base_fails_with_the_fetch_command(tmp_path: Path, capsys: pytes
     assert commands == []
 
 
-def test_base_comes_from_the_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_base_comes_from_the_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    make_repo: Callable[[Path], Path],
+) -> None:
     monkeypatch.setenv(check_new_clones.BASE_ENVIRONMENT_VARIABLE, "main")
     commands: list[Sequence[str]] = []
     assert check_new_clones.main([], fake_runner(0, commands), make_repo(tmp_path / "repo")) == 0
@@ -74,13 +66,23 @@ def test_base_comes_from_the_environment(tmp_path: Path, monkeypatch: pytest.Mon
 
 
 @pytest.mark.parametrize(("jscpd_exit", "expected"), [(0, 0), (1, 1)])
-def test_exit_code_follows_jscpd(tmp_path: Path, jscpd_exit: int, expected: int) -> None:
+def test_exit_code_follows_jscpd(
+    tmp_path: Path,
+    jscpd_exit: int,
+    expected: int,
+    make_repo: Callable[[Path], Path],
+) -> None:
     assert (
         check_new_clones.main(["--base", "main"], fake_runner(jscpd_exit, []), make_repo(tmp_path / "repo")) == expected
     )
 
 
-def test_missing_npx_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_missing_npx_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    make_repo: Callable[[Path], Path],
+) -> None:
     root = make_repo(tmp_path / "repo")
     real_which = check_new_clones.shutil.which
 

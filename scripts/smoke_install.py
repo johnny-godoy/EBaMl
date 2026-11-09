@@ -14,7 +14,6 @@ Run it from the repo root: ``uv run python -m scripts.smoke_install dist/ebaml-1
 
 import os
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the calls run uv and the new interpreter with fixed argv
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -22,6 +21,8 @@ from pathlib import Path
 from typing import Literal
 
 import cyclopts
+
+from scripts.fixed_command import run_fixed
 
 SMOKE_PROGRAM = """
 import importlib.metadata
@@ -137,14 +138,7 @@ def _run(command: Sequence[str], *, environment: Mapping[str, str] | None, worki
         If the command fails. The message holds its output.
 
     """
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv: the uv path from shutil.which and the paths of this script
-        command,
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=working_directory,
-        env=None if environment is None else dict(environment),
-    )
+    result = run_fixed(command, cwd=working_directory, env=environment)
     sys.stdout.write(result.stdout)
     if result.returncode:
         message = f"command failed with exit code {result.returncode}: {' '.join(command[:4])} ...\n{result.stderr}"

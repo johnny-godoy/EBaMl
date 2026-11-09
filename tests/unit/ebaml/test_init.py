@@ -1,10 +1,10 @@
 """Tests for the package."""
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the test starts a fresh interpreter with a fixed argv
 import sys
 
 import pytest
 from beartype.roar import BeartypeCallHintViolation
+from scripts.fixed_command import run_fixed
 
 import ebaml
 from ebaml.core.custom_types import coerce_enum
@@ -58,12 +58,7 @@ def test_unknown_name_raises_the_standard_message() -> None:
 
 def test_import_loads_neither_the_sdk_nor_the_descriptors() -> None:
     code = "import sys, ebaml; print('baml_sdk' in sys.modules, 'ebaml.llm.descriptors' in sys.modules)"
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv, never untrusted input
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    result = run_fixed([sys.executable, "-c", code], check=True)
     assert result.stdout.split() == ["False", "False"]
 
 
@@ -71,10 +66,5 @@ def test_import_loads_ortools_and_not_highspy() -> None:
     # highspy and ortools each ship a HiGHS library, and a process that loads both fails with an undefined symbol.
     # ebaml reaches HiGHS through the MathOpt API of ortools only.
     code = "import sys, ebaml; print('ortools.math_opt.python.mathopt' in sys.modules, 'highspy' in sys.modules)"
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv, never untrusted input
-        [sys.executable, "-c", code],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    result = run_fixed([sys.executable, "-c", code], check=True)
     assert result.stdout.split() == ["True", "False"]
