@@ -119,7 +119,7 @@ def _(mo) -> None:
 @app.cell
 def _(EBMGraph, ebm, features, kind, mo, np):
     scores = np.tile(np.asarray(ebm.intercept_, dtype=float), (5, 1))
-    for index in range(len(features.columns)):
+    for index, _ in enumerate(features.columns):
         feature_graph = EBMGraph.from_ebm(ebm, index, use_feature_bounds=False)
         # the bin of each value, from the cut points of the EBM (one bin per interval)
         cuts = np.asarray(ebm.bins_[index][0], dtype=float)

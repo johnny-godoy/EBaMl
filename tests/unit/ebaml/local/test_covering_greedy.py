@@ -74,7 +74,7 @@ def test_the_greedy_on_set_cover_is_chvatals_greedy_within_its_bound(sets: list[
     uncovered = set(range(ELEMENT_COUNT))
     chosen: list[int] = []
     while uncovered:
-        best = max(range(len(sets)), key=lambda index: (len(sets[index] & uncovered), -index))
+        best, _ = max(enumerate(sets), key=lambda indexed: (len(indexed[1] & uncovered), -indexed[0]))
         chosen.append(best)
         uncovered -= sets[best]
     for index in reversed(list(chosen)):

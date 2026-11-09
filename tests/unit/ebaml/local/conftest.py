@@ -64,7 +64,8 @@ def oracle_size(problem: CoveringProblem) -> int | None:
     group_count = len(problem.groups)
     for size in range(group_count + 1):
         for chosen_groups in itertools.combinations(range(group_count), size):
-            ranges = [range(len(problem.groups[group])) for group in chosen_groups]
+            alternative_counts = [len(problem.groups[group]) for group in chosen_groups]
+            ranges = [range(alternative_count) for alternative_count in alternative_counts]
             for alternatives in itertools.product(*ranges):
                 choices = list(itertools.starmap(Choice, zip(chosen_groups, alternatives, strict=True)))
                 if problem.sufficient(choices):
