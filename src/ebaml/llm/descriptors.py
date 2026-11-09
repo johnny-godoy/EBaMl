@@ -533,10 +533,10 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     num_sentences: int = 30,
     max_concurrency: int = 8,
     *,
+    progress_bar: bool = False,
     graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
     model: ModelOptions | str | None = None,
-    progress_bar: bool = False,
 ) -> str:
     """Ask the LLM to describe an EBM.
 
@@ -553,6 +553,9 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
         The EBM.
     num_sentences: int, default=30
         The desired number of sentences for the description.
+    progress_bar: bool, default=False
+        Whether to show a progress bar on the error stream: one step for each feature and one for the summary.
+        Without a terminal, the bar writes one line for each step.
     max_concurrency: int, default=8
         The maximum number of features described at the same time.
     graph: GraphOptions, default=GraphOptions()
@@ -562,9 +565,6 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     model: ModelOptions | str | None, default=None
         The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
         ``openrouter/free``. EBaMl sends every request of the call to this model.
-    progress_bar: bool, default=False
-        Whether to show a progress bar on the error stream. It counts one step for each feature and one for the
-        summary. If the error stream is not a terminal, the bar writes one line for each step.
 
     Returns
     -------
