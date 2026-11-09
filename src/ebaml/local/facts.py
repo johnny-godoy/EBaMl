@@ -523,6 +523,7 @@ def _features(
         raise UnsupportedModelError(msg)
     # a feature that exclude or remove_terms left out has no score, so the prediction cannot be split by feature
     with_term = main_effect_features(ebm)
+    # nosemgrep: ebaml-no-range-len -- the check compares with every position of the feature names
     if with_term != list(range(len(ebm.feature_names_in_))):
         missing = [name for index, name in enumerate(ebm.feature_names_in_) if index not in with_term]
         msg = f"Local explanations need a main-effect term for every feature. These features have none: {missing}."
@@ -818,7 +819,11 @@ def _several_margins_reason(
         The reason, or None if even all the features do not guarantee the decision.
 
     """
-    groups = [[[margin_gains[index] for margin_gains in table.gains]] for index in range(len(features))]
+    groups = [
+        [[margin_gains[index] for margin_gains in table.gains]]
+        # nosemgrep: ebaml-no-range-len -- the index addresses the feature in the gains of every margin
+        for index in range(len(features))
+    ]
     cover = search.solve(CoveringProblem(table.worst, groups), seed=seed)
     if cover is None:
         return None
@@ -1046,7 +1051,9 @@ def _target_counterfactual(
     target, _ = margins[0].columns or (0, 0)
     views = [[feature.against(margin.columns) for feature in features] for margin in margins]
     alternatives = [
-        _alternatives([margin_views[index] for margin_views in views], totals.z) for index in range(len(features))
+        _alternatives([margin_views[index] for margin_views in views], totals.z)
+        # nosemgrep: ebaml-no-range-len -- the index addresses the feature in the views of every margin
+        for index in range(len(features))
     ]
     worst = [
         margin.offset(totals.intercepts) + sum(view.current for view in margin_views)

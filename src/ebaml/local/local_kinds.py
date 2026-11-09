@@ -292,8 +292,8 @@ class MulticlassLocal(LocalKind):
             msg = f"The target class {target!r} is the predicted class already, so no change is needed."
             raise OptionRangeError(msg)
         return tuple(
-            Margin(1, 0.0, self.classes[rival], (column, rival))
-            for rival in range(len(self.classes))
+            Margin(1, 0.0, rival_class, (column, rival))
+            for rival, rival_class in enumerate(self.classes)
             if rival != column
         )
 
@@ -314,7 +314,7 @@ class MulticlassLocal(LocalKind):
         against[winner] = scores[winner] - spread[winner]
         towards = np.asarray(scores, dtype=float) - spread
         towards[winner] = scores[winner] + spread[winner]
-        rivals = [rival for rival in range(len(self.classes)) if rival != winner]
+        rivals = [rival for rival, _ in enumerate(self.classes) if rival != winner]
         margins = tuple(Margin(1, 0.0, self.classes[rival], (winner, rival)) for rival in rivals)
 
         def after(_margin: Margin, new_scores: Sequence[float]) -> Outcome:

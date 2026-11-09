@@ -183,6 +183,7 @@ def _class_columns(names: Sequence[str], selected: Sequence[str] | None) -> list
 
     """
     if selected is None:
+        # nosemgrep: ebaml-no-range-len -- the selection is every position of names, so the positions are the result
         return list(range(len(names)))
     # a string is a sequence of strings too, so without this check "setosa" would select the classes "s", "e", ...
     if isinstance(selected, str):
@@ -376,6 +377,7 @@ class EBMGraph:
                 # interpret types bins_ as arrays, but the bins of a nominal feature are a dict of category to position
                 bins = cast(dict[str, int], ebm.bins_[feature_index][0])
                 positions = {position - 1: category for category, position in bins.items()}
+                # nosemgrep: ebaml-no-range-len -- positions is a dict, so the indexes look up its keys in order
                 x_vals = [positions[idx] for idx in range(len(positions))]
             case _:
                 raise InvalidOptionError(feature_type, ["continuous", "nominal"])
@@ -427,13 +429,12 @@ class EBMGraph:
         rows = scores.reshape(len(x_vals), -1).tolist()
         # the bins of each merged bin; a bin joins the last group if no score moved more than the threshold
         groups = [[0]]
-        later_bins = range(1, len(x_vals))  # pragma: no mutate -- the first bin compared with itself changes nothing
-        for idx in later_bins:
+        for bin_index, row in enumerate(rows[1:], start=1):
             first = rows[groups[-1][0]]
-            if max(abs(a - b) for a, b in zip(first, rows[idx], strict=True)) <= threshold:
-                groups[-1].append(idx)
+            if max(abs(a - b) for a, b in zip(first, row, strict=True)) <= threshold:
+                groups[-1].append(bin_index)
             else:
-                groups.append([idx])
+                groups.append([bin_index])
         # the groups are runs of neighbouring bins, so reduceat over the first bin of each group reduces each run
         firsts = [group[0] for group in groups]
         return type(self)(

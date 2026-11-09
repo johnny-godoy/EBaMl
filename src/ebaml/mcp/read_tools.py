@@ -83,7 +83,7 @@ def model_summary(store: ModelStore) -> ModelSummary:
         outputs=kind.outputs,
         classes=classes,
         score_meaning=kind.score_meaning,
-        intercept=[float(value) for value in np.ravel(ebm.intercept_)],
+        intercept=np.ravel(ebm.intercept_).astype(float).tolist(),
         feature_count=len(main_effect_features(ebm)),
         skipped_terms=skipped,
     )

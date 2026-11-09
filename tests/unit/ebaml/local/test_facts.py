@@ -29,6 +29,8 @@ from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, retu
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
+FEATURE_INDEXES: tuple[int, ...] = tuple(index for index, _ in enumerate(NAMES))
+ALL_FEATURES = frozenset(FEATURE_INDEXES)
 
 
 @pytest.fixture(scope="module")
@@ -68,7 +70,7 @@ def _brute_force(ebm: ExplainableBoostingClassifier, row: tuple[str, ...]) -> tu
     sufficient = [
         size
         for size in range(len(NAMES) + 1)
-        for subset in itertools.combinations(range(len(NAMES)), size)
+        for subset in itertools.combinations(FEATURE_INDEXES, size)
         if all(same for combo, same in outcome.items() if all(combo[i] == row[i] for i in subset))
     ]
     return (min(flips) if flips else None), (min(sufficient) if sufficient else None)
@@ -195,7 +197,13 @@ def _feature(
     std: float = 0.0,
     plausible: list[bool] | None = None,
 ) -> local._Feature:
-    graph = EBMGraph("f", "nominal", [str(i) for i in range(len(scores))], scores, [std] * len(scores))
+    graph = EBMGraph(
+        "f",
+        "nominal",
+        [str(bin_index) for bin_index, _ in enumerate(scores)],
+        scores,
+        [std] * len(scores),
+    )
     weights = np.ones(len(scores))
     return local._Feature("f", graph, weights, bin_index, "v", np.array(plausible or [True] * len(scores)))
 
@@ -277,7 +285,7 @@ def _margin_views(
     """
     return [
         (intercepts[winner] - intercepts[rival], [feature.against((winner, rival)) for feature in features])
-        for rival in range(len(intercepts))
+        for rival, _ in enumerate(intercepts)
         if rival != winner
     ]
 
@@ -427,8 +435,9 @@ def _brute_force_target_size(features: Sequence[local._Feature], scores: Sequenc
         The fewest changes, or ``None`` if no choice of bins makes the target class win.
 
     """
+    feature_indexes = [index for index, _ in enumerate(features)]
     for size in range(1, len(features) + 1):
-        for chosen in itertools.combinations(range(len(features)), size):
+        for chosen in itertools.combinations(feature_indexes, size):
             bin_choices = [
                 [
                     int(bin_index)
@@ -443,7 +452,7 @@ def _brute_force_target_size(features: Sequence[local._Feature], scores: Sequenc
                     new_scores += features[index].outputs(bin_index) - features[index].outputs(
                         features[index].bin_index,
                     )
-                if all(new_scores[target] > new_scores[rival] for rival in range(len(scores)) if rival != target):
+                if all(new_scores[target] > new_scores[rival] for rival, _ in enumerate(scores) if rival != target):
                     return size
     return None
 
@@ -499,7 +508,7 @@ def _target_feature(name: str, rows: list[list[float]]) -> local._Feature:
     graph = EBMGraph(
         name,
         "nominal",
-        [f"{name}{bin_index}" for bin_index in range(len(rows))],
+        [f"{name}{bin_index}" for bin_index, _ in enumerate(rows)],
         rows,
         [[0.0] * 3] * len(rows),
         classes=("c0", "c1", "c2"),
@@ -628,7 +637,7 @@ def _hand(  # ruff: ignore[too-many-arguments] -- keyword-only options of a test
     weights: list[float] | None = None,
     plausible: list[bool] | None = None,
 ) -> local._Feature:
-    x_vals = [f"{name}{i}" for i in range(len(scores))]
+    x_vals = [f"{name}{bin_index}" for bin_index, _ in enumerate(scores)]
     graph = EBMGraph(name, "nominal", x_vals, scores, stds or [0.0] * len(scores))
     return local._Feature(
         name,
@@ -1192,7 +1201,7 @@ def _build(parts: Sequence[FeatureParts]) -> list[local._Feature]:
     features = []
     for index, (scores, stds, plausible, bin_index) in enumerate(parts):
         name = f"f{index}"
-        graph = EBMGraph(name, "nominal", [str(b) for b in range(len(scores))], scores, stds)
+        graph = EBMGraph(name, "nominal", [str(bin_index) for bin_index, _ in enumerate(scores)], scores, stds)
         features.append(
             local._Feature(name, graph, np.ones(len(scores)), bin_index, str(bin_index), np.array(plausible)),
         )
@@ -1254,9 +1263,7 @@ def test_the_features_of_a_sufficient_reason_fix_the_outcome_for_every_completio
     assume(reason is not None)
     assert reason is not None
     # each feature of the reason keeps the bin of the instance; each other one takes any plausible bin
-    choices = [
-        [f.bin_index] if f.name in reason.features else [int(b) for b in np.flatnonzero(f.plausible)] for f in features
-    ]
+    choices = [[f.bin_index] if f.name in reason.features else np.flatnonzero(f.plausible).tolist() for f in features]
     for completion in itertools.product(*choices):
         margin = sign * intercept + sum(
             sign * float(f.scores[b]) - z * float(f.stds[b]) for f, b in zip(features, completion, strict=True)
@@ -1307,7 +1314,7 @@ def _brute_force_regressor(
     sufficient = [
         size
         for size in range(len(NAMES) + 1)
-        for subset in itertools.combinations(range(len(NAMES)), size)
+        for subset in itertools.combinations(FEATURE_INDEXES, size)
         if all(same for combo, same in outcome.items() if all(combo[i] == row[i] for i in subset))
     ]
     return (min(flips) if flips else None), (min(sufficient) if sufficient else None)
@@ -1363,7 +1370,7 @@ def _sufficient_sizes(
     return {
         frozenset(subset): all(ok for combo, ok in same.items() if all(combo[i] == row[i] for i in subset))
         for size in range(len(NAMES) + 1)
-        for subset in itertools.combinations(range(len(NAMES)), size)
+        for subset in itertools.combinations(FEATURE_INDEXES, size)
     }
 
 
@@ -1408,7 +1415,7 @@ def test_regressor_interval_matches_brute_force(
         assert len(facts.counterfactual.changes) == flip
     sufficient = _sufficient_sizes(ebm, row, holds)
     reason = facts.sufficient_reason
-    if not sufficient[frozenset(range(len(NAMES)))]:
+    if not sufficient[ALL_FEATURES]:
         assert reason is None
         return
     assert reason is not None
