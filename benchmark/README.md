@@ -24,6 +24,7 @@ export OPENROUTER_API_KEY=sk-or-...
 uv run python benchmark/run.py                       # every task
 uv run python benchmark/run.py --task jumps --limit 5 --output results.json
 uv run python benchmark/run.py --model anthropic/claude-haiku-4-5   # needs ANTHROPIC_API_KEY
+uv run python benchmark/run.py --no-progress                       # no progress bar on the error stream
 ```
 
 Questions are asked one at a time (free models are rate limited), two LLM turns each, at temperature 0: the model

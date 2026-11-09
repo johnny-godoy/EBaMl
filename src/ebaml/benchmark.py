@@ -11,13 +11,15 @@ function that asks the question, so the parsing and the scoring run without the 
 import enum
 import os
 import re
-from collections.abc import Callable, Sequence
+import sys
+from collections.abc import Callable, Iterator, Sequence
 from itertools import starmap
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 import attrs
 import orjson
+import progressbar
 import structlog
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
@@ -323,7 +325,30 @@ def is_correct(task: Task, response: str, solution: str) -> bool:
     return answer is not None and answer == parse_answer(task, solution)
 
 
-def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion) -> TaskResult:
+def _with_progress_bar(questions: Sequence[Question], label: str) -> Iterator[Question]:
+    """Yield the questions, and redraw a progress bar on the error stream after the caller has handled each one.
+
+    Parameters
+    ----------
+    questions: Sequence[Question]
+        The questions to yield.
+    label: str
+        The text before the bar.
+
+    Yields
+    ------
+    Question
+        Each question, in order.
+
+    """
+    with progressbar.ProgressBar(max_value=len(questions), prefix=f"{label} ", fd=sys.stderr) as bar:
+        for question in questions:
+            yield question
+            # a question is a call of an LLM, which takes seconds, so each one redraws the bar
+            bar.increment(force=True)
+
+
+def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion, *, progress: bool = False) -> TaskResult:
     """Ask the LLM the questions of a task, one at a time, and score its answers.
 
     The questions are asked sequentially, because the free models are rate limited.
@@ -336,6 +361,9 @@ def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion) -> Tas
         The questions to ask, for example from ``load_questions``.
     ask: AskQuestion
         Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question``. It chooses the model.
+    progress: bool, default=False
+        Whether to show a progress bar of the questions on the error stream. If that stream is not a terminal, the bar
+        writes one line for each question.
 
     Returns
     -------
@@ -345,7 +373,9 @@ def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion) -> Tas
     """
     outcomes = []
     input_tokens = output_tokens = 0
-    for index, question in enumerate(questions, start=1):
+    # progressbar2 reads a total of 0 as an unknown total and draws a spinner, so a task with no question has no bar
+    asked = _with_progress_bar(questions, str(task)) if progress and questions else questions
+    for index, question in enumerate(asked, start=1):
         counted = ask(question=question.prompt, answer_format=task.answer_format)
         input_tokens += counted.usage.input_tokens
         output_tokens += counted.usage.output_tokens
