@@ -17,12 +17,13 @@ not combine the two modes.
 
 import os
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- jscpd runs on Node.js and git answers revision questions only as commands
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import cyclopts
+
+from scripts.fixed_command import run_fixed
 
 ROOT = Path(__file__).resolve().parent.parent
 # Keep this version equal to the one in the jscpd hook of prek.toml. A unit test checks that the two agree.
@@ -87,7 +88,7 @@ def run_command(command: Sequence[str], root: Path) -> int:
         The exit code of the command.
 
     """
-    return subprocess.run(command, cwd=root, check=False).returncode  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv of npx, never untrusted input
+    return run_fixed(command, cwd=root, capture_output=False).returncode
 
 
 def revision_exists(base: str, root: Path) -> bool:
@@ -110,7 +111,7 @@ def revision_exists(base: str, root: Path) -> bool:
     if git is None:
         return False
     command = [git, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}"]
-    return subprocess.run(command, cwd=root, capture_output=True, check=False).returncode == 0  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv of git, the revision is one argument
+    return run_fixed(command, cwd=root).returncode == 0
 
 
 app: cyclopts.App = cyclopts.App(

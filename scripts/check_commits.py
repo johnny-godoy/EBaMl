@@ -14,13 +14,14 @@ commits that git writes for ``fixup!`` and ``squash!`` are skipped.
 
 import re
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- git offers the commits of a branch only as a command
 import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Annotated, cast
 
 import cyclopts
+
+from scripts.fixed_command import run_fixed
 
 MAX_CHANGED_LINES = 400
 # the same minimum as the reason of a workaround in scripts/check_ignores.py
@@ -128,8 +129,7 @@ def _git(*args: str) -> str:
         The standard output.
 
     """
-    result = subprocess.run([GIT, *args], capture_output=True, text=True, check=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- a fixed git argv; the base revision comes from the workflow
-    return result.stdout
+    return run_fixed([GIT, *args], check=True).stdout
 
 
 def branch_problems(base: str) -> list[str]:

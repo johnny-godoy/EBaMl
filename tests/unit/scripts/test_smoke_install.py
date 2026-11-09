@@ -1,6 +1,5 @@
 """Tests for the clean-environment smoke test of a distribution."""
 
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the fake replaces subprocess.run, nothing runs
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -8,11 +7,12 @@ from pathlib import Path
 import attrs
 import pytest
 from scripts import smoke_install
+from scripts.fixed_command import CommandResult
 
 
 @attrs.define
 class Call:
-    """One recorded call of the fake ``subprocess.run``."""
+    """One recorded call of the fake ``run_fixed``."""
 
     command: list[str]
     env: dict[str, str] | None
@@ -26,28 +26,18 @@ class FakeRun:
     calls: list[Call] = attrs.field(factory=list)
     exit_codes: list[int] = attrs.field(factory=list)
 
-    def __call__(  # ruff: ignore[too-many-arguments] -- mirrors the keyword-only options of subprocess.run that the script passes
-        self,
-        command: Sequence[str],
-        *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
-        cwd: Path,
-        env: dict[str, str] | None,
-    ) -> subprocess.CompletedProcess[str]:
+    def __call__(self, command: Sequence[str], *, cwd: Path, env: dict[str, str] | None) -> CommandResult:
         """Record the call and report the next exit code, or 0.
 
         Returns
         -------
-        subprocess.CompletedProcess[str]
-            A finished process with the exit code, some output and a reason.
+        CommandResult
+            A finished command with the exit code, some output and a reason.
 
         """
-        assert (check, capture_output, text) == (False, True, True)
         self.calls.append(Call(list(command), env, cwd))
         code = self.exit_codes.pop(0) if self.exit_codes else 0
-        return subprocess.CompletedProcess(command, code, stdout="out\n", stderr="the reason")
+        return CommandResult(returncode=code, stdout="out\n", stderr="the reason")
 
 
 def _uv_path(_name: str) -> str | None:
@@ -61,7 +51,7 @@ def _no_path(_name: str) -> str | None:
 @pytest.fixture
 def fake_run(monkeypatch: pytest.MonkeyPatch) -> FakeRun:
     run = FakeRun()
-    monkeypatch.setattr(smoke_install.subprocess, "run", run)
+    monkeypatch.setattr(smoke_install, "run_fixed", run)
     monkeypatch.setattr(smoke_install.shutil, "which", _uv_path)
     return run
 

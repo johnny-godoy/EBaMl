@@ -25,7 +25,6 @@ So the ``build`` command also resolves every relative ``href`` and ``src`` of th
 
 import posixpath
 import re
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- marimo and Zensical only offer their build as a command
 import sys
 import tomllib
 from collections.abc import Callable, Sequence
@@ -36,6 +35,8 @@ from urllib.parse import unquote, urljoin, urlsplit
 import cyclopts
 import structlog
 import typst
+
+from scripts.fixed_command import CommandFailedError, run_fixed
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
@@ -93,7 +94,7 @@ def export_notebooks() -> None:
 
     Raises
     ------
-    subprocess.CalledProcessError
+    CommandFailedError
         If marimo fails, for example when a cell raises an error. The incomplete file is deleted first.
 
     """
@@ -104,8 +105,8 @@ def export_notebooks() -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
         command = [sys.executable, "-m", "marimo", "export", "html", str(notebook), "-o", str(output), "--force"]
         try:
-            subprocess.run(command, cwd=ROOT, check=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
-        except subprocess.CalledProcessError:
+            run_fixed(command, cwd=ROOT, capture_output=False, check=True)
+        except CommandFailedError:
             # marimo writes the file even when a cell fails, and the next run would take it as fresh
             output.unlink(missing_ok=True)
             raise
@@ -227,13 +228,7 @@ def build() -> int:
     export_notebooks()
     export_papers()
     command = [sys.executable, "-m", "zensical", "build", "--strict"]
-    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
-        command,
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    result = run_fixed(command, cwd=ROOT)
     # one text for both streams, so the gate sees the warnings wherever Zensical writes them
     output = result.stdout + result.stderr
     sys.stdout.write(output)
@@ -260,7 +255,7 @@ def serve() -> int:
     export_notebooks()
     export_papers()
     command = [sys.executable, "-m", "zensical", "serve"]
-    return subprocess.run(command, cwd=ROOT, check=False).returncode  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
+    return run_fixed(command, cwd=ROOT, capture_output=False).returncode
 
 
 COMMANDS: dict[str, Callable[[], int]] = {"build": build, "serve": serve}

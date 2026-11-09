@@ -1,11 +1,12 @@
 """Tests for the check of the subject style and the size of commits."""
 
-import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the tests build a real git repository to check
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from scripts import check_commits
+
+from .conftest import GitRunner
 
 
 @pytest.mark.parametrize(
@@ -67,37 +68,38 @@ def test_main_checks_a_message_file(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert check_commits.main(["--message-file", str(message)]) == 0
 
 
-GIT = shutil.which("git") or "git"
+@pytest.fixture
+def commit(git: GitRunner) -> Callable[[Path, str, int, str], None]:
+    def make_commit(repo: Path, name: str, lines: int, message: str) -> None:
+        (repo / name).write_text("x\n" * lines, encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", message)
 
-
-def git(repo: Path, *args: str) -> None:
-    subprocess.run([GIT, "-C", str(repo), *args], check=True, capture_output=True)  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed git argv in a temporary repository
-
-
-def commit(repo: Path, name: str, lines: int, message: str) -> None:
-    (repo / name).write_text("x\n" * lines)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", message)
+    return make_commit
 
 
 @pytest.fixture
-def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    git(tmp_path, "init", "-q", "-b", "main")
-    git(tmp_path, "config", "user.email", "test@example.com")
-    git(tmp_path, "config", "user.name", "test")
-    commit(tmp_path, "base.txt", 1, "chore: start")
+def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_repo: Callable[[Path], Path], git: GitRunner) -> Path:
+    make_repo(tmp_path)
     git(tmp_path, "checkout", "-q", "-b", "feature")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
 
-def test_main_passes_a_branch_of_small_well_written_commits(repo: Path) -> None:
+def test_main_passes_a_branch_of_small_well_written_commits(
+    repo: Path,
+    commit: Callable[[Path, str, int, str], None],
+) -> None:
     commit(repo, "a.py", 10, "feat: add a")
     commit(repo, "uv.lock", 5000, "build: lock the dependencies")
     assert check_commits.main(["--base", "main"]) == 0
 
 
-def test_main_reports_each_bad_commit_of_a_branch(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_main_reports_each_bad_commit_of_a_branch(
+    repo: Path,
+    commit: Callable[[Path, str, int, str], None],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     commit(repo, "a.py", 10, "feat: Add a.")
     commit(repo, "b.py", 500, "feat: add b")
     commit(repo, "c.py", 500, "fixup! feat: add b")

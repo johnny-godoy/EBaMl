@@ -3,7 +3,6 @@
 import importlib
 import importlib.util
 import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] -- the tests replace subprocess.run with a fake
 import sys
 import types
 from collections.abc import Sequence
@@ -29,8 +28,8 @@ SKEW = (
 SKILL_ERROR = "error: the installed BAML agent skill does not match this toolchain; run `baml agent install`"
 
 
-def finished(returncode: int = 0, stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(["baml"], returncode, stdout, stderr)
+def finished(returncode: int = 0, stdout: str = "", stderr: str = "") -> sdk_setup.subprocess.CompletedProcess[str]:
+    return sdk_setup.subprocess.CompletedProcess(["baml"], returncode, stdout, stderr)
 
 
 class Runs:
@@ -39,7 +38,7 @@ class Runs:
     def __init__(
         self,
         setup: "Setup",
-        outcomes: Sequence[subprocess.CompletedProcess[str] | Exception],
+        outcomes: Sequence[sdk_setup.subprocess.CompletedProcess[str] | Exception],
         *,
         creates_sdk: bool,
     ) -> None:
@@ -49,23 +48,23 @@ class Runs:
         ----------
         setup : Setup
             The setup of the test, which holds the events and the SDK.
-        outcomes : Sequence[subprocess.CompletedProcess[str] | Exception]
+        outcomes : Sequence[sdk_setup.subprocess.CompletedProcess[str] | Exception]
             The result to return, or the error to raise, for each call.
         creates_sdk : bool
             Whether the SDK exists after the first call.
 
         """
         self.setup: Setup = setup
-        self.outcomes: Sequence[subprocess.CompletedProcess[str] | Exception] = outcomes
+        self.outcomes: Sequence[sdk_setup.subprocess.CompletedProcess[str] | Exception] = outcomes
         self.creates_sdk: bool = creates_sdk
         self.calls: list[tuple[list[str], dict[str, object]]] = []
 
-    def __call__(self, args: list[str], **options: object) -> subprocess.CompletedProcess[str]:
+    def __call__(self, args: list[str], **options: object) -> sdk_setup.subprocess.CompletedProcess[str]:
         """Record the call, then return or raise its outcome.
 
         Returns
         -------
-        subprocess.CompletedProcess[str]
+        sdk_setup.subprocess.CompletedProcess[str]
             The result.
 
         """
@@ -91,12 +90,16 @@ class Setup:
     import_errors: list[Exception] = attrs.field(factory=list)
     forgotten: list[str] = attrs.field(factory=list)
 
-    def runs(self, *outcomes: subprocess.CompletedProcess[str] | Exception, creates_sdk: bool = False) -> Runs:
+    def runs(
+        self,
+        *outcomes: sdk_setup.subprocess.CompletedProcess[str] | Exception,
+        creates_sdk: bool = False,
+    ) -> Runs:
         """Replace ``subprocess.run`` with a fake.
 
         Parameters
         ----------
-        outcomes : subprocess.CompletedProcess[str] | Exception
+        outcomes : sdk_setup.subprocess.CompletedProcess[str] | Exception
             The result to return, or the error to raise, for each call.
         creates_sdk : bool
             Whether the SDK exists after the first call.
@@ -108,7 +111,7 @@ class Setup:
 
         """
         fake = Runs(self, outcomes, creates_sdk=creates_sdk)
-        self.monkeypatch.setattr(subprocess, "run", fake)
+        self.monkeypatch.setattr(sdk_setup.subprocess, "run", fake)
         return fake
 
     def find_spec(self, name: str) -> ModuleSpec | None:
@@ -312,7 +315,7 @@ def test_a_failed_command_without_output_says_so(setup: Setup) -> None:
 @pytest.mark.usefixtures("on_path")
 @pytest.mark.parametrize(
     "error",
-    [PermissionError("denied"), subprocess.TimeoutExpired(["baml", "generate"], 300)],
+    [PermissionError("denied"), sdk_setup.subprocess.TimeoutExpired(["baml", "generate"], 300)],
     ids=["cannot start", "times out"],
 )
 def test_a_command_that_does_not_finish_gives_the_cause(setup: Setup, error: Exception) -> None:

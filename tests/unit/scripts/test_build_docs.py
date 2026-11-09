@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from scripts import build_docs
+from scripts.fixed_command import CommandFailedError, CommandResult
 
 
 def touch(path: Path, mtime: int) -> Path:
@@ -49,7 +50,7 @@ def compiled(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Path, Path, Path]]:
 
 
 def record_runs(monkeypatch: pytest.MonkeyPatch, result: Callable[[list[str]], int] | None = None) -> list[list[str]]:
-    """Replace ``subprocess.run``.
+    """Replace ``run_fixed`` in ``build_docs``.
 
     Returns
     -------
@@ -59,12 +60,12 @@ def record_runs(monkeypatch: pytest.MonkeyPatch, result: Callable[[list[str]], i
     """
     commands: list[list[str]] = []
 
-    def run(command: list[str], **_kwargs: object) -> build_docs.subprocess.CompletedProcess[str]:
+    def run(command: list[str], **_kwargs: object) -> CommandResult:
         commands.append(command)
         code = result(command) if result else 0
-        return build_docs.subprocess.CompletedProcess(command, code, stdout="", stderr="")
+        return CommandResult(returncode=code, stdout="", stderr="")
 
-    monkeypatch.setattr(build_docs.subprocess, "run", run)
+    monkeypatch.setattr(build_docs, "run_fixed", run)
     return commands
 
 
@@ -129,12 +130,13 @@ def test_export_passes_the_arguments_that_make_a_failure_stop_the_build(
 ) -> None:
     kwargs: list[dict[str, object]] = []
 
-    def run(_command: list[str], **options: object) -> None:
+    def run(_command: list[str], **options: object) -> CommandResult:
         kwargs.append(options)
+        return CommandResult(returncode=0, stdout="", stderr="")
 
-    monkeypatch.setattr(build_docs.subprocess, "run", run)
+    monkeypatch.setattr(build_docs, "run_fixed", run)
     build_docs.export_notebooks()
-    assert kwargs == [{"cwd": build_docs.ROOT, "check": True}] * len(sources[:2])
+    assert kwargs == [{"cwd": build_docs.ROOT, "capture_output": False, "check": True}] * len(sources[:2])
 
 
 def test_find_warnings_returns_the_griffe_lines() -> None:
@@ -154,16 +156,11 @@ def test_build_fails_when_zensical_prints_a_griffe_warning_and_exits_zero(
     # Zensical 0.0.71 exits with code 0 on a docstring warning; this is the bug that the gate closes.
     del sources
 
-    def run(command: list[str], **_kwargs: object) -> build_docs.subprocess.CompletedProcess[str]:
+    def run(command: list[str], **_kwargs: object) -> CommandResult:
         text = "griffe: src/x.py:1: Parameter 'bogus' does not appear in the function signature\n"
-        return build_docs.subprocess.CompletedProcess(
-            command,
-            0,
-            stdout="",
-            stderr=text if "zensical" in command else "",
-        )
+        return CommandResult(returncode=0, stdout="", stderr=text if "zensical" in command else "")
 
-    monkeypatch.setattr(build_docs.subprocess, "run", run)
+    monkeypatch.setattr(build_docs, "run_fixed", run)
     assert build_docs.build() == 1
     assert "Parameter 'bogus'" in capsys.readouterr().out
 
@@ -207,12 +204,12 @@ def test_failed_export_leaves_no_file_that_looks_fresh(
     # marimo writes the HTML even when a cell fails, and a stale check would then skip the notebook on the next run.
     del sources
 
-    def run(command: list[str], **_kwargs: object) -> None:
+    def run(command: list[str], **_kwargs: object) -> CommandResult:
         Path(command[command.index("-o") + 1]).write_text("half", encoding="utf-8")
-        raise build_docs.subprocess.CalledProcessError(1, command)
+        raise CommandFailedError(command, CommandResult(returncode=1, stdout="", stderr=""))
 
-    monkeypatch.setattr(build_docs.subprocess, "run", run)
-    with pytest.raises(build_docs.subprocess.CalledProcessError):
+    monkeypatch.setattr(build_docs, "run_fixed", run)
+    with pytest.raises(CommandFailedError):
         build_docs.export_notebooks()
     assert not (tmp_path / "docs" / "notebooks" / "first.html").exists()
 
