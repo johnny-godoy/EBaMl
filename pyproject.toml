@@ -226,9 +226,10 @@ dist = [
 # @server.tool and @server.resource register are called by the MCP SDK by name, and cyclopts calls the functions that
 # @app.default and @app.command register from the command line. Vulture cannot see any of them.
 ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*"]
-# reason: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, code never references them, so vulture
-# reports them as unused.
-ignore_names = ["pytestmark", "pytest_*"]
+# reason: recurring patterns: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, and Python calls
+# the module hooks __getattr__ and __dir__ (PEP 562) by name. Code never references them, so vulture reports them as
+# unused.
+ignore_names = ["pytestmark", "pytest_*", "__getattr__", "__dir__"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
