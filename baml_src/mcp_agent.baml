@@ -28,6 +28,44 @@ function mcp_agent_user_msg(question: string) -> string {
     `
 }
 
+// One message of a chat: who wrote it, and the text.
+class ChatTurn {
+    speaker: "user" | "assistant",
+    text: string,
+}
+
+function mcp_chat_system_msg() -> string {
+    `${mcp_agent_system_msg()} You chat with the colleague, so answer the latest message and use the earlier messages as context for follow-up questions.`
+}
+
+// The earlier messages as one block of text, so a follow-up such as "and what if the income were higher?" has its
+// context. The tool results of earlier turns are not kept, so the model calls a tool again when it needs a number.
+function conversation_text(history: ChatTurn[]) -> string {
+    history
+        .map((turn) -> {
+            `<${turn.speaker}>\n${turn.text}\n</${turn.speaker}>`
+        })
+        .join("\n")
+}
+
+function mcp_chat_user_msg(question: string, history: ChatTurn[]) -> string {
+    `
+        <conversation>
+        ${conversation_text(history)}
+        </conversation>
+
+        <instructions>
+        1. Call only the tools that the latest message needs. Call a tool again if you need a number from an earlier turn.
+        2. To explain one prediction, call the tool that explains a prediction with the number of a row of the data, or with the value of every feature. If the colleague gives neither, ask for one of them.
+        3. Answer in plain prose, in a few sentences, because the colleague reads it in a terminal. Quote only numbers that a tool returned, and round them to three digits, because a longer number hides the point.
+        </instructions>
+
+        <message>
+        ${question}
+        </message>
+    `
+}
+
 // The agent loop. The model sees the system message and the question, and `ToolRequested` events fill `tool_calls`.
 function McpExplainer(question: string) -> string {
     client: Router
@@ -39,10 +77,21 @@ function McpExplainer(question: string) -> string {
     `
 }
 
-// The tool-calling loop on tools that the caller supplies. `explain_with_mcp` passes the tools of the server, and the
-// offline tests pass tools with fixed results.
-function explain_with_tools(
-    question: string,
+// One answer in a chat. `history` holds the messages before `question`.
+function McpChat(question: string, history: ChatTurn[]) -> string {
+    client: Router
+    prompt: `
+        ${role("system")}
+        ${mcp_chat_system_msg()}
+        ${role("user")}
+        ${mcp_chat_user_msg(question, history)}
+    `
+}
+
+// The tool-calling loop for any spec, on tools that the caller supplies. The server gives the tools in
+// `explain_with_mcp` and `chat_with_mcp`, and the offline tests pass tools with fixed results.
+function run_with_tools(
+    spec: ai.FunctionSpec<string>,
     tools: ai.tools.Tool[],
     client: ai.Client? = null,
     model: ModelSpec? = null,
@@ -64,9 +113,7 @@ function explain_with_tools(
         };
     });
     //# The spec carries the tools of the caller. The generated spec has none, because the tools are known at run time.
-    let base = McpExplainer@spec(question);
-    let spec = ai.FunctionSpec { ...base, toolbox: ai.tools.Toolbox.new(tools) };
-    let result = agent.run(spec);
+    let result = agent.run(ai.FunctionSpec { ...spec, toolbox: ai.tools.Toolbox.new(tools) });
     let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: samples };
     for (let entry in result.usage) {
         usage
@@ -80,6 +127,28 @@ function explain_with_tools(
             );
     }
     McpAgentReport { report: result.value, tool_calls: tool_calls, usage: usage }
+}
+
+function explain_with_tools(
+    question: string,
+    tools: ai.tools.Tool[],
+    client: ai.Client? = null,
+    model: ModelSpec? = null,
+    max_steps: int = 12,
+) -> McpAgentReport {
+    run_with_tools(McpExplainer@spec(question), tools, client = client, model = model, max_steps = max_steps)
+}
+
+// One chat answer on tools that the caller supplies.
+function chat_with_tools(
+    question: string,
+    history: ChatTurn[],
+    tools: ai.tools.Tool[],
+    client: ai.Client? = null,
+    model: ModelSpec? = null,
+    max_steps: int = 12,
+) -> McpAgentReport {
+    run_with_tools(McpChat@spec(question, history), tools, client = client, model = model, max_steps = max_steps)
 }
 
 // Entry point called from Python or the command line. `command` and `args` start the MCP server, for example
@@ -97,4 +166,48 @@ function explain_with_mcp(
     defer { connection.close() }
     //# Let the model call the tools, then return its report.
     explain_with_tools(question, connection.tools(), client = client, model = model, max_steps = max_steps)
+}
+
+// A chat in the terminal. The server starts once and stays up for the whole chat, so a later question is fast, and a
+// tool that changes the model keeps its change. `baml.io.input` reads end-of-input as an empty line, so an empty line
+// ends the chat. A failed turn (a rate limit, a refused key) prints its error and the chat goes on, because the
+// colleague can ask again.
+function chat_with_mcp(
+    command: string,
+    args: string[],
+    client: ai.Client? = null,
+    model: ModelSpec? = null,
+    max_steps: int = 12,
+) -> int {
+    //# Start the server once and read its tool catalog.
+    let connection = ai.mcp.Connection.connect("ebaml", command, args);
+    defer { connection.close() }
+    let tools = connection.tools();
+    let history: ChatTurn[] = [];
+    baml.io.println(
+        "Ask about the model, or about one prediction. Press Enter on an empty line to leave.",
+    );
+    //# Read a message, answer it with the tools, and keep both in the history.
+    while (true) {
+        let message = baml.io.input("you> ").trim();
+        if (message.length() == 0) {
+            break;
+        };
+        let reply = chat_with_tools(message, history, tools, client = client, model = model, max_steps = max_steps) catch_all (error) {
+            _ => {
+                McpAgentReport {
+                    report: `This turn failed: ${error}`,
+                    tool_calls: [],
+                    usage: TokenUsage { input_tokens: 0, output_tokens: 0, samples: [] },
+                }
+            }
+        };
+        baml.io.println(`\n${reply.report}\n`);
+        if (reply.tool_calls.length() > 0) {
+            baml.io.eprintln(`(tools: ${reply.tool_calls.join(", ")})`);
+        };
+        history.push(ChatTurn { speaker: "user", text: message });
+        history.push(ChatTurn { speaker: "assistant", text: reply.report });
+    }
+    history.length() / 2
 }

@@ -53,3 +53,37 @@ test "the user message holds the question and the system message forbids invente
     assert.is_true(mcp_agent_user_msg("Why?").includes("Why?"));
     assert.is_true(mcp_agent_system_msg().includes("invented number"))
 }
+
+test "conversation_text keeps the order and the speaker of each message" {
+    let text = conversation_text(
+        [
+            ChatTurn { speaker: "user", text: "Explain row 3." },
+            ChatTurn { speaker: "assistant", text: "Age pushes it up." },
+        ],
+    );
+    assert.equal(
+        text,
+        "<user>\nExplain row 3.\n</user>\n<assistant>\nAge pushes it up.\n</assistant>",
+    )
+}
+
+test "the chat message holds the history and the new message" {
+    let message = mcp_chat_user_msg("What if income were higher?", [ChatTurn { speaker: "user", text: "Explain row 3." }]);
+    assert.is_true(message.includes("Explain row 3."));
+    assert.is_true(message.includes("What if income were higher?"));
+    assert.is_true(mcp_chat_system_msg().includes("follow-up"))
+}
+
+test "chat_with_tools answers a follow-up with the history in the prompt" {
+    let scripted = ToolCallingClient { turns: 0, seen_tools: [] };
+    let history = [ChatTurn { speaker: "user", text: "Explain row 3." }];
+    let result = chat_with_tools("And row 4?", history, [fake_summary_tool()], client = scripted);
+    assert.equal(result.report, "Report: 2 features.");
+    assert.equal(result.tool_calls, ["get_model_summary"]);
+    let prompt = McpChat@spec("And row 4?", history).prompt();
+    assert.is_true(message_at(prompt, 1).includes("Explain row 3."))
+}
+
+test "the chat message asks for rounded numbers" {
+    assert.is_true(mcp_chat_user_msg("Q", []).includes("round them to three digits"))
+}
