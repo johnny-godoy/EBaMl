@@ -191,6 +191,8 @@ The `tool_calls` field shows that the report rests on tool results. A report wit
 evidence from the model. `explain_with_tools` is the same loop on tools that you supply, for example the tools of
 another MCP server.
 
+The [BAML agent notebook](baml-agent-notebook.md) runs the agent step by step.
+
 ### Example session: explain a prediction
 
 The agent gives the number of a row of the data file with `row`. It can also give the value of every feature with
