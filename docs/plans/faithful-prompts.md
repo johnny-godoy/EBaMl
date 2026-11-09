@@ -30,8 +30,8 @@ Pull request johnny-godoy/EBaMl#124 fixed three claims: "the prediction cannot b
 4. Both questions say "rare extreme values are left out". With `min_support=0`, `_plausible_bins` leaves out nothing.
 5. The completions question says "a large random sample". `LocalOptions.n_samples` accepts any count.
 
-The offline tests that pin the wording are in `baml_src/talk_to_ebm_test.baml` ("the questions make no claim that the
-facts do not support"). The live prompt tests are in `baml_src/prompt_tests.baml`, and they need a real key.
+The offline tests that pin the wording are in `baml_src/tests/local_explanations_test.baml` ("the questions make no claim that the
+facts do not support"). The live prompt tests are in `baml_src/tests/live/prompts.baml`, and they need a real key.
 </context>
 
 <steps>
@@ -48,7 +48,7 @@ facts do not support"). The live prompt tests are in `baml_src/prompt_tests.baml
 3. Rewrite the sentences as conditions on the keys ("If `...` is true, say that ..."), and give the reason for each,
    as `writing-style.md` asks for prompts. Name "the changed features" in place of "the model's effects".
 4. Add unit tests in `tests/unit/ebaml/local/test_fact_text.py` for each new key and each audience.
-5. Add one live prompt test in `prompt_tests.baml` with `confidence_level=0`: the answer must not say that the flip
+5. Add one live prompt test in `live/prompts.baml` with `confidence_level=0`: the answer must not say that the flip
    survives uncertainty. Run `baml test -i root::Live` with a real key if you have one. If you have none, say so in
    the PR.
 6. Run `baml generate`, `baml fmt`, `baml check`, `OPENROUTER_API_KEY=unused baml test -x root::Live` and

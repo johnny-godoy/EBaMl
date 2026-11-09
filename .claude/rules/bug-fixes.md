@@ -10,7 +10,7 @@ unseen, because nobody remembers the cause later.
 | Wrong behavior of one function for some input | A unit test in the mirrored test file that fails on the old code. |
 | A code pattern that is wrong wherever it appears (for example `**kwargs` bags, I/O in domain code) | A semgrep rule in `semgrep/ebaml.yml`, with a `ruleid` and an `ok` line in `semgrep/ebaml.py`. |
 | A wrong import across layers | A contract in `[tool.importlinter]` in `pyproject.toml`. See `architecture.md`. |
-| A prompt that gives a bad answer | An offline test in `baml_src/talk_to_ebm_test.baml`, or a live prompt test in `baml_src/prompt_tests.baml`. |
+| A prompt that gives a bad answer | An offline test in `baml_src/tests/<source>_test.baml`, or a live prompt test in `baml_src/tests/live/`. |
 
 - Prefer a unit test when the bug depends on values. Prefer a semgrep rule when the bug is a pattern that could appear
   in other places.
