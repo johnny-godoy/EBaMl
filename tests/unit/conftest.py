@@ -1,9 +1,11 @@
 """Pytest hooks and Hypothesis settings for all unit tests."""
 
+import io
 import os
 from pathlib import Path
 
 import orjson
+import progressbar
 import pytest
 from hypothesis import settings
 from scripts import mutant_tests
@@ -32,3 +34,22 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         original = (Path(os.environ["MUTATION_ORIGINAL"]) / path).read_text()
         covering = mutant_tests.covering_tests(coverage, original, (config.rootpath / path).read_text())
     items.sort(key=lambda item: (item.nodeid not in covering, item.path.stem != f"test_{module}"))
+
+
+@pytest.fixture
+def error_stream(monkeypatch: pytest.MonkeyPatch) -> io.StringIO:
+    """Give the test the stream that its progress bars write to, so that the test reads their lines.
+
+    progressbar2 replaces ``sys.stderr`` with the error stream that it saw at import, so this fixture replaces that
+    stream, and the output stream too.
+
+    Returns
+    -------
+    io.StringIO
+        The replacement for the error stream.
+
+    """
+    monkeypatch.setattr(progressbar.utils.streams, "original_stdout", io.StringIO())
+    stream = io.StringIO()
+    monkeypatch.setattr(progressbar.utils.streams, "original_stderr", stream)
+    return stream
