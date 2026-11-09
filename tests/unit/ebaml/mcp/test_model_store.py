@@ -7,9 +7,9 @@ import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file tha
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 import skops.io
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import ebaml
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 from tests.unit.ebaml.conftest import as_frame

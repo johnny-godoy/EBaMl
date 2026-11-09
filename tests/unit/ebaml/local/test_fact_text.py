@@ -6,9 +6,9 @@ import attrs
 import orjson
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import JSONValue
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson

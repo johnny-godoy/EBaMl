@@ -11,11 +11,11 @@ from typing import Any, ClassVar, override
 import orjson
 import pytest
 from baml_bridge.errors import BamlError
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from structlog.testing import capture_logs
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_budget import check_token_budget, estimate_tokens

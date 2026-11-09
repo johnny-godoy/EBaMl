@@ -8,9 +8,9 @@ import os
 import sys
 
 import numpy as np
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from structlog.testing import capture_logs
 
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.llm.descriptors import describe_ebm, describe_graph
 from ebaml.llm.options import PromptOptions
 

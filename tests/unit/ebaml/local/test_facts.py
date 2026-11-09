@@ -13,9 +13,9 @@ import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas fr
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import FeatureValue
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local

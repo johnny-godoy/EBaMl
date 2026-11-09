@@ -20,10 +20,10 @@ import numpy.typing as npt
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 from beartype.door import is_bearable
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureValue, Frame
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.graphs.model_kinds import ModelKind
 
 # `baml generate` writes the signatures of the SDK functions only to this stub. At run time each function takes

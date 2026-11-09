@@ -2,8 +2,8 @@
 
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.local.audience import DataScientist
 from ebaml.local.fact_text import facts_to_texts
