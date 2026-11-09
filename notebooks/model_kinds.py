@@ -18,6 +18,7 @@ def _():
     from sklearn.datasets import load_iris
 
     from ebaml import (
+        DescribeGraphRequest,
         EBMGraph,
         GreedyCover,
         LocalOptions,
@@ -33,25 +34,26 @@ def _():
     )
 
     return (
+        attrs,
+        compute_local_facts,
+        describe_graph,
+        DescribeGraphRequest,
         EBMGraph,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
         GreedyCover,
+        load_iris,
         LocalOptions,
         LocalSearchCover,
         MipCover,
-        OptionRangeError,
-        OrToolsBackend,
-        OrToolsSolver,
-        Stop,
-        attrs,
-        compute_local_facts,
-        describe_graph,
-        load_iris,
         mo,
         model_kind,
         np,
+        OptionRangeError,
+        OrToolsBackend,
+        OrToolsSolver,
         pl,
+        Stop,
         time,
     )
 
@@ -398,11 +400,13 @@ def _(mo, models):
 
 
 @app.cell
-def _(buttons, describe_graph, mo, models, petal_index) -> None:
+def _(buttons, describe_graph, DescribeGraphRequest, mo, models, petal_index) -> None:
     pressed = [name for name, button in buttons.items() if button.value]
     mo.stop(not pressed, mo.md("Press a button to describe the graph of that model."))
     with mo.status.spinner("Asking the LLM (three turns)..."):
-        descriptions = {name: describe_graph(models[name], petal_index, num_sentences=4) for name in pressed}
+        descriptions = {
+            name: describe_graph(DescribeGraphRequest(models[name], petal_index, num_sentences=4)) for name in pressed
+        }
     mo.vstack([mo.md(f"### {name}\n\n{description}") for name, description in descriptions.items()])
 
 

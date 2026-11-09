@@ -40,6 +40,7 @@ from ebaml.graphs.model_kinds import (
 )
 from ebaml.graphs.token_budget import check_token_budget
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
 from ebaml.local.audience import (
     Audience,
     DataScientist,
@@ -101,12 +102,15 @@ __all__ = [
     "CoveringSolver",
     "DataScientist",
     "Decision",
+    "DescribeEBMRequest",
+    "DescribeGraphRequest",
     "EBMGraph",
     "EBMGraphError",
     "EBMGraphShapeError",
     "EBMGraphSimplificationError",
     "EBMGraphTokenLimitError",
     "EBaMlError",
+    "ExplainInstanceRequest",
     "FactTexts",
     "FeatureType",
     "GraphOptions",

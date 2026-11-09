@@ -13,6 +13,7 @@ from structlog.testing import capture_logs
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.llm.descriptors import describe_ebm, describe_graph
 from ebaml.llm.options import PromptOptions
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 
 
 def _fit_small_ebm() -> ExplainableBoostingClassifier:
@@ -60,14 +61,16 @@ def main() -> int:
 
     with capture_logs() as logs:
         description = describe_graph(
-            ebm,
-            0,
-            num_sentences=3,
-            prompt=PromptOptions(dataset_description="Synthetic data, label is mostly x0 > 0."),
+            DescribeGraphRequest(
+                ebm,
+                0,
+                num_sentences=3,
+                prompt=PromptOptions(dataset_description="Synthetic data, label is mostly x0 > 0."),
+            ),
         )
         _check(description.strip(), "empty description")
 
-        summary = describe_ebm(ebm, num_sentences=5, max_concurrency=2)
+        summary = describe_ebm(DescribeEBMRequest(ebm, num_sentences=5, max_concurrency=2))
         _check(summary.strip(), "empty summary")
 
     usages = [log for log in logs if log["event"] == "usage"]

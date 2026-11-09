@@ -6,18 +6,17 @@ model predict this for this one input?**
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml import describe_ebm, explain_instance
-from ebaml import PromptOptions
+from ebaml import DescribeEBMRequest, ExplainInstanceRequest, PromptOptions, describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
-global_explanation = describe_ebm(ebm, prompt=PromptOptions(dataset_description="..."))  # once per model
+global_explanation = describe_ebm(DescribeEBMRequest(ebm, prompt=PromptOptions(dataset_description="...")))  # once per model
 
-explanation = explain_instance(
+explanation = explain_instance(ExplainInstanceRequest(
     ebm,
     X.iloc[0].to_dict(),      # the value of every feature, by name
     global_explanation,
     audience="layperson",     # or "data_scientist", or your own Audience
-)
+))
 print(explanation.counterfactual)
 print(explanation.sufficient_reason)
 print(explanation.completions)
@@ -264,7 +263,7 @@ Pass any language name that the LLM knows. The facts, the numbers and the audien
 combine every audience with every language:
 
 ```python
-explanation = explain_instance(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French")
+explanation = explain_instance(ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French"))
 ```
 
 The [languages notebook](languages-notebook.md) shows one passenger in several languages. The quality of the text depends on how well the LLM writes the language. To change the language and the rules of the
@@ -325,7 +324,7 @@ class LoanOfficer(DataScientist):
 ```
 
 `ebaml` also exports the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
-`round_value` and `points_towards`. Pass the object to `explain_instance(..., audience=LoanOfficer())`. The
+`round_value` and `points_towards`. Pass the object to `explain_instance(ExplainInstanceRequest(..., audience=LoanOfficer()))`. The
 [custom audiences notebook](audiences-notebook.md) walks through six audiences (a child, a chief executive, a reader of Simplified Technical English, a loan officer, a machine learning engineer and a regulator) and shows their facts side by side.
 
 You can see exactly what the LLM reads, without calling it:
@@ -374,11 +373,11 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
 
 ## Options
 
-The signature is `explain_instance(ebm, instance, global_explanation, audience, num_sentences, *, language, local, prompt)`.
-The arguments `language`, `local`, `prompt` and `model` are keyword-only. `local` is a `LocalOptions` from `ebaml`. `prompt` is a
+The function takes one `ExplainInstanceRequest(ebm, instance, global_explanation, audience, num_sentences, *, language, local, prompt, model)`.
+The fields `language`, `local`, `prompt` and `model` are keyword-only. `local` is a `LocalOptions` from `ebaml`. `prompt` is a
 `PromptOptions` from `ebaml`. The table shows where each setting goes:
 
-| Argument | Default | Meaning |
+| Field | Default | Meaning |
 | --- | --- | --- |
 | `audience` | `"layperson"` | An `Audience`, or the name `"layperson"` or `"data_scientist"`. See [Audience](#audience). |
 | `num_sentences` | `5` | The most sentences in each of the three explanations. |

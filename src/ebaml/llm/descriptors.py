@@ -1,19 +1,19 @@
 """Describe EBM graphs and models using LLMs.
 
 The prompts and the chat conversations live in ``baml_src/talk_to_ebm.baml``; this module extracts the graphs from the
-EBM, converts them to text, and calls the generated ``baml_sdk`` functions. Each function takes ``model`` to choose the
-LLM of the call.
+EBM, converts them to text, and calls the generated ``baml_sdk`` functions. Each function takes one request
+from ``ebaml.llm.requests``, and the ``model`` field of the request chooses the LLM of the call.
 """
 
 import functools
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 import attrs
 import structlog
 from baml_bridge.errors import BamlError
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
@@ -22,11 +22,12 @@ from ebaml.graphs.token_weights import ModelKey
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.progress_bars import progress
 from ebaml.llm.provider_errors import provider_errors
-from ebaml.llm.retry import call_with_shrinking_graph
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
+from ebaml.llm.retry import ShrinkingGraphCall, call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
-from ebaml.local.audience import Audience, resolve_audience
+from ebaml.local.audience import resolve_audience
 from ebaml.local.fact_text import facts_to_texts
-from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
+from ebaml.local.facts import LocalFacts, compute_local_facts
 
 # `baml_sdk` is generated and gitignored, so a checkout may lack it. Generate it before the import, or explain the fix.
 ensure_sdk()
@@ -36,9 +37,7 @@ import baml_sdk  # ruff: ignore[module-import-not-at-top-of-file] -- ensure_sdk 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 _GRAPH_SENTENCES = 7
-# the defaults of the option arguments, as module-level values that nothing changes: the option classes are frozen
-_DEFAULT_GRAPH_OPTIONS = GraphOptions()
-_DEFAULT_LOCAL_OPTIONS = LocalOptions()
+# the default of the option argument, as a module-level value that nothing changes: the option class is frozen
 _DEFAULT_PROMPT_OPTIONS = PromptOptions()
 
 
@@ -284,15 +283,18 @@ class _Described:
     truncated_attempts: int
 
 
-def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- the retry needs the EBM, the feature, the first text, and the two option sets
-    ebm: ExplainableBoostingModel,
-    feature_index: int,
-    graph: str,
-    num_sentences: int,
-    graph_options: GraphOptions,
-    opts: baml_sdk.GraphPromptOptions,
-    model: baml_sdk.ModelSpec | None,
-) -> _Described:
+@attrs.frozen
+class _GraphJob:
+    """The settings that every graph of one call shares."""
+
+    ebm: ExplainableBoostingModel
+    num_sentences: int
+    graph_options: GraphOptions
+    prompt_options: baml_sdk.GraphPromptOptions
+    model: baml_sdk.ModelSpec | None
+
+
+def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _Described:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
     A failure that the user can fix raises an ``LLMRequestError`` (see ``ebaml.llm.provider_errors``). Any other failure
@@ -301,20 +303,14 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 
     Parameters
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM.
+    job: _GraphJob
+        The EBM, the number of sentences, the options of the graph text (a retry changes ``max_tokens`` and
+        ``overbudget_percent``), the prompt options as made by ``_prompt_options``, and the model of the requests as
+        made by ``_model_spec`` (``None`` selects the default clients).
     feature_index: int
         The index of the feature to describe.
     graph: str
         The text of the graph, as made by ``_graph_text``.
-    num_sentences: int
-        The desired number of sentences for the description.
-    graph_options: GraphOptions
-        The options of the graph text. A retry changes ``max_tokens`` and ``overbudget_percent``.
-    opts: baml_sdk.GraphPromptOptions
-        The prompt options, as made by ``_prompt_options``.
-    model: baml_sdk.ModelSpec | None
-        The model of the requests, as made by ``_model_spec``. ``None`` selects the default clients.
 
     Returns
     -------
@@ -324,29 +320,37 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
 
     """
     truncated: list[BamlError] = []
-    estimator = _estimator(graph_options, model)
+    graph_options = job.graph_options
+    estimator = _estimator(graph_options, job.model)
     estimate = estimate_tokens if estimator is None else estimator.estimate
     sent: list[str] = []
 
     def ask(text: str) -> baml_sdk.Counted:
         sent.append(text)
-        return baml_sdk.describe_graph_cot(graph=text, num_sentences=num_sentences, opts=opts, model=model)
+        return baml_sdk.describe_graph_cot(
+            graph=text,
+            num_sentences=job.num_sentences,
+            opts=job.prompt_options,
+            model=job.model,
+        )
 
     with provider_errors():
         counted = call_with_shrinking_graph(
-            ask,
-            graph,
-            error_type=BamlError,
-            is_truncated=_is_truncated,
-            estimate_tokens=estimate,
-            rebuild=lambda budget: _graph_text(
-                ebm,
-                feature_index,
-                attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
-                model,
+            ShrinkingGraphCall(
+                call=ask,
+                graph=graph,
+                error_type=BamlError,
+                is_truncated=_is_truncated,
+                estimate_tokens=estimate,
+                rebuild=lambda budget: _graph_text(
+                    job.ebm,
+                    feature_index,
+                    attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
+                    job.model,
+                ),
+                on_truncated=truncated.append,
+                label=job.ebm.feature_names_in_[feature_index],
             ),
-            on_truncated=truncated.append,
-            label=ebm.feature_names_in_[feature_index],
         )
     if graph_options.token_learner is not None:
         # the last text that the call sent is the one that the successful attempt used
@@ -354,15 +358,7 @@ def _describe_graph_counted(  # ruff: ignore[too-many-arguments, too-many-positi
     return _Described(counted, len(truncated))
 
 
-def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the feature, the length, and three keyword-only option arguments
-    ebm: ExplainableBoostingModel,
-    feature_index: int,
-    num_sentences: int = 7,
-    *,
-    graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
-    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
-    model: ModelOptions | str | None = None,
-) -> str:
+def describe_graph(request: DescribeGraphRequest) -> str:
     """Ask the LLM to describe a graph. Uses chain-of-thought reasoning.
 
     A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times. The logged usage leaves out the
@@ -372,19 +368,8 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
 
     Parameters
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM.
-    feature_index: int
-        The index of the feature to describe.
-    num_sentences: int, default=7
-        The desired number of sentences for the description.
-    graph: GraphOptions, default=GraphOptions()
-        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
-    prompt: PromptOptions, default=PromptOptions()
-        The descriptions that the prompts use.
-    model: ModelOptions | str | None, default=None
-        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
-        ``openrouter/free``. EBaMl sends every request of the call to this model.
+    request: DescribeGraphRequest
+        The EBM, the index of the feature, the number of sentences, the options of the graph, the prompts and the model.
 
     Returns
     -------
@@ -392,18 +377,13 @@ def describe_graph(  # ruff: ignore[too-many-arguments] -- the model, the featur
         The description of the graph.
 
     """
+    ebm = request.ebm
+    feature_index = request.feature_index
     _warn_skipped_interactions(ebm, {feature_index})
-    model_spec = _model_spec(model)
-    graph_text = _graph_text(ebm, feature_index, graph, model_spec)
-    described = _describe_graph_counted(
-        ebm,
-        feature_index,
-        graph_text,
-        num_sentences,
-        graph,
-        _prompt_options(prompt),
-        model_spec,
-    )
+    model_spec = _model_spec(request.model)
+    graph_text = _graph_text(ebm, feature_index, request.graph, model_spec)
+    job = _GraphJob(ebm, request.num_sentences, request.graph, _prompt_options(request.prompt), model_spec)
+    described = _describe_graph_counted(job, feature_index, graph_text)
     return _log_usage(
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
         described.counted,
@@ -528,16 +508,7 @@ def _describe_graphs(
         return [future.result() for future in futures]
 
 
-def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and four keyword-only arguments
-    ebm: ExplainableBoostingModel,
-    num_sentences: int = 30,
-    max_concurrency: int = 8,
-    *,
-    progress_bar: bool = False,
-    graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
-    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
-    model: ModelOptions | str | None = None,
-) -> str:
+def describe_ebm(request: DescribeEBMRequest) -> str:
     """Ask the LLM to describe an EBM.
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
@@ -549,22 +520,10 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
 
     Parameters
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM.
-    num_sentences: int, default=30
-        The desired number of sentences for the description.
-    progress_bar: bool, default=False
-        Whether to show a progress bar on the error stream: one step for each feature and one for the summary.
-        Without a terminal, the bar writes one line for each step.
-    max_concurrency: int, default=8
-        The maximum number of features described at the same time.
-    graph: GraphOptions, default=GraphOptions()
-        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
-    prompt: PromptOptions, default=PromptOptions()
-        The descriptions that the prompts use.
-    model: ModelOptions | str | None, default=None
-        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
-        ``openrouter/free``. EBaMl sends every request of the call to this model.
+    request: DescribeEBMRequest
+        The EBM, the number of sentences, the number of features described at the same time, whether to show a progress
+        bar on the error stream (one step for each feature and one for the summary; without a terminal, the bar writes
+        one line for each step), the options of the graph, the prompts and the model.
 
     Returns
     -------
@@ -575,27 +534,22 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
     # processing one of the graphs or in the model surface before any LLM call is paid for.
     # a feature that exclude or remove_terms left out has no graph to describe
+    ebm = request.ebm
     features = main_effect_features(ebm)
     feature_names = [ebm.feature_names_in_[feature_index] for feature_index in features]
     _warn_skipped_interactions(ebm, features)
     feature_importances = _feature_importances_to_text(ebm)
-    model_spec = _model_spec(model)
-    graph_texts = [_graph_text(ebm, feature_index, graph, model_spec) for feature_index in features]
-    opts = _prompt_options(prompt)
+    model_spec = _model_spec(request.model)
+    graph_texts = [_graph_text(ebm, feature_index, request.graph, model_spec) for feature_index in features]
+    opts = _prompt_options(request.prompt)
+    job = _GraphJob(ebm, _GRAPH_SENTENCES, request.graph, opts, model_spec)
 
-    with progress(len(features) + 1, "describe_ebm", enabled=progress_bar) as finish_step:
+    with progress(len(features) + 1, "describe_ebm", enabled=request.progress_bar) as finish_step:
         described = _describe_graphs(
-            functools.partial(
-                _describe_graph_counted,
-                ebm,
-                num_sentences=_GRAPH_SENTENCES,
-                graph_options=graph,
-                opts=opts,
-                model=model_spec,
-            ),
+            functools.partial(_describe_graph_counted, job),
             features,
             graph_texts,
-            max_concurrency,
+            request.max_concurrency,
             finish_step,
         )
         graph_descriptions = "\n\n".join(
@@ -610,7 +564,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
             summary = baml_sdk.summarize_ebm(
                 feature_importances=feature_importances,
                 graph_descriptions=graph_descriptions,
-                num_sentences=num_sentences,
+                num_sentences=request.num_sentences,
                 opts=opts,
                 model=model_spec,
             )
@@ -637,18 +591,7 @@ class LocalExplanation:
     facts: LocalFacts
 
 
-def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the instance, three settings of the explanation, and two option sets
-    ebm: ExplainableBoostingModel,
-    instance: Mapping[str, FeatureValue],
-    global_explanation: str,
-    audience: Audience | str = "layperson",
-    num_sentences: int = 5,
-    *,
-    language: str = "English",
-    local: LocalOptions = _DEFAULT_LOCAL_OPTIONS,
-    prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
-    model: ModelOptions | str | None = None,
-) -> LocalExplanation:
+def explain_instance(request: ExplainInstanceRequest) -> LocalExplanation:
     """Explain one prediction of an EBM with three explanations, computed exactly and put in words by the LLM.
 
     The facts come from ``ebaml.local.compute_local_facts``: the minimum change that flips the prediction
@@ -658,30 +601,9 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
 
     Parameters
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM: a binary classifier or a regressor, without interactions.
-    instance: Mapping[str, FeatureValue]
-        The value of every feature, by feature name.
-    global_explanation: str
-        The explanation of the whole model, computed once.
-    audience: Audience | str, default="layperson"
-        Who reads the explanation: an ``Audience`` or the name of a built-in one. A layperson gets no model numbers; a
-        data scientist gets scores, probabilities and confidence intervals. A subclass of ``Audience`` sets the facts
-        and the instruction for any other reader.
-    num_sentences: int, default=5
-        The most sentences of each explanation.
-    language: str, default="English"
-        The language of the explanations, as a name that the LLM knows (``"French"``, ``"Deutsch"``). The facts and the
-        numbers stay as they are, and only the words around them change.
-    local: LocalOptions, default=LocalOptions()
-        The options of ``compute_local_facts``. For a regressor, ``decision`` sets the question about the predicted
-        value that the explanations keep.
-    prompt: PromptOptions, default=PromptOptions()
-        The descriptions that the prompts use. The local prompts read ``expert_description`` and
-        ``dataset_description``.
-    model: ModelOptions | str | None, default=None
-        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
-        ``openrouter/free``. EBaMl sends every request of the call to this model.
+    request: ExplainInstanceRequest
+        The EBM, the instance, the global explanation, the audience, the number of sentences, the language, the local
+        options, the prompts and the model.
 
     Returns
     -------
@@ -689,18 +611,18 @@ def explain_instance(  # ruff: ignore[too-many-arguments] -- the model, the inst
         The three explanations and the facts they come from.
 
     """
-    audience = resolve_audience(audience)
-    facts = compute_local_facts(ebm, instance, local)
+    audience = resolve_audience(request.audience)
+    facts = compute_local_facts(request.ebm, request.instance, request.local)
     texts = facts_to_texts(facts, audience)
-    model_spec = _model_spec(model)
+    model_spec = _model_spec(request.model)
     with provider_errors():
         result = baml_sdk.explain_local(
-            global_explanation=global_explanation,
+            global_explanation=request.global_explanation,
             facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts, recurse=False)),
             audience_guidance=audience.guidance(),
-            num_sentences=num_sentences,
-            opts=_prompt_options(prompt),
-            language=language,
+            num_sentences=request.num_sentences,
+            opts=_prompt_options(request.prompt),
+            language=request.language,
             model=model_spec,
         )
     logger.info(

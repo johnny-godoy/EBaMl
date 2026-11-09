@@ -15,9 +15,9 @@ from mcp import Client, StdioServerParameters
 from mcp.server.mcpserver import MCPServer
 from mcp_types import TextContent, TextResourceContents
 
-from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.llm.options import ModelOptions
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import model_store
 from ebaml.mcp import server as server_module
@@ -209,14 +209,16 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
     graph_calls: list[tuple[int, ModelOptions]] = []
     model_calls: list[ModelOptions] = []
 
-    def fake_describe_graph(fitted: ExplainableBoostingModel, feature_index: int, *, model: ModelOptions) -> str:
-        assert fitted is ebm
-        graph_calls.append((feature_index, model))
-        return f"words about feature {feature_index}"
+    def fake_describe_graph(request: DescribeGraphRequest) -> str:
+        assert request.ebm is ebm
+        assert isinstance(request.model, ModelOptions)
+        graph_calls.append((request.feature_index, request.model))
+        return f"words about feature {request.feature_index}"
 
-    def fake_describe_ebm(fitted: ExplainableBoostingModel, *, model: ModelOptions) -> str:
-        assert fitted is ebm
-        model_calls.append(model)
+    def fake_describe_ebm(request: DescribeEBMRequest) -> str:
+        assert request.ebm is ebm
+        assert isinstance(request.model, ModelOptions)
+        model_calls.append(request.model)
         return f"words about the model, call {len(model_calls)}"
 
     monkeypatch.setattr(llm_tools_module, "describe_graph", fake_describe_graph)

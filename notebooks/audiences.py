@@ -21,6 +21,8 @@ def _():
     from ebaml import (
         Audience,
         DataScientist,
+        DescribeEBMRequest,
+        ExplainInstanceRequest,
         InvalidOptionError,
         Layperson,
         PromptOptions,
@@ -37,22 +39,24 @@ def _():
 
     return (
         Audience,
+        compute_local_facts,
         DataScientist,
+        describe_ebm,
+        DescribeEBMRequest,
+        explain_instance,
         ExplainableBoostingClassifier,
+        ExplainInstanceRequest,
+        facts_to_texts,
+        fetch_openml,
         InvalidOptionError,
         JSONValue,
         Layperson,
-        PromptOptions,
-        compute_local_facts,
-        describe_ebm,
-        explain_instance,
-        facts_to_texts,
-        fetch_openml,
+        likelihood_word,
         mo,
         os,
         pl,
-        likelihood_word,
         points_towards,
+        PromptOptions,
         round_value,
         strength_word,
     )
@@ -474,7 +478,7 @@ def _(mo):
 
 
 @app.cell
-def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
+def _(describe_button, describe_ebm, DescribeEBMRequest, ebm, has_api_key, mo, PromptOptions):
     mo.stop(not describe_button.value, mo.md("Press the button to describe the model first."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
     dataset_description = (
@@ -485,9 +489,11 @@ def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
     )
     with mo.status.spinner("Describing the model..."):
         global_explanation = describe_ebm(
-            ebm,
-            max_concurrency=2,
-            prompt=PromptOptions(dataset_description=dataset_description),
+            DescribeEBMRequest(
+                ebm,
+                max_concurrency=2,
+                prompt=PromptOptions(dataset_description=dataset_description),
+            ),
         )
     mo.md(global_explanation)
     return dataset_description, global_explanation
@@ -503,25 +509,28 @@ def _(audience_objects, mo):
 
 @app.cell
 def _(
-    PromptOptions,
     audience_choice,
     audience_objects,
     dataset_description,
     ebm,
     explain_button,
     explain_instance,
+    ExplainInstanceRequest,
     global_explanation,
     instance,
     mo,
+    PromptOptions,
 ):
     mo.stop(not explain_button.value, mo.md("Press the button to explain the prediction of the passenger above."))
     with mo.status.spinner("Asking the LLM (three explanations, concurrently)..."):
         explanation = explain_instance(
-            ebm,
-            instance,
-            global_explanation,
-            audience=audience_objects[audience_choice.value],
-            prompt=PromptOptions(dataset_description=dataset_description),
+            ExplainInstanceRequest(
+                ebm,
+                instance,
+                global_explanation,
+                audience=audience_objects[audience_choice.value],
+                prompt=PromptOptions(dataset_description=dataset_description),
+            ),
         )
     mo.md(f"""
     ### What would have to change
