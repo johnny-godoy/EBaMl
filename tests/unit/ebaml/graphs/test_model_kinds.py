@@ -5,12 +5,12 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
-from interpret.glassbox import (
-    ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
-    ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
-)
 
 import ebaml
+from ebaml.core.ebm_classes import (
+    ExplainableBoostingClassifier,
+    ExplainableBoostingRegressor,
+)
 from ebaml.core.exceptions import UnsupportedModelError
 from ebaml.graphs.model_kinds import BinaryClassifier, MulticlassClassifier, Regressor, model_kind
 from tests.unit.ebaml.conftest import fake_model

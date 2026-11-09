@@ -8,12 +8,12 @@ from typing import Any
 
 import narwhals as nw
 import numpy as np
-from interpret.glassbox import (
-    ExplainableBoostingClassifier,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
-    ExplainableBoostingRegressor,  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
-)
 from pandas.api.typing import NAType  # ruff: ignore[banned-api] -- pd.NA has a type of its own, and only pandas exports it
 
+from ebaml.core.ebm_classes import (
+    ExplainableBoostingClassifier,
+    ExplainableBoostingRegressor,
+)
 from ebaml.core.exceptions import InvalidOptionError
 
 ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRegressor

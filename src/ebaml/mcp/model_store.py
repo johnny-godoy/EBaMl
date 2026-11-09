@@ -12,9 +12,9 @@ import narwhals as nw
 import polars as pl
 import skops.io
 import skops.io.exceptions
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 
 

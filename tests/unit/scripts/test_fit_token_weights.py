@@ -8,9 +8,9 @@ import attrs
 import numpy as np
 import orjson
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from scripts import fit_token_weights as script
 
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import ProviderUnreachableError, RateLimitedError, TokenFitError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_weights import ModelKey, TextFeatures, TokenWeights, WeightsEntry, WeightsTable

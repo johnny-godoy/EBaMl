@@ -31,10 +31,10 @@ import numpy as np
 import numpy.typing as npt
 import orjson
 import progressbar
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import (
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,

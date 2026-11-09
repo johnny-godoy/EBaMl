@@ -2,9 +2,9 @@
 
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.llm.options import ModelOptions
 from ebaml.mcp import llm_tools
 from ebaml.mcp.model_store import ModelStore

@@ -5,9 +5,9 @@ Each function calls code of a lower layer and returns an attrs class. The server
 
 import attrs
 import numpy as np
-from interpret.glassbox import ExplainableBoostingClassifier  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 
 from ebaml.core.custom_types import ClassLabel, Normalization
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term

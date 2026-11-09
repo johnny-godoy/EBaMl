@@ -13,12 +13,12 @@ import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas fr
 import pytest
 import skops.io
 import structlog
-from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from mcp import Client, StdioServerParameters
 from mcp.server.mcpserver import MCPServer
 from mcp_types import TextContent, TextResourceContents
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.llm.options import ModelOptions
 from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import server as server_module
