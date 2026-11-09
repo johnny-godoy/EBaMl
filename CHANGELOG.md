@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.2'></a>
+## [0.6.2] - 2026-11-09
+
+### Changed
+
+- Local explanation prompts no longer overclaim. A failed counterfactual search says that no realistic change flips the prediction. A missing sufficient reason says that the search found none. Completion shares may fall as inputs become known.
+
 <a id='changelog-0.6.1'></a>
 ## [0.6.1] - 2026-11-09
 
