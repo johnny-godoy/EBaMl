@@ -81,7 +81,7 @@ it is large.
    with two margins is NP-hard, or whether an algorithm in polynomial time solves it. Search the literature on
    covering integer programs with a fixed number of constraints and a cardinality objective. Report the answer to
    the user before you prove anything, because the answer decides whether a proof or an algorithm follows.
-6. **The upper bound.** The search `Greedy` (`greedy_cover` in `covering_solvers.py`) is the greedy rule by marginal
+6. **The upper bound.** The solver `GreedyCover` (`greedy_cover` in `covering_greedy.py`) is the greedy rule by marginal
    coverage, with lazy evaluation and a removal pass. Read the paper of Wolsey first, and check its statement against
    the code: the coverage `_coverage_gain`, the deficits with `ε`, the removal pass, and the problems with one
    alternative for each group. Then prove its ratio (the bound of Wolsey for submodular cover) for gains that are
@@ -97,7 +97,7 @@ it is large.
 - For stage 4, a unit test runs the counterexample of the Lean theorem on `_target_counterfactual`. The test
   `test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two` already does this, so
   keep its numbers and the Lean theorem the same.
-- For stage 6, the tests of `tests/unit/ebaml/local/test_covering_solvers.py` compare `Greedy` with a brute-force oracle
+- For stage 6, the tests of `tests/unit/ebaml/local/test_covering_greedy.py` compare the greedy with a brute-force oracle
   on small instances. Add a check of the proved ratio there.
 </tests>
 
@@ -113,7 +113,7 @@ it is large.
 
 <release>
 A stage that changes only `proofs/` and the docs has no user-visible change, so it needs no changelog fragment. A stage
-that changes `src/ebaml/` (stage 6) adds a fragment if the behavior of `Greedy` changes. Give each stage its own pull
+that changes `src/ebaml/` (stage 6) adds a fragment if the behavior of `GreedyCover` changes. Give each stage its own pull
 request, because each one is reviewed on its own.
 </release>
 

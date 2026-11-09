@@ -19,13 +19,14 @@ def _():
 
     from ebaml import (
         EBMGraph,
-        Engine,
-        Exact,
-        Greedy,
-        Heuristic,
+        GreedyCover,
         LocalOptions,
+        LocalSearchCover,
+        MipCover,
         OptionRangeError,
-        Stochastic,
+        OrToolsBackend,
+        OrToolsSolver,
+        Stop,
         compute_local_facts,
         describe_graph,
         model_kind,
@@ -33,15 +34,16 @@ def _():
 
     return (
         EBMGraph,
-        Engine,
-        Exact,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
-        Greedy,
-        Heuristic,
+        GreedyCover,
         LocalOptions,
+        LocalSearchCover,
+        MipCover,
         OptionRangeError,
-        Stochastic,
+        OrToolsBackend,
+        OrToolsSolver,
+        Stop,
         attrs,
         compute_local_facts,
         describe_graph,
@@ -193,12 +195,12 @@ def _(mo) -> None:
     - `Counterfactual.new_decision` is the class that is predicted after the changes. For a regressor, it is the other
       answer.
     - `SufficientReason.minimum` tells whether no smaller set of features fixes the decision. It is always true for a
-      binary classifier. For a decision with several margins, it depends on the search that `LocalOptions.search`
+      binary classifier. For a decision with several margins, it depends on the solver that `LocalOptions.search`
       names, and `SufficientReason.lower_bound` gives the fewest features that any set needs.
 
     A multiclass classifier has one margin for each other class: the score of the predicted class minus the score of
     that class. The option `target_class` asks for the fewest changes that lead to a chosen class, over every choice of
-    bins. The next section compares the searches.
+    bins. The next section compares the solvers.
 
     The iris data has only 150 flowers, so the confidence intervals of the scores are wide. At a high confidence level,
     most flowers have no counterfactual and no sufficient reason. Flower 70 is a versicolor near the border with the
@@ -285,32 +287,33 @@ def _(attrs, facts, instance, mo) -> None:
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    ## Choose the search
+    ## Choose the solver
 
     The sufficient reason of a multiclass classifier and the counterfactual of a target class are covering problems.
-    No fast exact algorithm solves them unless P = NP, so `LocalOptions.search` chooses how to solve them:
+    No fast exact algorithm solves them unless P = NP, so `LocalOptions.search` chooses the algorithm:
 
-    - `Exact(engine)` proves the smallest set with a MIP solver: HiGHS (the default), SCIP or CP-SAT.
-    - `Heuristic(engine)` stops at the first set that the solver finds.
-    - `Stochastic(seed)` runs the local search of CP-SAT with a fixed seed.
-    - `Greedy()` adds the input with the largest gain until the set is enough. It uses no solver.
+    - `MipCover()` searches all sets by branch and bound in a MIP solver of OR-Tools: HiGHS (the default), or SCIP or
+      CP-SAT through `OrToolsBackend(OrToolsSolver.SCIP)`. `stop=Stop.FIRST` ends at the first set that it finds.
+    - `LocalSearchCover()` removes a random part of the greedy set and builds it again, with a fixed seed.
+    - `GreedyCover()` adds the input with the largest gain until the set is enough.
 
-    The table runs each search on the flower and the confidence level above, with the target class `setosa` for the
-    counterfactual. It shows the size of each set, the flag `minimum`, the lower bound and the time. Each solver search
-    has a `time_limit` in seconds, and a set is marked as the smallest only if the solver proves it or the set reaches
-    the lower bound. The iris model has three features, so every search finds the same sets here. The searches differ
-    on models with many features.
+    The last two need no MIP solver. The table runs each solver on the flower and the confidence level above, with the
+    target class `setosa` for the counterfactual. It shows the size of each set, the flag `minimum`, the lower bound
+    and the time. `MipCover` has a `time_limit` in seconds. A set is marked as the smallest only if the MIP solver
+    proves it or the set reaches the lower bound. The iris model has three features, so every solver finds the same sets
+    here. The solvers differ on models with many features.
     """)
 
 
 @app.cell
 def _(
-    Engine,
-    Exact,
-    Greedy,
-    Heuristic,
+    GreedyCover,
     LocalOptions,
-    Stochastic,
+    LocalSearchCover,
+    MipCover,
+    OrToolsBackend,
+    OrToolsSolver,
+    Stop,
     compute_local_facts,
     confidence,
     instance,
@@ -318,27 +321,27 @@ def _(
     models,
     time,
 ):
-    searches = {
-        "Exact()": Exact(),
-        "Exact(Engine.SCIP)": Exact(Engine.SCIP),
-        "Exact(Engine.CP_SAT)": Exact(Engine.CP_SAT),
-        "Heuristic()": Heuristic(),
-        "Stochastic()": Stochastic(),
-        "Greedy()": Greedy(),
+    solvers = {
+        "MipCover()": MipCover(),
+        "MipCover(OrToolsBackend(OrToolsSolver.SCIP))": MipCover(OrToolsBackend(OrToolsSolver.SCIP)),
+        "MipCover(OrToolsBackend(OrToolsSolver.CP_SAT))": MipCover(OrToolsBackend(OrToolsSolver.CP_SAT)),
+        "MipCover(stop=Stop.FIRST)": MipCover(stop=Stop.FIRST),
+        "LocalSearchCover()": LocalSearchCover(),
+        "GreedyCover()": GreedyCover(),
     }
     search_rows = []
-    for search_name, search in searches.items():
+    for solver_name, solver in solvers.items():
         start = time.perf_counter()
         search_facts = compute_local_facts(
             models["multiclass"],
             instance,
-            LocalOptions(confidence_level=confidence.value, target_class="setosa", search=search),
+            LocalOptions(confidence_level=confidence.value, target_class="setosa", search=solver),
         )
         seconds = time.perf_counter() - start
         target_change = search_facts.counterfactual
         search_reason = search_facts.sufficient_reason
         search_rows.append({
-            "search": search_name,
+            "solver": solver_name,
             "changes to setosa": "none" if target_change is None else len(target_change.changes),
             "changes: minimum": None if target_change is None else target_change.minimum,
             "changes: lower bound": None if target_change is None else target_change.lower_bound,
