@@ -177,6 +177,20 @@ The examples below come from a real session over stdio. The model is an EBM with
 An agent that asks for a feature that the model lacks, or for an interaction term, gets a tool error that names the
 features of the model.
 
+## BAML agent
+
+BAML can act as the MCP client. `explain_with_mcp` starts `ebaml-mcp`, offers its tools to a language model, and lets
+the model call them. It returns the report and the names of the tools that the model called, in order. The agent needs
+the BAML toolchain and `OPENROUTER_API_KEY`, or a model that you choose with `model=`.
+
+```bash
+baml run -e 'root.explain_with_mcp("Which features drive the model?", "ebaml-mcp", ["--model", "model.skops", "--data", "train.csv"])' --output-format json
+```
+
+The `tool_calls` field shows that the report rests on tool results. A report with an empty `tool_calls` has no
+evidence from the model. `explain_with_tools` is the same loop on tools that you supply, for example the tools of
+another MCP server.
+
 ### Example session: explain a prediction
 
 The agent gives the number of a row of the data file with `row`. It can also give the value of every feature with
