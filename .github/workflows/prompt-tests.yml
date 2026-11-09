@@ -1,6 +1,6 @@
 name: Prompt tests
 
-# Live prompt tests (baml_src/prompt_tests.baml) send real requests to OpenRouter, so they are slow, rate limited and
+# Live prompt tests (baml_src/tests/live/) send real requests to OpenRouter, so they are slow, rate limited and
 # not deterministic. They live in their own workflow: a failure here never blocks or reddens the CI workflow, and
 # nothing in CI depends on this workflow. Do not make it a required status check.
 on:

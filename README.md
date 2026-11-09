@@ -253,7 +253,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `baml_src/talk_to_ebm.baml` | Prompts, the default LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
 | `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
 | `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
-| `baml_src/talk_to_ebm_test.baml`, `baml_src/model_spec_test.baml` | Offline tests on a scripted client. |
+| `baml_src/tests/` | The BAML tests: offline tests on a scripted client, one `<source>_test.baml` for each source file, and the live prompt tests in `live/`. |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |

@@ -31,7 +31,7 @@ When a change touches a contract:
 
 1. Name the contract and the test that guards it.
 2. Add a regression, property-based or differential test. For a prompt, add an offline BAML test in
-   `talk_to_ebm_test.baml` that fails on the old wording.
+   the test file of the prompt in `baml_src/tests/` that fails on the old wording.
 3. Run the checks of the change. Report each guarantee that no test or proof shows.
 4. Do not expect a change to a contract, or to a reference oracle, to pass without the approval of the user. A test
    that you rewrite to fit the code proves nothing.
