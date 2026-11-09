@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.3'></a>
+## [0.6.3] - 2026-11-09
+
+### Added
+
+- `explain_with_mcp` in BAML: an agent that starts `ebaml-mcp`, lets a language model call its tools, and returns the report with the list of tool calls. `explain_with_tools` runs the same loop on tools that you supply.
+
 <a id='changelog-0.6.2'></a>
 ## [0.6.2] - 2026-11-09
 
