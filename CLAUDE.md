@@ -81,6 +81,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
+- Evaluate each new loop for a progress bar (`.claude/rules/progress-bars.md`). A person or an agent that waits for
+  slow steps, such as LLM requests, needs one. Use `progressbar2`, because ruff bans `tqdm`.
 - Search before you add a shared `Protocol`, `ABC` or cross-module helper, and register a new shared contract in
   `architecture/abstractions.yml` (`.claude/rules/reuse.md`). Reuse a contract that the layers allow, because a second
   contract for one job drifts from the first.
