@@ -254,6 +254,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
 | `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
 | `baml_src/tests/` | The BAML tests: offline tests on a scripted client, one `<source>_test.baml` for each source file, and the live prompt tests in `live/`. |
+| `src/ebaml/mcp/`, `baml_src/mcp_agent.baml` | The MCP server (`ebaml-mcp`), the agent that reads it through its tools, and the terminal chat (`ebaml-chat`). |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |
@@ -330,11 +331,59 @@ graph.
 uv run marimo edit notebooks/model_kinds.py
 ```
 
+[`notebooks/mcp_server.py`](notebooks/mcp_server.py) starts the real `ebaml-mcp` server and connects to it as a client does.
+It lists the tools, reads a graph with a token budget, explains a row, serves each kind of model, and shows the errors
+that a user can fix. One button calls the LLM tool.
+
+```bash
+uv run marimo edit notebooks/mcp_server.py
+```
+
+[`notebooks/baml_agent.py`](notebooks/baml_agent.py) runs the BAML agent from the `baml` command. A language model
+answers one question with the tools of the server, and the notebook shows the tools that it called. The steps before the
+last button need no key.
+
+```bash
+uv run marimo edit notebooks/baml_agent.py
+```
+
+[`notebooks/chat.py`](notebooks/chat.py) puts a chat box in front of the real `ebaml-chat` command. Ask about the model or
+about one row, and ask follow-up questions. The chat starts with no key, and each message needs an LLM.
+
+```bash
+uv run marimo edit notebooks/chat.py
+```
+
 ## MCP server
 
 `ebaml-mcp` serves a fitted EBM to an agent, for example Claude Code. The agent reads the features and the graphs, and
 explains one prediction with the exact local facts. These tools call no LLM, so they need no key. See the
 [MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/).
+
+### Chat with the agent
+
+`ebaml-chat` opens a chat in the terminal. An LLM answers your questions about the model with the tools of the server.
+Ask about the model, or about one row of the data, and ask follow-up questions. The command starts the server for you and
+keeps it up for the whole chat. It needs the `mcp` extra and the BAML toolchain. The default model needs
+`OPENROUTER_API_KEY`.
+
+```bash
+ebaml-chat --model model.skops --data train.csv
+```
+
+```text
+you> Explain the prediction for row 3 of the data.
+
+The model predicts class 0 for row 3, with a probability of 0.581. Age (34) pushes toward this prediction. ...
+
+(tools: explain_prediction)
+you> What would flip it?
+```
+
+An empty line ends the chat. After each answer, the chat prints the tools that the agent called, so you can check that
+the answer rests on tool results. Use `--llm PROVIDER/MODEL` to choose another model. The [chat
+notebook](notebooks/chat.py) runs the same command behind a chat box. The
+[MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/#chat-with-the-agent) lists the options.
 
 ## Benchmark
 
