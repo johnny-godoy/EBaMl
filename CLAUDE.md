@@ -75,6 +75,7 @@ module. import-linter, `scripts/check_layout.py` and the semgrep rules in `semgr
 <conventions>
 Rules in `.claude/rules/` load automatically. Follow them, and keep these points in mind:
 
+- Read `.claude/rules/semantic-contracts.md` before you change an explanation, a prompt or a proof-covered algorithm.
 - Run `prek run --all-files` before you report a task as done. The hooks enforce the project's quality bar.
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
