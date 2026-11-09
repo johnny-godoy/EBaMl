@@ -45,7 +45,8 @@ of four causes. So search first, and fix a cause that repeats once.
 | `banned-api` for pandas or joblib in a test | The aliases and helpers of `tests/unit/ebaml/conftest.py`: `FittedClassifier`, `frame_of_columns`, `frame_of_rows`, `categorical`, `save_model`. A new test imports neither library. |
 | A vulture report of a hook that Python or pytest calls by name | `ignore_names` of `[tool.vulture]` in `pyproject.toml`. |
 
-`src/ebaml/llm/sdk_setup.py` keeps its own `subprocess` ignore, because `src/ebaml` must not import from `scripts/`. A
+`src/ebaml/llm/sdk_setup.py` keeps its own `subprocess` ignore, because `src/ebaml` must not import from `scripts/`.
+`scripts/mutation.py` keeps its own, because CI runs it by path, and then `scripts` is not importable. A
 need that the table does not cover is a new shared fix: build it once, then add a row.
 
 ### Scope: inline for a one-off, shared fix for a repeat

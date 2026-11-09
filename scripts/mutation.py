@@ -16,6 +16,7 @@ import re
 import shlex
 import shutil
 import sqlite3
+import subprocess  # ruff: ignore[suspicious-subprocess-import] -- must launch cosmic-ray and the interpreter as subprocesses
 import sys
 import tempfile
 import threading
@@ -32,8 +33,6 @@ import cyclopts
 import orjson
 import structlog
 from coverage import CoverageData
-
-from scripts.fixed_command import run_fixed
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
@@ -80,7 +79,14 @@ def run(*args: str, cwd: Path = ROOT, env: dict[str, str] | None = None) -> str:
         The standard output followed by the standard error.
 
     """
-    result = run_fixed(args, cwd=cwd, env=env)
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable, never untrusted input
+        args,
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     return result.stdout + result.stderr
 
 
@@ -291,10 +297,13 @@ def run_baseline(workdir: Path, modules: Collection[str]) -> int:
     if command[0] == "python":
         command[0] = sys.executable
     data = workdir / ".coverage"
-    baseline = run_fixed(
+    baseline = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] -- the test command of cosmic-ray.toml, never untrusted input
         [*command, "--cov=ebaml", "--cov-context=test", "--cov-report="],
         cwd=ROOT,
         env={**os.environ, "EBAML_FIT_CACHE": str(workdir / "fits"), "COVERAGE_FILE": str(data)},
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if baseline.returncode:
         logger.error("Baseline failed", output=baseline.stdout[-5000:] + baseline.stderr[-5000:])
