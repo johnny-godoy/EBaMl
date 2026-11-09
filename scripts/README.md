@@ -217,6 +217,7 @@ OPENROUTER_API_KEY=... uv run python scripts/fit_token_weights.py collect openro
 uv run python scripts/fit_token_weights.py fit openrouter/openai/gpt-6-luna
 ```
 
+- `collect` shows a progress bar of the records on the error stream. Use `--no-progress` to turn it off.
 - `--final` forbids a learning estimator to change the entry. Use it for a model that you want to keep fixed.
 - `--set-default` also makes the entry the default of the package, in the table and in `DEFAULT_WEIGHTS` of
   `src/ebaml/graphs/token_budget.py`. A change of the default changes the text of the graphs that `describe_graph` and
