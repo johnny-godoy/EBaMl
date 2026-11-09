@@ -262,6 +262,17 @@ test "the questions explain the lower bound and why a set is not proved smallest
     assert.is_true(sufficient_reason_question(3).includes("you may state the gap"))
 }
 
+test "the questions make no claim that the facts do not support" {
+    // A failed search is not a proof: the counterfactual search covers realistic values only.
+    assert.is_true(counterfactual_question(3).includes("within the realistic values"));
+    assert.is_true(!counterfactual_question(3).includes("cannot be changed by altering"));
+    assert.is_true(sufficient_reason_question(3).includes("found no set of inputs"));
+    assert.is_true(!sufficient_reason_question(3).includes("every input matters"));
+    // Completion shares are estimates and can fall as inputs become known.
+    assert.is_true(completions_question(3).includes("when it falls"));
+    assert.is_true(!completions_question(3).includes("how that share grows"))
+}
+
 test "each local function gets its own facts, question and system role" {
     let facts = LocalFactTexts {
         prediction: "PRED-FACT",
