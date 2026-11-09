@@ -16,19 +16,29 @@ def _():
     from sklearn.datasets import fetch_openml
     from sklearn.model_selection import train_test_split
 
-    from ebaml import EBMGraph, PromptOptions, check_token_budget, describe_ebm, describe_graph
-
-    return (
+    from ebaml import (
+        DescribeEBMRequest,
+        DescribeGraphRequest,
         EBMGraph,
-        ExplainableBoostingClassifier,
         PromptOptions,
         check_token_budget,
         describe_ebm,
         describe_graph,
+    )
+
+    return (
+        check_token_budget,
+        describe_ebm,
+        describe_graph,
+        DescribeEBMRequest,
+        DescribeGraphRequest,
+        EBMGraph,
+        ExplainableBoostingClassifier,
         fetch_openml,
         mo,
         os,
         pl,
+        PromptOptions,
         train_test_split,
     )
 
@@ -151,22 +161,25 @@ def _():
 
 @app.cell
 def _(
-    PromptOptions,
     dataset_description,
     describe_graph,
     describe_graph_button,
+    DescribeGraphRequest,
     ebm,
     feature,
     graph_description,
     has_api_key,
     mo,
+    PromptOptions,
     with_context,
 ) -> None:
     mo.stop(not describe_graph_button.value, mo.md("Press the button to ask the LLM."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
     context = PromptOptions(dataset_description=dataset_description, graph_description=graph_description)
     with mo.status.spinner("Asking the LLM (three turns)..."):
-        description = describe_graph(ebm, feature.value, prompt=context if with_context.value else PromptOptions())
+        description = describe_graph(
+            DescribeGraphRequest(ebm, feature.value, prompt=context if with_context.value else PromptOptions()),
+        )
     mo.md(description)
 
 
@@ -189,22 +202,25 @@ def _(mo):
 
 @app.cell
 def _(
-    PromptOptions,
     dataset_description,
     describe_ebm,
     describe_ebm_button,
+    DescribeEBMRequest,
     ebm,
     graph_description,
     has_api_key,
     mo,
+    PromptOptions,
 ) -> None:
     mo.stop(not describe_ebm_button.value, mo.md("Press the button to ask the LLM."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
     with mo.status.spinner("Asking the LLM (one chain per feature, then a summary)..."):
         summary = describe_ebm(
-            ebm,
-            max_concurrency=2,
-            prompt=PromptOptions(dataset_description=dataset_description, graph_description=graph_description),
+            DescribeEBMRequest(
+                ebm,
+                max_concurrency=2,
+                prompt=PromptOptions(dataset_description=dataset_description, graph_description=graph_description),
+            ),
         )
     mo.md(summary)
 

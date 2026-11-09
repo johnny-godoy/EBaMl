@@ -2,6 +2,7 @@
 
 from ebaml.llm.descriptors import describe_ebm, describe_graph
 from ebaml.llm.options import ModelOptions
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp.model_store import ModelStore
 
 
@@ -23,7 +24,7 @@ def describe_feature(store: ModelStore, llm: ModelOptions, feature: str) -> str:
         The output of ``describe_graph``.
 
     """
-    return describe_graph(store.ebm, store.feature_index(feature), model=llm)
+    return describe_graph(DescribeGraphRequest(store.ebm, store.feature_index(feature), model=llm))
 
 
 def describe_model(store: ModelStore, llm: ModelOptions) -> str:
@@ -43,5 +44,5 @@ def describe_model(store: ModelStore, llm: ModelOptions) -> str:
 
     """
     if store.model_description is None:
-        store.model_description = describe_ebm(store.ebm, model=llm)
+        store.model_description = describe_ebm(DescribeEBMRequest(store.ebm, model=llm))
     return store.model_description

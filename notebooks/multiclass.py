@@ -15,6 +15,8 @@ def _():
     from sklearn.datasets import load_iris
 
     from ebaml import (
+        DescribeEBMRequest,
+        DescribeGraphRequest,
         EBMGraph,
         GraphOptions,
         InvalidOptionError,
@@ -26,19 +28,21 @@ def _():
     )
 
     return (
+        describe_ebm,
+        describe_graph,
+        DescribeEBMRequest,
+        DescribeGraphRequest,
         EBMGraph,
         ExplainableBoostingClassifier,
         GraphOptions,
         InvalidOptionError,
-        Normalization,
-        UnsupportedModelError,
-        describe_ebm,
-        describe_graph,
         load_iris,
         mo,
         model_kind,
+        Normalization,
         np,
         pl,
+        UnsupportedModelError,
     )
 
 
@@ -231,23 +235,25 @@ def _(mo):
 
 
 @app.cell
-def _(GraphOptions, describe_graph, ebm, graph_button, mo, petal_index) -> None:
+def _(describe_graph, DescribeGraphRequest, ebm, graph_button, GraphOptions, mo, petal_index) -> None:
     mo.stop(not graph_button.value, mo.md("Press the first button to describe the graph."))
     with mo.status.spinner("Asking the LLM (three turns)..."):
         graph_description = describe_graph(
-            ebm,
-            petal_index,
-            num_sentences=4,
-            graph=GraphOptions(classes=["setosa", "virginica"]),
+            DescribeGraphRequest(
+                ebm,
+                petal_index,
+                num_sentences=4,
+                graph=GraphOptions(classes=["setosa", "virginica"]),
+            ),
         )
     mo.md(graph_description)
 
 
 @app.cell
-def _(describe_ebm, ebm, mo, model_button) -> None:
+def _(describe_ebm, DescribeEBMRequest, ebm, mo, model_button) -> None:
     mo.stop(not model_button.value, mo.md("Press the second button to describe the model."))
     with mo.status.spinner("Asking the LLM (three turns per feature, then the summary)..."):
-        model_description = describe_ebm(ebm, num_sentences=8)
+        model_description = describe_ebm(DescribeEBMRequest(ebm, num_sentences=8))
     mo.md(model_description)
 
 

@@ -30,14 +30,16 @@ def _run(
     on_truncated: Callable[[CutOffError], None] = lambda _error: None,
 ) -> str:
     return retry.call_with_shrinking_graph(
-        call,
-        graph,
-        error_type=CutOffError,
-        is_truncated=_is_cut_off,
-        estimate_tokens=estimate,
-        rebuild=rebuild,
-        on_truncated=on_truncated,
-        label="f0",
+        retry.ShrinkingGraphCall(
+            call=call,
+            graph=graph,
+            error_type=CutOffError,
+            is_truncated=_is_cut_off,
+            estimate_tokens=estimate,
+            rebuild=rebuild,
+            on_truncated=on_truncated,
+            label="f0",
+        ),
     )
 
 
@@ -182,7 +184,7 @@ def test_does_not_hide_other_errors_of_the_rebuild() -> None:
         _run(call, "g0", rebuild)
 
 
-def test_takes_the_dependencies_by_keyword_only() -> None:
-    untyped: Any = retry.call_with_shrinking_graph
+def test_the_request_needs_every_service() -> None:
+    untyped: Any = retry.ShrinkingGraphCall
     with pytest.raises(TypeError):
-        untyped(str, "g0", CutOffError, _is_cut_off, len, str, "f0")
+        untyped(call=str, graph="g0", error_type=CutOffError)

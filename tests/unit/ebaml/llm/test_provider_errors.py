@@ -89,7 +89,7 @@ def test_a_rate_limit_status_is_a_rate_limit() -> None:
     message = str(explained)
     assert message.startswith("The openai provider limited the rate of the requests.\n")
     assert "The provider said: slow down\n" in message
-    assert "describe_ebm(ebm, max_concurrency=2)" in message
+    assert "describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2))" in message
 
 
 @pytest.mark.parametrize(

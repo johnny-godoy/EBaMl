@@ -16,6 +16,8 @@ def _():
     from sklearn.datasets import fetch_openml
 
     from ebaml import (
+        DescribeEBMRequest,
+        ExplainInstanceRequest,
         Layperson,
         MissingAPIKeyError,
         ModelOptions,
@@ -27,19 +29,21 @@ def _():
     )
 
     return (
-        ExplainableBoostingClassifier,
-        Layperson,
-        MissingAPIKeyError,
-        ModelOptions,
-        PromptOptions,
         compute_local_facts,
         describe_ebm,
+        DescribeEBMRequest,
         explain_instance,
+        ExplainableBoostingClassifier,
+        ExplainInstanceRequest,
         facts_to_texts,
         fetch_openml,
+        Layperson,
+        MissingAPIKeyError,
         mo,
+        ModelOptions,
         os,
         pl,
+        PromptOptions,
     )
 
 
@@ -171,7 +175,7 @@ def _(mo):
 
 
 @app.cell
-def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
+def _(describe_button, describe_ebm, DescribeEBMRequest, ebm, has_api_key, mo, PromptOptions):
     mo.stop(not describe_button.value, mo.md("Press the button to describe the model first."))
     mo.stop(not has_api_key, mo.callout("Enter your OpenRouter API key above first.", kind="warn"))
     dataset_description = (
@@ -182,9 +186,11 @@ def _(PromptOptions, describe_button, describe_ebm, ebm, has_api_key, mo):
     )
     with mo.status.spinner("Describing the model..."):
         global_explanation = describe_ebm(
-            ebm,
-            max_concurrency=2,
-            prompt=PromptOptions(dataset_description=dataset_description),
+            DescribeEBMRequest(
+                ebm,
+                max_concurrency=2,
+                prompt=PromptOptions(dataset_description=dataset_description),
+            ),
         )
     mo.md(global_explanation)
     return dataset_description, global_explanation
@@ -215,15 +221,16 @@ def _(mo):
 
 @app.cell
 def _(
-    PromptOptions,
     dataset_description,
     ebm,
     explain_instance,
+    ExplainInstanceRequest,
     global_explanation,
     instance,
     language_choice,
     languages_button,
     mo,
+    PromptOptions,
 ):
     mo.stop(not languages_button.value, mo.md("Press the button to explain the passenger above."))
     mo.stop(not language_choice.value, mo.callout("Choose at least one language.", kind="warn"))
@@ -231,11 +238,13 @@ def _(
     for chosen_language in language_choice.value:
         with mo.status.spinner(f"Asking the LLM in {chosen_language}..."):
             explanations[chosen_language] = explain_instance(
-                ebm,
-                instance,
-                global_explanation,
-                language=chosen_language,
-                prompt=PromptOptions(dataset_description=dataset_description),
+                ExplainInstanceRequest(
+                    ebm,
+                    instance,
+                    global_explanation,
+                    language=chosen_language,
+                    prompt=PromptOptions(dataset_description=dataset_description),
+                ),
             )
     mo.ui.tabs({
         chosen_language: mo.md(f"""
@@ -278,27 +287,30 @@ def _(mo):
 
 @app.cell
 def _(
-    PromptOptions,
     audience_button,
     audience_choice,
     dataset_description,
     ebm,
     explain_instance,
+    ExplainInstanceRequest,
     global_explanation,
     instance,
     language_text,
     mo,
+    PromptOptions,
 ):
     mo.stop(not audience_button.value, mo.md("Press the button to explain the passenger with this pair."))
     mo.stop(not language_text.value.strip(), mo.callout("Type a language name.", kind="warn"))
     with mo.status.spinner("Asking the LLM..."):
         audience_explanation = explain_instance(
-            ebm,
-            instance,
-            global_explanation,
-            audience=audience_choice.value,
-            language=language_text.value.strip(),
-            prompt=PromptOptions(dataset_description=dataset_description),
+            ExplainInstanceRequest(
+                ebm,
+                instance,
+                global_explanation,
+                audience=audience_choice.value,
+                language=language_text.value.strip(),
+                prompt=PromptOptions(dataset_description=dataset_description),
+            ),
         )
     mo.md(f"""
     **What would have to change**
@@ -327,11 +339,13 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(MissingAPIKeyError, ModelOptions, ebm, explain_instance, instance, mo) -> None:
+def _(ebm, explain_instance, ExplainInstanceRequest, instance, MissingAPIKeyError, mo, ModelOptions) -> None:
     # the variable name is made up, so the environment cannot have it
     unset = ModelOptions(provider="openai", model="gpt-4o-mini", api_key_env="EBAML_NOTEBOOK_UNSET_KEY")
     try:
-        explain_instance(ebm, instance, "The global explanation.", language="French", model=unset)
+        explain_instance(
+            ExplainInstanceRequest(ebm, instance, "The global explanation.", language="French", model=unset),
+        )
     except MissingAPIKeyError as error:
         missing_key_view = mo.callout(mo.md(f"`MissingAPIKeyError`: {error}"), kind="danger")
     missing_key_view
@@ -343,7 +357,7 @@ def _(mo) -> None:
     Pass `language=` to `explain_instance` in your own code in the same way:
 
     ```python
-    explain_instance(ebm, instance, global_explanation, audience="layperson", language="French")
+    explain_instance(ExplainInstanceRequest(ebm, instance, global_explanation, audience="layperson", language="French"))
     ```
 
     To change the role of the reader as well as the language, write an audience. The audiences notebook shows six.

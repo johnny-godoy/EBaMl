@@ -15,17 +15,25 @@ def _():
     from interpret.glassbox import ExplainableBoostingClassifier
     from sklearn.datasets import fetch_openml
 
-    from ebaml import InvalidOptionError, LLMRequestError, MissingAPIKeyError, ModelOptions, describe_graph
-
-    return (
-        ExplainableBoostingClassifier,
+    from ebaml import (
+        DescribeGraphRequest,
         InvalidOptionError,
         LLMRequestError,
         MissingAPIKeyError,
         ModelOptions,
         describe_graph,
+    )
+
+    return (
+        describe_graph,
+        DescribeGraphRequest,
+        ExplainableBoostingClassifier,
         fetch_openml,
+        InvalidOptionError,
+        LLMRequestError,
+        MissingAPIKeyError,
         mo,
+        ModelOptions,
         os,
         pl,
     )
@@ -94,7 +102,7 @@ def _(mo, os):
 
 
 @app.cell
-def _(LLMRequestError, describe_graph, ebm, mo, sex_index):
+def _(describe_graph, DescribeGraphRequest, ebm, LLMRequestError, mo, sex_index):
     def ask(model) -> mo.Html:
         """Describe the `sex` graph with the model, or show the fix steps of a failed request.
 
@@ -106,7 +114,7 @@ def _(LLMRequestError, describe_graph, ebm, mo, sex_index):
         """
         try:
             with mo.status.spinner("Asking the LLM (three turns)..."):
-                description = describe_graph(ebm, sex_index, num_sentences=3, model=model)
+                description = describe_graph(DescribeGraphRequest(ebm, sex_index, num_sentences=3, model=model))
         except LLMRequestError as error:
             # the message names the cause and lists the steps that fix it
             return mo.callout(mo.md(f"**The request failed.**\n\n{error}"), kind="danger")
@@ -281,22 +289,22 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(InvalidOptionError, describe_graph, ebm, mo, sex_index) -> None:
+def _(describe_graph, DescribeGraphRequest, ebm, InvalidOptionError, mo, sex_index) -> None:
     provider_failure = None
     try:
-        describe_graph(ebm, sex_index, model="not-a-provider/some-model")
+        describe_graph(DescribeGraphRequest(ebm, sex_index, model="not-a-provider/some-model"))
     except InvalidOptionError as error:
         provider_failure = mo.callout(mo.md(f"`InvalidOptionError`: {error}"), kind="danger")
     provider_failure
 
 
 @app.cell
-def _(MissingAPIKeyError, ModelOptions, describe_graph, ebm, mo, sex_index) -> None:
+def _(describe_graph, DescribeGraphRequest, ebm, MissingAPIKeyError, mo, ModelOptions, sex_index) -> None:
     # the variable name is made up, so the environment cannot have it
     unset = ModelOptions(provider="openai", model="gpt-4o-mini", api_key_env="EBAML_NOTEBOOK_UNSET_KEY")
     key_failure = None
     try:
-        describe_graph(ebm, sex_index, model=unset)
+        describe_graph(DescribeGraphRequest(ebm, sex_index, model=unset))
     except MissingAPIKeyError as error:
         key_failure = mo.callout(mo.md(f"`MissingAPIKeyError`: {error}"), kind="danger")
     key_failure

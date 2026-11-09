@@ -147,7 +147,7 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 | `SDKUnavailableError`, or `ModuleNotFoundError: baml_sdk` | The SDK is not generated or has the wrong version, and `ebaml` could not fix it. The message of the error lists the steps. Run `baml generate` (step 4). |
 | `MissingAPIKeyError` | The key of the provider is not exported in this shell. The message names the variable. See "Choosing the model" for the variable of each provider. |
 | `APIKeyRejectedError` | The provider rejected the key. Check the key, its account and its credit. |
-| `RateLimitedError` | The provider limited the rate. Lower the concurrency, `describe_ebm(ebm, max_concurrency=2)`, or pin a paid model. |
+| `RateLimitedError` | The provider limited the rate. Lower the concurrency, `describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2))`, or pin a paid model. |
 | `ProviderUnreachableError` | A request did not reach the provider. Check the network, `HTTPS_PROXY` and `base_url`. |
 
 <!-- --8<-- [end:setup] -->
@@ -157,22 +157,21 @@ It fits a small EBM, runs the three-turn chain directly and checks that the prov
 ```python
 from interpret.glassbox import ExplainableBoostingClassifier
 
-from ebaml import describe_ebm, describe_graph
-from ebaml import PromptOptions
+from ebaml import DescribeEBMRequest, DescribeGraphRequest, PromptOptions, describe_ebm, describe_graph
 
 ebm = ExplainableBoostingClassifier().fit(X, y)
 
-print(describe_graph(ebm, feature_index=0))
-print(describe_ebm(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="...")))
+print(describe_graph(DescribeGraphRequest(ebm, feature_index=0)))
+print(describe_ebm(DescribeEBMRequest(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="..."))))
 ```
 
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
 
-Three keyword-only arguments set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
+Each function takes one request: `DescribeGraphRequest`, `DescribeEBMRequest` or `ExplainInstanceRequest`. Three keyword-only fields set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
 `EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
 (`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
-"Choosing the model". `GraphOptions`, `PromptOptions` and `ModelOptions` are importable from `ebaml`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
+"Choosing the model". The requests, `GraphOptions`, `PromptOptions` and `ModelOptions` are importable from `ebaml`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
 
 A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
 because the text of a model with many classes is long. In every bin, the scores have the same mean over all the classes
@@ -190,18 +189,18 @@ y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "o
 from ebaml import GraphOptions
 
 multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
-print(describe_graph(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"])))
+print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"]))))
 ```
 
 ### Explaining one prediction
 
 ```python
-from ebaml import describe_ebm, explain_instance
+from ebaml import DescribeEBMRequest, ExplainInstanceRequest, describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
-global_explanation = describe_ebm(ebm)  # computed once, prepended to every local prompt
+global_explanation = describe_ebm(DescribeEBMRequest(ebm))  # computed once, prepended to every local prompt
 
-explanation = explain_instance(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson")
+explanation = explain_instance(ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson"))
 print(explanation.counterfactual)      # what would have to change to flip the prediction
 print(explanation.sufficient_reason)   # which inputs settle the prediction on their own
 print(explanation.completions)         # how certain the outcome is as inputs become known
@@ -270,8 +269,8 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 - **Retries:** transient failures (rate limits, network errors, 5xx) are retried up to 3 times. Requests the provider
   rejects are not retried.
 - **Concurrency:** `describe_ebm` describes features concurrently, at most `max_concurrency` at a time (default 8).
-  Free models are rate limited, so lower it (`describe_ebm(ebm, max_concurrency=2)`) if you see rate-limit errors.
-- **Progress:** `describe_ebm(ebm, progress_bar=True)` shows a progress bar on the error stream. It counts one step for
+  Free models are rate limited, so lower it (`describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2))`) if you see rate-limit errors.
+- **Progress:** `describe_ebm(DescribeEBMRequest(ebm, progress_bar=True))` shows a progress bar on the error stream. It counts one step for
   each feature and one for the summary. If the error stream is not a terminal, the bar writes one line for each step,
   so a log file or an agent that polls the console sees the progress. The benchmark and `fit_token_weights.py` show a bar
   by default. Use `--no-progress` to turn it off.
@@ -414,9 +413,9 @@ request of that call to that model. You do not change the package.
 Pass the shorthand `"provider/model"`:
 
 ```python
-from ebaml import describe_ebm
+from ebaml import DescribeEBMRequest, describe_ebm
 
-print(describe_ebm(ebm, model="anthropic/claude-haiku-4-5"))
+print(describe_ebm(DescribeEBMRequest(ebm, model="anthropic/claude-haiku-4-5")))
 ```
 
 Pass `ModelOptions` to set more:
@@ -425,7 +424,7 @@ Pass `ModelOptions` to set more:
 from ebaml import ModelOptions
 
 model = ModelOptions(provider="anthropic", model="claude-haiku-4-5", temperature=0.2, max_output_tokens=8000)
-print(describe_ebm(ebm, model=model))
+print(describe_ebm(DescribeEBMRequest(ebm, model=model)))
 ```
 
 EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o-mini"` selects the provider
@@ -473,16 +472,16 @@ A field that you set wins over the default of the call. The output limit has two
 
 ```python
 # OpenRouter, a pinned model (the free router picks a new model for each request)
-describe_ebm(ebm, model="openrouter/openai/gpt-4o-mini")
+describe_ebm(DescribeEBMRequest(ebm, model="openrouter/openai/gpt-4o-mini"))
 
 # OpenAI
-describe_ebm(ebm, model="openai/gpt-4o-mini")
+describe_ebm(DescribeEBMRequest(ebm, model="openai/gpt-4o-mini"))
 
 # Google Gemini
-describe_ebm(ebm, model="google/gemini-2.5-flash")
+describe_ebm(DescribeEBMRequest(ebm, model="google/gemini-2.5-flash"))
 
 # A local model with Ollama. It needs no key.
-describe_ebm(ebm, model="ollama/llama3.1")
+describe_ebm(DescribeEBMRequest(ebm, model="ollama/llama3.1"))
 
 # A company gateway with an OpenAI-compatible API
 gateway = ModelOptions(
@@ -492,7 +491,7 @@ gateway = ModelOptions(
     api_key_env="MY_GATEWAY_KEY",
     headers={"x-team": "ebm"},
 )
-describe_ebm(ebm, model=gateway)
+describe_ebm(DescribeEBMRequest(ebm, model=gateway))
 ```
 
 The benchmark has the flag `--model`:

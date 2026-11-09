@@ -4,6 +4,7 @@ import pytest
 
 from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.llm.options import ModelOptions
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools
 from ebaml.mcp.model_store import ModelStore
 from tests.unit.ebaml.conftest import FittedClassifier
@@ -18,8 +19,9 @@ def test_describe_feature_passes_the_feature_index_and_the_llm(
     ebm, _ = continuous_ebm
     calls: list[tuple[ExplainableBoostingModel, int, ModelOptions]] = []
 
-    def fake_describe_graph(fitted: ExplainableBoostingModel, feature_index: int, *, model: ModelOptions) -> str:
-        calls.append((fitted, feature_index, model))
+    def fake_describe_graph(request: DescribeGraphRequest) -> str:
+        assert isinstance(request.model, ModelOptions)
+        calls.append((request.ebm, request.feature_index, request.model))
         return "graph text"
 
     monkeypatch.setattr(llm_tools, "describe_graph", fake_describe_graph)
@@ -34,9 +36,10 @@ def test_describe_model_computes_the_text_once(
     ebm, _ = continuous_ebm
     calls: list[ModelOptions] = []
 
-    def fake_describe_ebm(fitted: ExplainableBoostingModel, *, model: ModelOptions) -> str:
-        assert fitted is ebm
-        calls.append(model)
+    def fake_describe_ebm(request: DescribeEBMRequest) -> str:
+        assert request.ebm is ebm
+        assert isinstance(request.model, ModelOptions)
+        calls.append(request.model)
         return "model text"
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)

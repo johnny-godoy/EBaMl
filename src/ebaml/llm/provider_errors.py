@@ -193,7 +193,8 @@ def _rate_limited(error: BamlError) -> LLMRequestError:
         f"The {provider} provider limited the rate of the requests.{wait}\n"
         f"{_said(error)}"
         "To fix it:\n"
-        "  1. Lower the number of parallel requests, for example describe_ebm(ebm, max_concurrency=2).\n"
+        "  1. Lower the number of parallel requests, for example"
+        " describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2)).\n"
         "  2. Wait, and run the call again. A free model has a low limit.\n"
         '  3. Choose a paid model, for example model="provider/model", or another provider.',
     )
