@@ -9,7 +9,6 @@ from decimal import Decimal
 
 import attrs
 import numpy as np
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
@@ -25,7 +24,20 @@ from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearc
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
-from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, returning
+from tests.unit.ebaml.conftest import (
+    MISSING_VALUE,
+    FittedClassifier,
+    FittedRegressor,
+    PandasFrame,
+    UnknownKind,
+    categorical,
+    fake_model,
+    frame_of_columns,
+    frame_of_matrix,
+    frame_of_rows,
+    instance_of,
+    returning,
+)
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
@@ -36,9 +48,9 @@ ALL_FEATURES = frozenset(FEATURE_INDEXES)
 @pytest.fixture(scope="module")
 def categorical_ebm(
     fit_ebm: Callable[..., ExplainableBoostingClassifier],
-) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+) -> FittedClassifier:
     rng = np.random.default_rng(1)
-    data = pd.DataFrame({name: rng.choice(CATEGORIES, 900) for name in NAMES})
+    data = frame_of_columns({name: rng.choice(CATEGORIES, 900) for name in NAMES})
     effect = data["f0"].map({"p": 1.5, "q": 0.0, "r": -1.5}) + data["f1"].map({"p": 0.5, "q": 0.0, "r": -0.5})
     effect += data["f2"].map({"p": 0.2, "q": 0.0, "r": -0.2}) + rng.normal(size=900) * 0.3
     target = (effect > 0).astype(int)
@@ -46,7 +58,7 @@ def categorical_ebm(
 
 
 def _scores(ebm: ExplainableBoostingClassifier, combo: tuple[str, ...]) -> float:
-    frame = pd.DataFrame([dict(zip(NAMES, combo, strict=True))])
+    frame = frame_of_rows([dict(zip(NAMES, combo, strict=True))])
     logits: np.ndarray = ebm.decision_function(frame)
     return float(logits[0])
 
@@ -78,7 +90,7 @@ def _brute_force(ebm: ExplainableBoostingClassifier, row: tuple[str, ...]) -> tu
 
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_matches_brute_force(
-    categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    categorical_ebm: FittedClassifier,
     row: tuple[str, ...],
 ) -> None:
     ebm, _ = categorical_ebm
@@ -98,16 +110,16 @@ def test_matches_brute_force(
     assert facts.sufficient_reason.minimum
 
 
-def test_counterfactual_really_flips(categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_counterfactual_really_flips(categorical_ebm: FittedClassifier) -> None:
     ebm, _ = categorical_ebm
     row = {"f0": "p", "f1": "p", "f2": "p"}
     facts = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0, min_support=0))
     assert facts.counterfactual is not None
     changed = {**row, **{c.feature: c.to_value for c in facts.counterfactual.changes}}
-    assert ebm.predict(pd.DataFrame([changed]))[0] != ebm.predict(pd.DataFrame([row]))[0]
+    assert ebm.predict(frame_of_rows([changed]))[0] != ebm.predict(frame_of_rows([row]))[0]
 
 
-def test_prediction_matches_model(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_prediction_matches_model(continuous_ebm: FittedClassifier) -> None:
     ebm, data = continuous_ebm
     row = instance_of(data, 3)
     facts = local.compute_local_facts(ebm, row)
@@ -117,7 +129,7 @@ def test_prediction_matches_model(continuous_ebm: tuple[ExplainableBoostingClass
     assert facts.prediction.decision == ebm.predict(data.iloc[[3]])[0]
 
 
-def test_confidence_makes_claims_harder(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_confidence_makes_claims_harder(continuous_ebm: FittedClassifier) -> None:
     ebm, data = continuous_ebm
     row = instance_of(data, 0)
     loose = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0))
@@ -131,7 +143,7 @@ def test_confidence_makes_claims_harder(continuous_ebm: tuple[ExplainableBoostin
 
 
 def test_completions_are_reproducible_and_grow(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
     row = instance_of(data, 5)
@@ -143,7 +155,7 @@ def test_completions_are_reproducible_and_grow(
     assert first.completions[-1].share >= first.completions[0].share
 
 
-def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_sufficient_reason_decides_outcome(continuous_ebm: FittedClassifier) -> None:
     ebm, data = continuous_ebm
     row = instance_of(data, 0)
     facts = local.compute_local_facts(ebm, row, local.LocalOptions(confidence_level=0, min_support=0))
@@ -153,7 +165,7 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoos
     for _ in range(50):
         other = data.iloc[int(rng.integers(len(data)))].to_dict()
         mixed = {**row, **{n: other[n] for n in free}}
-        assert ebm.predict(pd.DataFrame([mixed]))[0] == facts.prediction.decision
+        assert ebm.predict(frame_of_rows([mixed]))[0] == facts.prediction.decision
 
 
 @pytest.mark.parametrize(
@@ -163,12 +175,12 @@ def test_sufficient_reason_decides_outcome(continuous_ebm: tuple[ExplainableBoos
         ({"a": float("nan"), "b": 0, "c": "x"}, "missing"),
         # a NaN of NumPy and the pd.NA of a nullable column were not seen as missing, so they got a bin or a TypeError
         ({"a": np.float32("nan"), "b": 0, "c": "x"}, "missing"),
-        ({"a": 0, "b": 0, "c": pd.NA}, "missing"),
+        ({"a": 0, "b": 0, "c": MISSING_VALUE}, "missing"),
         ({"a": 0, "b": 0, "c": "?"}, "Unknown"),
     ],
 )
 def test_bad_instances(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     instance: dict[str, FeatureValue],
     message: str,
 ) -> None:
@@ -177,14 +189,14 @@ def test_bad_instances(
 
 
 def test_rejects_interactions_and_bad_confidence(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     fit_ebm: Callable[..., ExplainableBoostingClassifier],
 ) -> None:
     ebm, data = continuous_ebm
     with pytest.raises(OptionRangeError, match="confidence_level"):
         local.compute_local_facts(ebm, instance_of(data, 0), local.LocalOptions(confidence_level=1))
     rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.normal(size=(300, 3)), columns=list("abc"))
+    frame = frame_of_matrix(rng.normal(size=(300, 3)), list("abc"))
     with_interactions = fit_ebm(frame, (frame["a"] * frame["b"] > 0).astype(int), interactions=1, random_state=0)
     with pytest.raises(UnsupportedModelError, match="interactions"):
         local.compute_local_facts(with_interactions, instance_of(frame, 0))
@@ -254,17 +266,17 @@ def test_sufficient_reason_is_none_when_not_even_all_features_guarantee() -> Non
 
 
 @functools.cache
-def _multiclass_model() -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+def _multiclass_model() -> FittedClassifier:
     """Fit a three-class model on a small grid, so that each feature has few bins and a search can try every one.
 
     Returns
     -------
-    tuple[ExplainableBoostingClassifier, pd.DataFrame]
+    FittedClassifier
         The model and its training data.
 
     """
     rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.integers(0, 4, size=(240, 3)).astype(float), columns=["a", "b", "c"])
+    frame = frame_of_matrix(rng.integers(0, 4, size=(240, 3)).astype(float), ["a", "b", "c"])
     target = (frame["a"] + frame["b"] + rng.integers(0, 2, 240) > 3).astype(int) + (frame["c"] > 2).astype(int)
     model = ExplainableBoostingClassifier(interactions=0, random_state=0).fit(frame, target)
     return model, frame
@@ -371,18 +383,18 @@ def test_multiclass_counterfactual_changes_the_predicted_class(row: int) -> None
         **instance,
         **{change.feature: float(change.to_value.strip("[)").split(",")[0]) for change in facts.counterfactual.changes},
     }
-    after = model.predict_proba(pd.DataFrame([changed]))[0]
+    after = model.predict_proba(frame_of_rows([changed]))[0]
     assert model.classes_[int(np.argmax(after))] == facts.counterfactual.new_decision
     assert facts.counterfactual.new_decision != facts.prediction.decision
     assert facts.counterfactual.new_output == pytest.approx(float(after.max()), abs=1e-6)
 
 
-def _changed_row(instance: dict[str, FeatureValue], counterfactual: local.Counterfactual) -> pd.DataFrame:
+def _changed_row(instance: dict[str, FeatureValue], counterfactual: local.Counterfactual) -> PandasFrame:
     """Return the instance with each changed feature set to the lower end of its new bin.
 
     Returns
     -------
-    pd.DataFrame
+    PandasFrame
         One row.
 
     """
@@ -390,7 +402,7 @@ def _changed_row(instance: dict[str, FeatureValue], counterfactual: local.Counte
         **instance,
         **{change.feature: float(change.to_value.strip("[)").split(",")[0]) for change in counterfactual.changes},
     }
-    return pd.DataFrame([changed])
+    return frame_of_rows([changed])
 
 
 @settings(max_examples=40, deadline=None)
@@ -563,7 +575,7 @@ class _SeedSpy:
 
 
 def test_the_searches_get_the_seed_of_the_options(
-    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    categorical_regressor: FittedRegressor,
 ) -> None:
     ebm, _ = categorical_regressor
     spy = _SeedSpy()
@@ -590,7 +602,7 @@ def test_a_target_class_that_the_model_does_not_have_is_rejected() -> None:
 
 def test_a_binary_classifier_rejects_a_target_class(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> None:
     rng = np.random.default_rng(0)
-    frame = pd.DataFrame(rng.normal(size=(300, 2)), columns=["a", "b"])
+    frame = frame_of_matrix(rng.normal(size=(300, 2)), ["a", "b"])
     ebm = fit_ebm(frame, (frame["a"] > 0).astype(int), interactions=0, random_state=0)
     with pytest.raises(OptionRangeError, match="needs a multiclass classifier"):
         local.compute_local_facts(ebm, instance_of(frame, 0), local.LocalOptions(target_class=1))
@@ -711,15 +723,15 @@ def test_bin_index_names_the_value_of_an_unknown_category() -> None:
 @pytest.fixture(scope="module")
 def coded_ebm(
     fit_ebm: Callable[..., ExplainableBoostingClassifier],
-) -> tuple[ExplainableBoostingClassifier, pd.DataFrame]:
+) -> FittedClassifier:
     rng = np.random.default_rng(5)
     size = 600
-    data = pd.DataFrame(
+    data = frame_of_columns(
         {
             "a": rng.normal(size=size),
-            "grade": pd.Categorical(rng.choice([1, 2, 3], size)),
-            "flag": pd.Categorical(rng.choice([True, False], size)),
-            "share": pd.Categorical(rng.choice([0.5, 1.0], size)),
+            "grade": categorical(rng.choice([1, 2, 3], size)),
+            "flag": categorical(rng.choice([True, False], size)),
+            "share": categorical(rng.choice([0.5, 1.0], size)),
         },
     )
     signal = data["a"] + data["grade"].astype(int) - 2 + 0.8 * data["flag"].astype(bool) + rng.normal(size=size)
@@ -727,7 +739,7 @@ def coded_ebm(
 
 
 def test_facts_of_training_rows_with_number_and_boolean_categories_agree_with_the_ebm(
-    coded_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    coded_ebm: FittedClassifier,
 ) -> None:
     # a row of the training data has NumPy integers, booleans and floats for the categories that interpret keeps as
     # text, so every such row raised "Unknown category"
@@ -1272,7 +1284,7 @@ def test_the_features_of_a_sufficient_reason_fix_the_outcome_for_every_completio
 
 
 def test_a_decimal_value_falls_in_the_bin_of_its_float(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, _ = continuous_ebm
     as_float = local.compute_local_facts(ebm, {"a": 0.25, "b": -0.5, "c": "x"})
@@ -1283,9 +1295,9 @@ def test_a_decimal_value_falls_in_the_bin_of_its_float(
 @pytest.fixture(scope="module")
 def categorical_regressor(
     fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
-) -> tuple[ExplainableBoostingRegressor, pd.DataFrame]:
+) -> FittedRegressor:
     rng = np.random.default_rng(2)
-    data = pd.DataFrame({name: rng.choice(CATEGORIES, 900) for name in NAMES})
+    data = frame_of_columns({name: rng.choice(CATEGORIES, 900) for name in NAMES})
     target = data["f0"].map({"p": 3.0, "q": 0.0, "r": -3.0}) + data["f1"].map({"p": 1.0, "q": 0.0, "r": -1.0})
     target += data["f2"].map({"p": 0.4, "q": 0.0, "r": -0.4}) + rng.normal(size=900) * 0.2
     ebm = fit_ebm(data, target, interactions=0, random_state=0, regression=True)
@@ -1307,7 +1319,7 @@ def _brute_force_regressor(
 
     """
     values = {
-        combo: float(ebm.predict(pd.DataFrame([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
+        combo: float(ebm.predict(frame_of_rows([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
     }
     outcome = {combo: holds(value) == holds(values[row]) for combo, value in values.items()}
     flips = [sum(a != b for a, b in zip(row, combo, strict=True)) for combo, same in outcome.items() if not same]
@@ -1323,7 +1335,7 @@ def _brute_force_regressor(
 @pytest.mark.parametrize("threshold", [None, 0.5, -1.0, 2.5])
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_regressor_threshold_matches_brute_force(
-    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    categorical_regressor: FittedRegressor,
     row: tuple[str, ...],
     threshold: float | None,
 ) -> None:
@@ -1364,7 +1376,7 @@ def _sufficient_sizes(
 
     """
     values = {
-        combo: float(ebm.predict(pd.DataFrame([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
+        combo: float(ebm.predict(frame_of_rows([dict(zip(NAMES, combo, strict=True))]))[0]) for combo in _all_combos()
     }
     same = {combo: holds(value) == holds(values[row]) for combo, value in values.items()}
     return {
@@ -1394,14 +1406,14 @@ def _interval_answer(interval: Interval, value: float) -> Callable[[float], bool
 @pytest.mark.parametrize("search", [MipCover(), GreedyCover(), LocalSearchCover()], ids=repr)
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_regressor_interval_matches_brute_force(
-    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    categorical_regressor: FittedRegressor,
     row: tuple[str, ...],
     search: CoveringSolver,
     interval: Interval,
 ) -> None:
     ebm, _ = categorical_regressor
     instance = dict(zip(NAMES, row, strict=True))
-    value = float(ebm.predict(pd.DataFrame([instance]))[0])
+    value = float(ebm.predict(frame_of_rows([instance]))[0])
     holds = _interval_answer(interval, value)
     facts = local.compute_local_facts(
         ebm,
@@ -1433,7 +1445,7 @@ def test_regressor_interval_matches_brute_force(
 
 
 def test_regressor_prediction_is_the_predicted_value(
-    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    categorical_regressor: FittedRegressor,
 ) -> None:
     ebm, data = categorical_regressor
     facts = local.compute_local_facts(ebm, instance_of(data, 3), local.LocalOptions(decision=Threshold(1.0)))
@@ -1450,7 +1462,7 @@ def test_regressor_prediction_is_the_predicted_value(
 
 
 def test_regressor_counterfactual_gives_the_new_value(
-    categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
+    categorical_regressor: FittedRegressor,
 ) -> None:
     ebm, _ = categorical_regressor
     row = {"f0": "p", "f1": "p", "f2": "p"}
@@ -1462,12 +1474,12 @@ def test_regressor_counterfactual_gives_the_new_value(
     assert facts.counterfactual is not None
     assert facts.counterfactual.new_decision == "at most 0.5"
     changed = {**row, **{c.feature: c.to_value for c in facts.counterfactual.changes}}
-    new_value = float(ebm.predict(pd.DataFrame([changed]))[0])
+    new_value = float(ebm.predict(frame_of_rows([changed]))[0])
     assert facts.counterfactual.new_output == pytest.approx(new_value)
     assert new_value <= 0.5
 
 
-def test_a_classifier_rejects_a_decision(categorical_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_a_classifier_rejects_a_decision(categorical_ebm: FittedClassifier) -> None:
     ebm, _ = categorical_ebm
     with pytest.raises(OptionRangeError, match="Only a regressor accepts a decision"):
         local.compute_local_facts(ebm, {"f0": "p", "f1": "p", "f2": "p"}, local.LocalOptions(decision=Threshold(0.0)))

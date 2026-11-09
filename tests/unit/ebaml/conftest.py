@@ -8,7 +8,7 @@ import inspect
 import os
 import types
 import typing
-from collections.abc import Callable, MutableMapping, MutableSequence
+from collections.abc import Callable, Mapping, MutableMapping, MutableSequence, Sequence
 from pathlib import Path
 from typing import Any, override
 
@@ -25,6 +25,70 @@ import baml_sdk
 from ebaml.core.custom_types import FeatureValue, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.graphs.model_kinds import ModelKind
+
+type PandasFrame = pd.DataFrame
+type FittedClassifier = tuple[ExplainableBoostingClassifier, PandasFrame]
+type FittedRegressor = tuple[ExplainableBoostingRegressor, PandasFrame]
+
+# The missing value of a nullable pandas column.
+MISSING_VALUE: FeatureValue = pd.NA
+
+
+def frame_of_columns(columns: Mapping[str, npt.ArrayLike | pd.api.extensions.ExtensionArray]) -> PandasFrame:
+    """Build the pandas frame that interpret fits on from the values of each column.
+
+    Returns
+    -------
+    PandasFrame
+        The frame. Its column names are the keys.
+
+    """
+    return pd.DataFrame(columns)
+
+
+def frame_of_rows(rows: Sequence[Mapping[str, FeatureValue]]) -> PandasFrame:
+    """Build a pandas frame from the instances, one row for each.
+
+    Returns
+    -------
+    PandasFrame
+        The frame. Its column names are the keys of the instances.
+
+    """
+    return pd.DataFrame(list(rows))
+
+
+def frame_of_matrix(matrix: npt.NDArray[np.floating], columns: Sequence[str]) -> PandasFrame:
+    """Build a pandas frame from a matrix, and name its columns.
+
+    Returns
+    -------
+    PandasFrame
+        The frame.
+
+    """
+    return pd.DataFrame(matrix, columns=list(columns))
+
+
+def categorical(values: np.ndarray) -> pd.api.extensions.ExtensionArray:
+    """Make the categorical column of a pandas frame.
+
+    Returns
+    -------
+    pd.api.extensions.ExtensionArray
+        The categorical column. Its categories are the distinct values.
+
+    """
+    return pd.Categorical(values)
+
+
+def save_model(model: object, path: Path) -> None:
+    """Write ``model`` to a joblib file, as the user of ``ebaml-mcp`` does.
+
+    The test of the loader writes the file, so only this function imports ``joblib``.
+    """
+    joblib.dump(model, path)
+
 
 # `baml generate` writes the signatures of the SDK functions only to this stub. At run time each function takes
 # (*args, **kwargs), so inspect.signature cannot see the parameters.

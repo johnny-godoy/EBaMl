@@ -3,14 +3,12 @@
 import copy
 
 import numpy as np
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 
-from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
-from tests.unit.ebaml.conftest import fake_model
+from tests.unit.ebaml.conftest import FittedClassifier, fake_model
 
 
 def test_main_term_finds_the_term_of_a_feature_after_a_left_out_feature() -> None:
@@ -46,7 +44,7 @@ def test_main_effect_features_of_a_model_without_terms_is_empty() -> None:
 
 
 def test_from_ebm_after_remove_terms_keeps_the_graph_of_each_feature(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     # after remove_terms(["a"]), the graph named "a" held the scores of "b"
     ebm = copy.deepcopy(continuous_ebm[0])
