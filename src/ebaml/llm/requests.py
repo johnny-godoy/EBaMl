@@ -16,19 +16,13 @@ from ebaml.local.facts import LocalOptions
 
 
 @attrs.frozen
-class DescribeGraphRequest:
-    """The input of ``describe_graph``.
+class _EBMRequest:
+    """The fields that every request has.
 
     Attributes
     ----------
     ebm: ExplainableBoostingModel
         The EBM.
-    feature_index: int
-        The index of the feature to describe.
-    num_sentences: int
-        The desired number of sentences for the description.
-    graph: GraphOptions
-        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
     prompt: PromptOptions
         The descriptions that the prompts use.
     model: ModelOptions | str | None
@@ -38,21 +32,47 @@ class DescribeGraphRequest:
     """
 
     ebm: ExplainableBoostingModel
-    feature_index: int
-    num_sentences: int = 7
-    graph: GraphOptions = attrs.field(factory=GraphOptions, kw_only=True)
     prompt: PromptOptions = attrs.field(factory=PromptOptions, kw_only=True)
     model: ModelOptions | str | None = attrs.field(default=None, kw_only=True)
 
 
 @attrs.frozen
-class DescribeEBMRequest:
+class _GraphRequest(_EBMRequest):
+    """The fields of a request that describes graphs.
+
+    Attributes
+    ----------
+    graph: GraphOptions
+        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
+
+    """
+
+    graph: GraphOptions = attrs.field(factory=GraphOptions, kw_only=True)
+
+
+@attrs.frozen
+class DescribeGraphRequest(_GraphRequest):
+    """The input of ``describe_graph``.
+
+    Attributes
+    ----------
+    feature_index: int
+        The index of the feature to describe.
+    num_sentences: int
+        The desired number of sentences for the description.
+
+    """
+
+    feature_index: int
+    num_sentences: int = 7
+
+
+@attrs.frozen
+class DescribeEBMRequest(_GraphRequest):
     """The input of ``describe_ebm``.
 
     Attributes
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM.
     num_sentences: int
         The desired number of sentences for the description.
     max_concurrency: int
@@ -60,33 +80,22 @@ class DescribeEBMRequest:
     progress_bar: bool
         Whether to show a progress bar on the error stream: one step for each feature and one for the summary.
         Without a terminal, the bar writes one line for each step.
-    graph: GraphOptions
-        The options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``.
-    prompt: PromptOptions
-        The descriptions that the prompts use.
-    model: ModelOptions | str | None
-        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
-        ``openrouter/free``. EBaMl sends every request of the call to this model.
 
     """
 
-    ebm: ExplainableBoostingModel
     num_sentences: int = 30
     max_concurrency: int = 8
     progress_bar: bool = attrs.field(default=False, kw_only=True)
-    graph: GraphOptions = attrs.field(factory=GraphOptions, kw_only=True)
-    prompt: PromptOptions = attrs.field(factory=PromptOptions, kw_only=True)
-    model: ModelOptions | str | None = attrs.field(default=None, kw_only=True)
 
 
 @attrs.frozen
-class ExplainInstanceRequest:
+class ExplainInstanceRequest(_EBMRequest):
     """The input of ``explain_instance``.
+
+    The EBM is a binary classifier or a regressor, without interactions.
 
     Attributes
     ----------
-    ebm: ExplainableBoostingModel
-        The EBM: a binary classifier or a regressor, without interactions.
     instance: Mapping[str, FeatureValue]
         The value of every feature, by feature name.
     global_explanation: str
@@ -102,22 +111,14 @@ class ExplainInstanceRequest:
         numbers stay as they are, and only the words around them change.
     local: LocalOptions
         The options of ``compute_local_facts``. For a regressor, ``decision`` sets the question about the predicted
-        value that the explanations keep.
-    prompt: PromptOptions
-        The descriptions that the prompts use. The local prompts read ``expert_description`` and
-        ``dataset_description``.
-    model: ModelOptions | str | None
-        The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
-        ``openrouter/free``. EBaMl sends every request of the call to this model.
+        value that the explanations keep. The local prompts read ``expert_description`` and ``dataset_description`` of
+        ``prompt``.
 
     """
 
-    ebm: ExplainableBoostingModel
     instance: Mapping[str, FeatureValue]
     global_explanation: str
     audience: Audience | str = "layperson"
     num_sentences: int = 5
     language: str = attrs.field(default="English", kw_only=True)
     local: LocalOptions = attrs.field(factory=LocalOptions, kw_only=True)
-    prompt: PromptOptions = attrs.field(factory=PromptOptions, kw_only=True)
-    model: ModelOptions | str | None = attrs.field(default=None, kw_only=True)
