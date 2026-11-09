@@ -24,6 +24,14 @@ other change. A reviewer judges the reasons. CI checks only the registry and the
 - Capability ID and owner in `architecture/abstractions.yml` (if new):
 - Why the existing abstractions cannot be reused:
 
+## Workarounds
+
+<!-- Answer for a change that adds an ignore (`noqa`, `type: ignore`, `pyrefly: ignore`, a pragma, a skipped test or a
+config ignore). Write "None" for any other change. .claude/rules/prek-and-ignores.md has the rules. -->
+
+- Total from `uv run python -m scripts.compile_ignores` (before and after):
+- Why no shared fix applies (helper, import, fixture or one config entry):
+
 ## Changelog
 
 <!-- Choose one. -->
