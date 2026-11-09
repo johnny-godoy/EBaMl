@@ -181,7 +181,7 @@ def multiclass_ebm(
 
 
 # fake_model builds EBM instances with preset attributes, so tests can pass them where an EBM type is required.
-def fake_model(**attributes: Any) -> ExplainableBoostingClassifier:  # ruff: ignore[any-type] -- attribute values are arbitrary test data
+def fake_model(**attributes: object) -> ExplainableBoostingClassifier:
     """Build an EBM without fitting it, and set the given attributes on it.
 
     Returns
