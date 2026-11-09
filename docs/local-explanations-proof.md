@@ -20,8 +20,8 @@ term per feature.
   moves the predicted value across `t`.
 - **Inside an interval.** When the predicted value is inside `Interval(low, high)`, the decision has two margins. The
   counterfactual has as many features as the smaller of the two answers for the margins.
-- **Several margins.** A search of `LocalOptions.search` returns a set that the code checks with the definition of a
-  sufficient set. The removal pass of `Greedy` leaves no feature that the set does not need. A result with one feature
+- **Several margins.** The solver of `LocalOptions.search` returns a set that the code checks with the definition of a
+  sufficient set. The removal pass of `GreedyCover` and `LocalSearchCover` leaves no feature that the set does not need. A result with one feature
   is a smallest set when the empty set is not sufficient. If a solver proves its set optimal, each sufficient set has at
   least as many features: Lean checks this form of the claim, and the certificate of the solver gives its premise.
 
@@ -29,12 +29,12 @@ term per feature.
   score of `j`. Each margin is the binary model with the intercept `b_c - b_j`, the scores `s_c - s_j` and the
   deviations `σ_c + σ_j`. The counterfactual "the predicted class is no longer `c`" has as many features as the
   smallest of the answers for the rivals, and `_smallest_counterfactual` returns this number. A set keeps the class
-  iff it is sufficient for every margin, so the claims about the searches above hold for the sufficient reason. The sum of the two deviations is an upper bound of the deviation of the margin for any correlation.
+  iff it is sufficient for every margin, so the claims about the solvers above hold for the sufficient reason. The sum of the two deviations is an upper bound of the deviation of the margin for any correlation.
 
 - **Hardness.** The sufficient reason of several margins contains Set Cover. A set of features is sufficient for the
   reduction iff the matching sets cover every element, and a multiclass classifier with one rival class for each
   element has this problem as its sufficient reason. The decision problem is NP-complete, so a polynomial algorithm for
-  the smallest sufficient set exists only if P = NP. This is why the searches use a MIP solver with a time limit.
+  the smallest sufficient set exists only if P = NP. This is why `MipCover` has a time limit, and the other solvers prove no ratio.
 - **The same approximability as Set Cover.** The sufficient sets of the reduction are exactly the covers. So the two
   problems have the same smallest size and the same approximate solutions for every ratio. Lean checks this. The
   hardness result of Dinur and Steurer for Set Cover then holds for the sufficient reason: for every `α > 0`, it is
@@ -52,13 +52,13 @@ the *gains*.
 - The completions. They are sampled, so there is nothing exact to prove.
 - A change that lands exactly on the threshold. The robust margin is then zero, and the code does not count it as a
   flip. A classifier has the same convention at the log-odds zero.
-- The order of `Greedy`. The proof allows any order, and it proves only that no feature can be removed.
+- The order of the greedy. The proof allows any order, and it proves only that no feature can be removed.
 - The certificates of the solvers. An optimal result of HiGHS, SCIP or CP-SAT rests on the solver and on its
   floating-point tolerances. A set whose smallest margin is positive but tiny can be missed, so `minimum` can be wrong
   in that case.
 - The reduction of the problem, the lower bound of the LP and the coverage of the greedy. The paper proves the first
   two on paper, and Lean checks none of them. The lower bound also depends on the tolerances of the LP solver. EBaMl
-  claims no ratio for `Greedy`, and its guarantee is the lower bound.
+  claims no ratio for `GreedyCover` and `LocalSearchCover`, and their guarantee is the lower bound.
 - A tie between the two highest classes of a multiclass classifier. The code takes the first class, and the margin is
   then zero. The proof needs a strict winner.
 - The counterfactual with a chosen target class `j`. The Lean model covers "the predicted class is no longer `c`". The
@@ -68,7 +68,7 @@ the *gains*.
   is correct. The paper argues the running time and the membership in a few lines, and it cites Karp for the
   NP-hardness of Set Cover.
 - The hardness result of Dinur and Steurer and the algorithms of Chvátal and of Kolliopoulos and Young. The paper
-  cites them as stated, and it proves none of them. `Greedy` is a greedy of the kind of Chvátal, with no proved ratio.
+  cites them as stated, and it proves none of them. `GreedyCover` is a greedy of the kind of Chvátal, with no proved ratio.
 - A fixed number of margins that is larger than one. The reduction needs one margin for each element, so a classifier
   needs one rival class for each element.
 - The confidence level of the counterfactual. Only the features that the counterfactual changes move by `z` standard
@@ -79,8 +79,8 @@ the *gains*.
 `explain_instance` accepts binary classifiers, multiclass classifiers and regressors. The definitions below set what the
 explanations of each kind mean. The result types of `ebaml.local` hold all of them, and each kind has a proof. A
 regressor uses the same sorting algorithms on a shifted intercept for each margin, and the answer "inside" uses the
-searches below. A multiclass classifier uses them on the margin of each rival class. The counterfactual with a chosen
-target class `j` uses the searches below.
+covering solvers below. A multiclass classifier uses them on the margin of each rival class. The counterfactual with a chosen
+target class `j` uses the covering solvers below.
 
 ### Notation
 
@@ -107,7 +107,7 @@ The counterfactual is the smallest set of changes after which the decision does 
   is the default counterfactual of a multiclass classifier: "the predicted class is no longer `c`".
 - **A chosen target class `j`.** An option of the multiclass counterfactual asks for the smallest set of changes after
   which the predicted class is `j`. All the margins of `j` must become positive together, so sorting does not solve it.
-  Each plausible bin of a feature is an alternative, and the search of the sufficient reason below finds the smallest
+  Each plausible bin of a feature is an alternative, and the solver of the sufficient reason below finds the smallest
   set over every choice of bins, with the same claims.
 
 ### Sufficient reason
@@ -118,14 +118,13 @@ of the other features.
 - **One margin.** This is the binary problem, so sorting finds the smallest set exactly.
 - **Several margins.** The decision holds for every completion when the worst case of each margin is positive. Each
   margin gives one linear condition, so the smallest set that meets all of them is a covering problem. Sorting does
-  not solve it in general, and the problem is NP-hard. `LocalOptions.search` selects the search:
+  not solve it in general, and the problem is NP-hard. `LocalOptions.search` selects the algorithm:
 
-  | Search | Result | Claim |
+  | Solver | Algorithm | Claim |
   | --- | --- | --- |
-  | `Exact` (default) | A MIP solver (HiGHS, SCIP or CP-SAT) with the gap tolerances zero and a time limit. | *Minimum* when the solver proves the optimum, or when the size equals the lower bound. |
-  | `Heuristic` | The first set of the solver. | *Minimum* when the size equals the lower bound. |
-  | `Stochastic` | The local search of CP-SAT with a fixed seed. | *Minimum* when the solver proves the optimum, or when the size equals the lower bound. |
-  | `Greedy` | Add the feature with the largest gain of coverage, then remove each feature that is not necessary. | *Minimal*: no feature of the set can be removed. *Minimum* when the size equals the lower bound. |
+  | `MipCover` (default) | Branch and bound in a MIP solver (HiGHS, SCIP or CP-SAT) with a time limit. `Stop.OPTIMAL` sets the gap tolerances to zero, and `Stop.FIRST` ends at the first set. | *Minimum* when the solver proves the optimum, or when the size equals the lower bound. |
+  | `LocalSearchCover` | Remove a random part of the greedy set and build it again, with a seed. | *Minimal*: no feature of the set can be removed. *Minimum* when the size equals the lower bound. |
+  | `GreedyCover` | Add the feature with the largest gain of coverage, then remove each feature that is not necessary. | *Minimal*: no feature of the set can be removed. *Minimum* when the size equals the lower bound. |
 
   `SufficientReason.minimum` tells which claim the result has, and `SufficientReason.lower_bound` gives the bound of
   the LP relaxation.
@@ -154,7 +153,7 @@ this bound.
 | `Counterfactual.new_decision` | The other class. | The other decision. | The new predicted class. |
 | `Counterfactual.new_output` | The probability of the new class. | The new predicted value. | The probability of the new class. |
 | `SufficientReason.guaranteed_margin` | The worst case of the margin. | The worst case of the margin. | The smallest worst case over the margins. |
-| `SufficientReason.minimum` | Always true (proved). | True for one margin. | See the search. |
+| `SufficientReason.minimum` | Always true (proved). | True for one margin. | See the solver. |
 | `SufficientReason.lower_bound`, `Counterfactual.lower_bound` | The size of the set. | The size of the set for one margin, else the bound of the LP. | The bound of the LP for a covering problem. |
 
 ## How the proof is checked

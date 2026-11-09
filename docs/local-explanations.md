@@ -151,21 +151,26 @@ predicted class is the decision.
 The answer "inside" has two margins, one for each end of the interval. The counterfactual is the smaller of the two
 answers for the margins, and it is exact. The sufficient reason must keep both margins positive at the same time.
 Sorting does not find the smallest set for that. The problem is a covering problem, and no fast exact algorithm for
-it exists unless P = NP ([proof page](local-explanations-proof.md)). `LocalOptions.search` chooses the search. The
-searches use the solvers of OR-Tools:
+it exists unless P = NP ([proof page](local-explanations-proof.md)). `LocalOptions.search` chooses the algorithm. Each
+class is one algorithm:
 
-| Search | Result | `minimum` is true when |
+| Solver | Algorithm | `minimum` is true when |
 | --- | --- | --- |
-| `Exact(engine=Engine.HIGHS, time_limit=10.0)` (default) | The smallest set, which a MIP solver proves. `engine` is `Engine.HIGHS`, `Engine.SCIP` or `Engine.CP_SAT`. | The solver proves the optimum before the time limit, or the size equals the lower bound. |
-| `Heuristic(engine=Engine.HIGHS, time_limit=10.0)` | The first set that the solver finds. | The size equals the lower bound, or the solver proves that the greedy set is the smallest. |
-| `Stochastic(seed=None, time_limit=10.0)` | The set of the local search of CP-SAT, with one worker and a fixed seed. `None` uses `LocalOptions.seed`. | The solver proves the optimum, or the size equals the lower bound. |
-| `Greedy()` | The set of the greedy algorithm of set cover, with no solver. It needs no time limit. | The size equals the lower bound. |
+| `MipCover(backend=OrToolsBackend(), stop=Stop.OPTIMAL, time_limit=10.0)` (default) | Branch and bound over all sets in a MIP solver. `OrToolsBackend(OrToolsSolver.SCIP)` or `OrToolsSolver.CP_SAT` choose another solver than HiGHS. `stop=Stop.FIRST` ends at the first set smaller than the greedy set. | The solver proves the optimum, or the size equals the lower bound. |
+| `LocalSearchCover(iterations=100, destroy_share=0.1, seed=None)` | Starts from the greedy set, removes a random part of it, builds it again with the greedy, and keeps the smallest set. `None` uses `LocalOptions.seed`. It needs no MIP solver. | The size equals the lower bound. |
+| `GreedyCover()` | The greedy algorithm of set cover, then the removal of each input that the set does not need. It needs no MIP solver and no time limit. | The size equals the lower bound. |
 
-Every search starts with the greedy set and reports a lower bound, `lower_bound`: no set has fewer inputs. The bound
-comes from the LP relaxation of the problem. If the time limit ends before the solver proves the optimum, the search
-returns the best set that it found, and `minimum` is false unless the set reaches the bound. A decision with one margin
-ignores `search`, because sorting finds its smallest set exactly. When `minimum` is false, the prompt tells the LLM not
-to call the set the smallest, and a data scientist gets the lower bound in the facts.
+Every solver checks the empty set first and reports a lower bound, `lower_bound`: no set has fewer inputs. The bound
+comes from the LP relaxation of the problem, which the backend solves. `GreedyCover(bound_backend=None)` and
+`LocalSearchCover(bound_backend=None)` run no LP, and their bound is `1`. If the time limit of `MipCover` ends before
+the solver proves the optimum, it returns the best set that it found, and `minimum` is false unless the set reaches the
+bound. A decision with one margin ignores `search`, because sorting finds its smallest set exactly. When `minimum` is
+false, the prompt tells the LLM not to call the set the smallest, and a data scientist gets the lower bound in the
+facts.
+
+The MIP solver is behind the `MipBackend` protocol: a class with a method `solve(model, settings)` that solves a
+`CoveringModel` and returns a `ModelResult`. `OrToolsBackend` is the backend that ships with the package. To use another
+optimization library, write a class with this method and pass it as `MipCover(backend=...)`.
 
 <!-- invisible-code-block: python
 from ebaml import Threshold, LocalOptions
@@ -179,13 +184,13 @@ facts = compute_local_facts(regressor, instance, LocalOptions(decision=Threshold
 print(facts.prediction.decision, round(facts.prediction.output, 1))
 ```
 
-The answer "inside" of an interval uses the search. This example asks for the greedy search, which is fast and proves
-less:
+The answer "inside" of an interval uses the solver. This example asks for the local search, which needs no MIP solver
+and proves less:
 
 ```python
-from ebaml import Greedy, Interval
+from ebaml import Interval, LocalSearchCover
 
-options = LocalOptions(decision=Interval(20.0, 40.0), search=Greedy())
+options = LocalOptions(decision=Interval(20.0, 40.0), search=LocalSearchCover())
 reason = compute_local_facts(regressor, instance, options).sufficient_reason
 if reason is not None:
     print(reason.features, reason.minimum, reason.lower_bound)
@@ -205,13 +210,14 @@ of `j`. Each margin is a sum of one term for each feature, as the margin of a bi
   the answers for the margins, so sorting finds it for each margin. `new_decision` is the class that is predicted
   after the changes.
 - The sufficient reason must keep every margin positive at the same time, so `LocalOptions.search` chooses the
-  search, as for the answer "inside" of a regressor. `Exact()` is the default.
+  algorithm, as for the answer "inside" of a regressor. `MipCover()` is the default.
 - The completions are estimated by sampling, as for every kind.
 - `LocalOptions.target_class` asks for the fewest changes after which a chosen class is the predicted class. All the
   margins of that class must then hold at once. Each plausible bin of a feature is a possible change, and a set of
   changes moves each changed feature to one bin. `LocalOptions.search` finds the set over every choice of bins. With
-  `Exact()`, the set is the smallest unless the time limit ends first. If the solver finds no set in its time limit and
-  cannot prove that none exists, `compute_local_facts` raises a `SearchLimitError`, which names the fix.
+  `MipCover()`, the set is the smallest unless the time limit ends first. If the solver finds no set in its time limit
+  and cannot prove that none exists, `compute_local_facts` raises a `SearchLimitError`, which names the fix.
+  `GreedyCover` and `LocalSearchCover` raise it too when a change that lowers a margin stops the greedy.
 - EBMs store no covariance between the scores of two classes. The confidence interval of a margin therefore uses the sum
   of the two standard deviations, which is an upper bound for any correlation.
 
