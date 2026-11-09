@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.4'></a>
+## [0.6.4] - 2026-11-09
+
+### Changed
+
+- Internal loops in graph simplification, local explanations and the MCP model summary use `enumerate` and array conversion in place of index loops. The output stays the same.
+
 <a id='changelog-0.6.3'></a>
 ## [0.6.3] - 2026-11-09
 
