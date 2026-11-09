@@ -41,14 +41,14 @@ def test_each_lazy_name_is_the_object_of_the_descriptors() -> None:
 
 def test_lazy_name_is_stored_in_the_namespace() -> None:
     ebaml.__dict__.pop("describe_graph", None)
-    loaded = ebaml.__getattr__("describe_graph")  # ruff: ignore[unnecessary-dunder-call] -- the hook runs only for a missing name, so only a direct call proves it
+    loaded = ebaml.describe_graph  # the name is missing from the namespace, so the module hook loads it
     assert ebaml.__dict__["describe_graph"] is loaded
 
 
 def test_dir_lists_the_lazy_names() -> None:
     assert set(LAZY_NAMES) <= set(dir(ebaml))
     assert set(dir(ebaml)) == set(ebaml.__all__)
-    assert ebaml.__dir__() == sorted(ebaml.__all__)  # ruff: ignore[unnecessary-dunder-call] -- the module function has no other caller, and vulture needs one
+    assert dir(ebaml) == sorted(ebaml.__all__)
 
 
 def test_unknown_name_raises_the_standard_message() -> None:
