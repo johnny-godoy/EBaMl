@@ -6,8 +6,8 @@ LLM of the call.
 """
 
 import functools
-from collections.abc import Collection, Mapping
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Collection, Mapping
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 
 import attrs
 import structlog
@@ -20,6 +20,7 @@ from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
+from ebaml.llm.progress_bars import progress
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
@@ -444,7 +445,55 @@ def sample_graph_tokens(
         return baml_sdk.sample_graph_tokens(graph=graph, opts=_prompt_options(prompt), model=model_spec)
 
 
-def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and three keyword-only option arguments
+def _describe_graphs(
+    describe: Callable[[int, str], _Described],
+    features: Collection[int],
+    graph_texts: Collection[str],
+    max_concurrency: int,
+    finish_step: Callable[[], None],
+) -> list[_Described]:
+    """Describe the graphs of the features at the same time, and count each one that finishes.
+
+    The function counts the graphs in the thread of the caller, in the order in which they finish. It returns the
+    descriptions in the order of the features. If a graph fails, the function cancels the graphs that have not started
+    and raises the error of the first graph that failed.
+
+    Parameters
+    ----------
+    describe: Callable[[int, str], _Described]
+        Describes one graph from the index of its feature and its text.
+    features: Collection[int]
+        The indices of the features to describe.
+    graph_texts: Collection[str]
+        The text of the graph of each feature, in the order of ``features``.
+    max_concurrency: int
+        The maximum number of graphs that the function describes at the same time.
+    finish_step: Callable[[], None]
+        Called once for each graph that finishes.
+
+    Returns
+    -------
+    list[_Described]
+        The description of each graph, in the order of ``features``.
+
+    """
+    with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
+        futures: list[Future[_Described]] = [
+            pool.submit(describe, feature_index, graph_text)
+            for feature_index, graph_text in zip(features, graph_texts, strict=True)
+        ]
+        try:
+            for finished in as_completed(futures):
+                finished.result()
+                finish_step()
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
+        return [future.result() for future in futures]
+
+
+def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and four keyword-only arguments
     ebm: ExplainableBoostingModel,
     num_sentences: int = 30,
     max_concurrency: int = 8,
@@ -452,6 +501,7 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     graph: GraphOptions = _DEFAULT_GRAPH_OPTIONS,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
     model: ModelOptions | str | None = None,
+    progress_bar: bool = False,
 ) -> str:
     """Ask the LLM to describe an EBM.
 
@@ -477,6 +527,9 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     model: ModelOptions | str | None, default=None
         The LLM of the call, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
         ``openrouter/free``. EBaMl sends every request of the call to this model.
+    progress_bar: bool, default=False
+        Whether to show a progress bar on the error stream. It counts one step for each feature and one for the
+        summary. If the error stream is not a terminal, the bar writes one line for each step.
 
     Returns
     -------
@@ -495,37 +548,38 @@ def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, 
     graph_texts = [_graph_text(ebm, feature_index, graph, model_spec) for feature_index in features]
     opts = _prompt_options(prompt)
 
-    with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
-        described = list(
-            pool.map(
-                functools.partial(
-                    _describe_graph_counted,
-                    ebm,
-                    num_sentences=_GRAPH_SENTENCES,
-                    graph_options=graph,
-                    opts=opts,
-                    model=model_spec,
-                ),
-                features,
-                graph_texts,
+    with progress(len(features) + 1, "describe_ebm", enabled=progress_bar) as finish_step:
+        described = _describe_graphs(
+            functools.partial(
+                _describe_graph_counted,
+                ebm,
+                num_sentences=_GRAPH_SENTENCES,
+                graph_options=graph,
+                opts=opts,
+                model=model_spec,
             ),
+            features,
+            graph_texts,
+            max_concurrency,
+            finish_step,
         )
-    graph_descriptions = "\n\n".join(
-        f"{name}: {item.counted.text}"
-        for name, item in zip(
-            feature_names,
-            described,
-            strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
+        graph_descriptions = "\n\n".join(
+            f"{name}: {item.counted.text}"
+            for name, item in zip(
+                feature_names,
+                described,
+                strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
+            )
         )
-    )
-    with provider_errors():
-        summary = baml_sdk.summarize_ebm(
-            feature_importances=feature_importances,
-            graph_descriptions=graph_descriptions,
-            num_sentences=num_sentences,
-            opts=opts,
-            model=model_spec,
-        )
+        with provider_errors():
+            summary = baml_sdk.summarize_ebm(
+                feature_importances=feature_importances,
+                graph_descriptions=graph_descriptions,
+                num_sentences=num_sentences,
+                opts=opts,
+                model=model_spec,
+            )
+        finish_step()
     usage = baml_sdk.TokenUsage(
         input_tokens=summary.usage.input_tokens + sum(item.counted.usage.input_tokens for item in described),
         output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),

@@ -32,6 +32,7 @@ dependencies = [
     # only ebaml.local.ortools_backend imports it: the MathOpt models and their solvers HiGHS, SCIP and CP-SAT
     "ortools>=9.15.6755",
     "pandas>=3.1.0",
+    "progressbar2>=4.6.0",
     "scipy>=1.18.1",
     "structlog>=26.1.0",
 ]
@@ -137,17 +138,21 @@ select = ["ALL"]
 # Each banned module names its replacement. Ruff fails in the editor and shows the message; an exception is an inline
 # `# ruff: ignore[banned-api] -- <reason>` on the import.
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
+"alive_progress".msg = "Use progressbar2. See .claude/rules/progress-bars.md."
 "argparse".msg = "Use cyclopts. See .claude/rules/libraries.md."
 "cloudpickle".msg = "Use skops.io. See .claude/rules/libraries.md."
 "dataclasses".msg = "Use attrs. See .claude/rules/libraries.md."
 "dill".msg = "Use skops.io. See .claude/rules/libraries.md."
 "doctest".msg = "Use sybil. See .claude/rules/libraries.md."
+"enlighten".msg = "Use progressbar2. See .claude/rules/progress-bars.md."
 "joblib".msg = "Use skops.io. See .claude/rules/libraries.md."
 "json".msg = "Use orjson. See .claude/rules/libraries.md."
 "logging".msg = "Use structlog. See .claude/rules/libraries.md."
 "pandas".msg = "Take a frame with narwhals, or read data with polars. See .claude/rules/libraries.md."
 "pickle".msg = "Use skops.io. See .claude/rules/libraries.md."
+"rich.progress".msg = "Use progressbar2. See .claude/rules/progress-bars.md."
 "shelve".msg = "Use skops.io. See .claude/rules/libraries.md."
+"tqdm".msg = "Use progressbar2. See .claude/rules/progress-bars.md."
 
 [tool.ruff.lint.per-file-ignores]
 # reason: recurring pattern in tests/: pytest tests use bare assert, literal expected values and private members by design,

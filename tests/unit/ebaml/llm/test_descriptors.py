@@ -2,6 +2,8 @@
 
 import ast
 import inspect
+import io
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, override
@@ -653,6 +655,92 @@ def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
     descriptors.describe_ebm(fake_ebm)
     assert workers == [8]
+
+
+def _fake_summary_and_graphs(monkeypatch: pytest.MonkeyPatch, counted: baml_sdk.Counted) -> None:
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+
+
+def test_describe_ebm_shows_one_step_for_each_graph_and_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+    error_stream: io.StringIO,
+) -> None:
+    _fake_summary_and_graphs(monkeypatch, counted)
+    descriptors.describe_ebm(fake_ebm, progress_bar=True)
+    lines = error_stream.getvalue().splitlines()
+    assert [f"({step} of 3)" in lines[step] for step in range(4)] == [True] * 4
+    assert all(line.startswith("describe_ebm ") for line in lines)
+
+
+def test_describe_ebm_shows_no_progress_bar_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+    error_stream: io.StringIO,
+) -> None:
+    _fake_summary_and_graphs(monkeypatch, counted)
+    descriptors.describe_ebm(fake_ebm)
+    assert not error_stream.getvalue()
+
+
+def test_describe_ebm_counts_the_summary_after_the_graphs(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_ebm: ExplainableBoostingClassifier,
+    counted: baml_sdk.Counted,
+    error_stream: io.StringIO,
+) -> None:
+    def summary(**_kw: object) -> baml_sdk.Counted:
+        # the bar shows both graphs and not the summary while the summary runs
+        assert "(2 of 3)" in error_stream.getvalue()
+        assert "(3 of 3)" not in error_stream.getvalue()
+        return counted
+
+    monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", summary))
+    descriptors.describe_ebm(fake_ebm, progress_bar=True)
+    assert "(3 of 3)" in error_stream.getvalue()
+
+
+def test_describe_graphs_returns_the_descriptions_in_the_order_of_the_features(counted: baml_sdk.Counted) -> None:
+    finished = []
+
+    def describe(feature_index: int, _text: str) -> descriptors._Described:
+        # the first graph finishes last
+        time.sleep(0.1 if feature_index == 0 else 0)
+        return descriptors._Described(
+            baml_sdk.Counted(text=f"d{feature_index}", usage=counted.usage),
+            truncated_attempts=feature_index,
+        )
+
+    described = descriptors._describe_graphs(describe, [0, 1], ["a", "b"], 2, lambda: finished.append(len(finished)))
+    assert [item.counted.text for item in described] == ["d0", "d1"]
+    assert finished == [0, 1]
+
+
+def test_describe_graphs_cancels_the_graphs_that_have_not_started_after_a_failure() -> None:
+    started = []
+
+    def describe(feature_index: int, _text: str) -> descriptors._Described:
+        started.append(feature_index)
+        if feature_index == 0:
+            msg = "first graph failed"
+            raise RuntimeError(msg)
+        # the second graph runs while the caller cancels the third, which has not started
+        time.sleep(0.2)
+        return descriptors._Described(baml_sdk.Counted(text="d", usage=_no_usage()), truncated_attempts=0)
+
+    with pytest.raises(RuntimeError, match="first graph failed"):
+        descriptors._describe_graphs(describe, [0, 1, 2], ["a", "b", "c"], 1, lambda: None)
+    assert 2 not in started
+
+
+def _no_usage() -> baml_sdk.TokenUsage:
+    return baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[])
 
 
 def test_describe_ebm_passes_the_options_to_every_graph_and_the_summary(
