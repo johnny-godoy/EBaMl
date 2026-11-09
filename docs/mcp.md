@@ -213,6 +213,8 @@ Only one change flips it: age from 34 into [77.5, 78.5). That change raises the 
 you>
 ```
 
+The [chat notebook](chat-notebook.md) runs the same command behind a chat box.
+
 The agent remembers the earlier messages of the chat, but not the results of earlier tool calls. It calls a tool again
 when it needs a number. A turn that fails, for example because of a rate limit, prints its error, and you can ask again.
 

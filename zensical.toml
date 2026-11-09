@@ -22,6 +22,7 @@ nav = [
     { "Model kinds" = "model-kinds-notebook.md" },
     { "MCP server" = "mcp-notebook.md" },
     { "BAML agent" = "baml-agent-notebook.md" },
+    { "Chat" = "chat-notebook.md" },
   ] },
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },
