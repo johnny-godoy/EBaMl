@@ -30,6 +30,7 @@ import cyclopts
 import numpy as np
 import numpy.typing as npt
 import orjson
+import progressbar
 from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor  # pyrefly: ignore[implicit-reexport] -- interpret.glassbox has no __all__, so pyrefly reads its public classes as private imports
 from sklearn.datasets import load_breast_cancer, load_diabetes, load_wine
 
@@ -690,6 +691,7 @@ def _build_app(sampler: Sampler | None) -> cyclopts.App:
         count: int = 100,
         output: Path | None = None,
         yes: bool = False,
+        progress: bool = True,
     ) -> int:
         """Send requests and write the records (costs money).
 
@@ -703,6 +705,8 @@ def _build_app(sampler: Sampler | None) -> cyclopts.App:
             The JSON lines file. The default is a file in token_samples/, named after the model.
         yes : bool
             Agree to pay for count + 1 requests.
+        progress : bool
+            Show a progress bar of the records on the error stream. Use ``--no-progress`` to turn it off.
 
         Returns
         -------
@@ -721,7 +725,11 @@ def _build_app(sampler: Sampler | None) -> cyclopts.App:
             EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index in range(len(ebm.feature_names_in_))
         ])
         written = 0
-        for record in collect(texts, sampler or _real_sampler(model), count):
+        records = collect(texts, sampler or _real_sampler(model), count)
+        if progress and count > 0:  # progressbar2 draws a spinner for a total of 0
+            # each record is a paid request that takes seconds, so the bar shows the records that are done
+            records = progressbar.progressbar(records, max_value=count, prefix="collect ", fd=sys.stderr)
+        for record in records:
             write_records([record], samples_path)
             written += 1
         sys.stdout.write(f"wrote {written} records to {samples_path}\n")

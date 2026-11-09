@@ -1,6 +1,7 @@
 """Tests for the script that collects token samples of a model and fits its token weights."""
 
 import ast
+import io
 from pathlib import Path
 
 import attrs
@@ -359,6 +360,54 @@ def test_collect_with_yes_writes_the_records(monkeypatch: pytest.MonkeyPatch, tm
     )
     assert code == 0
     assert len(script.read_records(tmp_path / "out" / "s.jsonl", LUNA)) == 4
+
+
+def _collect_arguments(tmp_path: Path, *extra: str) -> list[str]:
+    return [
+        "collect",
+        "openrouter/openai/gpt-6-luna",
+        "--count",
+        "4",
+        "--yes",
+        "--output",
+        str(tmp_path / "s.jsonl"),
+        *extra,
+    ]
+
+
+def test_collect_shows_a_progress_bar_of_the_records(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    error_stream: io.StringIO,
+) -> None:
+    monkeypatch.setattr(script, "build_ebms", lambda: [small_ebm()])
+    script.main(_collect_arguments(tmp_path), sampler=fake_sampler())
+    lines = error_stream.getvalue().splitlines()
+    assert all(line.startswith("collect ") for line in lines)
+    assert "(4 of 4)" in lines[-1]
+
+
+def test_collect_with_no_progress_shows_no_bar(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    error_stream: io.StringIO,
+) -> None:
+    monkeypatch.setattr(script, "build_ebms", lambda: [small_ebm()])
+    script.main(_collect_arguments(tmp_path, "--no-progress"), sampler=fake_sampler())
+    assert not error_stream.getvalue()
+
+
+def test_collect_of_zero_records_shows_no_bar(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    error_stream: io.StringIO,
+) -> None:
+    # progressbar2 draws a spinner for a total of 0, which tells the reader nothing
+    monkeypatch.setattr(script, "build_ebms", lambda: [small_ebm()])
+    arguments = _collect_arguments(tmp_path)
+    arguments[arguments.index("--count") + 1] = "0"
+    script.main(arguments, sampler=fake_sampler())
+    assert not error_stream.getvalue()
 
 
 def test_the_real_sampler_asks_for_a_short_reply_from_the_model(monkeypatch: pytest.MonkeyPatch) -> None:
