@@ -154,12 +154,20 @@ capabilities:
     keywords: [explain, instance, prediction, local, llm]
     status: active
 
-  - id: covering-search
-    responsibility: Solve the covering problem of a fact with several margins with a chosen search and a lower bound
+  - id: covering-solver
+    responsibility: Find a small sufficient set of a covering problem with one algorithm, and report a lower bound
     owner: ebaml.local
-    symbol: ebaml.local.covering_solvers:CoveringSearch
+    symbol: ebaml.local.covering_solvers:CoveringSolver
     consumers: [ebaml.local, ebaml.llm]
-    keywords: [covering, solver, search, sufficient, reason, counterfactual, margins, ortools]
+    keywords: [covering, solver, search, sufficient, reason, counterfactual, margins, greedy, local, mip]
+    status: active
+
+  - id: covering-mip-backend
+    responsibility: Solve the linear models of the covering solvers with an optimization library
+    owner: ebaml.local
+    symbol: ebaml.local.covering_backend:MipBackend
+    consumers: [ebaml.local]
+    keywords: [backend, mip, lp, solver, ortools, highs, scip, optimization, model]
     status: active
 
   - id: benchmark-usage

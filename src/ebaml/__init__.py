@@ -56,13 +56,20 @@ from ebaml.local.audience import (  # ruff: ignore[module-import-not-at-top-of-f
     round_value,
     strength_word,
 )
+from ebaml.local.covering_backend import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+    CoveringModel,
+    MipBackend,
+    ModelResult,
+    ModelStatus,
+    SolveSettings,
+    Stop,
+)
+from ebaml.local.covering_problem import Choice, Cover, CoveringProblem  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.local.covering_solvers import (  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
-    CoveringSearch,
-    Engine,
-    Exact,
-    Greedy,
-    Heuristic,
-    Stochastic,
+    CoveringSolver,
+    GreedyCover,
+    LocalSearchCover,
+    MipCover,
 )
 from ebaml.local.decisions import Decision, Interval, Threshold  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 from ebaml.local.fact_text import FactTexts, facts_to_texts  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
@@ -78,6 +85,7 @@ from ebaml.local.facts import (  # ruff: ignore[module-import-not-at-top-of-file
     compute_local_facts,
 )
 from ebaml.local.local_kinds import OutputKind  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
+from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver  # ruff: ignore[module-import-not-at-top-of-file] -- the beartype hook must run first
 
 if TYPE_CHECKING:
     from ebaml.llm.descriptors import LocalExplanation, describe_ebm, describe_graph, explain_instance
@@ -89,10 +97,14 @@ __all__ = [
     "Audience",
     "BinaryClassifier",
     "Change",
+    "Choice",
     "CompletionStep",
     "Contribution",
     "Counterfactual",
-    "CoveringSearch",
+    "Cover",
+    "CoveringModel",
+    "CoveringProblem",
+    "CoveringSolver",
     "DataScientist",
     "Decision",
     "EBMGraph",
@@ -101,14 +113,11 @@ __all__ = [
     "EBMGraphSimplificationError",
     "EBMGraphTokenLimitError",
     "EBaMlError",
-    "Engine",
-    "Exact",
     "FactTexts",
     "FeatureType",
     "GraphOptions",
     "GraphTextError",
-    "Greedy",
-    "Heuristic",
+    "GreedyCover",
     "Interval",
     "InvalidInstanceError",
     "InvalidOptionError",
@@ -117,12 +126,19 @@ __all__ = [
     "LocalExplanation",
     "LocalFacts",
     "LocalOptions",
+    "LocalSearchCover",
+    "MipBackend",
+    "MipCover",
     "MissingAPIKeyError",
     "ModelKind",
     "ModelOptions",
+    "ModelResult",
+    "ModelStatus",
     "MulticlassClassifier",
     "Normalization",
     "OptionRangeError",
+    "OrToolsBackend",
+    "OrToolsSolver",
     "OutputKind",
     "Prediction",
     "PromptOptions",
@@ -131,7 +147,8 @@ __all__ = [
     "Regressor",
     "SDKUnavailableError",
     "SearchLimitError",
-    "Stochastic",
+    "SolveSettings",
+    "Stop",
     "SufficientReason",
     "Threshold",
     "TokenFitError",

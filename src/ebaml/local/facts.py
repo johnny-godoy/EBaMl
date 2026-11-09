@@ -11,7 +11,7 @@ An EBM without interactions is a sum of one score per feature. The decision of a
 term per feature, positive while the decision holds (``ebaml.local.local_kinds``). The first two explanations are solved
 exactly by sorting the features by how much they move the margin, and the third by sampling the unknown features from
 their training distribution with a fixed seed. A decision with several margins, and the counterfactual of a chosen
-class, are covering problems that sorting does not solve. A ``CoveringSearch`` of ``ebaml.local.covering_solvers``
+class, are covering problems that sorting does not solve. A ``CoveringSolver`` of ``ebaml.local.covering_solvers``
 solves them. Nothing here calls an LLM, and nothing here renders text: ``ebaml.local.fact_text`` puts the facts in words
 for the prompts in ``baml_src/local_explanations.baml``.
 
@@ -40,7 +40,8 @@ from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, Unsupp
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
-from ebaml.local.covering_solvers import CoveringProblem, CoveringSearch, Exact
+from ebaml.local.covering_problem import CoveringProblem
+from ebaml.local.covering_solvers import CoveringSolver, MipCover
 from ebaml.local.decisions import Decision, Margin
 from ebaml.local.local_kinds import LocalKind, Outcome, OutputKind, PredictionFrame, local_kind
 
@@ -157,11 +158,12 @@ class LocalOptions:
         The question about the predicted value of a regressor that the explanations keep, such as ``Threshold(10)`` or
         ``Interval(10, 20)``. ``None`` asks whether the value is above the intercept, the average prediction. A
         classifier has its predicted class as the decision, so it accepts ``None`` only.
-    search: CoveringSearch
+    search: CoveringSolver
         How to solve the covering problems: the sufficient reason of a decision with several margins, as "inside an
-        interval" has, and the counterfactual of ``target_class``. ``Exact()`` (the default) proves the smallest set
-        with HiGHS, unless its time limit ends first. ``Heuristic``, ``Stochastic`` and ``Greedy`` are faster and
-        prove less. A decision with one margin ignores this option, because sorting finds its smallest set exactly.
+        interval" has, and the counterfactual of ``target_class``. ``MipCover()`` (the default) searches all sets in a
+        MIP solver of OR-Tools (HiGHS), and proves the smallest set unless its time limit ends first. ``GreedyCover``
+        and ``LocalSearchCover`` need no MIP solver and prove less. A decision with one margin ignores this option,
+        because sorting finds its smallest set exactly.
     target_class: ClassLabel | None
         For a multiclass classifier, the class that the counterfactual must reach. ``None`` (the default) asks for the
         fewest changes after which the class is no longer the predicted class. A class asks for the fewest changes
@@ -176,7 +178,7 @@ class LocalOptions:
     seed: int = 0
     min_support: float = 0.01
     decision: Decision | None = None
-    search: CoveringSearch = attrs.field(factory=Exact)
+    search: CoveringSolver = attrs.field(factory=MipCover)
     target_class: ClassLabel | None = None
 
 
@@ -792,7 +794,7 @@ def _gain_table(features: Sequence[_Feature], bounds: Sequence[_Bound], z: float
 def _several_margins_reason(
     features: Sequence[_Feature],
     table: _GainTable,
-    search: CoveringSearch,
+    search: CoveringSolver,
     seed: int,
 ) -> SufficientReason | None:
     """Choose a sufficient reason for a decision with several margins, with the search of the user.
@@ -805,7 +807,7 @@ def _several_margins_reason(
         The features.
     table : _GainTable
         The worst cases and the gains.
-    search : CoveringSearch
+    search : CoveringSolver
         How to choose the features.
     seed : int
         The seed of the solver.
