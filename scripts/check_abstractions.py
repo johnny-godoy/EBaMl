@@ -367,12 +367,12 @@ def build_index(root: Path) -> SourceIndex:
     return SourceIndex(modules=frozenset(modules), symbols=symbols)
 
 
-def _text_list(value: Any) -> list[str] | None:  # ruff: ignore[any-type] -- the value comes from untyped YAML
+def _text_list(value: object) -> list[str] | None:
     """Read a list of strings from a YAML value.
 
     Parameters
     ----------
-    value: Any
+    value: object
         The parsed YAML value. ``None`` stands for an absent key.
 
     Returns
