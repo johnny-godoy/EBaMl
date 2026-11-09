@@ -23,7 +23,7 @@ reason_ is the fewest features to fix so that no values of the other features ca
 come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
-covering problem. The code solves it with a MIP solver or a greedy search, and the paper states what a result proves. A multiclass classifier has one margin for each rival
+covering problem. The code solves it with a MIP solver, a local search or a greedy, and the paper states what a result proves. A multiclass classifier has one margin for each rival
 class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover, and it has the same hardness of
 approximation.
 A Lean 4 file @lean4 checks every statement except two facts about running time and the statements about the
@@ -50,12 +50,12 @@ with no new proof (@sec-regressor, Lemmas 7 and 8). The code does this shift in 
 fewest features that flip it are the fewest of the two answers for the margins, and `_smallest_counterfactual` returns
 this number (Theorem 6).
 
-*Claim 5 (searches).* For a decision with several margins, the code builds a covering problem, and a `CoveringSearch`
-of `covering_solvers.py` solves it. Each set that a search returns is sufficient, because the code checks it with the
-definition of @sec-covering. The flag `minimum` is true only if the solver reports a proved optimum, or if the size of
-the set equals a lower bound (Theorem 5, Corollary 3, Lemma 17). A proved optimum rests on the certificate of the solver,
-which Lean does not check, and on floating-point tolerances (@sec-solvers). The removal pass of `Greedy` returns a set
-from which no feature can be removed (Theorem 4).
+*Claim 5 (solvers).* For a decision with several margins, the code builds a covering problem, and a `CoveringSolver`
+of `covering_solvers.py` solves it: `MipCover`, `LocalSearchCover` or `GreedyCover`. Each set that a solver returns is
+sufficient, because the code checks it with the definition of @sec-covering. The flag `minimum` is true only if the MIP
+solver reports a proved optimum, or if the size of the set equals a lower bound (Theorem 5, Corollary 3, Lemma 17). A
+proved optimum rests on the certificate of the MIP solver, which Lean does not check, and on floating-point tolerances
+(@sec-solvers). The removal pass of the greedy returns a set from which no feature can be removed (Theorem 4).
 
 *Claim 6 (multiclass classifier).* For a multiclass classifier, the predicted class $w$ has one margin for each rival
 class $j$: the score of $w$ minus the score of $j$, with the deviation $sigma_w + sigma_j$. The fewest features that
@@ -415,7 +415,7 @@ margin this is the definition of @sec-model.
   $W_k + sum_(i in G) h_(k,i) >= W_k + sum_(i in F) h_(k,i) > 0$.
 ]
 
-The search `Greedy` (`greedy_cover`) has two passes. The first pass adds the feature with the largest gain of coverage
+The greedy (`greedy_cover` in `covering_greedy.py`) has two passes. The first pass adds the feature with the largest gain of coverage
 (@sec-solvers) until the set is sufficient. The second pass, _prune_, visits the added features from the last to the first.
 It removes a feature when the set stays sufficient without it. The proof allows any order in both passes. Let
 $"prune"(l, C)$ be the result for a list $l$ of features and a set $C$ at the start of the second pass.
@@ -472,10 +472,11 @@ brute-force oracle of the tests does, visits at most $2^n$ sets. The code does n
   not empty, and $|G| >= 1 >= |R|$.
 ]
 
-Each search of the code checks the empty set first. When the empty set is not sufficient, the lower bound of the
-search is at least $1$ (`max(1, ...)` in `_lp_bound`). So a result with one feature reaches the bound, and its flag
+Each solver of the code checks the empty set first. When the empty set is not sufficient, the lower bound of the
+solver is at least $1$: the code takes `max(1, ...)` of the LP value in `_lower_bound`, and it uses $1$ when the solver
+has no backend for the LP. So a result with one feature reaches the bound, and its flag
 `minimum` is true. Corollary 3 proves this case. For a larger result, the flag rests on the solver or on the bound of
-Lemma 17. An example shows that the two passes of `Greedy` alone do not give a smallest set. Take three margins with
+Lemma 17. An example shows that the two passes of the greedy alone do not give a smallest set. Take three margins with
 $W = (-3/2, -5/2, -7/2)$ and four features with the gains $h_1 = (2, 2, 0)$, $h_2 = (2, 0, 2)$, $h_3 = (1, 2, 3)$
 and $h_4 = (0, 3, 3)$. The first pass adds the features $3, 1, 2$, and the set is sufficient. No feature can be
 removed, but $\{2, 4\}$ is also sufficient and has fewer features. The test problem `GREEDY_IS_NOT_OPTIMAL` is this
@@ -575,7 +576,7 @@ The sufficient reason of a decision with the margins $m_k$ is a covering problem
 ]
 
 Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 and Corollary 3. The function
-`_gain_table` computes the numbers $W_k$ and $h_(k,i)$, and `_several_margins_reason` gives them to the search of
+`_gain_table` computes the numbers $W_k$ and $h_(k,i)$, and `_several_margins_reason` gives them to the solver of
 `LocalOptions.search` as a problem with one alternative for each feature.
 
 *Correspondence of symbols to the code* for this section.
@@ -594,8 +595,8 @@ Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 a
   [first pass of `Greedy`], [`_next_pick` until `problem.sufficient(picked)`], [`greedy_cover`],
   [$"prune"$], [`for pick in reversed(list(picked))`], [`greedy_cover`],
   [$F$ is sufficient], [`all(margin > 0 for margin in self.margins(choices))`], [`CoveringProblem.sufficient`],
-  [the bound $1$ of Corollary 3], [`max(1, math.ceil(...))`], [`_lp_bound`],
-  [the flag `minimum`], [`proved or len(ordered) <= lower_bound`], [`_cover`],
+  [the bound $1$ of Corollary 3], [`max(1, math.ceil(...))`, or `1` with no backend], [`_lower_bound`, `_open`],
+  [the flag `minimum`], [`proved or len(ordered) <= lower_bound`], [`make_cover`],
 )
 
 
@@ -847,15 +848,16 @@ bounds $x_i <= 1$, after one change: for rational numbers with the common denomi
 $W_k + sum_(i in F) h_(k,i) > 0$ is the same as $W_k + sum_(i in F) h_(k,i) >= 1/q$. Kolliopoulos and Young
 @kolliopoulos2005 give a polynomial-time algorithm with the ratio $O(log m)$ for such programs. So, with the bins fixed,
 the covering problem and Set Cover have the same approximability up to a constant factor. This paper does not prove the
-guarantee of Kolliopoulos and Young, and the code does not implement it. The search `Greedy` follows the greedy of
+guarantee of Kolliopoulos and Young, and the code does not implement it. The solver `GreedyCover` follows the greedy of
 Chvátal with the coverage of Wolsey @wolsey1982 for real gains, but EBaMl proves no ratio for it (@sec-solvers). The
 counterfactual of a chosen class picks at most one bin for each feature. This constraint is not a covering constraint,
 and the paper states nothing about its approximability.
 
-*Meaning for the code.* The searches of `covering_solvers.py` run a MIP solver with a time limit, or the greedy, and
-the flag `minimum` needs a proof of the solver or the lower bound of Lemma 17. Both facts match the hardness. The test
-`test_the_exact_search_solves_set_cover_through_the_reduction_of_the_proof` runs the reduction on small instances and
-compares the size of `Exact`, with each of its three engines, with the size of a smallest cover.
+*Meaning for the code.* `MipCover` runs a MIP solver with a time limit, `GreedyCover` and `LocalSearchCover` prove no
+ratio, and the flag `minimum` needs a proof of the MIP solver or the lower bound of Lemma 17. These facts match the
+hardness. The test `test_the_mip_solves_set_cover_through_the_reduction_of_the_proof` runs the reduction on small
+instances, and compares the size of `MipCover`, with each of the three solvers of OR-Tools, with the size of a
+smallest cover.
 
 *Correspondence of symbols to the code* for this section.
 
@@ -864,15 +866,15 @@ compares the size of `Exact`, with each of its three engines, with the size of a
   stroke: 0.4pt + luma(160),
   inset: 5pt,
   [*Symbol*], [*Computed by*], [*Function*],
-  [$W_k$], [`[-0.5] * ELEMENT_COUNT`], [`_set_cover_problem` of the test],
-  [$h_(k,i)$], [`1.0 if element in members else 0.0`], [`_set_cover_problem` of the test],
-  [the smallest sufficient set], [`strategy.solve(_set_cover_problem(sets), seed=0)`], [`Exact.solve`],
+  [$W_k$], [`[-0.5] * ELEMENT_COUNT`], [`set_cover_problem` of the tests],
+  [$h_(k,i)$], [`1.0 if element in members else 0.0`], [`set_cover_problem` of the tests],
+  [the smallest sufficient set], [`solver.solve(set_cover_problem(sets), seed=0)`], [`MipCover.solve`],
   [a cover of the smallest size], [`min(size for size ... if set().union(*chosen) >= set(elements))`], [the test of the reduction],
 )
 
 = Solvers, the greedy and the lower bound <sec-solvers>
 
-This section states what the searches of `covering_solvers.py` prove. Lean checks none of its statements. The proofs
+This section states what the solvers of `covering_solvers.py` prove. Lean checks none of its statements. The proofs
 are on paper only, and @sec-limits lists this fact.
 
 *The problem of the code.* `CoveringProblem` extends the problem of @sec-covering. The features are _groups_, and each
@@ -937,12 +939,13 @@ problem. The test `test_the_reduction_keeps_two_groups_with_equal_gains` is this
   $|F| = sum_a x_a >= L$, and $|F| >= ceil(L)$ because $|F|$ is an integer.
 ]
 
-The code solves the LP of Lemma 17 with GLOP, after a division of each margin by the largest absolute value of its
-numbers, which does not change the set of solutions. GLOP returns $L$ up to its tolerances, so the code subtracts
-$10^(-6)$ before the rounding up (`_lp_bound`). The bound therefore holds up to the tolerances of GLOP. If GLOP proves
-the LP infeasible, Lemma 17 shows that no sufficient set exists, and the search returns `None`.
+The code writes the LP of Lemma 17 as a `CoveringModel` (`build_model`), after a division of each margin by the largest
+absolute value of its numbers, which does not change the set of solutions, and a `MipBackend` solves it. The backend
+of OR-Tools uses GLOP. GLOP returns $L$ up to its tolerances, so the code subtracts $10^(-6)$ before the rounding up
+(`_lower_bound`). The bound therefore holds up to the tolerances of the LP solver. If the backend proves the LP
+infeasible, Lemma 17 shows that no sufficient set exists, and the solver returns `None`.
 
-*What a solver proves.* The MIP of the code asks each margin to be at least $epsilon$ times the size of its numbers, in
+*What `MipCover` proves.* The MIP of the code asks each margin to be at least $epsilon$ times the size of its numbers, in
 place of positive, because a solver works with tolerances. The first $epsilon$ is $10^(-6)$. The code checks each set
 of the solver in Python with the definition above. If the check fails, it solves again with an $epsilon$ that is 100
 times larger, and it tries three values. When the greedy found a set of size $g$, the MIP also asks for at most $g - 1$
@@ -952,10 +955,12 @@ $epsilon$, and a solver that proves this MIP infeasible proves the set of the gr
 that case the flag `minimum` can be true for a set that is not the smallest. Lean does not check the certificate of a
 solver, and no solver on PyPI gives an exact answer in rational numbers.
 
-*The time limit.* If the time limit ends before the solver proves the optimum, the code returns the smaller of the set of
-the solver and the set of the greedy, and `minimum` is true only if its size equals the bound of Lemma 17. If no set is
-known, the problem of the sufficient reason returns all its features, which Lemma 6 shows to be sufficient when any set
-is, and the counterfactual of a chosen class raises `SearchLimitError`, because `None` would claim that no set exists.
+*The time limit.* If the time limit ends before the MIP solver proves the optimum, `MipCover` returns the set that the
+solver found, which is smaller than the greedy set, or else the greedy set, and `minimum` is true only if its size equals
+the bound of Lemma 17. If no set is known, the problem of the sufficient reason returns all its features, which Lemma 6
+shows to be sufficient when any set is, and the counterfactual of a chosen class raises `SearchLimitError`, because
+`None` would claim that no set exists. `GreedyCover` and `LocalSearchCover` raise it too when the greedy finds no set
+of a problem with negative gains.
 
 *The greedy.* Let $d_k = epsilon - W_k$ be the deficit of the margin $k$ and $c_k(F)$ the sum of the positive parts of
 the gains of $F$ for $k$. The coverage of $F$ is $sum_(k : d_k > 0) min(1, c_k(F) \/ d_k)$. Each step adds the
@@ -965,8 +970,14 @@ gain of an alternative never grows when the set grows, because each term $min(h^
 when $c_k$ grows. So the lazy search picks what the plain search picks, and the test
 `test_the_lazy_greedy_picks_what_the_plain_greedy_picks` compares them. Wolsey @wolsey1982 proves a ratio for the greedy
 of a submodular cover function. This paper has not checked his statement against the code, with its removal pass and
-its $epsilon$, and a group with several alternatives is outside his setting. So EBaMl claims no ratio for `Greedy`. Its
-guarantee is the bound of Lemma 17.
+its $epsilon$, and a group with several alternatives is outside his setting. So EBaMl claims no ratio for
+`GreedyCover`. Its guarantee is the bound of Lemma 17.
+
+*The local search.* `LocalSearchCover` starts from the greedy set. Each step removes a random share of the current
+picks, at least one, and runs the greedy from the picks that stay, without the removed ones. It keeps the new set if it
+is not larger, and it remembers the smallest set. The removal pass of the greedy runs in each step, so Theorem 4 holds
+for each set of the search. The search is not global and proves nothing about the size, except through Corollary 3 and
+Lemma 17. It stops early when a set reaches the bound. A fixed seed gives the same set.
 
 *Correspondence of symbols to the code* for this section.
 
@@ -977,11 +988,12 @@ guarantee is the bound of Lemma 17.
   [*Symbol*], [*Computed by*], [*Function*],
   [$h_(k,a)$ of a chosen class], [`view.scores[bin_index] - z * view.stds[bin_index] - view.current`], [`_alternatives`],
   [Lemmas 15 and 16], [`any(gain > 0 ...)` and `_dominates(...)`], [`reduce_problem`],
-  [$L$], [`result.objective_value()` of GLOP], [`_lp_bound`],
-  [$ceil(L)$], [`math.ceil(result.objective_value() - _ROUNDING_TOLERANCE)`], [`_lp_bound`],
-  [$epsilon$], [`_FIRST_EPSILON`, times `_EPSILON_STEP`], [`_SolverSearch._improve`],
-  [at most $g - 1$ picks], [`fast_sum(built.variables.values()) <= len(greedy) - 1`], [`_SolverSearch._run`],
+  [$L$], [`result.objective` of the LP], [`_lower_bound`],
+  [$ceil(L)$], [`math.ceil(result.objective - _ROUNDING_TOLERANCE)`], [`_lower_bound`],
+  [$epsilon$], [`MARGIN_EPSILON`, times `_EPSILON_STEP`], [`MipCover.solve`],
+  [at most $g - 1$ picks], [`max_picks=len(opening.greedy) - 1`], [`MipCover.solve`, `build_model`],
   [the coverage gain], [`min(max(gain, 0.0), max(deficit - margin_covered, 0.0)) / deficit`], [`_coverage_gain`],
+  [a step of the local search], [`greedy_cover(problem, stay, excluded=...)`], [`LocalSearchCover.solve`],
 )
 
 = Limits <sec-limits>
@@ -1006,7 +1018,7 @@ The proof does not cover the following points.
   $0$, so the code does not count it as a flip, although the value is then "at most $tau$". This is the same
   convention as the logit $0$ of a classifier. Every change that the code finds does flip the decision (Lemma 8), and
   "fewest" counts the changes that cross $tau$ strictly. A point mass at $tau$ has no meaning in floating point.
-- *The order of `Greedy`.* The proof allows any order in both passes of `Greedy`. It proves a set from which no feature
+- *The order of the greedy.* The proof allows any order in both passes of the greedy. It proves a set from which no feature
   can be removed (Theorem 4). About the size, it proves only Corollary 3 and the bound of Lemma 17.
 - *The running time in the hardness result.* Lean checks that the reduction is correct (Theorem 8). It does not check
   that the reduction runs in polynomial time, that the decision problem is in NP (Corollary 4), or Karp's theorem
@@ -1016,7 +1028,7 @@ The proof does not cover the following points.
   must check the translation of $ln n$.
 - *The upper bound.* The ratio $O(log m)$ of Kolliopoulos and Young @kolliopoulos2005 and the ratio $1 + ln m$ of
   Chvátal @chvatal1979 are citations. The paper proves neither. The code implements a greedy of the kind of Chvátal
-  (`Greedy`), and it claims no ratio for it.
+  (`GreedyCover`), and it claims no ratio for it.
 - *The number of margins.* The reduction needs one margin for each element, so a classifier needs one rival class for
   each element. A classifier with few classes has few margins. The paper proves nothing about a fixed number of margins
   that is larger than one. One margin is the case that sorting solves exactly (Theorem 3).
