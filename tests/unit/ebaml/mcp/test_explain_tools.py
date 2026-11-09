@@ -1,6 +1,5 @@
 """Tests of the tool that explains one prediction."""
 
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
@@ -11,11 +10,11 @@ from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.mcp.explain_tools import explain_prediction
 from ebaml.mcp.model_store import ModelStore
-from tests.unit.ebaml.conftest import as_frame, instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of
 
 
 def test_instance_and_row_give_the_same_facts(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, frame = continuous_ebm
     data = as_frame(frame)
@@ -25,7 +24,7 @@ def test_instance_and_row_give_the_same_facts(
     assert by_row.facts == compute_local_facts(ebm, instance_of(frame, 3))
 
 
-def test_texts_follow_the_audience(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_texts_follow_the_audience(continuous_ebm: FittedClassifier) -> None:
     ebm, frame = continuous_ebm
     data = as_frame(frame)
     explanation = explain_prediction(ModelStore(ebm=ebm, data=data), row=0, audience="data_scientist")
@@ -33,7 +32,7 @@ def test_texts_follow_the_audience(continuous_ebm: tuple[ExplainableBoostingClas
     assert explanation.texts != explain_prediction(ModelStore(ebm=ebm, data=data), row=0).texts
 
 
-def test_confidence_level_reaches_the_facts(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_confidence_level_reaches_the_facts(continuous_ebm: FittedClassifier) -> None:
     ebm, frame = continuous_ebm
     data = as_frame(frame)
     explanation = explain_prediction(ModelStore(ebm=ebm, data=data), row=0, confidence_level=0.5)
@@ -42,7 +41,7 @@ def test_confidence_level_reaches_the_facts(continuous_ebm: tuple[ExplainableBoo
 
 @pytest.mark.parametrize("arguments", [{}, {"row": 0, "instance": {"a": 1.0}}])
 def test_exactly_one_of_instance_and_row_is_needed(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     arguments: dict[str, object],
 ) -> None:
     ebm, frame = continuous_ebm

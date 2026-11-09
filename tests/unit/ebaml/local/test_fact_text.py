@@ -4,27 +4,25 @@ from typing import override
 
 import attrs
 import orjson
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 
 from ebaml.core.custom_types import JSONValue
-from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.local_kinds import OutputKind
-from tests.unit.ebaml.conftest import instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 
 def test_the_default_audience_is_a_layperson(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
     facts = local.compute_local_facts(ebm, instance_of(data, 0))
     assert local_text.facts_to_texts(facts) == local_text.facts_to_texts(facts, Layperson())
 
 
-def test_texts_hide_numbers_from_layperson(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_texts_hide_numbers_from_layperson(continuous_ebm: FittedClassifier) -> None:
     ebm, data = continuous_ebm
     facts = local.compute_local_facts(ebm, instance_of(data, 0))
     layperson = local_text.facts_to_texts(facts)

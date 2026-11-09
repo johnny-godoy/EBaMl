@@ -1,15 +1,15 @@
 """Tests of the tools that read an EBM."""
 
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.read_tools import graph_text, list_features, model_summary
+from tests.unit.ebaml.conftest import FittedClassifier
 
 
-def test_summary_of_a_binary_classifier(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_summary_of_a_binary_classifier(continuous_ebm: FittedClassifier) -> None:
     ebm, _ = continuous_ebm
     summary = model_summary(ModelStore(ebm=ebm))
     assert summary.kind == "BinaryClassifier"
@@ -44,7 +44,7 @@ def test_summary_names_the_skipped_interaction_terms(interaction_ebm: Explainabl
     assert summary.feature_count == 2
 
 
-def test_features_are_sorted_by_importance(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_features_are_sorted_by_importance(continuous_ebm: FittedClassifier) -> None:
     ebm, _ = continuous_ebm
     features = list_features(ModelStore(ebm=ebm))
     importances = [feature.importance for feature in features]
@@ -53,7 +53,7 @@ def test_features_are_sorted_by_importance(continuous_ebm: tuple[ExplainableBoos
     assert {feature.type for feature in features} == {"continuous", "nominal"}
 
 
-def test_graph_text_names_the_feature(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+def test_graph_text_names_the_feature(continuous_ebm: FittedClassifier) -> None:
     ebm, _ = continuous_ebm
     text = graph_text(ModelStore(ebm=ebm), "c", max_tokens=1000)
     assert "x" in text
@@ -61,7 +61,7 @@ def test_graph_text_names_the_feature(continuous_ebm: tuple[ExplainableBoostingC
 
 
 def test_graph_text_of_an_unknown_feature_is_an_error(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, _ = continuous_ebm
     with pytest.raises(InvalidInstanceError, match="no feature 'zzz'"):
@@ -69,7 +69,7 @@ def test_graph_text_of_an_unknown_feature_is_an_error(
 
 
 def test_a_small_max_tokens_gives_a_shorter_graph_text(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     """Bug: ``max_tokens`` had no effect, because ``graph_text`` passed no ``check_budget`` to ``to_text``."""
     ebm, _ = continuous_ebm

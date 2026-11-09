@@ -3,16 +3,13 @@
 import ast
 from pathlib import Path
 
-import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 import skops.io
 
 import ebaml
-from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
-from tests.unit.ebaml.conftest import as_frame
+from tests.unit.ebaml.conftest import FittedClassifier, as_frame, save_model
 
 
 class UntrustedType:
@@ -20,22 +17,22 @@ class UntrustedType:
 
 
 def test_load_model_reads_a_joblib_file(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
 ) -> None:
     ebm, _ = continuous_ebm
-    joblib.dump(ebm, tmp_path / "model.joblib")
+    save_model(ebm, tmp_path / "model.joblib")
     assert list(load_model(tmp_path / "model.joblib").feature_names_in_) == ["a", "b", "c"]
 
 
 def test_load_model_rejects_a_file_that_holds_no_ebm(tmp_path: Path) -> None:
-    joblib.dump({"not": "a model"}, tmp_path / "other.joblib")
+    save_model({"not": "a model"}, tmp_path / "other.joblib")
     with pytest.raises(UnsupportedModelError, match="holds a dict"):
         load_model(tmp_path / "other.joblib")
 
 
 def test_load_model_reads_a_skops_file(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
 ) -> None:
     ebm, _ = continuous_ebm
@@ -62,7 +59,7 @@ def test_load_data_reads_a_csv_file(tmp_path: Path) -> None:
 
 
 def test_row_instance_without_data_is_an_error(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, _ = continuous_ebm
     with pytest.raises(InvalidInstanceError, match="--data"):
@@ -70,7 +67,7 @@ def test_row_instance_without_data_is_an_error(
 
 
 def test_row_instance_checks_the_row_and_the_columns(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, frame = continuous_ebm
     data = as_frame(frame)

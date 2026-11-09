@@ -1,19 +1,18 @@
 """Tests of the tools that ask the LLM, with the calls into ``ebaml.llm`` faked."""
 
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.llm.options import ModelOptions
 from ebaml.mcp import llm_tools
 from ebaml.mcp.model_store import ModelStore
+from tests.unit.ebaml.conftest import FittedClassifier
 
 LLM: ModelOptions = ModelOptions(provider="ollama", model="llama3")
 
 
 def test_describe_feature_passes_the_feature_index_and_the_llm(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ebm, _ = continuous_ebm
@@ -29,7 +28,7 @@ def test_describe_feature_passes_the_feature_index_and_the_llm(
 
 
 def test_describe_model_computes_the_text_once(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ebm, _ = continuous_ebm

@@ -7,9 +7,7 @@ import sys
 from pathlib import Path
 
 import anyio
-import joblib  # ruff: ignore[banned-api] -- the test writes the joblib file that ebaml-mcp loads
 import orjson
-import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
 import skops.io
 import structlog
@@ -21,10 +19,11 @@ from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.llm.options import ModelOptions
 from ebaml.mcp import llm_tools as llm_tools_module
+from ebaml.mcp import model_store
 from ebaml.mcp import server as server_module
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.server import create_server, main
-from tests.unit.ebaml.conftest import as_frame, instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of, save_model
 
 pytestmark = pytest.mark.anyio
 
@@ -40,7 +39,7 @@ async def _call(server: MCPServer, name: str, arguments: dict[str, object] | Non
 
 
 @pytest.fixture
-def binary_server(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> MCPServer:
+def binary_server(continuous_ebm: FittedClassifier) -> MCPServer:
     ebm, data = continuous_ebm
     return create_server(ModelStore(ebm=ebm, data=as_frame(data)))
 
@@ -87,7 +86,7 @@ async def test_graph_resource_matches_the_default_tool(binary_server: MCPServer)
 
 
 async def test_explain_prediction_by_instance_and_by_row(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
     server = create_server(ModelStore(ebm=ebm, data=as_frame(data)))
@@ -176,7 +175,7 @@ async def test_a_model_with_an_interaction_names_it_and_the_tools_skip_it(
 
 
 async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ebm, _ = continuous_ebm
@@ -201,7 +200,7 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
 
 
 async def test_llm_tools_reach_the_llm_once_through_the_client(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Fake the two calls into ``ebaml.llm``, not the tools: the full path from the client to the LLM runs."""
@@ -236,7 +235,7 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
 
 
 async def test_tool_schemas_match_the_snapshot(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     """The names and argument schemas of the tools are public API from 1.0.0. Regenerate the snapshot on purpose."""
     ebm, _ = continuous_ebm
@@ -253,12 +252,12 @@ async def test_tool_schemas_match_the_snapshot(
 
 
 def test_main_loads_the_model_and_runs_the_server(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     ebm, data = continuous_ebm
-    joblib.dump(ebm, tmp_path / "model.joblib")
+    save_model(ebm, tmp_path / "model.joblib")
     data.to_csv(tmp_path / "data.csv", index=False)
     started: list[tuple[MCPServer, str]] = []
 
@@ -274,7 +273,7 @@ def test_main_loads_the_model_and_runs_the_server(
 @pytest.mark.parametrize("transport", ["stdio", "streamable-http"])
 def test_log_events_go_to_stderr_and_never_to_the_protocol_channel(
     transport: str,
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -297,7 +296,7 @@ def test_log_events_go_to_stderr_and_never_to_the_protocol_channel(
 
 
 def test_main_passes_the_host_and_the_port_to_the_server(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -327,7 +326,7 @@ def test_main_rejects_an_unknown_transport(tmp_path: Path, capsys: pytest.Captur
     assert "carrier-pigeon" in capsys.readouterr().err
 
 
-async def test_no_tool_takes_a_path(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> None:
+async def test_no_tool_takes_a_path(continuous_ebm: FittedClassifier) -> None:
     """Loading a pickle runs code, so only the user names a file, at start. No tool argument may name one."""
     ebm, _ = continuous_ebm
     server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
@@ -352,7 +351,7 @@ def test_only_the_command_loads_files() -> None:
 
 
 async def test_a_tool_argument_with_a_path_loads_no_file(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An agent cannot make the server load a file, even if it adds an argument that names a path."""
@@ -363,7 +362,7 @@ async def test_a_tool_argument_with_a_path_loads_no_file(
 
     monkeypatch.setattr(server_module, "load_model", forbidden)
     monkeypatch.setattr(server_module, "load_data", forbidden)
-    monkeypatch.setattr(joblib, "load", forbidden)
+    monkeypatch.setattr(model_store.joblib, "load", forbidden)
     server = create_server(ModelStore(ebm=ebm, data=as_frame(data)), ModelOptions(provider="ollama", model="llama3"))
     attempts: tuple[tuple[str, dict[str, object]], ...] = (
         ("get_graph", {"feature": "/etc/passwd", "path": "/etc/passwd"}),
@@ -391,7 +390,7 @@ def _command() -> str:
 
 @pytest.fixture
 def saved_files(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     tmp_path: Path,
 ) -> tuple[Path, Path]:
     ebm, data = continuous_ebm
