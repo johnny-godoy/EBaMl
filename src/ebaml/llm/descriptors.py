@@ -6,7 +6,7 @@ LLM of the call.
 """
 
 import functools
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 
 import attrs
@@ -442,6 +442,41 @@ def sample_graph_tokens(
     model_spec = _model_spec(model)
     with provider_errors():
         return baml_sdk.sample_graph_tokens(graph=graph, opts=_prompt_options(prompt), model=model_spec)
+
+
+def chat_with_mcp(
+    command: str,
+    arguments: Sequence[str],
+    model: ModelOptions | str | None = None,
+    *,
+    max_steps: int = 12,
+) -> int:
+    """Chat in the terminal with an agent that reads an EBM through an MCP server.
+
+    BAML starts the server once and keeps it for the whole chat. Each message that you type gets an answer from the
+    LLM, which calls the tools of the server as it needs them. The chat reads standard input and ends on an empty line.
+
+    Parameters
+    ----------
+    command: str
+        The program that starts the MCP server, for example the path of ``ebaml-mcp``.
+    arguments: Sequence[str]
+        The arguments of the program, for example ``["--model", "model.skops", "--data", "train.csv"]``.
+    model: ModelOptions | str | None, default=None
+        The LLM of the chat, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
+        ``openrouter/free``.
+    max_steps: int, default=12
+        The most rounds of tool calls for one answer.
+
+    Returns
+    -------
+    int
+        The number of questions that the chat answered.
+
+    """
+    model_spec = _model_spec(model)
+    with provider_errors():
+        return baml_sdk.chat_with_mcp(command=command, args=list(arguments), model=model_spec, max_steps=max_steps)
 
 
 def describe_ebm(  # ruff: ignore[too-many-arguments] -- the model, two limits, and three keyword-only option arguments
