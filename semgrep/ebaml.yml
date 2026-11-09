@@ -363,3 +363,53 @@ rules:
       - pattern: skops.io.load(..., trusted=True, ...)
       - pattern: sio.load(..., trusted=True, ...)
       - pattern: load(..., trusted=True, ...)
+
+  - id: ebaml-no-range-len
+    languages: [python]
+    severity: ERROR
+    message: >-
+      range(len(items)) makes an index to reach items[index]. Loop over the items (`for item in items`). If you need
+      the position too, use `enumerate(items)`. If you need a count, name it (`item_count = len(items)`). If an
+      index is the real subject (it addresses several sequences), loop over `zip` of the sequences, or add
+      `# nosemgrep: ebaml-no-range-len -- <reason>`. See .claude/rules/loops.md.
+    pattern-either:
+      - pattern: range(len($ITEMS))
+      - pattern: range($START, len($ITEMS))
+
+  - id: ebaml-numpy-loop-needs-reason
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A Python loop over a numpy array runs in the interpreter, and a numpy operation runs in compiled code. Write
+      the operation on the whole array (a ufunc, a mask, `np.where`, a reduction). If the loop must stay (a
+      step depends on the one before it, or the array holds Python objects), add
+      `# nosemgrep: ebaml-numpy-loop-needs-reason -- <why a vector operation cannot do it>` on the line of the
+      loop. See .claude/rules/loops.md.
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  for $ITEM in $ARRAY:
+                      ...
+              - pattern: |
+                  for $ITEM in enumerate($ARRAY):
+                      ...
+              - pattern: "[... for $ITEM in $ARRAY]"
+              - pattern: "[... for $ITEM in enumerate($ARRAY)]"
+          # Semgrep infers a type only from an annotation or a constructor, so an array of another origin escapes.
+          - metavariable-type:
+              metavariable: $ARRAY
+              types: [np.ndarray, numpy.ndarray]
+      - pattern: |
+          for $ITEM in np.$FUNCTION(...):
+              ...
+      - pattern: |
+          for $ITEM in enumerate(np.$FUNCTION(...)):
+              ...
+      - pattern: |
+          for $ITEM in range($ARRAY.shape[...]):
+              ...
+      - pattern: |
+          for $ITEM in range($ARRAY.size):
+              ...
+      - pattern: "[... for $ITEM in np.$FUNCTION(...)]"
