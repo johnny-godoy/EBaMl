@@ -6,7 +6,6 @@ import math
 import re
 from collections.abc import Callable, Iterator, Sequence
 from decimal import Decimal
-from typing import override
 
 import attrs
 import numpy as np
@@ -20,18 +19,12 @@ from ebaml.core.custom_types import FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
-from ebaml.local.covering_solvers import (
-    Cover,
-    CoveringProblem,
-    CoveringSearch,
-    Engine,
-    Exact,
-    Greedy,
-    Heuristic,
-    Stochastic,
-)
+from ebaml.local.covering_backend import Stop
+from ebaml.local.covering_problem import Cover, CoveringProblem
+from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearchCover, MipCover
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
+from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from tests.unit.ebaml.conftest import UnknownKind, fake_model, instance_of, returning
 
 CATEGORIES = ["p", "q", "r"]
@@ -455,13 +448,13 @@ def _brute_force_target_size(features: Sequence[local._Feature], scores: Sequenc
     return None
 
 
-TARGET_SEARCHES: list[CoveringSearch] = [
-    Exact(),
-    Exact(Engine.SCIP),
-    Exact(Engine.CP_SAT),
-    Heuristic(),
-    Stochastic(),
-    Greedy(),
+TARGET_SEARCHES: list[CoveringSolver] = [
+    MipCover(),
+    MipCover(OrToolsBackend(OrToolsSolver.SCIP)),
+    MipCover(OrToolsBackend(OrToolsSolver.CP_SAT)),
+    MipCover(stop=Stop.FIRST),
+    LocalSearchCover(),
+    GreedyCover(),
 ]
 
 
@@ -470,7 +463,7 @@ TARGET_SEARCHES: list[CoveringSearch] = [
 def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
     row: int,
     target: int,
-    search: CoveringSearch,
+    search: CoveringSolver,
 ) -> None:
     model, frame = _multiclass_model()
     instance = instance_of(frame, row)
@@ -496,7 +489,7 @@ def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
     assert counterfactual.lower_bound <= smallest
     if counterfactual.minimum:
         assert len(counterfactual.changes) == smallest
-    if isinstance(search, Exact):
+    if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
         assert counterfactual.minimum
         assert len(counterfactual.changes) == smallest
 
@@ -514,8 +507,10 @@ def _target_feature(name: str, rows: list[list[float]]) -> local._Feature:
     return local._Feature(name, graph, np.ones(len(rows)), 0, f"{name}0", np.ones(len(rows), dtype=bool))
 
 
-@pytest.mark.parametrize("engine", list(Engine))
-def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two(engine: Engine) -> None:
+@pytest.mark.parametrize("solver", list(OrToolsSolver))
+def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two(
+    solver: OrToolsSolver,
+) -> None:
     # Bin 1 of f0 alone makes c0 win against both rivals. Bin 2 of f0 has the larger sum of gains over the two margins
     # (13 against 12), and it covers neither margin alone, so a search that keeps only that bin needs f1 as well. The
     # covering problem has every bin as an alternative, so the search finds the one change and proves it smallest.
@@ -530,7 +525,7 @@ def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest
     margins = kind.target_margins("c0", frame)
     totals = local._Totals(scores, intercepts, 0.0)
     assert _brute_force_target_size(features, scores, 0) == 1
-    options = local.LocalOptions(search=Exact(engine))
+    options = local.LocalOptions(search=MipCover(OrToolsBackend(solver)))
     counterfactual = local._target_counterfactual(features, frame, margins, totals, options=options)
     assert counterfactual is not None
     assert counterfactual.new_decision == "c0"
@@ -540,15 +535,22 @@ def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest
 
 
 @attrs.frozen
-class _SeedSpy(Greedy):
-    """A greedy search that records the seed of each call."""
+class _SeedSpy:
+    """A ``CoveringSolver`` that runs the greedy and records the seed of each call."""
 
     seeds: list[int] = attrs.field(factory=list)
 
-    @override
     def solve(self, problem: CoveringProblem, *, seed: int) -> Cover | None:
+        """Record the seed, and solve with the greedy.
+
+        Returns
+        -------
+        Cover | None
+            The answer of ``GreedyCover``.
+
+        """
         self.seeds.append(seed)
-        return super().solve(problem, seed=seed)
+        return GreedyCover().solve(problem, seed=seed)
 
 
 def test_the_searches_get_the_seed_of_the_options(
@@ -1382,12 +1384,12 @@ def _interval_answer(interval: Interval, value: float) -> Callable[[float], bool
 
 
 @pytest.mark.parametrize("interval", [Interval(-1.5, 1.5), Interval(-0.7, 0.7), Interval(-3.5, 3.5)])
-@pytest.mark.parametrize("search", [Exact(), Greedy()], ids=repr)
+@pytest.mark.parametrize("search", [MipCover(), GreedyCover(), LocalSearchCover()], ids=repr)
 @pytest.mark.parametrize("row", list(itertools.product(CATEGORIES, repeat=3)))
 def test_regressor_interval_matches_brute_force(
     categorical_regressor: tuple[ExplainableBoostingRegressor, pd.DataFrame],
     row: tuple[str, ...],
-    search: CoveringSearch,
+    search: CoveringSolver,
     interval: Interval,
 ) -> None:
     ebm, _ = categorical_regressor
@@ -1418,7 +1420,7 @@ def test_regressor_interval_matches_brute_force(
     assert reason.lower_bound <= smallest
     if reason.minimum:
         assert len(chosen) == smallest
-    if isinstance(search, Exact):
+    if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
         assert reason.minimum
         assert len(chosen) == smallest
 
