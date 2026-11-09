@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.5'></a>
+## [0.6.5] - 2026-11-09
+
+### Added
+
+- The `ebaml-chat` command: a chat in the terminal with an agent that explains an EBM. Ask about the model or about one row of the data, and ask follow-up questions. The server starts once and stays up for the whole chat.
+- `chat_with_mcp` and `chat_with_tools` in BAML, and `ebaml.llm.descriptors.chat_with_mcp` in Python, for the same chat.
+
 <a id='changelog-0.6.4'></a>
 ## [0.6.4] - 2026-11-09
 
