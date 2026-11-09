@@ -5,6 +5,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | Script | What it does |
 | --- | --- |
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
+| `check_ignore_repeats.py` | Fails when one ignore rule has more than 5 sites outside the files that hold the shared fix. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
 | `mutant_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation.py`, so that they run first. |
@@ -59,6 +60,14 @@ uv run python -m scripts.compile_ignores -o ignores-report.md   # report to a fi
 
 `check_ignores` also runs as the `check-ignores` hook in `prek.toml`. Do not edit the scripts or the hook to make a
 violation pass. The finder shared by both is `ignore_sites.py`.
+
+`check_ignore_repeats` groups the workarounds by tool and rule. It fails when a rule has more than 5 sites, so that a
+repeated cause gets one shared fix. The sites in `SHARED_HOMES` do not count, and a tool in `UNLIMITED_TOOLS` has no
+limit. Both lists are in the script, with the reason for each. It runs as the `check-ignore-repeats` hook.
+
+```bash
+uv run python -m scripts.check_ignore_repeats                   # fails if a rule repeats too often
+```
 
 ## `check_abstractions.py`, `check_contract_overlap.py` and `check_new_clones.py`
 
