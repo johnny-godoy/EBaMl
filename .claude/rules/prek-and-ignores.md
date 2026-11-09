@@ -21,14 +21,42 @@ A workaround silences a tool instead of fixing the code: `# noqa`, `# type: igno
 `# pragma: no cover`, `# pragma: no mutate`, `pytest.mark.skip/skipif/xfail`, `pytest.skip()`, and ignore/exclude/omit
 settings in `pyproject.toml` or `cosmic-ray.toml`. Fix the root cause first; a workaround is a last resort.
 
-### Scope: inline first, config only for recurring patterns
+### Count before you add
 
-- A one-off or a handful of occurrences gets an **inline** ignore (`# noqa: RULE`, `# pyrefly: ignore[...]`, ...) on the
-  exact line, so each one is vetted at the place it applies and carries its own reason.
+A copied ignore hides its cause, and the copies grow with each feature. An audit found about 60 sites that were copies
+of four causes. So search first, and fix a cause that repeats once.
+
+- Before you add a workaround, run `rg` for its rule, or `uv run python -m scripts.compile_ignores`, and look for the
+  same rule with the same reason.
+- If three or more sites share one cause, fix the cause: a shared helper, a shared import, a fixture, or one config
+  entry with a `reason:` block that names the pattern. Do not add a third copy.
+- A workaround for one tool must not appease another tool with a trick, such as a call that exists only so that vulture
+  sees a caller. Use the tool's own mechanism (`ignore_names` for a hook that Python calls by name) or a better design.
+  A chain of workarounds hides the first cause.
+- The description of a pull request that adds an ignore states the new total from `compile_ignores`, and why no shared
+  fix applies. A reviewer can then see the growth.
+
+### Fix the cause by pattern
+
+| Repeated ignore | Shared fix |
+| --- | --- |
+| `suspicious-subprocess-import`, `subprocess-without-shell-equals-true` in `scripts/` or tests | `run_fixed` in `scripts/fixed_command.py`. A test that builds a git repository takes the `git` and `make_repo` fixtures of `tests/unit/scripts/conftest.py`. |
+| `implicit-reexport` of an `interpret.glassbox` class | Import it from `ebaml.core.ebm_classes`. |
+| `banned-api` for pandas or joblib in a test | The aliases and helpers of `tests/unit/ebaml/conftest.py`: `FittedClassifier`, `frame_of_columns`, `frame_of_rows`, `categorical`, `save_model`. A new test imports neither library. |
+| A vulture report of a hook that Python or pytest calls by name | `ignore_names` of `[tool.vulture]` in `pyproject.toml`. |
+
+`src/ebaml/llm/sdk_setup.py` keeps its own `subprocess` ignore, because `src/ebaml` must not import from `scripts/`. A
+need that the table does not cover is a new shared fix: build it once, then add a row.
+
+### Scope: inline for a one-off, shared fix for a repeat
+
+- A one-off gets an **inline** ignore (`# noqa: RULE`, `# pyrefly: ignore[...]`, ...) on the exact line, so each one is
+  vetted at the place it applies and carries its own reason.
+- The same ignore in three places is a recurring pattern. Apply the shared fix above, and do not add a third copy.
 - Config-level ignores (`per-file-ignores`, `ignore`, `exclude`, `omit`, `ignore_names`, ... in `pyproject.toml` or
   `cosmic-ray.toml`) are only for a **recurring pattern** that would otherwise need the same inline ignore over and over
   (e.g. `assert` in `tests/**`). Never use them to silence a rule for one function or a few lines in a source file.
-- Before adding a config-level ignore, check how many places it would cover; if it is only a few, go inline. If an
+- Before you add a config-level ignore, check how many places it covers. If it covers only a few, go inline. If an
   existing config-level ignore covers only a few places, convert it to inline ignores and remove the config entry.
 - The reason of a config-level ignore must name the recurring pattern it covers.
 
