@@ -1,6 +1,7 @@
 """Tests for the benchmark."""
 
 import inspect
+import io
 from pathlib import Path
 from typing import Protocol
 
@@ -236,6 +237,26 @@ def test_run_task_without_questions_asks_nothing() -> None:
     result = run_task(Task.JUMPS, [], ask)
     assert result.outcomes == ()
     assert result.accuracy == pytest.approx(0.0)
+
+
+def test_run_task_shows_a_progress_bar_that_counts_the_answered_questions(error_stream: io.StringIO) -> None:
+    questions = [Question("q1", "Increasing"), Question("q2", "Decreasing")]
+    run_task(Task.MONOTONICITY, questions, lambda **_: counted("Increasing", 1, 1), progress=True)
+
+    lines = error_stream.getvalue().splitlines()
+    assert [f"({step} of 2)" in lines[step] for step in range(3)] == [True] * 3
+    assert all(line.startswith("monotonicity ") for line in lines)
+
+
+def test_run_task_shows_no_progress_bar_by_default(error_stream: io.StringIO) -> None:
+    run_task(Task.MONOTONICITY, [Question("q1", "Increasing")], lambda **_: counted("Increasing", 1, 1))
+    assert not error_stream.getvalue()
+
+
+def test_run_task_without_questions_shows_no_bar(error_stream: io.StringIO) -> None:
+    # progressbar2 draws a spinner for a total of 0, which tells the reader nothing
+    run_task(Task.JUMPS, [], lambda **_: pytest.fail("no question is expected"), progress=True)
+    assert not error_stream.getvalue()
 
 
 def test_baml_function_satisfies_the_benchmark_protocols() -> None:
