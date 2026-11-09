@@ -3,6 +3,7 @@
 Code that passes every guard can still make an explanation less correct or less honest. The code, the proofs, the
 result types, the prompts and the docs must make the same claim about each explanation. These contracts protect that
 agreement. They apply to `src/ebaml/local/`, `src/ebaml/graphs/`, `baml_src/` and their tests and docs.
+`docs/plans/semantic-contracts.md` lists the plans that add the checks for each contract.
 
 ## Contracts
 
