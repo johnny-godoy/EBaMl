@@ -49,6 +49,7 @@ mcp = [
 ]
 
 [project.scripts]
+ebaml-chat = "ebaml.mcp.chat:main"
 ebaml-mcp = "ebaml.mcp.server:main"
 
 [project.urls]

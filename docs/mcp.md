@@ -177,9 +177,48 @@ The examples below come from a real session over stdio. The model is an EBM with
 An agent that asks for a feature that the model lacks, or for an interaction term, gets a tool error that names the
 features of the model.
 
+## Chat with the agent
+
+`ebaml-chat` opens a chat in the terminal. An LLM answers your questions with the tools of the server. Ask about the
+model, or about one row of the data, and ask follow-up questions. The command starts the server for you, so you need no
+other command.
+
+```bash
+ebaml-chat --model model.skops --data train.csv
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--model PATH` | The EBM in a skops file, or in a pickled or joblib file. This option is required. The same warning as for `ebaml-mcp` applies. |
+| `--data PATH` | A CSV file with the rows that you can ask about, by their number. |
+| `--llm PROVIDER/MODEL` | The LLM of the agent. See [Choosing the model](providers.md). The default model needs `OPENROUTER_API_KEY`. |
+| `--max-steps NUMBER` | The most rounds of tool calls for one answer. The default is `12`. |
+
+An empty line ends the chat. The server stays up for the whole chat, so only the first answer waits for it to start.
+After each answer, the chat prints the tools that the agent called, so you can check that the answer rests on tool
+results. This example is shortened:
+
+```text
+Ask about the model, or about one prediction. Press Enter on an empty line to leave.
+you> Explain the prediction for row 3 of the data.
+
+For row 3, the model predicts class 0 with a probability of 0.581. Age (34) pushes toward this prediction, and so
+does income (45.1). The smallest change that flips it to class 1 is to move age from 34 into [77.5, 78.5). ...
+
+(tools: explain_prediction)
+you> What would flip it?
+
+Only one change flips it: age from 34 into [77.5, 78.5). That change raises the score by 0.781 ...
+
+you>
+```
+
+The agent remembers the earlier messages of the chat, but not the results of earlier tool calls. It calls a tool again
+when it needs a number. A turn that fails, for example because of a rate limit, prints its error, and you can ask again.
+
 ## BAML agent
 
-BAML can act as the MCP client. `explain_with_mcp` starts `ebaml-mcp`, offers its tools to a language model, and lets
+`ebaml-chat` runs `chat_with_mcp`, a BAML function. BAML can act as the MCP client for one question too. `explain_with_mcp` starts `ebaml-mcp`, offers its tools to a language model, and lets
 the model call them. It returns the report and the names of the tools that the model called, in order. The agent needs
 the BAML toolchain and `OPENROUTER_API_KEY`, or a model that you choose with `model=`.
 
