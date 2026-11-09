@@ -1,11 +1,13 @@
 """Tests for the choice of the mutants that the mutation run executes."""
 
 import sqlite3
+import sys
 from contextlib import closing
 from pathlib import Path
 
 from coverage import CoverageData
 from scripts import mutation
+from scripts.fixed_command import run_fixed
 
 DIFF = """\
 diff --git a/src/ebaml/a.py b/src/ebaml/a.py
@@ -107,3 +109,11 @@ def test_build_coverage_map_lists_the_tests_of_each_line_of_the_given_modules(tm
     data.write()
     coverage = mutation.build_coverage_map(tmp_path / ".coverage", tmp_path, {"src/pkg/m.py"})
     assert coverage == {"src/pkg/m.py": {"1": [], "2": ["t.py::a"], "3": ["t.py::a", "t.py::b"]}}
+
+
+def test_the_script_starts_when_it_is_run_by_path() -> None:
+    # CI and the docs run `python scripts/mutation.py`. Then only the scripts directory is on the import path, so an
+    # import of `scripts.<module>` raised ModuleNotFoundError before the first line of main ran.
+    result = run_fixed([sys.executable, str(Path(mutation.__file__)), "--help"], cwd=Path(mutation.__file__).parents[1])
+    assert result.returncode == 0, result.stderr
+    assert "mutation testing" in result.stdout
