@@ -12,7 +12,8 @@ import sys
 from collections.abc import Iterable, Sequence
 
 USER_VISIBLE = ("src/ebaml/", "baml_src/", "benchmark/")
-NOT_USER_VISIBLE = ("baml_src/talk_to_ebm_test.baml", "baml_src/prompt_tests.baml")
+# every BAML test file, offline and live, lives under this directory
+NOT_USER_VISIBLE = ("baml_src/tests/",)
 FRAGMENT_DIRECTORY = "changelog.d/"
 
 
@@ -30,7 +31,7 @@ def is_user_visible(path: str) -> bool:
         True for a file of the package, of its BAML functions or of the benchmark command.
 
     """
-    return path.startswith(USER_VISIBLE) and path not in NOT_USER_VISIBLE
+    return path.startswith(USER_VISIBLE) and not path.startswith(NOT_USER_VISIBLE)
 
 
 def is_fragment(path: str) -> bool:

@@ -1,5 +1,6 @@
 # Tests of the rules in ebaml.yml. A comment that starts with the word ruleid marks a line that must match.
 import narwhals as nw
+import numpy as np
 
 
 def is_pandas(frame):
@@ -468,3 +469,49 @@ def loads_with_trust(path, types):
     # ok: ebaml-skops-load-trusted-true
     third = sio.load(path, trusted=types)
     return first, second, third
+
+
+def indexes_by_range_len(items, names):
+    # ruleid: ebaml-no-range-len
+    for index in range(len(items)):
+        names.append(items[index])
+    # ruleid: ebaml-no-range-len
+    tail = [items[index] for index in range(1, len(items))]
+    # ok: ebaml-no-range-len
+    for position, item in enumerate(items):
+        names.append((position, item))
+    # ok: ebaml-no-range-len
+    size_range = range(len(items) + 1)
+    # ok: ebaml-no-range-len
+    pairs = list(zip(items, names, strict=True))
+    return tail, size_range, pairs
+
+
+def loops_over_numpy(scores: np.ndarray, rows: list[float]):
+    total = 0.0
+    # ruleid: ebaml-numpy-loop-needs-reason
+    for score in scores:
+        total += score
+    # ruleid: ebaml-numpy-loop-needs-reason
+    for position, score in enumerate(scores):
+        total += position * score
+    # ruleid: ebaml-numpy-loop-needs-reason
+    for step in np.linspace(0, 1, 5):
+        total += step
+    # ruleid: ebaml-numpy-loop-needs-reason
+    for position in range(scores.shape[0]):
+        total += position
+    # ruleid: ebaml-numpy-loop-needs-reason
+    for position in range(scores.size):
+        total += position
+    # ruleid: ebaml-numpy-loop-needs-reason
+    doubled = [score * 2 for score in scores]
+    # ok: ebaml-numpy-loop-needs-reason
+    for row in rows:
+        total += row
+    # ok: ebaml-numpy-loop-needs-reason
+    summed = np.sum(scores)
+    # ok: ebaml-numpy-loop-needs-reason
+    for score in scores:  # nosemgrep: ebaml-numpy-loop-needs-reason -- each step uses the total of the step before
+        total = total * score
+    return total, doubled, summed

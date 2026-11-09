@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.5'></a>
+## [0.6.5] - 2026-11-09
+
+### Added
+
+- The `ebaml-chat` command: a chat in the terminal with an agent that explains an EBM. Ask about the model or about one row of the data, and ask follow-up questions. The server starts once and stays up for the whole chat.
+- `chat_with_mcp` and `chat_with_tools` in BAML, and `ebaml.llm.descriptors.chat_with_mcp` in Python, for the same chat.
+
+<a id='changelog-0.6.4'></a>
+## [0.6.4] - 2026-11-09
+
+### Changed
+
+- Internal loops in graph simplification, local explanations and the MCP model summary use `enumerate` and array conversion in place of index loops. The output stays the same.
+
+<a id='changelog-0.6.3'></a>
+## [0.6.3] - 2026-11-09
+
+### Added
+
+- `explain_with_mcp` in BAML: an agent that starts `ebaml-mcp`, lets a language model call its tools, and returns the report with the list of tool calls. `explain_with_tools` runs the same loop on tools that you supply.
+
+<a id='changelog-0.6.2'></a>
+## [0.6.2] - 2026-11-09
+
+### Changed
+
+- Local explanation prompts no longer overclaim. A failed counterfactual search says that no realistic change flips the prediction. A missing sufficient reason says that the search found none. Completion shares may fall as inputs become known.
+
 <a id='changelog-0.6.1'></a>
 ## [0.6.1] - 2026-11-09
 

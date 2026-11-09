@@ -147,7 +147,7 @@ def _(EBMGraph, features, kinds, mo, models, np):
     differences = []
     for model_name, model in models.items():
         total = np.asarray(model.intercept_, dtype=float) + np.zeros((len(first), len(kinds[model_name].outputs)))
-        for feature_index in range(len(features.columns)):
+        for feature_index, _ in enumerate(features.columns):
             graph_scores = np.asarray(EBMGraph.from_ebm(model, feature_index, use_feature_bounds=False).scores)
             # the bin of each value, from the cut points of the EBM (one bin per interval)
             cuts = np.asarray(model.bins_[feature_index][0], dtype=float)

@@ -18,7 +18,14 @@ def test_package_prompt_and_benchmark_files_are_user_visible(path: str) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["tests/unit/ebaml/test_init.py", "baml_src/talk_to_ebm_test.baml", "baml_src/prompt_tests.baml", "README.md"],
+    [
+        "tests/unit/ebaml/test_init.py",
+        "baml_src/tests/support.baml",
+        "baml_src/tests/model_spec_test.baml",
+        "baml_src/tests/mcp_agent_test.baml",
+        "baml_src/tests/live/prompts.baml",
+        "README.md",
+    ],
 )
 def test_tests_and_docs_are_not_user_visible(path: str) -> None:
     assert not check_fragment.is_user_visible(path)

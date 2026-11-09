@@ -722,7 +722,7 @@ def _build_app(sampler: Sampler | None) -> cyclopts.App:
             return 2
         samples_path.parent.mkdir(parents=True, exist_ok=True)
         texts = graph_texts([
-            EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index in range(len(ebm.feature_names_in_))
+            EBMGraph.from_ebm(ebm, index) for ebm in build_ebms() for index, _ in enumerate(ebm.feature_names_in_)
         ])
         written = 0
         records = collect(texts, sampler or _real_sampler(model), count)

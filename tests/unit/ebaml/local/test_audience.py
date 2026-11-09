@@ -22,7 +22,7 @@ AUDIENCE_METHODS = [
     "lower_bound",
     "share",
 ]
-PROMPT_TESTS = Path(__file__).parents[4] / "baml_src" / "prompt_tests.baml"
+PROMPT_TESTS = Path(__file__).parents[4] / "baml_src" / "tests" / "live" / "prompts.baml"
 
 
 @pytest.mark.parametrize(

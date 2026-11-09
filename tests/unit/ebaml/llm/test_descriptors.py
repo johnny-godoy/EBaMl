@@ -1432,3 +1432,35 @@ def test_an_async_sdk_function_fails_the_fake_with_the_way_to_fix_it(monkeypatch
     monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_functions", lambda: frozenset({"describe"}))
     with pytest.raises(AssertionError, match=r"baml_sdk\.describe is async.*scripts/baml_toolchain\.py"):
         sdk_signature("describe")
+
+
+def test_chat_with_mcp_sends_the_server_command_the_model_and_the_step_limit(
+    checked_models: list[baml_sdk.ModelSpec],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(baml_sdk, "chat_with_mcp", fake_sdk("chat_with_mcp", appending(calls, 3)))
+    answered = descriptors.chat_with_mcp("python", ("-c", "server"), "openai/gpt-4o-mini", max_steps=4)
+    assert answered == 3
+    assert calls[0]["command"] == "python"
+    assert calls[0]["args"] == ["-c", "server"]
+    assert (calls[0]["model"].provider, calls[0]["model"].model) == ("openai", "gpt-4o-mini")
+    assert calls[0]["max_steps"] == 4
+    assert [spec.model for spec in checked_models] == ["gpt-4o-mini"]
+
+
+def test_chat_with_mcp_uses_the_default_clients_without_a_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(baml_sdk, "chat_with_mcp", fake_sdk("chat_with_mcp", appending(calls, 0)))
+    assert descriptors.chat_with_mcp("python", []) == 0
+    assert calls[0]["model"] is None
+    assert calls[0]["max_steps"] == 12
+
+
+def test_chat_with_mcp_turns_a_missing_key_into_an_error_with_fix_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(**_kw: object) -> int:
+        raise _missing_key_error()
+
+    monkeypatch.setattr(baml_sdk, "chat_with_mcp", fake_sdk("chat_with_mcp", refuse))
+    with pytest.raises(MissingAPIKeyError):
+        descriptors.chat_with_mcp("python", [])

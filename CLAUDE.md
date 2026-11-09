@@ -17,7 +17,7 @@ uv sync
 baml generate                      # run after every .baml change; writes src/baml_sdk/ (gitignored, generated)
 baml fmt && baml check             # format and compile-check .baml files
 OPENROUTER_API_KEY=unused baml test -x root::Live   # offline BAML tests on a scripted client; the variable must exist
-baml test -i root::Live            # live prompt tests (baml_src/prompt_tests.baml); send real requests, need a real key
+baml test -i root::Live            # live prompt tests (baml_src/tests/live/); send real requests, need a real key
 uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
@@ -61,7 +61,8 @@ The boundary between the two languages is the generated `baml_sdk` package.
   connects this code to `baml_sdk` (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
 - `src/ebaml/benchmark.py` and `benchmark/` follow the TalkToEBM benchmark. `is_correct` parses and compares
   values.
-- `baml_src/talk_to_ebm_test.baml` holds the offline BAML tests. `notebooks/` uses marimo. `docs/` uses Zensical
+- `baml_src/tests/` holds the BAML tests: one `<source>_test.baml` for each source file, `support.baml` for the fakes that
+  several files share, and `live/` for the tests that send real requests. `notebooks/` uses marimo. `docs/` uses Zensical
   (`zensical.toml`) and includes README sections through `--8<--` markers, so keep the markers intact.
 </architecture>
 
@@ -75,6 +76,7 @@ module. import-linter, `scripts/check_layout.py` and the semgrep rules in `semgr
 <conventions>
 Rules in `.claude/rules/` load automatically. Follow them, and keep these points in mind:
 
+- Read `.claude/rules/semantic-contracts.md` before you change an explanation, a prompt or a proof-covered algorithm.
 - Run `prek run --all-files` before you report a task as done. The hooks enforce the project's quality bar.
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
