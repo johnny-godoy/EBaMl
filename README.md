@@ -273,7 +273,8 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
   Free models are rate limited, so lower it (`describe_ebm(ebm, max_concurrency=2)`) if you see rate-limit errors.
 - **Progress:** `describe_ebm(ebm, progress_bar=True)` shows a progress bar on the error stream. It counts one step for
   each feature and one for the summary. If the error stream is not a terminal, the bar writes one line for each step,
-  so a log file or an agent that polls the console sees the progress.
+  so a log file or an agent that polls the console sees the progress. `benchmark/run.py` shows a bar by default. Use
+  `--no-progress` to turn it off.
 - **Token budget:** there is no tokenizer before a call, so the check estimates the tokens of a graph text from its
   words and its digits. The default weights are 4.13 tokens for each word and 0.27 for each digit. They come from 100
   graph texts that one current model counted. The estimate has a margin above the fit, so it is more often too high

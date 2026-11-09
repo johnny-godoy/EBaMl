@@ -1,8 +1,8 @@
 """Run the benchmark against an LLM.
 
-Usage: ``uv run python benchmark/run.py [--task TASK ...] [--limit N] [--model PROVIDER/MODEL] [--output FILE]``. Makes
-real requests. The default model is OpenRouter's ``openrouter/free``, which needs ``OPENROUTER_API_KEY`` (see the
-README). ``--model`` selects another model, and the key variable of its provider.
+Usage: ``uv run python benchmark/run.py [--task TASK ...] [--limit N] [--model PROVIDER/MODEL] [--output FILE]
+[--no-progress]``. Makes real requests. The default model is OpenRouter's ``openrouter/free``, which needs
+``OPENROUTER_API_KEY`` (see the README). ``--model`` selects another model, and the key variable of its provider.
 """
 
 import functools
@@ -68,6 +68,7 @@ def run(
     ]
     | None = None,
     output: Path | None = None,
+    progress: bool = True,
 ) -> int:
     """Run the tasks, print the table of results, and optionally save every response.
 
@@ -81,6 +82,9 @@ def run(
         The model as provider/model, for example anthropic/claude-haiku-4-5. The default is openrouter/free.
     output: Path, optional
         Write every question, response and verdict to this JSON file.
+    progress: bool
+        Show a progress bar on the error stream. If that stream is not a terminal, the bar writes one line for each
+        question. Use ``--no-progress`` to turn it off.
 
     Returns
     -------
@@ -89,7 +93,9 @@ def run(
 
     """
     ask = functools.partial(baml_sdk.answer_benchmark_question, model=model)
-    results = [run_task(each, load_questions(each, DATA_DIR)[:limit], ask) for each in task or list(Task)]
+    results = [
+        run_task(each, load_questions(each, DATA_DIR)[:limit], ask, progress=progress) for each in task or list(Task)
+    ]
     sys.stdout.write(format_results(results) + "\n")
     if output:
         output.write_bytes(orjson.dumps([attrs.asdict(result) for result in results], option=orjson.OPT_INDENT_2))
