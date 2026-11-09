@@ -30,6 +30,9 @@ of four causes. So search first, and fix a cause that repeats once.
   same rule with the same reason.
 - If three or more sites share one cause, fix the cause: a shared helper, a shared import, a fixture, or one config
   entry with a `reason:` block that names the pattern. Do not add a third copy.
+- `scripts/check_ignore_repeats.py` (the `check-ignore-repeats` hook) fails when one rule has more than 5 sites outside
+  the shared homes. Fix the cause. Do not add a file to `SHARED_HOMES` or a tool to `UNLIMITED_TOOLS` to pass it, unless
+  that file holds the shared fix of the cause.
 - A workaround for one tool must not appease another tool with a trick, such as a call that exists only so that vulture
   sees a caller. Use the tool's own mechanism (`ignore_names` for a hook that Python calls by name) or a better design.
   A chain of workarounds hides the first cause.
@@ -43,6 +46,7 @@ of four causes. So search first, and fix a cause that repeats once.
 | `suspicious-subprocess-import`, `subprocess-without-shell-equals-true` in `scripts/` or tests | `run_fixed` in `scripts/fixed_command.py`. A test that builds a git repository takes the `git` and `make_repo` fixtures of `tests/unit/scripts/conftest.py`. |
 | `implicit-reexport` of an `interpret.glassbox` class | Import it from `ebaml.core.ebm_classes`. |
 | `banned-api` for pandas or joblib in a test | The aliases and helpers of `tests/unit/ebaml/conftest.py`: `FittedClassifier`, `frame_of_columns`, `frame_of_rows`, `categorical`, `save_model`. A new test imports neither library. |
+| `too-many-arguments` on a function that takes a model, its settings and option sets | One `@attrs.frozen` request class, as `DescribeEBMRequest` in `ebaml/llm/requests.py` and `ShrinkingGraphCall` in `ebaml/llm/retry.py`. Give it keyword-only option fields. |
 | A vulture report of a hook that Python or pytest calls by name | `ignore_names` of `[tool.vulture]` in `pyproject.toml`. |
 
 `src/ebaml/llm/sdk_setup.py` keeps its own `subprocess` ignore, because `src/ebaml` must not import from `scripts/`.
@@ -81,5 +85,6 @@ Verify with `uv run python -m scripts.check_ignores` (also runs as the `check-ig
 place, run `uv run python -m scripts.compile_ignores` (Markdown to stdout, or `-o FILE`).
 
 Do not edit `scripts/ignore_sites.py`, `scripts/check_ignores.py` or the `check-ignores` hook to make a violation pass.
+The same holds for `scripts/check_ignore_repeats.py` and its hook.
 
 Exempt: generated code in `src/baml_sdk/`, `.pyi` files and `baml_src/`.
