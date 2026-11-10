@@ -95,13 +95,12 @@ hooks = [
   },
   {
     id = "jscpd",
-    name = "jscpd: copy-paste in src stays under 1%",
+    name = "jscpd: src has no copy-paste clone",
     language = "node",
     additional_dependencies = ["jscpd@5.4.2"],
-    # This hook keeps the total share under 1% and needs no git history. A small new clone can still pass beneath that
-    # limit, so check-new-clones (CI and the manual stage) fails on each clone that the base branch lacks. Tests repeat
-    # setup on purpose, so they are not scanned.
-    entry = "jscpd src --format python --min-tokens 50 --min-lines 5 --threshold 1 --reporters console --no-colors",
+    # This hook fails on any clone (threshold 0) and needs no git history. check-new-clones (CI and the manual stage)
+    # reports the clones that the base branch lacks. Tests repeat setup on purpose, so they are not scanned.
+    entry = "jscpd src --format python --min-tokens 50 --min-lines 5 --threshold 0 --reporters console --no-colors",
     files = "^src/.*\\.py$",
     pass_filenames = false,
     priority = 44,
