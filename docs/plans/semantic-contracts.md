@@ -10,7 +10,6 @@ does now, so the implementing agent knows which parts of the review were already
 | Order | Plan | Contract | Main gap found |
 | --- | --- | --- | --- |
 | 2 | [confidence-semantics](confidence-semantics.md) | 7 | The module docstring of `facts.py` says that every score moves by `z`. The paper records that this is false. |
-| 3 | [proof-oracles](proof-oracles.md) | 1 | The brute-force tests run only at `confidence_level=0` and `min_support=0`, so no oracle checks the robust part of the model in the paper. |
 | 4 | [guarantee-strength](guarantee-strength.md) | 2 | The docstrings of `Counterfactual` and `compute_local_facts` describe guarantees and model kinds that the code does not have. |
 | 5 | [model-consistency](model-consistency.md) | 5 | The checks against `ebm.predict` use a few fixed rows of two fitted models. |
 | 6 | [completion-sampling](completion-sampling.md) | 6 | A test asserts that the share grows, and no test compares the estimate with an exact count. |

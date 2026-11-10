@@ -38,6 +38,18 @@ from tests.unit.ebaml.conftest import (
     instance_of,
     returning,
 )
+from tests.unit.ebaml.local.conftest import (
+    CONFIDENCE_LEVELS,
+    MIN_SUPPORTS,
+    FittedModel,
+    SmallModel,
+    Templates,
+    build_ebm,
+    feature_name,
+    model_cases,
+    model_scores,
+    oracle_problem,
+)
 
 CATEGORIES = ["p", "q", "r"]
 NAMES = ["f0", "f1", "f2"]
@@ -1493,3 +1505,73 @@ def test_no_reason_with_several_margins_when_all_features_are_not_enough() -> No
 
 def test_the_reveal_order_of_several_margins_ranks_by_the_smallest_gain() -> None:
     assert local._by_smallest_gain([[1.0, 4.0, 2.0], [3.0, 4.0, 0.5]]) == [1, 0, 2]
+
+
+def _decision(limits: Sequence[float]) -> Threshold | Interval | None:
+    """Build the question of a regressor from its limits.
+
+    Returns
+    -------
+    Threshold | Interval | None
+        ``None`` for no limit, a threshold for one limit, an interval for two.
+
+    """
+    if not limits:
+        return None
+    return Threshold(limits[0]) if len(limits) == 1 else Interval(limits[0], limits[1])
+
+
+def _small_facts(
+    templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    *,
+    confidence_level: float,
+    min_support: float,
+) -> tuple[FittedModel, local.LocalFacts]:
+    model, limits = case
+    ebm = build_ebm(templates, model)
+    # the completions are not under test here, so the sample is tiny
+    options = local.LocalOptions(
+        confidence_level=confidence_level,
+        min_support=min_support,
+        decision=_decision(limits),
+        n_samples=8,
+        max_steps=0,
+    )
+    return ebm, local.compute_local_facts(ebm, model.instance, options)
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+)
+def test_the_facts_match_the_oracle_of_the_paper(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+) -> None:
+    # contract 1: the code computes what the paper proves, with scores that move and bins that are left out
+    model, limits = case
+    ebm, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    assert model_scores(ebm, [model.instance])[0] == pytest.approx(model.output_scores(model.instance_bins))
+    problem = oracle_problem(model, confidence_level=confidence_level, min_support=min_support, limits=limits)
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+
+    counterfactual = facts.counterfactual
+    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
+    if counterfactual is not None:
+        # a tie can give another set of the same size, so the oracle checks the set and not its members
+        assert problem.flips([names.index(change.feature) for change in counterfactual.changes])
+        assert counterfactual.minimum is True
+        assert counterfactual.lower_bound == len(counterfactual.changes)
+
+    reason = facts.sufficient_reason
+    assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
+    if reason is not None:
+        guaranteed = problem.worst_case_margin([names.index(name) for name in reason.features])
+        assert guaranteed > 0
+        assert reason.guaranteed_margin == pytest.approx(guaranteed)
+        assert reason.minimum is True
