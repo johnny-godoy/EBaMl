@@ -468,6 +468,32 @@ def decision_key(model: SmallModel, bins: Sequence[int], limits: Sequence[float]
     return tuple(totals[0] > limit for limit in limits or (default_limit,))
 
 
+def exact_share(model: SmallModel, known: Sequence[int], limits: Sequence[float] = ()) -> float:
+    """Count the completions that keep the decision of the instance, weighted by the training weight of each bin.
+
+    The known features keep the bin of the instance. Every bin of an unknown feature counts, with its share of the
+    weight of the feature, and the features are independent.
+
+    Returns
+    -------
+    float
+        The exact share that the count-completions steps estimate.
+
+    """
+    kept = decision_key(model, model.instance_bins, limits)
+    unknown = [feature for feature, _ in enumerate(model.weights) if feature not in known]
+    share = 0.0
+    for bins in itertools.product(*(range(model.shape[feature]) for feature in unknown)):
+        completion = list(model.instance_bins)
+        probability = 1.0
+        for feature, bin_index in zip(unknown, bins, strict=True):
+            completion[feature] = bin_index
+            probability *= model.weights[feature][bin_index] / sum(model.weights[feature])
+        if decision_key(model, completion, limits) == kept:
+            share += probability
+    return share
+
+
 def deviation_count(confidence_level: float) -> float:
     """Return the number of deviations of a confidence level, as the paper defines it.
 
