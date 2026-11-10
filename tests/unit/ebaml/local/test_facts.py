@@ -1575,3 +1575,120 @@ def test_the_facts_match_the_oracle_of_the_paper(
         assert guaranteed > 0
         assert reason.guaranteed_margin == pytest.approx(guaranteed)
         assert reason.minimum is True
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    case=model_cases(),
+    levels=st.lists(st.sampled_from([0.0, 0.5, 0.8, 0.95, 0.99]), min_size=2, max_size=2, unique=True).map(sorted),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+)
+def test_more_confidence_never_makes_a_claim_easier(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    levels: list[float],
+    min_support: float,
+) -> None:
+    # contract 7: more uncertainty never turns a failed claim into a valid one, and never shrinks a proved set
+    _, low = _small_facts(small_templates, case, confidence_level=levels[0], min_support=min_support)
+    _, high = _small_facts(small_templates, case, confidence_level=levels[1], min_support=min_support)
+    assert low.prediction.decision == high.prediction.decision
+    assert high.prediction.lower <= low.prediction.lower + TOLERANCE
+    assert high.prediction.upper >= low.prediction.upper - TOLERANCE
+
+    if high.counterfactual is not None:
+        assert low.counterfactual is not None
+        assert len(low.counterfactual.changes) <= len(high.counterfactual.changes)
+    if high.sufficient_reason is not None:
+        assert low.sufficient_reason is not None
+        assert low.sufficient_reason.minimum is True
+        assert high.sufficient_reason.minimum is True
+        assert len(low.sufficient_reason.features) <= len(high.sufficient_reason.features)
+        # sorting gives the set with the largest guaranteed margin of its size, so two sets of one size compare
+        if case[0].kind == "binary" and len(low.sufficient_reason.features) == len(high.sufficient_reason.features):
+            assert high.sufficient_reason.guaranteed_margin <= low.sufficient_reason.guaranteed_margin + TOLERANCE
+
+
+def _tie_model(instance_score: float) -> SmallModel:
+    """Build a binary model with two bins of one feature that matter: the instance and a bin with the score zero.
+
+    Returns
+    -------
+    SmallModel
+        A model whose logit is ``instance_score`` for the instance and exactly zero after the one possible change.
+
+    """
+    return SmallModel(
+        kind="binary",
+        scores=[[[instance_score], [0.0]], [[0.0], [0.0], [0.0]]],
+        deviations=[[[0.0], [0.0]], [[0.0], [0.0], [0.0]]],
+        weights=[[1.0, 1.0], [1.0, 1.0, 1.0]],
+        intercepts=[0.0],
+        instance_bins=[0, 0],
+    )
+
+
+@pytest.mark.parametrize("instance_score", [1.0, -1.0])
+def test_a_change_that_lands_on_a_logit_of_zero_is_not_called_a_flip(
+    small_templates: Templates,
+    instance_score: float,
+) -> None:
+    # a logit of zero belongs to the first class. The facts claim a flip only below zero, so a tie is never a claim
+    # for the side that the tie rule gives to the other decision.
+    model = _tie_model(instance_score)
+    options = local.LocalOptions(confidence_level=0, min_support=0)
+    facts = local.compute_local_facts(build_ebm(small_templates, model), model.instance, options)
+    assert facts.prediction.margin == pytest.approx(1.0)
+    assert facts.counterfactual is None
+    # the worst completion has the margin zero, and a guarantee needs a margin above zero
+    assert facts.sufficient_reason is not None
+    assert facts.sufficient_reason.features == [feature_name(0)]
+
+
+def test_a_prediction_on_a_logit_of_zero_has_no_guarantee(small_templates: Templates) -> None:
+    model = _tie_model(0.0)
+    ebm = build_ebm(small_templates, model)
+    facts = local.compute_local_facts(ebm, model.instance, local.LocalOptions(confidence_level=0, min_support=0))
+    assert facts.prediction.decision == ebm.predict(frame_of_rows([model.instance]))[0] == ebm.classes_[0]
+    assert facts.prediction.margin == pytest.approx(0.0)
+    assert facts.counterfactual is None
+    assert facts.sufficient_reason is None
+
+
+@settings(max_examples=60, deadline=None)
+@given(case=model_cases(), min_support=st.sampled_from(MIN_SUPPORTS))
+def test_scores_without_deviation_give_the_same_claims_at_every_confidence(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    min_support: float,
+) -> None:
+    model, limits = case
+    certain = attrs.evolve(
+        model,
+        deviations=[[[0.0 for _ in outputs] for outputs in feature] for feature in model.deviations],
+    )
+    _, nominal = _small_facts(small_templates, (certain, limits), confidence_level=0.0, min_support=min_support)
+    _, strict = _small_facts(small_templates, (certain, limits), confidence_level=0.99, min_support=min_support)
+    assert strict.counterfactual == nominal.counterfactual
+    assert strict.sufficient_reason == nominal.sufficient_reason
+    assert strict.prediction.lower == pytest.approx(strict.prediction.output)
+    assert strict.prediction.upper == pytest.approx(strict.prediction.output)
+
+
+@settings(max_examples=60, deadline=None)
+@given(case=model_cases(), min_support=st.sampled_from(MIN_SUPPORTS))
+def test_a_confidence_level_close_to_one_keeps_the_claims_of_the_paper(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    min_support: float,
+) -> None:
+    confidence_level = 1 - 1e-9
+    model, limits = case
+    _, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    problem = oracle_problem(model, confidence_level=confidence_level, min_support=min_support, limits=limits)
+    counterfactual, reason = facts.counterfactual, facts.sufficient_reason
+    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
+    assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
+    assert math.isfinite(facts.prediction.lower)
+    assert math.isfinite(facts.prediction.upper)
+    assert facts.prediction.lower <= facts.prediction.output <= facts.prediction.upper
