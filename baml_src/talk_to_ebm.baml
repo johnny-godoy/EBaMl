@@ -75,6 +75,27 @@ function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
     msg + `<task>\n${opts.task_description}\n</task>`
 }
 
+// The parts of the model that a description leaves out. The reader of a description cannot see a log warning, so the
+// text itself must name them. An empty list gives no block, so a model without such parts gets no text about them.
+function omitted_parts_msg(omitted_terms: string[], omitted_features: string[]) -> string {
+    if (omitted_terms.length() + omitted_features.length() == 0) {
+        return "";
+    };
+    let msg = "<omitted_parts>\nThe graph descriptions cover the main effect of one feature at a time.\n";
+    if (omitted_terms.length() > 0) {
+        msg
+            = msg
+                + `The model also has these interaction terms, and no graph description covers them: ${omitted_terms.join(", ")}.\n`;
+    };
+    if (omitted_features.length() > 0) {
+        msg
+            = msg
+                + `These features have no main effect in the model, and no graph description covers them: ${omitted_features.join(", ")}.\n`;
+    };
+    msg
+        + "Say in one sentence that your answer leaves these parts out, and name each of them, because the reader must know that the answer does not cover the whole model.\n</omitted_parts>\n\n"
+}
+
 function summarize_ebm_system_msg(expert_description: string) -> string {
     `You are ${expert_description}. You provide an overall summary of a Generalized Additive Model (GAM). The model consists of different graphs, and each graph shows the effect of one input feature. Answer in plain prose paragraphs, because a person reads your answer.`
 }
@@ -83,6 +104,8 @@ function summarize_ebm_msg(
     feature_importances: string,
     graph_descriptions: string,
     dataset_description: string,
+    omitted_terms: string[] = [],
+    omitted_features: string[] = [],
 ) -> string {
     let msg = `
         <feature_importances>
@@ -98,6 +121,7 @@ function summarize_ebm_msg(
         msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
     msg
+        + omitted_parts_msg(omitted_terms, omitted_features)
         + `
             <instructions>
             Summarize the model. The feature importances are global, and there is exactly one graph description for each feature.
@@ -116,14 +140,15 @@ function surprises_request() -> string {
     `
 }
 
-function final_description_request(num_sentences: int) -> string {
-    `
-        <instructions>
-                Describe the graph in at most ${num_sentences} sentences.
-                Include the important surprising patterns, because the reader uses them to decide where to look closer.
-                The reader knows that the graph is from a Generalized Additive Model (GAM), so leave that background out.
-                </instructions>
-    `
+function final_description_request(num_sentences: int, omitted_terms: string[] = []) -> string {
+    omitted_parts_msg(omitted_terms, [])
+        + `
+            <instructions>
+                    Describe the graph in at most ${num_sentences} sentences.
+                    Include the important surprising patterns, because the reader uses them to decide where to look closer.
+                    The reader knows that the graph is from a Generalized Additive Model (GAM), so leave that background out.
+                    </instructions>
+        `
 }
 
 // describe_graph_cot, turn 1: system + describe_graph prompt.
@@ -159,6 +184,7 @@ function GraphFinalDescription(
     surprises: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    omitted_terms: string[] = [],
 ) -> string {
     client: Router
     prompt: `
@@ -173,7 +199,7 @@ function GraphFinalDescription(
         ${role("assistant")}
         ${surprises}
         ${role("user")}
-        ${final_description_request(num_sentences)}
+        ${final_description_request(num_sentences, omitted_terms = omitted_terms)}
     `
 }
 
@@ -182,13 +208,15 @@ function EbmSummaryDraft(
     feature_importances: string,
     graph_descriptions: string,
     opts: GraphPromptOptions,
+    omitted_terms: string[] = [],
+    omitted_features: string[] = [],
 ) -> string {
     client: RouterLong
     prompt: `
         ${role("system")}
         ${summarize_ebm_system_msg(opts.expert_description)}
         ${role("user")}
-        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description)}
+        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features)}
     `
 }
 
@@ -199,18 +227,20 @@ function EbmSummaryShorten(
     draft: string,
     num_sentences: int,
     opts: GraphPromptOptions,
+    omitted_terms: string[] = [],
+    omitted_features: string[] = [],
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${summarize_ebm_system_msg(opts.expert_description)}
         ${role("user")}
-        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description)}
+        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features)}
         ${role("assistant")}
         ${draft}
         ${role("user")}
         <instructions>
-        Shorten your summary to at most ${num_sentences} sentences. Keep the most important information, because the reader wants the main effects and surprises.
+        Shorten your summary to at most ${num_sentences} sentences. Keep the most important information, because the reader wants the main effects and surprises. If the input has an <omitted_parts> block, keep the sentence that names the parts that the summary leaves out, because the reader must know that the summary does not cover the whole model.
         </instructions>
     `
 }
@@ -350,6 +380,7 @@ function describe_graph_cot(
     opts: GraphPromptOptions,
     client: ai.Client? = null,
     model: ModelSpec? = null,
+    omitted_terms: string[] = [],
 ) -> Counted {
     //# Three sequential assistant turns, each seeing the previous replies
     let long = select_client(client, model, long_defaults());
@@ -357,7 +388,7 @@ function describe_graph_cot(
     let first_pass = run_counted(GraphFirstPass@spec(graph, opts), client = long);
     let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts), client = short);
     let final = run_counted(
-        GraphFinalDescription@spec(graph, first_pass.text, surprises.text, num_sentences, opts),
+        GraphFinalDescription@spec(graph, first_pass.text, surprises.text, num_sentences, opts, omitted_terms = omitted_terms),
         client = short,
     );
     Counted {
@@ -374,23 +405,39 @@ function summarize_ebm(
     opts: GraphPromptOptions,
     client: ai.Client? = null,
     model: ModelSpec? = null,
+    omitted_terms: string[] = [],
+    omitted_features: string[] = [],
 ) -> Counted {
     let draft = run_counted(
-        EbmSummaryDraft@spec(feature_importances, graph_descriptions, opts),
+        EbmSummaryDraft@spec(
+            feature_importances,
+            graph_descriptions,
+            opts,
+            omitted_terms = omitted_terms,
+            omitted_features = omitted_features,
+        ),
         client = select_client(client, model, long_defaults()),
     );
     if (num_sentences == null) {
         return draft;
     };
     let shortened = run_counted(
-        EbmSummaryShorten@spec(feature_importances, graph_descriptions, draft.text, num_sentences, opts),
+        EbmSummaryShorten@spec(
+            feature_importances,
+            graph_descriptions,
+            draft.text,
+            num_sentences,
+            opts,
+            omitted_terms = omitted_terms,
+            omitted_features = omitted_features,
+        ),
         client = select_client(client, model, short_defaults()),
     );
     Counted { text: shortened.text, usage: add_usage(draft.usage, shortened.usage) }
 }
 
 // Full EBM description: one chain per feature graph (concurrently), then the summary.
-// `graphs[i]` is the text of the graph of `feature_names[i]`.
+// `graphs[i]` is the text of the graph of `feature_names[i]`. The summary names `omitted_terms` and `omitted_features`.
 function describe_ebm(
     feature_names: string[],
     graphs: string[],
@@ -401,6 +448,8 @@ function describe_ebm(
     opts: GraphPromptOptions,
     client: ai.Client? = null,
     model: ModelSpec? = null,
+    omitted_terms: string[] = [],
+    omitted_features: string[] = [],
 ) -> Counted {
     if (feature_names.length() != graphs.length()) {
         throw baml.errors.InvalidArgument { message: "feature_names and graphs must have the same length" };
@@ -424,7 +473,16 @@ function describe_ebm(
         i = i + 1;
     }
     //# Summarize all the per-graph descriptions
-    let summary = summarize_ebm(feature_importances, lines.join("\n\n"), num_sentences, opts, client = client, model = model);
+    let summary = summarize_ebm(
+        feature_importances,
+        lines.join("\n\n"),
+        num_sentences,
+        opts,
+        client = client,
+        model = model,
+        omitted_terms = omitted_terms,
+        omitted_features = omitted_features,
+    );
     Counted { text: summary.text, usage: add_usage(usage, summary.usage) }
 }
 
