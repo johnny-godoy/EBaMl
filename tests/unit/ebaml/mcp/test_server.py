@@ -5,6 +5,7 @@ import asyncio
 import socket
 import sys
 from pathlib import Path
+from typing import Any
 
 import anyio
 import orjson
@@ -23,7 +24,15 @@ from ebaml.mcp import model_store
 from ebaml.mcp import server as server_module
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.server import create_server, main
-from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of, save_model
+from tests.unit.ebaml.conftest import (
+    PARTIAL_CASES,
+    PARTIAL_KINDS,
+    REMOVED_FEATURE,
+    FittedClassifier,
+    as_frame,
+    instance_of,
+    save_model,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -450,3 +459,29 @@ async def _tool_names_when_ready(url: str) -> set[str]:
         except (OSError, ExceptionGroup):
             await asyncio.sleep(0.5)
     pytest.fail("the HTTP server did not start in 30 seconds")
+
+
+@pytest.mark.parametrize("case", PARTIAL_CASES)
+@pytest.mark.parametrize("kind", PARTIAL_KINDS)
+async def test_the_tools_name_or_reject_a_model_that_they_cover_in_part(
+    partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
+    kind: str,
+    case: str,
+) -> None:
+    # contract 4: the summary names the interaction terms, the feature list has the features with a graph only, and
+    # the explain tool gives an error and no partial answer
+    ebm, data = partial_models[kind, case]
+    server = create_server(ModelStore(ebm=ebm))
+    summary = orjson.loads((await _call(server, "get_model_summary"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])
+    names = list(ebm.feature_names_in_)
+    interactions = [" x ".join(names[index] for index in term) for term in ebm.term_features_ if len(term) > 1]
+    with_graph = {names[term[0]] for term in ebm.term_features_ if len(term) == 1}
+    assert summary["skipped_terms"] == interactions
+    assert len(interactions) == (1 if case == "interaction" else 0)
+    assert summary["feature_count"] == len(with_graph)
+    assert {feature["name"] for feature in features} == with_graph
+    assert (REMOVED_FEATURE in with_graph) == (case == "interaction")
+    is_error, message = await _call(server, "explain_prediction", {"instance": instance_of(data, 0)})
+    assert is_error
+    assert ("without interactions" if case == "interaction" else "main-effect term for every feature") in message

@@ -2,6 +2,7 @@
 
 import ast
 import builtins
+import copy
 import functools
 import hashlib
 import inspect
@@ -178,6 +179,47 @@ def multiclass_ebm(
     ebm = fit_ebm(data, target, interactions=0, random_state=0)
     assert isinstance(ebm, ExplainableBoostingClassifier)
     return ebm
+
+
+# The models that an explanation covers only in part: every kind, with an interaction term or without a main effect.
+PARTIAL_KINDS: tuple[str, ...] = ("binary", "multiclass", "regressor")
+PARTIAL_CASES: tuple[str, ...] = ("interaction", "removed_term")
+REMOVED_FEATURE = "a"
+
+
+@pytest.fixture(scope="session")
+def partial_models(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
+) -> dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, PandasFrame]]:
+    """Fit, for each model kind, a model with one interaction term and a model without the main effect of ``a``.
+
+    Returns
+    -------
+    dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, PandasFrame]]
+        The model and its training data, by kind (``PARTIAL_KINDS``) and case (``PARTIAL_CASES``).
+
+    """
+    random_generator = np.random.default_rng(5)
+    data = pd.DataFrame({
+        "a": random_generator.normal(size=400),
+        "b": random_generator.normal(size=400),
+        "c": random_generator.choice(["x", "y"], 400),
+    })
+    signal = data["a"] * data["b"] + data["a"] + random_generator.normal(scale=0.2, size=400)
+    targets = {
+        "binary": (signal > 0).astype(int),
+        "multiclass": np.where(signal > 0.7, "high", np.where(signal < -0.3, "low", "mid")),
+        "regressor": signal,
+    }
+    models = {}
+    for kind, target in targets.items():
+        regression = kind == "regressor"
+        with_interaction = fit_ebm(data, target, interactions=1, random_state=0, regression=regression)
+        assert sum(len(features) > 1 for features in with_interaction.term_features_) == 1
+        models[kind, "interaction"] = (with_interaction, data)
+        without_term = copy.deepcopy(fit_ebm(data, target, interactions=0, random_state=0, regression=regression))
+        models[kind, "removed_term"] = (without_term.remove_terms([REMOVED_FEATURE]), data)
+    return models
 
 
 # fake_model builds EBM instances with preset attributes, so tests can pass them where an EBM type is required.

@@ -14,8 +14,13 @@ from structlog.testing import capture_logs
 
 import baml_sdk
 from ebaml.core.custom_types import FeatureType, Normalization
-from ebaml.core.ebm_classes import ExplainableBoostingClassifier
-from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, MissingAPIKeyError
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+from ebaml.core.exceptions import (
+    EBMGraphSimplificationError,
+    InvalidOptionError,
+    MissingAPIKeyError,
+    UnsupportedModelError,
+)
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey, TokenWeights, WeightsEntry, WeightsTable
@@ -27,9 +32,12 @@ from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (
+    PARTIAL_KINDS,
+    REMOVED_FEATURE,
     appending,
     fake_model,
     fake_sdk,
+    instance_of,
     recording,
     returning,
     same_type,
@@ -1103,8 +1111,10 @@ def test_describe_ebm_warns_about_the_skipped_interaction_terms(
         term_importances=lambda: [1.0, 2.0, 0.5],
     )
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    graph_calls: list[dict[str, Any]] = []
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
     with capture_logs() as logs:
         descriptors.describe_ebm(DescribeEBMRequest(ebm))
     assert [log for log in logs if log["log_level"] == "warning"] == [
@@ -1115,6 +1125,10 @@ def test_describe_ebm_warns_about_the_skipped_interaction_terms(
             "log_level": "warning",
         },
     ]
+    # a reader of the summary cannot see the log, so the summary prompt names the terms too
+    assert summary_calls["omitted_terms"] == ["f0 & f1"]
+    assert summary_calls["omitted_features"] == []
+    assert [call["omitted_terms"] for call in graph_calls] == [[], []]
 
 
 def test_describe_ebm_does_not_warn_without_interactions(
@@ -1124,10 +1138,13 @@ def test_describe_ebm_does_not_warn_without_interactions(
 ) -> None:
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
-    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
+    summary_calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
     with capture_logs() as logs:
         descriptors.describe_ebm(DescribeEBMRequest(fake_ebm))
-    assert all(log["event"] != "interactions_skipped" for log in logs)
+    assert all(log["event"] not in {"interactions_skipped", "features_skipped"} for log in logs)
+    assert summary_calls["omitted_terms"] == []
+    assert summary_calls["omitted_features"] == []
 
 
 def test_describe_graph_of_a_multiclass_classifier_sends_one_series_per_class(
@@ -1179,10 +1196,13 @@ def test_describe_graph_warns_about_the_interaction_terms_of_its_feature(
         term_features_=[(0,), (1,), (2,), (0, 1), (1, 2)],
     )
     monkeypatch.setattr(descriptors, "_graph_text", returning("g"))
-    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", returning(counted)))
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", recording(calls, counted)))
     with capture_logs() as logs:
         descriptors.describe_graph(DescribeGraphRequest(ebm, feature_index))
     assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [terms]
+    # the prompt names the terms, so the description says that it leaves them out
+    assert calls["omitted_terms"] == terms
 
 
 def test_describe_ebm_skips_a_feature_without_a_term(
@@ -1205,10 +1225,115 @@ def test_describe_ebm_skips_a_feature_without_a_term(
     summary_calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
-    descriptors.describe_ebm(DescribeEBMRequest(ebm))
+    with capture_logs() as logs:
+        descriptors.describe_ebm(DescribeEBMRequest(ebm))
     assert [call["graph"] for call in graph_calls] == ["graph1"]
     assert summary_calls["feature_importances"] == "f1: 2.00"
     assert summary_calls["graph_descriptions"] == "f1: answer"
+    # the summary and the log name the feature that has no graph
+    assert summary_calls["omitted_features"] == ["f0"]
+    assert summary_calls["omitted_terms"] == []
+    assert [log for log in logs if log["log_level"] == "warning"] == [
+        {
+            "event": "features_skipped",
+            "features": ["f0"],
+            "reason": "the features have no main-effect term",
+            "log_level": "warning",
+        },
+    ]
+
+
+def _sdk_calls(monkeypatch: pytest.MonkeyPatch, counted: baml_sdk.Counted) -> dict[str, list[dict[str, Any]]]:
+    """Replace the SDK functions of the three entry points by fakes that record their calls.
+
+    Returns
+    -------
+    dict[str, list[dict[str, Any]]]
+        The keyword arguments of each call, by the name of the SDK function.
+
+    """
+    calls: dict[str, list[dict[str, Any]]] = {"describe_graph_cot": [], "summarize_ebm": [], "explain_local": []}
+    for name in ("describe_graph_cot", "summarize_ebm"):
+        monkeypatch.setattr(baml_sdk, name, fake_sdk(name, appending(calls[name], counted)))
+    explained = baml_sdk.LocalExplanationText(
+        counterfactual="c",
+        sufficient_reason="s",
+        completions="k",
+        usage=counted.usage,
+    )
+    monkeypatch.setattr(
+        baml_sdk,
+        "explain_local",
+        fake_sdk("explain_local", appending(calls["explain_local"], explained)),
+    )
+    return calls
+
+
+@pytest.mark.parametrize("kind", PARTIAL_KINDS)
+def test_each_entry_point_names_or_rejects_a_model_with_an_interaction(
+    monkeypatch: pytest.MonkeyPatch,
+    partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
+    counted: baml_sdk.Counted,
+    kind: str,
+) -> None:
+    # contract 4: an explanation covers every term in its scope, or it names what it leaves out
+    ebm, data = partial_models[kind, "interaction"]
+    (term, features) = next(
+        (name, features)
+        for name, features in zip(ebm.term_names_, ebm.term_features_, strict=True)
+        if len(features) > 1
+    )
+    outside = next(index for index, _ in enumerate(ebm.feature_names_in_) if index not in features)
+    calls = _sdk_calls(monkeypatch, counted)
+    graph_options = GraphOptions(max_tokens=20_000)
+
+    # describe_ebm: named in the summary prompt and in the log
+    with capture_logs() as logs:
+        descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+    assert [call["omitted_terms"] for call in calls["summarize_ebm"]] == [[term]]
+    assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [[term]]
+    assert all(call["omitted_terms"] == [] for call in calls["describe_graph_cot"])
+
+    # describe_graph: named in the prompt of a feature of the term only
+    calls["describe_graph_cot"].clear()
+    descriptors.describe_graph(DescribeGraphRequest(ebm, features[0], graph=graph_options))
+    descriptors.describe_graph(DescribeGraphRequest(ebm, outside, graph=graph_options))
+    assert [call["omitted_terms"] for call in calls["describe_graph_cot"]] == [[term], []]
+
+    # explain_instance: rejected before any LLM call
+    with pytest.raises(UnsupportedModelError, match="without interactions"):
+        descriptors.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
+    assert calls["explain_local"] == []
+
+
+@pytest.mark.parametrize("kind", PARTIAL_KINDS)
+def test_each_entry_point_names_or_rejects_a_model_with_a_removed_term(
+    monkeypatch: pytest.MonkeyPatch,
+    partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
+    counted: baml_sdk.Counted,
+    kind: str,
+) -> None:
+    ebm, data = partial_models[kind, "removed_term"]
+    removed = list(ebm.feature_names_in_).index(REMOVED_FEATURE)
+    calls = _sdk_calls(monkeypatch, counted)
+    graph_options = GraphOptions(max_tokens=20_000)
+
+    # describe_ebm: named in the summary prompt and in the log
+    with capture_logs() as logs:
+        descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+    assert [call["omitted_features"] for call in calls["summarize_ebm"]] == [[REMOVED_FEATURE]]
+    assert [call["omitted_terms"] for call in calls["summarize_ebm"]] == [[]]
+    assert [log["features"] for log in logs if log["event"] == "features_skipped"] == [[REMOVED_FEATURE]]
+    assert len(calls["describe_graph_cot"]) == len(ebm.feature_names_in_) - 1
+
+    # describe_graph of the feature without a graph, and explain_instance: rejected before any LLM call
+    calls["describe_graph_cot"].clear()
+    with pytest.raises(UnsupportedModelError, match="no main-effect term"):
+        descriptors.describe_graph(DescribeGraphRequest(ebm, removed, graph=graph_options))
+    with pytest.raises(UnsupportedModelError, match="main-effect term for every feature"):
+        descriptors.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
+    assert calls["describe_graph_cot"] == []
+    assert calls["explain_local"] == []
 
 
 LUNA: ModelKey = ModelKey("openrouter", "openai/gpt-6-luna")
