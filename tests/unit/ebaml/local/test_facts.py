@@ -9,6 +9,7 @@ from decimal import Decimal
 
 import attrs
 import numpy as np
+import orjson
 import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
@@ -18,10 +19,12 @@ from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoo
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.local import facts as local
-from ebaml.local.covering_backend import Stop
+from ebaml.local.audience import DataScientist
+from ebaml.local.covering_backend import CoveringModel, ModelResult, ModelStatus, Stop
 from ebaml.local.covering_problem import Cover, CoveringProblem
 from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearchCover, MipCover
 from ebaml.local.decisions import Interval, Threshold
+from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from tests.unit.ebaml.conftest import (
@@ -41,11 +44,14 @@ from tests.unit.ebaml.conftest import (
 from tests.unit.ebaml.local.conftest import (
     CONFIDENCE_LEVELS,
     MIN_SUPPORTS,
+    NO_LP,
     FittedModel,
+    ScriptedBackend,
     SmallModel,
     Templates,
     build_ebm,
     feature_name,
+    fit_template,
     model_cases,
     model_scores,
     oracle_problem,
@@ -1692,3 +1698,127 @@ def test_a_confidence_level_close_to_one_keeps_the_claims_of_the_paper(
     assert math.isfinite(facts.prediction.lower)
     assert math.isfinite(facts.prediction.upper)
     assert facts.prediction.lower <= facts.prediction.output <= facts.prediction.upper
+
+
+# An interval regressor whose sufficient reason is a covering problem that the greedy does not solve. Each feature has
+# the instance in bin 0 with the score zero, a bin that lowers the value and a bin that raises it. The value is 0,
+# inside the interval, so the two margins have the worst cases -3.5 and the gains (2, 2), (1, 2), (1, 4) and (2, 2).
+# The greedy needs three features. The features 0 and 3 are enough, and the LP bound is 2.
+GREEDY_GAP_SHAPE: tuple[int, ...] = (3, 3, 3, 3)
+GREEDY_GAP_MODEL: SmallModel = SmallModel(
+    kind="regressor",
+    scores=[[[0.0], [-low], [high]] for low, high in [(2.0, 2.0), (1.0, 2.0), (1.0, 4.0), (2.0, 2.0)]],
+    deviations=[[[0.0], [0.0], [0.0]] for _ in GREEDY_GAP_SHAPE],
+    weights=[[1.0, 1.0, 1.0] for _ in GREEDY_GAP_SHAPE],
+    intercepts=[0.0],
+    instance_bins=[0, 0, 0, 0],
+)
+GREEDY_GAP_INTERVAL: Interval = Interval(-2.5, 6.5)
+
+
+def _feasible_pair(model: CoveringModel) -> ModelResult:
+    # the answer of a MIP solver that ends at its time limit: a set that is enough, with no proof of its size
+    picks = [choice for choice in model.choices if choice.group in {0, 3}]
+    return ModelResult(ModelStatus.FEASIBLE, picks, float(len(picks)))
+
+
+@pytest.fixture(scope="module")
+def greedy_gap_ebm(fit_ebm: Callable[..., FittedModel]) -> FittedModel:
+    templates = {("regressor", GREEDY_GAP_SHAPE): fit_template(fit_ebm, "regressor", GREEDY_GAP_SHAPE)}
+    return build_ebm(templates, GREEDY_GAP_MODEL)
+
+
+@pytest.mark.parametrize(
+    ("decision", "search", "expected"),
+    [
+        # one margin: sorting proves the size, whatever the search is
+        pytest.param(Threshold(-2.5), GreedyCover(bound_backend=None), (2, 2, True), id="sorting"),
+        pytest.param(GREEDY_GAP_INTERVAL, MipCover(), (2, 2, True), id="mip-optimal"),
+        pytest.param(
+            GREEDY_GAP_INTERVAL,
+            MipCover(ScriptedBackend(answer=_feasible_pair, lp=NO_LP)),
+            (2, 1, False),
+            id="mip-time-limit",
+        ),
+        pytest.param(
+            GREEDY_GAP_INTERVAL,
+            MipCover(ScriptedBackend(answer=_feasible_pair)),
+            (2, 2, True),
+            id="mip-time-limit-at-the-bound",
+        ),
+        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(), (3, 2, False), id="greedy"),
+        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(bound_backend=None), (3, 1, False), id="greedy-no-bound"),
+        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(iterations=0), (3, 2, False), id="local-search-no-step"),
+        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(), (2, 2, True), id="local-search-at-the-bound"),
+    ],
+)
+def test_each_way_to_find_a_sufficient_reason_reports_the_guarantee_that_it_has(
+    greedy_gap_ebm: FittedModel,
+    decision: Threshold | Interval,
+    search: CoveringSolver,
+    expected: tuple[int, int, bool],
+) -> None:
+    # expected: the size of the set, its lower bound, and whether the set is proved the smallest
+    # contract 2: the claim "smallest" reaches the prompt only on a path that established it. The fallback to every
+    # group (_no_set_found) cannot be reached from the facts, and test_covering_solvers covers it.
+    options = local.LocalOptions(confidence_level=0, min_support=0, decision=decision, search=search)
+    facts = local.compute_local_facts(greedy_gap_ebm, GREEDY_GAP_MODEL.instance, options)
+    reason = facts.sufficient_reason
+    assert reason is not None
+    assert (len(reason.features), reason.lower_bound, reason.minimum) == expected
+    _, lower_bound, minimum = expected
+    assert reason.guaranteed_margin > 0
+    expert = orjson.loads(facts_to_texts(facts, DataScientist()).sufficient_reason)
+    assert expert["is_smallest_set"] is minimum
+    assert expert["smallest_possible_number_of_features"] == lower_bound
+    assert orjson.loads(facts_to_texts(facts).sufficient_reason)["is_smallest_set"] is minimum
+
+
+# A classifier with three classes. The instance has class 0, and class 2 needs a change of both features.
+TWO_CHANGES_MODEL: SmallModel = SmallModel(
+    kind="multiclass",
+    scores=[
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 0.5]],
+        [[1.0, 0.0, 0.0], [0.0, 0.0, 0.5], [0.0, 0.0, 0.0]],
+    ],
+    deviations=[[[0.0] * 3 for _ in range(2)], [[0.0] * 3 for _ in range(3)]],
+    weights=[[1.0, 1.0], [1.0, 1.0, 1.0]],
+    intercepts=[1 / 16, 2 / 16, 3 / 16],
+    instance_bins=[0, 0],
+)
+
+
+@pytest.mark.parametrize(
+    ("search", "lower_bound", "minimum"),
+    [
+        pytest.param(MipCover(), 2, True, id="mip-optimal"),
+        pytest.param(GreedyCover(), 2, True, id="greedy-at-the-bound"),
+        pytest.param(GreedyCover(bound_backend=None), 1, False, id="greedy-no-bound"),
+        pytest.param(LocalSearchCover(bound_backend=None), 1, False, id="local-search-no-bound"),
+    ],
+)
+def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
+    small_templates: Templates,
+    search: CoveringSolver,
+    lower_bound: int,
+    *,
+    minimum: bool,
+) -> None:
+    ebm = build_ebm(small_templates, TWO_CHANGES_MODEL)
+    options = local.LocalOptions(confidence_level=0, min_support=0, target_class=2, search=search)
+    facts = local.compute_local_facts(ebm, TWO_CHANGES_MODEL.instance, options)
+    counterfactual = facts.counterfactual
+    assert counterfactual is not None
+    assert counterfactual.new_decision == 2
+    assert (len(counterfactual.changes), counterfactual.lower_bound, counterfactual.minimum) == (
+        2,
+        lower_bound,
+        minimum,
+    )
+    expert = orjson.loads(facts_to_texts(facts, DataScientist()).counterfactual)
+    assert expert["is_smallest_set"] is minimum
+    assert expert["smallest_possible_number_of_changes"] == lower_bound
+    # the default counterfactual of the same instance is one margin at a time, so sorting proves it
+    default = local.compute_local_facts(ebm, TWO_CHANGES_MODEL.instance, attrs.evolve(options, target_class=None))
+    assert default.counterfactual is not None
+    assert default.counterfactual.minimum is True

@@ -7,7 +7,6 @@ The solvers rest on third-party MIP solvers that EBaMl does not prove, so these 
 
 from collections.abc import Callable, Sequence
 
-import attrs
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -22,7 +21,9 @@ from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from tests.unit.ebaml.local.conftest import (
     GREEDY_FINDS_NOTHING,
     GREEDY_IS_NOT_OPTIMAL,
+    NO_LP,
     ProblemParts,
+    ScriptedBackend,
     check_result,
     oracle_size,
     problem_parts,
@@ -44,35 +45,6 @@ SOLVERS: list[CoveringSolver] = [
     GreedyCover(bound_backend=None),
 ]
 PROVING_SOLVERS: list[MipCover] = [MipCover(OrToolsBackend(solver)) for solver in OrToolsSolver]
-
-
-@attrs.define
-class ScriptedBackend:
-    """A ``MipBackend`` that answers the LP with the real backend, and the integer models from a script.
-
-    ``answer`` gets the model of each integer call and returns the result. It obeys the contract: a status, and picks
-    only with a solution.
-    """
-
-    answer: Callable[[CoveringModel], ModelResult] | None = None
-    lp: ModelResult | None = None
-    calls: list[tuple[CoveringModel, SolveSettings]] = attrs.field(factory=list)
-
-    def solve(self, model: CoveringModel, settings: SolveSettings) -> ModelResult:
-        """Answer one model.
-
-        Returns
-        -------
-        ModelResult
-            The scripted answer, or the answer of ``OrToolsBackend`` when there is no script for the model.
-
-        """
-        if not model.integer:
-            return self.lp if self.lp is not None else OrToolsBackend().solve(model, settings)
-        self.calls.append((model, settings))
-        if self.answer is not None:
-            return self.answer(model)
-        return OrToolsBackend().solve(model, settings)
 
 
 def _solve_or_limit(solver: CoveringSolver, problem: CoveringProblem) -> Cover | SearchLimitError | None:
@@ -219,9 +191,6 @@ def _ends(status: ModelStatus) -> Callable[[CoveringModel], ModelResult]:
         return ModelResult(status)
 
     return answer
-
-
-NO_LP: ModelResult = ModelResult(ModelStatus.NO_SOLUTION)
 
 
 def test_the_mip_asks_for_fewer_picks_than_the_greedy_with_its_settings() -> None:
