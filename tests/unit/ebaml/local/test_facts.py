@@ -51,6 +51,7 @@ from tests.unit.ebaml.local.conftest import (
     SmallModel,
     Templates,
     build_ebm,
+    exact_share,
     feature_name,
     fit_template,
     model_cases,
@@ -163,7 +164,7 @@ def test_confidence_makes_claims_harder(continuous_ebm: FittedClassifier) -> Non
     assert strict.counterfactual is None or len(strict.counterfactual.changes) >= len(loose.counterfactual.changes)
 
 
-def test_completions_are_reproducible_and_grow(
+def test_completions_are_reproducible_shares(
     continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
@@ -173,7 +174,6 @@ def test_completions_are_reproducible_and_grow(
     assert first.completions == again.completions
     assert [len(s.fixed) for s in first.completions] == [0, 1, 2]
     assert all(0 <= s.share <= 1 for s in first.completions)
-    assert first.completions[-1].share >= first.completions[0].share
 
 
 def test_sufficient_reason_decides_outcome(continuous_ebm: FittedClassifier) -> None:
@@ -2055,3 +2055,94 @@ def test_a_model_with_missing_values_in_training_still_needs_every_input(
     ebm, data = unsorted_ebm
     with pytest.raises(InvalidInstanceError, match="is missing"):
         local.compute_local_facts(ebm, instance_of(data, 50) | missing)
+
+
+def _completion_facts(
+    templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    *,
+    n_samples: int,
+    seed: int = 0,
+) -> local.LocalFacts:
+    model, limits = case
+    options = local.LocalOptions(n_samples=n_samples, seed=seed, decision=_decision(limits), max_steps=4)
+    return local.compute_local_facts(build_ebm(templates, model), model.instance, options)
+
+
+def _share_error(exact: float, n_samples: int) -> float:
+    # four binomial standard errors, and a few samples for a share so close to 0 or 1 that the count is a rare event
+    return 4 * math.sqrt(max(0.0, exact * (1 - exact)) / n_samples) + 8 / n_samples
+
+
+# the examples are fixed, so the bound on the sampling error holds or fails the same way in every run
+@settings(max_examples=60, deadline=None, derandomize=True)
+@given(case=model_cases(), n_samples=st.sampled_from([400, 4000]))
+def test_each_completion_share_estimates_the_exact_weighted_count(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    n_samples: int,
+) -> None:
+    # contract 6: the shares are estimates of the count under independent inputs with the training weights of every bin
+    model, limits = case
+    facts = _completion_facts(small_templates, case, n_samples=n_samples)
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    assert [len(step.fixed) for step in facts.completions] == list(range(len(names) + 1))
+    for step in facts.completions:
+        exact = exact_share(model, [names.index(name) for name in step.fixed], limits)
+        assert abs(step.share - exact) <= _share_error(exact, n_samples)
+    assert facts.completions[-1].share == pytest.approx(1.0)
+
+
+# Feature 0 decides the class, and its bin 0 has 95 % of the training weight. Sampling the bins uniformly gives 50 %.
+SKEWED_MODEL: SmallModel = SmallModel(
+    kind="binary",
+    scores=[[[1.0], [-1.0]], [[0.0], [0.0], [0.0]]],
+    deviations=[[[0.0], [0.0]], [[0.0], [0.0], [0.0]]],
+    weights=[[19.0, 1.0], [1.0, 1.0, 1.0]],
+    intercepts=[1 / 16],
+    instance_bins=[0, 0],
+)
+
+
+def test_the_completions_sample_the_bins_by_their_training_weight(small_templates: Templates) -> None:
+    n_samples = 4000
+    facts = _completion_facts(small_templates, (SKEWED_MODEL, ()), n_samples=n_samples)
+    assert exact_share(SKEWED_MODEL, []) == pytest.approx(0.95)
+    assert abs(facts.completions[0].share - 0.95) <= _share_error(0.95, n_samples)
+    assert abs(facts.completions[0].share - 0.5) > _share_error(0.5, n_samples)
+
+
+# The instance is positive. With nothing known, 85 % of the completions are positive, because feature 1 is mostly in
+# its high bin. Feature 1 is revealed first, and its bin of the instance leaves the class to feature 0: 50 %.
+FALLING_MODEL: SmallModel = SmallModel(
+    kind="binary",
+    scores=[[[1.0], [-1.0]], [[0.0], [3.0], [-3.0]]],
+    deviations=[[[0.0], [0.0]], [[0.0], [0.0], [0.0]]],
+    weights=[[1.0, 1.0], [2.0, 16.0, 2.0]],
+    intercepts=[1 / 16],
+    instance_bins=[0, 0],
+)
+
+
+def test_a_completion_share_can_fall_when_an_input_becomes_known(small_templates: Templates) -> None:
+    # a fall is a correct result, so no text and no test may claim that the share grows
+    n_samples = 4000
+    facts = _completion_facts(small_templates, (FALLING_MODEL, ()), n_samples=n_samples)
+    assert facts.completions[1].fixed == [feature_name(1)]
+    assert exact_share(FALLING_MODEL, []) == pytest.approx(0.85)
+    assert exact_share(FALLING_MODEL, [1]) == pytest.approx(0.5)
+    assert abs(facts.completions[0].share - 0.85) <= _share_error(0.85, n_samples)
+    assert abs(facts.completions[1].share - 0.5) <= _share_error(0.5, n_samples)
+    assert facts.completions[1].share < facts.completions[0].share
+
+
+def test_the_seed_fixes_the_draws_and_the_sample_count_sets_the_precision(small_templates: Templates) -> None:
+    case = (FALLING_MODEL, ())
+    first = _completion_facts(small_templates, case, n_samples=400, seed=1)
+    assert _completion_facts(small_templates, case, n_samples=400, seed=1).completions == first.completions
+    other_seed = _completion_facts(small_templates, case, n_samples=400, seed=2)
+    assert other_seed.completions != first.completions
+    # more samples give another estimate of the same share, so both are near the exact count and need not be equal
+    for n_samples in (400, 40_000):
+        share = _completion_facts(small_templates, case, n_samples=n_samples, seed=1).completions[0].share
+        assert abs(share - 0.85) <= _share_error(0.85, n_samples)
