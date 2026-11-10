@@ -102,6 +102,37 @@ test "the questions make no claim that the facts do not support" {
     assert.is_true(!completions_question(3).includes("how that share grows"))
 }
 
+test "the questions state a condition of the facts only through its key" {
+    // Each condition depends on an option, so a fixed sentence about it is false for some option value.
+    let counterfactual = counterfactual_question(3);
+    let sufficient = sufficient_reason_question(3);
+    let completions = completions_question(3);
+    // confidence_level=0 moves no score
+    assert.is_true(
+        counterfactual.includes("\"flip_holds_even_if_the_model_is_somewhat_off\" is true"),
+    );
+    assert.is_true(counterfactual.includes("\"flip_holds_at_confidence\" is above 0"));
+    assert.is_true(
+        sufficient.includes("\"guarantee_holds_even_if_the_model_is_somewhat_off\" is true"),
+    );
+    assert.is_true(sufficient.includes("\"guarantee_holds_at_confidence\" is above 0"));
+    for (let question in [counterfactual, sufficient]) {
+        assert.is_true(question.includes("make no statement about the model's uncertainty"));
+        // min_support=0 leaves out no value
+        assert.is_true(question.includes("If \"rare_values_left_out\" is true"));
+        assert.is_true(!question.includes("(rare extreme values are left out)"))
+    }
+    ;
+    // only the changed features of a counterfactual move by their uncertainty
+    assert.is_true(counterfactual.includes("the effects of the changed features"));
+    assert.is_true(!counterfactual.includes("holds even if the model's effects"));
+    // n_samples accepts any count
+    assert.is_true(completions.includes("\"sample_size\""));
+    assert.is_true(completions.includes("\"number_of_samples\""));
+    assert.is_true(!completions.includes("a large random sample"));
+    assert.is_true(!completions.includes("gets more certain"))
+}
+
 test "each local function gets its own facts, question and system role" {
     let facts = LocalFactTexts {
         prediction: "PRED-FACT",
