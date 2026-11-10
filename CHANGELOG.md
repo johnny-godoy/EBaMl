@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.7'></a>
+## [0.6.7] - 2026-11-10
+
+### Added
+
+- `DescribeGraphRequest`, `DescribeEBMRequest` and `ExplainInstanceRequest` hold the input of `describe_graph`, `describe_ebm` and `explain_instance`. Import them from `ebaml`.
+
+### Changed
+
+- **BREAKING:** `describe_graph`, `describe_ebm` and `explain_instance` take one request object and no other argument. Wrap the old arguments in the matching request: `describe_ebm(DescribeEBMRequest(ebm, model="openai/gpt-4o-mini"))`. The fields keep the names, the order and the defaults of the old arguments, and `graph`, `prompt`, `local`, `model` and `language` stay keyword-only.
+
 <a id='changelog-0.6.6'></a>
 ## [0.6.6] - 2026-11-09
 
