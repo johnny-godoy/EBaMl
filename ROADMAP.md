@@ -38,6 +38,10 @@ Interaction terms are not on the list yet. The graph descriptions skip them, and
 model that has them. The README table "Supported models" shows the state of each feature. Full support needs a
 two-dimensional graph text and new proofs of the local explanations.
 
+The plan of that milestone must keep one test: an additive model gives the same guarantees through both code paths. A
+model whose interaction effects are all zero must satisfy the same semantic contracts as the model without the terms. A
+tie can give a different valid set, so the test compares the guarantees and not the sets.
+
 ## Versions
 
 EBaMl follows [Semantic Versioning 2.0.0](https://semver.org/) strictly. The package has no users yet, so 1.0.0 comes

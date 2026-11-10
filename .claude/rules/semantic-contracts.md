@@ -3,7 +3,7 @@
 Code that passes every guard can still make an explanation less correct or less honest. The code, the proofs, the
 result types, the prompts and the docs must make the same claim about each explanation. These contracts protect that
 agreement. They apply to `src/ebaml/local/`, `src/ebaml/graphs/`, `baml_src/` and their tests and docs.
-`docs/plans/semantic-contracts.md` lists the plans that add the checks for each contract.
+The table below names the test that guards each contract.
 
 ## Contracts
 
@@ -24,6 +24,18 @@ agreement. They apply to `src/ebaml/local/`, `src/ebaml/graphs/`, `baml_src/` an
    (independent inputs, training-bin weights, fixed seed). Never describe them as exact frequencies.
 7. **Name the uncertainty model.** A confidence-adjusted guarantee holds under the stated assumptions only. More
    uncertainty must never turn a failed robust guarantee into a valid one.
+
+## Guards
+
+| Contract | Guard |
+| --- | --- |
+| 1 | `test_the_facts_match_the_oracle_of_the_paper` in `tests/unit/ebaml/local/test_facts.py`. The oracle is in `tests/unit/ebaml/local/conftest.py`. |
+| 2 | `test_each_way_to_find_a_sufficient_reason_reports_the_guarantee_that_it_has` and `test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search` in `test_facts.py`. |
+| 3 | The offline tests of `baml_src/tests/local_explanations_test.baml`, and `test_the_facts_claim_no_condition_that_the_options_turn_off` in `test_fact_text.py`. |
+| 4 | `test_each_entry_point_names_or_rejects_a_model_with_an_interaction` and its twin for a removed term in `tests/unit/ebaml/llm/test_descriptors.py`, and `test_the_tools_name_or_reject_a_model_that_they_cover_in_part` in `tests/unit/ebaml/mcp/test_server.py`. |
+| 5 | The three `..._fitted_model...` tests in `test_facts.py`. |
+| 6 | `test_each_completion_share_estimates_the_exact_weighted_count` in `test_facts.py`. |
+| 7 | `test_more_confidence_never_makes_a_claim_easier` in `test_facts.py`. |
 
 ## Evidence
 
