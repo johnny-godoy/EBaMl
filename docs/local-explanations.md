@@ -59,9 +59,15 @@ makes the first two queries solvable exactly: the [proof](local-explanations-pro
 
 | Explanation | Query in the paper | Question | How it is computed |
 | --- | --- | --- | --- |
-| `counterfactual` | Minimum change required | What is the *fewest* inputs to change so that the prediction flips? | Exact. |
-| `sufficient_reason` | Minimum sufficient reason | What is the *fewest* inputs that settle the prediction, whatever the other inputs are? | Exact. |
+| `counterfactual` | Minimum change required | What is the *fewest* inputs to change so that the prediction flips? | Exact when `minimum` is true. |
+| `sufficient_reason` | Minimum sufficient reason | What is the *fewest* inputs that settle the prediction, whatever the other inputs are? | Exact when `minimum` is true. |
 | `completions` | Count completions | If only some inputs are known, what share of the possible completions get this prediction? | Estimated by sampling. |
+
+Each result names the guarantee that it has. `minimum` is true when no smaller set exists. Sorting proves it for a
+decision with one margin: a binary classifier, and a regressor with a threshold. A decision with several margins (a
+multiclass classifier, the answer "inside" of an interval) and the counterfactual of a target class use a search, and
+`minimum` is then true only if the search proves it. The two sections below describe the case with one margin.
+[Regressors](#regressors) and [Multiclass classifiers](#multiclass-classifiers) describe the search.
 
 ### Counterfactual
 
@@ -120,8 +126,9 @@ no score, so no claim covers the uncertainty of the model.
 | `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
 | `sufficient_reason.features` | The features that fix the prediction. | The features that fix the answer. |
 | `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. | The worst case of the distance from the threshold, with these features fixed. |
-| `sufficient_reason.minimum` | True: no smaller set fixes the prediction. |
-| `completions` | One `CompletionStep(fixed, share)` for each step. |
+| `counterfactual.minimum`, `sufficient_reason.minimum` | True if no smaller set exists. It is always true for one margin. | The same. It can be false for the answer "inside" of an interval. |
+| `counterfactual.lower_bound`, `sufficient_reason.lower_bound` | No set has fewer members than this number. | The same. |
+| `completions` | One `CompletionStep(fixed, share)` for each step. | The same. |
 
 <!-- invisible-code-block: python
 from ebaml import compute_local_facts
@@ -431,21 +438,3 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
   `ValueError`. Impute, or drop the row.
 - **The words are not guaranteed.** The facts are exact; the LLM can still misread them. The prompts forbid inventing
   values and tell it which claims are guarantees and which are estimates, and `explanation.facts` lets you check.
-
-A multiclass classifier gets the error before any LLM call:
-
-<!-- invisible-code-block: python
-import numpy as np
-
-y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "old")
--->
-
-```python
-from ebaml import UnsupportedModelError
-
-multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
-try:
-    compute_local_facts(multiclass, X.iloc[0].to_dict())
-except UnsupportedModelError as error:
-    print(error)  # Local explanations need a binary classifier or a regressor. Got a MulticlassClassifier.
-```

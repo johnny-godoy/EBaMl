@@ -225,7 +225,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
 | `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
 | `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
-| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a binary classifier or a regressor. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
+| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a classifier or a regressor. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
 | `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
 | `EBMGraphError` | no | The base class of the errors of a graph. |
 | `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |

@@ -156,7 +156,7 @@ def create_server(
         row: int | None = None,
         confidence_level: float = 0.95,
     ) -> str:
-        """Explain one prediction of a binary classifier or a regressor with exact facts.
+        """Explain one prediction of a classifier or a regressor with exact facts.
 
         A regressor's explanation keeps the answer to the question "is the predicted value above the average
         prediction?". Give the value of every feature in instance, or give the number of a row of the data that the
@@ -165,9 +165,9 @@ def create_server(
         Returns
         -------
         str
-            JSON with the facts and their texts. The facts have the counterfactual (the fewest changes that flip the
-            prediction), the sufficient reason (the features that fix the prediction) and the share of completions
-            with the same prediction.
+            JSON with the facts and their texts. The facts have the counterfactual (changes that flip the prediction,
+            the fewest ones when ``minimum`` is true), the sufficient reason (the features that fix the prediction)
+            and the share of completions with the same prediction.
 
         """
         with _tool_errors():

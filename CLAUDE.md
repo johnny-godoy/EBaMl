@@ -52,7 +52,7 @@ The boundary between the two languages is the generated `baml_sdk` package.
   tests, and the Python wrappers do not expose it.
 - `baml_src/local_explanations.baml` and `src/ebaml/local/` produce local (per-prediction) explanations. Python
   computes the facts exactly from EBM scores and confidence intervals (counterfactual, sufficient reason, completions;
-  arXiv:2010.12265). The LLM only puts them in words. Only binary classifiers without interactions work.
+  arXiv:2010.12265). The LLM only puts them in words. Classifiers and regressors without interactions work.
 - `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text.
   `terms.py` finds the term of each feature: index the term attributes (`term_scores_`, `bin_weights_`) through it. The
   token budget is an estimate from the words and digits of the text (`token_budget.py`, `token_weights.py`). A

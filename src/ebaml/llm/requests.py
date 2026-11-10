@@ -92,7 +92,7 @@ class DescribeEBMRequest(_GraphRequest):
 class ExplainInstanceRequest(_EBMRequest):
     """The input of ``explain_instance``.
 
-    The EBM is a binary classifier or a regressor, without interactions.
+    The EBM is a classifier or a regressor, without interactions.
 
     Attributes
     ----------
