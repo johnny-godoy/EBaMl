@@ -19,9 +19,18 @@ The proof that the sorting algorithms are exact is in ``proofs/papers/local-expl
 classifier, a multiclass classifier and a regressor, which use the same algorithms on the margin of their decision. For
 a covering problem, the paper states what a result of a solver proves and what it does not.
 
-The confidence of the model enters through ``confidence_level``: every score is moved by ``z`` standard deviations in
-the direction that makes the claim harder to prove, so a counterfactual flips the prediction, and a sufficient reason
-keeps it, even if the scores sit at the edge of their confidence interval.
+The confidence of the model enters through ``confidence_level``, as a number ``z`` of standard deviations. Each claim
+names the scores that move by ``z`` deviations, always in the direction that makes the claim harder to prove:
+
+- A counterfactual moves the score of the new bin of each changed feature against the flip. The features that do not
+  change keep their fitted scores.
+- A sufficient reason moves every score against the decision: a fixed feature at its bin, and a free feature at its
+  worst plausible bin.
+- The interval of the output moves the total score. Its deviation is that of a sum of independent errors.
+- A margin of a multiclass classifier is the difference of two class scores. Its deviation is the sum of the two
+  deviations, because an EBM stores no covariance between two classes.
+
+A claim holds under its own model only. ``confidence_level=0`` gives ``z = 0``, so no score moves.
 """
 
 import math

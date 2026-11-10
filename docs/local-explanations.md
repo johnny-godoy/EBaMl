@@ -88,16 +88,21 @@ approximate.**
 
 ## Confidence
 
-The EBM stores a standard deviation for every score. `confidence_level` (default `0.95`) moves each score by
-`z` standard deviations **against the claim being made**:
+The EBM stores a standard deviation for every score. `confidence_level` (default `0.95`) gives a number `z` of
+standard deviations. Each claim has its own uncertainty model: it names the scores that move by `z` deviations
+**against the claim being made**.
 
-- a **counterfactual** must flip the prediction even if the effects of the changed features are at the unfavourable
-  edge of their confidence interval, so it is harder to find;
-- a **sufficient reason** must keep the prediction even if the fixed features sit at the unfavourable edge and the
-  free ones take their worst values, so it needs more features, or does not exist.
+| Claim | What moves by `z` deviations |
+| --- | --- |
+| Counterfactual | The effect of the new value of each changed feature, against the flip. The other features keep their fitted effects. |
+| Sufficient reason | Every effect, against the prediction: a fixed feature at its value, and a free feature at its worst value. |
+| Interval of the probability or of the value | The total score. Its deviation (`score_std`) is that of a sum of independent errors. |
+| Margin of a multiclass classifier | The difference of two class scores. Its deviation is the sum of the two deviations, because an EBM stores no covariance. |
 
-`confidence_level=0` ignores the uncertainty. The probability of the prediction also gets a confidence interval from
-the variance of the sum of the effects (`score_std`), which assumes the errors of the effects are independent.
+A higher `confidence_level` makes a counterfactual and a sufficient reason harder to find: the set gets larger, or the
+search finds none. It never turns a failed claim into a valid one. A claim holds under its own model only: a
+counterfactual does not cover the uncertainty of the features that it leaves unchanged. `confidence_level=0` moves
+no score, so no claim covers the uncertainty of the model.
 
 ## The facts
 
