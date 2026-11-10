@@ -285,6 +285,21 @@ testset "Live" {
         assert.is_true(result.usage.output_tokens > 0)
     }
 
+    test "summarize_ebm: says that the summary leaves out the interaction term" {
+        let result = summarize_ebm(
+            "age: 0.80\nincome: 0.50",
+            "age: The risk rises with age, with a jump after 60.\n\nincome: The risk falls as the income grows.",
+            3,
+            default_graph_options(),
+            omitted_terms = ["age & income"],
+        );
+        log_reply(result.text);
+        let text = result.text.to_lower_case();
+        assert.is_true(text.includes("interaction"));
+        assert.is_true(text.includes("age") && text.includes("income"));
+        assert.is_true(count_sentences(result.text) <= 4)
+    }
+
     test "describe_graph_cot: names the feature and respects the sentence limit" {
         let graph = "{\"feature_name\": \"age\", \"type\": \"continuous\", \"mean\": {\"18-30\": 0.8, \"30-50\": 0.0, \"50-90\": -0.6}}";
         let result = describe_graph_cot(graph, 3, default_graph_options());

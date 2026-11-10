@@ -443,3 +443,95 @@ test "summarize_ebm puts the draft reply in the shorten prompt" {
         position_of(result.text, "R1<<") < position_of(result.text, "at most 30 sentences"),
     )
 }
+
+test "omitted_parts_msg names each omitted part and says why, and is empty without one" {
+    assert.equal(omitted_parts_msg([], []), "");
+    let both = omitted_parts_msg(["age & income", "age & city"], ["zip"]);
+    assert.is_true(both.includes("<omitted_parts>") && both.includes("</omitted_parts>"));
+    assert.is_true(
+        both.includes(
+            "interaction terms, and no graph description covers them: age & income, age & city.",
+        ),
+    );
+    assert.is_true(
+        both.includes("no main effect in the model, and no graph description covers them: zip."),
+    );
+    assert.is_true(both.includes("Say in one sentence that your answer leaves these parts out"));
+    assert.is_true(both.includes("does not cover the whole model"));
+    let terms = omitted_parts_msg(["age & income"], []);
+    assert.is_true(terms.includes("age & income") && !terms.includes("no main effect"));
+    let features = omitted_parts_msg([], ["zip"]);
+    assert.is_true(features.includes("zip") && !features.includes("interaction terms"))
+}
+
+test "the summary prompts name the omitted parts, and a model without them gets no such text" {
+    // Contract 4: a description that leaves out a model part says so in its text, not only in a log.
+    let plain = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "");
+    assert.is_true(!plain.includes("omitted_parts"));
+    let msg = summarize_ebm_msg(
+        "IMPORTANCES",
+        "DESCRIPTIONS",
+        "",
+        omitted_terms = ["age & income"],
+        omitted_features = ["zip"],
+    );
+    assert.is_true(position_of(msg, "DESCRIPTIONS") < position_of(msg, "<omitted_parts>"));
+    assert.is_true(position_of(msg, "</omitted_parts>") < position_of(msg, "<instructions>"));
+
+    let result = summarize_ebm(
+        "IMPORTANCES",
+        "DESCRIPTIONS",
+        3,
+        default_graph_options(),
+        client = EchoClient {},
+        omitted_terms = ["age & income"],
+        omitted_features = ["zip"],
+    );
+    // the echo of the shorten turn holds the draft turn too, so both turns got the block
+    assert.is_true(result.text.includes("age & income") && result.text.includes("zip"));
+    assert.is_true(
+        result.text.includes("keep the sentence that names the parts that the summary leaves out"),
+    );
+    let draft = summarize_ebm(
+        "IMPORTANCES",
+        "DESCRIPTIONS",
+        null,
+        default_graph_options(),
+        client = EchoClient {},
+        omitted_terms = ["age & income"],
+    );
+    assert.is_true(draft.text.includes("age & income") && !draft.text.includes("no main effect"))
+}
+
+test "describe_graph_cot names the omitted interaction terms in its final turn only" {
+    assert.is_true(!final_description_request(3).includes("omitted_parts"));
+    assert.is_true(
+        final_description_request(3, omitted_terms = ["age & income"]).includes("age & income"),
+    );
+    let opts = default_graph_options();
+    let first = GraphFirstPass@spec("GRAPH", opts).prompt().text();
+    let final = GraphFinalDescription@spec("GRAPH", "FIRST", "SURPRISES", 3, opts, omitted_terms = ["age & income"])
+        .prompt()
+        .text();
+    assert.is_true(!first.includes("age & income"));
+    assert.is_true(final.includes("age & income") && final.includes("at most 3 sentences"));
+    let result = describe_graph_cot("GRAPH", 3, opts, client = EchoClient {}, omitted_terms = ["age & income"]);
+    assert.is_true(result.text.includes("age & income"))
+}
+
+test "describe_ebm hands the omitted parts to the summary" {
+    let result = describe_ebm(
+        ["age"],
+        ["GRAPH"],
+        "IMPORTANCES",
+        3,
+        2,
+        1,
+        default_graph_options(),
+        client = EchoClient {},
+        omitted_terms = ["age & income"],
+        omitted_features = ["zip"],
+    );
+    assert.is_true(result.text.includes("<omitted_parts>"));
+    assert.is_true(result.text.includes("age & income") && result.text.includes("zip"))
+}
