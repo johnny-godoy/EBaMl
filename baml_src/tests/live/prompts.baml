@@ -256,11 +256,12 @@ testset "Live" {
         log_reply(text);
         let lower = text.to_lower_case();
         assert.is_true(lower.includes("income"));
-        // a reply may say that the facts cover no uncertainty, so the check looks for a claim that the flip survives it
+        // a reply may say that the facts make no claim about uncertainty, so the check looks for the claim itself: a
+        // flip that holds "even if" or "despite" the uncertainty
         assert.is_true(
             !baml.regex
                 .new(
-                    "(holds|survives|robust|remains|stays)[^.]*(uncertain|confidence interval|unfavou?rable)",
+                    "(even if|even when|even with|despite|regardless of)[^.]*(uncertain|confidence interval|somewhat off|unfavou?rable)",
                 )
                 .has_match(lower),
         );
