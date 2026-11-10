@@ -74,6 +74,9 @@ test "question functions state the sentence limit and their own query" {
     assert.is_true(counterfactual_question(3).includes("keep its size out of the answer"));
     assert.is_true(sufficient_reason_question(4).includes("at most 4 sentences"));
     assert.is_true(sufficient_reason_question(4).includes("sufficient reason"));
+    assert.is_true(
+        sufficient_reason_question(4).includes("name the inputs of \"features_not_needed\""),
+    );
     assert.is_true(sufficient_reason_question(4).includes("is_smallest_set"));
     assert.is_true(sufficient_reason_question(4).includes("keep its size out of the answer"));
     assert.is_true(completions_question(6).includes("at most 6 sentences"));
