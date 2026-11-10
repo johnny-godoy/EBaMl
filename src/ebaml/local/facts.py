@@ -311,7 +311,30 @@ class CompletionStep:
 
 @attrs.frozen
 class LocalFacts:
-    """Everything computed about one prediction."""
+    """Everything computed about one prediction, with the options that say under which conditions the facts hold.
+
+    Attributes
+    ----------
+    prediction: Prediction
+        The prediction to explain.
+    contributions: list[Contribution]
+        The effect of each input, largest first.
+    counterfactual: Counterfactual | None
+        The changes that flip the decision, or ``None`` if the search found none.
+    sufficient_reason: SufficientReason | None
+        The inputs that fix the decision, or ``None`` if the search found none.
+    completions: list[CompletionStep]
+        The estimated share of completions with the same prediction, for each step.
+    confidence_level: float
+        ``LocalOptions.confidence_level`` of the facts. At ``0`` no score moves, so no claim covers the uncertainty of
+        the model.
+    min_support: float
+        ``LocalOptions.min_support`` of the facts. At ``0`` the counterfactual and the sufficient reason leave out no
+        value.
+    n_samples: int
+        ``LocalOptions.n_samples`` of the facts: the size of the sample behind each share of ``completions``.
+
+    """
 
     prediction: Prediction
     contributions: list[Contribution]
@@ -319,6 +342,8 @@ class LocalFacts:
     sufficient_reason: SufficientReason | None
     completions: list[CompletionStep]
     confidence_level: float
+    min_support: float
+    n_samples: int
 
 
 def _bin_label(x_val: tuple[float, float] | str) -> str:
@@ -1215,4 +1240,6 @@ def compute_local_facts(
         sufficient_reason=_reason(features, bounds, z, options),
         completions=_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,
+        min_support=options.min_support,
+        n_samples=options.n_samples,
     )

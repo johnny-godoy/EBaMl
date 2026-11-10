@@ -3,9 +3,12 @@
 ``Audience`` is the base class. A subclass fills in the rules of one kind of reader:
 
 - ``guidance`` is the instruction that tells the LLM how to write for this reader.
-- ``contribution``, ``prediction``, ``change``, ``flip``, ``class_output``, ``margin``, ``lower_bound`` and ``share``
-  return the keys that the audience adds to the facts of the prompt. Each is abstract, so the author of an audience
-  decides on every model number.
+- ``contribution``, ``prediction``, ``change``, ``flip``, ``class_output``, ``margin``, ``guarantee``, ``support``,
+  ``lower_bound``, ``share`` and ``sample`` return the keys that the audience adds to the facts of the prompt. Each is
+  abstract, so the author of an audience decides on every model number.
+- ``flip``, ``guarantee``, ``support`` and ``sample`` state the conditions of the facts: whether the scores moved by
+  their uncertainty, whether rare values were left out, and how large the sample is. The prompts read these keys, so
+  the text claims a condition only when the options of the facts set it.
 
 ``Layperson`` and ``DataScientist`` are the two audiences that ship with the package. To change one rule, subclass one
 of them and override one method. Pass an instance of any subclass as ``audience=`` to ``explain_instance`` or to
@@ -30,6 +33,7 @@ _LIKELIHOOD_WORDS = (
     (0.05, "very unlikely"),
 )
 _STRENGTH_WORDS = ((0.5, "strongly"), (0.2, "moderately"))
+_SAMPLE_WORDS = ((10_000, "large"), (1_000, "moderate"))
 
 
 def likelihood_word(probability: float) -> str:
@@ -70,6 +74,26 @@ def strength_word(score: float) -> str:
         if abs(score) >= threshold:
             return word
     return "slightly"
+
+
+def sample_size_word(n_samples: int) -> str:
+    """Return the word for the size of a sample, from ``large`` to ``small``.
+
+    Parameters
+    ----------
+    n_samples: int
+        The number of samples.
+
+    Returns
+    -------
+    str
+        ``large`` from 10000 samples, ``moderate`` from 1000, else ``small``.
+
+    """
+    for threshold, word in _SAMPLE_WORDS:
+        if n_samples >= threshold:
+            return word
+    return "small"
 
 
 def round_value(value: float) -> float:
@@ -224,6 +248,20 @@ class Audience(abc.ABC):
         """Return the keys that describe the margin of the sufficient reason."""
 
     @abc.abstractmethod
+    def guarantee(
+        self,
+        confidence_level: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        """Return the keys that tell whether the sufficient reason holds under the uncertainty of the scores."""
+
+    @abc.abstractmethod
+    def support(
+        self,
+        min_support: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        """Return the keys that tell whether the counterfactual and the sufficient reason left out rare values."""
+
+    @abc.abstractmethod
     def lower_bound(
         self,
         lower_bound: int,
@@ -234,6 +272,13 @@ class Audience(abc.ABC):
     @abc.abstractmethod
     def share(self, share: float) -> float | str:
         """Return the share of completions with the same prediction."""
+
+    @abc.abstractmethod
+    def sample(
+        self,
+        n_samples: int,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        """Return the keys that tell how large the sample behind the shares of the completions is."""
 
 
 class Layperson(Audience):
@@ -298,6 +343,20 @@ class Layperson(Audience):
         return {}
 
     @override
+    def guarantee(
+        self,
+        confidence_level: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"guarantee_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
+
+    @override
+    def support(
+        self,
+        min_support: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"rare_values_left_out": min_support > 0}
+
+    @override
     def lower_bound(
         self,
         lower_bound: int,
@@ -309,6 +368,13 @@ class Layperson(Audience):
     @override
     def share(self, share: float) -> float | str:
         return likelihood_word(share)
+
+    @override
+    def sample(
+        self,
+        n_samples: int,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"sample_size": sample_size_word(n_samples)}
 
 
 class DataScientist(Audience):
@@ -374,6 +440,20 @@ class DataScientist(Audience):
         return {_MARGIN_KEYS[output_kind]: round_value(reason.guaranteed_margin)}
 
     @override
+    def guarantee(
+        self,
+        confidence_level: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"guarantee_holds_at_confidence": confidence_level}
+
+    @override
+    def support(
+        self,
+        min_support: float,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"rare_values_left_out": min_support > 0, "min_support": min_support}
+
+    @override
     def lower_bound(
         self,
         lower_bound: int,
@@ -385,6 +465,13 @@ class DataScientist(Audience):
     @override
     def share(self, share: float) -> float | str:
         return round_value(share)
+
+    @override
+    def sample(
+        self,
+        n_samples: int,
+    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+        return {"number_of_samples": n_samples}
 
 
 BUILT_IN_AUDIENCES: Mapping[str, Audience] = {

@@ -82,7 +82,10 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
             cf.new_output,
             p.output_kind,
         )
-        counterfactual |= audience.flip(facts.confidence_level)
+    # the conditions of the search are facts too, with or without a result: the prompt claims a condition only when
+    # its key says so
+    counterfactual |= audience.flip(facts.confidence_level)
+    counterfactual |= audience.support(facts.min_support)
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason
@@ -93,6 +96,8 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
         sufficient |= audience.lower_bound(sr.lower_bound, "features")
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)
+    sufficient |= audience.guarantee(facts.confidence_level)
+    sufficient |= audience.support(facts.min_support)
 
     completions = [
         {"known_features": s.fixed, "share_with_same_prediction": audience.share(s.share)} for s in facts.completions
@@ -101,5 +106,5 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
         prediction=_dump(prediction),
         counterfactual=_dump(counterfactual),
         sufficient_reason=_dump(sufficient),
-        completions=_dump({"steps": completions}),
+        completions=_dump({"steps": completions} | audience.sample(facts.n_samples)),
     )
