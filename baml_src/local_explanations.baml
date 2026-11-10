@@ -73,20 +73,22 @@ function counterfactual_question(num_sentences: int) -> string {
                 If "is_smallest_set" is true, this is exact, not a guess: no smaller set of changes gives the new prediction, because the model adds up one independent effect per input and the computation proves the size.
                 If "is_smallest_set" is false, the facts ask for a chosen class, and the search ended at its time limit or was a fast search, so it did not prove the size. Describe the set as a set of changes that reaches that class, and keep its size out of the answer, because any word about the size reads as a claim that the facts do not make.
                 If the facts give "smallest_possible_number_of_changes", no set reaches the new prediction with fewer changes than that number. When "is_smallest_set" is false, you may state the gap between "number_of_changes" and that number, because the gap tells this reader how far the set can be from the smallest one.
-                Only realistic alternative values were considered (rare extreme values are left out), and the flip holds even if the model's effects are at the unfavourable edge of their confidence interval.
+                The search considered the values that the model saw in training. If "rare_values_left_out" is true, say that only realistic alternative values were considered, because the search left out rare extreme values. If it is false, make no such statement, because the search left out no value.
+                If "flip_holds_even_if_the_model_is_somewhat_off" is true, or "flip_holds_at_confidence" is above 0, the flip holds even if the effects of the changed features are at the unfavourable edge of their confidence interval, and you may say so. Limit that statement to the changed features, because the effects of the other inputs are taken as the model fitted them. If the key is false or 0, every effect is taken as fitted, so make no statement about the model's uncertainty, because the facts support none.
                 Suggest only the changes that the facts list, because they are the only ones that the model supports.
-                If no change flips the prediction, say that no change within the realistic values flips it, because the search covered only those values and the facts make no claim about other values.
+                If "flip_possible" is false, say that the search found no change that flips the prediction among the values that it considered: within the realistic values when "rare_values_left_out" is true, and within the values seen in training otherwise. The search covered only those values, so the facts make no claim about other values. When the confidence key is true or above 0, the search asked for a flip that survives the uncertainty of the changed features, so a change that flips the prediction only with the effects as fitted is outside this result.
     `
 }
 
 function sufficient_reason_question(num_sentences: int) -> string {
     `
         Explain, in at most ${num_sentences} sentences, which inputs are enough to settle the prediction.
-                The facts list a set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome.
+                The facts list a set of inputs (a sufficient reason) that fixes the prediction whatever the other inputs are. State clearly that the remaining inputs cannot change the outcome within the values that the guarantee covers.
                 If "is_smallest_set" is true, this is exact: no smaller set of inputs guarantees the outcome, because the model adds up one independent effect per input and the computation proves the size.
                 If "is_smallest_set" is false, the search ended at its time limit or was a fast search, so it did not prove the size. Call the set a set of inputs that is enough, and keep its size out of the answer, because any word about the size reads as a claim that the facts do not make.
                 If the facts give "smallest_possible_number_of_features", no set with fewer inputs than that number guarantees the outcome. When "is_smallest_set" is false, you may state the gap between the number of listed inputs and that number, because the gap tells this reader how far the set can be from the smallest one.
-                The guarantee covers every realistic value of the other inputs (rare extreme values are left out) and holds even when the model's effects are at the unfavourable edge of their confidence interval.
+                The guarantee covers the values of the other inputs that the model saw in training. If "rare_values_left_out" is true, say that it covers every realistic value of the other inputs, because rare extreme values are left out. If it is false, it covers every value seen in training, so make no statement about rare values.
+                If "guarantee_holds_even_if_the_model_is_somewhat_off" is true, or "guarantee_holds_at_confidence" is above 0, the guarantee holds even when the model's effects are at the unfavourable edge of their confidence interval, and you may say so. If the key is false or 0, every effect is taken as the model fitted it, so make no statement about the model's uncertainty, because the facts support none.
                 Present it as a statement about this model, not about the real world.
                 If there is no such set, say that the search found no set of inputs that settles the prediction under these conditions, because that result does not show that each single input is needed.
     `
@@ -94,10 +96,11 @@ function sufficient_reason_question(num_sentences: int) -> string {
 
 function completions_question(num_sentences: int) -> string {
     `
-        Explain, in at most ${num_sentences} sentences, how the outcome gets more certain as the inputs become known.
+        Explain, in at most ${num_sentences} sentences, how certain the outcome is as the inputs become known.
                 The facts give the share of people who would get the same prediction when only the first inputs are known and the rest are unknown (count completions).
                 Describe how that share changes from step to step, and say so when it falls, because learning more inputs can lower the share and a sample adds noise. Name the inputs that make the biggest difference.
-                Unlike the other two explanations, these shares are estimates from a large random sample that treats the unknown inputs as independent and distributed as in the training data. Describe them as approximate, because they are not guarantees.
+                Unlike the other two explanations, these shares are estimates from a random sample that treats the unknown inputs as independent and distributed as in the training data. Describe them as approximate, because they are not guarantees.
+                The facts give the size of the sample, as the word "sample_size" or as "number_of_samples". When the word is "small", or the number is below 1000, say that the shares are rough, because a small sample adds much noise.
     `
 }
 

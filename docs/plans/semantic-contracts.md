@@ -9,7 +9,6 @@ does now, so the implementing agent knows which parts of the review were already
 
 | Order | Plan | Contract | Main gap found |
 | --- | --- | --- | --- |
-| 1 | [faithful-prompts](faithful-prompts.md) | 3 | The prompts claim a robust flip and a robust reason at `confidence_level=0`, and they claim that rare values were left out at `min_support=0`. |
 | 2 | [confidence-semantics](confidence-semantics.md) | 7 | The module docstring of `facts.py` says that every score moves by `z`. The paper records that this is false. |
 | 3 | [proof-oracles](proof-oracles.md) | 1 | The brute-force tests run only at `confidence_level=0` and `min_support=0`, so no oracle checks the robust part of the model in the paper. |
 | 4 | [guarantee-strength](guarantee-strength.md) | 2 | The docstrings of `Counterfactual` and `compute_local_facts` describe guarantees and model kinds that the code does not have. |
