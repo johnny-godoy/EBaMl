@@ -24,7 +24,8 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
 
 ✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
-`describe_graph` and `describe_ebm` log an `interactions_skipped` warning that names them. ❌ not supported yet. Full support is on the
+`describe_graph` and `describe_ebm` name them in the prompt, so the description says that it leaves them out, and they
+log an `interactions_skipped` warning. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
 The MCP server reads every kind of model. Its explain tool works for every kind of model without interactions.

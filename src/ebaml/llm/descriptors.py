@@ -62,8 +62,11 @@ def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
     )
 
 
-def _warn_skipped_interactions(ebm: ExplainableBoostingModel, described: Collection[int]) -> None:
-    """Log a warning that names the interaction terms of the described features, which the descriptions skip.
+def _skipped_interactions(ebm: ExplainableBoostingModel, described: Collection[int]) -> list[str]:
+    """Name the interaction terms of the described features, which the descriptions skip, and log a warning.
+
+    The names go to the prompt, so that the text of the description says what it leaves out. The warning tells the
+    program the same.
 
     Parameters
     ----------
@@ -71,6 +74,11 @@ def _warn_skipped_interactions(ebm: ExplainableBoostingModel, described: Collect
         The EBM.
     described : Collection[int]
         The indices of the features that the call describes.
+
+    Returns
+    -------
+    list[str]
+        The names of the skipped terms, in the order of the model.
 
     """
     skipped = [
@@ -83,6 +91,29 @@ def _warn_skipped_interactions(ebm: ExplainableBoostingModel, described: Collect
     ]
     if skipped:
         logger.warning("interactions_skipped", terms=skipped, reason="the descriptions cover the main effects only")
+    return skipped
+
+
+def _features_without_graph(ebm: ExplainableBoostingModel, described: Collection[int]) -> list[str]:
+    """Name the features that have no main-effect term, which the descriptions skip, and log a warning.
+
+    Parameters
+    ----------
+    ebm : ExplainableBoostingModel
+        The EBM.
+    described : Collection[int]
+        The indices of the features that have a graph.
+
+    Returns
+    -------
+    list[str]
+        The names of the features that ``exclude`` or ``remove_terms`` left without a graph.
+
+    """
+    skipped = [name for index, name in enumerate(ebm.feature_names_in_) if index not in described]
+    if skipped:
+        logger.warning("features_skipped", features=skipped, reason="the features have no main-effect term")
+    return skipped
 
 
 def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
@@ -292,6 +323,7 @@ class _GraphJob:
     graph_options: GraphOptions
     prompt_options: baml_sdk.GraphPromptOptions
     model: baml_sdk.ModelSpec | None
+    omitted_terms: Sequence[str] = ()
 
 
 def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _Described:
@@ -305,8 +337,9 @@ def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _
     ----------
     job: _GraphJob
         The EBM, the number of sentences, the options of the graph text (a retry changes ``max_tokens`` and
-        ``overbudget_percent``), the prompt options as made by ``_prompt_options``, and the model of the requests as
-        made by ``_model_spec`` (``None`` selects the default clients).
+        ``overbudget_percent``), the prompt options as made by ``_prompt_options``, the model of the requests as
+        made by ``_model_spec`` (``None`` selects the default clients), and the interaction terms that the description
+        must name as left out.
     feature_index: int
         The index of the feature to describe.
     graph: str
@@ -332,6 +365,7 @@ def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _
             num_sentences=job.num_sentences,
             opts=job.prompt_options,
             model=job.model,
+            omitted_terms=list(job.omitted_terms),
         )
 
     with provider_errors():
@@ -364,7 +398,8 @@ def describe_graph(request: DescribeGraphRequest) -> str:
     A reply cut off by ``max_tokens`` is retried with a simplified graph, up to 4 times. The logged usage leaves out the
     cut-off attempts, because the provider error carries no token count. It is a lower bound, and the ``usage`` log
     event has the number of those attempts in ``truncated_attempts``. The description covers the main effect of the
-    feature, and an ``interactions_skipped`` warning names the interaction terms of the feature.
+    feature. The prompt names the interaction terms of the feature, so that the description says that it leaves them
+    out, and an ``interactions_skipped`` warning names them too.
 
     Parameters
     ----------
@@ -379,10 +414,17 @@ def describe_graph(request: DescribeGraphRequest) -> str:
     """
     ebm = request.ebm
     feature_index = request.feature_index
-    _warn_skipped_interactions(ebm, {feature_index})
+    omitted_terms = _skipped_interactions(ebm, {feature_index})
     model_spec = _model_spec(request.model)
     graph_text = _graph_text(ebm, feature_index, request.graph, model_spec)
-    job = _GraphJob(ebm, request.num_sentences, request.graph, _prompt_options(request.prompt), model_spec)
+    job = _GraphJob(
+        ebm,
+        request.num_sentences,
+        request.graph,
+        _prompt_options(request.prompt),
+        model_spec,
+        omitted_terms,
+    )
     described = _describe_graph_counted(job, feature_index, graph_text)
     return _log_usage(
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
@@ -513,8 +555,9 @@ def describe_ebm(request: DescribeEBMRequest) -> str:
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
     each retried with a simplified graph if the reply is cut off by ``max_tokens``), and then the LLM summarizes the
-    descriptions. The descriptions skip the interaction terms, and an ``interactions_skipped`` warning names them.
-    They also skip a feature that ``exclude`` or ``remove_terms`` left out, because it has no graph.
+    descriptions. The descriptions skip the interaction terms, and a feature that ``exclude`` or ``remove_terms`` left
+    out, because it has no graph. The summary prompt names both, so that the text says what it leaves out. An
+    ``interactions_skipped`` and a ``features_skipped`` warning name them too.
     The logged usage leaves out the cut-off attempts, because the provider error carries no token count. It is a lower
     bound, and the ``usage`` log event has the number of those attempts in ``truncated_attempts``.
 
@@ -537,7 +580,8 @@ def describe_ebm(request: DescribeEBMRequest) -> str:
     ebm = request.ebm
     features = main_effect_features(ebm)
     feature_names = [ebm.feature_names_in_[feature_index] for feature_index in features]
-    _warn_skipped_interactions(ebm, features)
+    omitted_terms = _skipped_interactions(ebm, features)
+    omitted_features = _features_without_graph(ebm, features)
     feature_importances = _feature_importances_to_text(ebm)
     model_spec = _model_spec(request.model)
     graph_texts = [_graph_text(ebm, feature_index, request.graph, model_spec) for feature_index in features]
@@ -567,6 +611,8 @@ def describe_ebm(request: DescribeEBMRequest) -> str:
                 num_sentences=request.num_sentences,
                 opts=opts,
                 model=model_spec,
+                omitted_terms=omitted_terms,
+                omitted_features=omitted_features,
             )
         finish_step()
     usage = baml_sdk.TokenUsage(
