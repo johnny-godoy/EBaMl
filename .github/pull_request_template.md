@@ -17,7 +17,7 @@ no period, at most 72 characters. A squash merge makes the title the commit on m
 ## Abstraction reuse
 
 <!-- Answer for a change that adds a shared Protocol, ABC, service, adapter or cross-module helper. Write "None" for any
-other change. A reviewer judges the reasons. CI checks only the registry and the clones. -->
+other change. A reviewer judges the reasons. CI checks only the registry. -->
 
 - New shared abstraction? [ ] No [ ] Yes
 - Existing candidates inspected (`uv run python -m scripts.check_abstractions --search <words>`):
@@ -70,7 +70,6 @@ notebook for the input. Mark each step that sends real requests and needs OPENRO
 <!-- Tick what you ran. Say why for each check that you could not run. -->
 
 - [ ] `prek run --all-files`
-- [ ] `uvx prek run --hook-stage manual check-new-clones` (if `src/ebaml/` changed; needs `origin/main` and Node.js)
 - [ ] `uv run pytest` (100% coverage)
 - [ ] `uv run pytest README.md docs src --no-cov` (the documentation examples)
 - [ ] `OPENROUTER_API_KEY=unused baml test -x root::Live` (if `baml_src/` changed)

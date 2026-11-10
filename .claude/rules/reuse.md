@@ -40,10 +40,9 @@ sibling contracts. CI checks the merged result, so a second claim on the same ID
 | --- | --- | --- |
 | Registry | `uv run python -m scripts.check_abstractions --check` | An ID is not unique, a symbol or owner is missing, two active entries claim the same symbol or responsibility, or an exception has no reason. |
 | Contract overlap | `uv run python -m scripts.check_contract_overlap` | Two registered contracts of one context have identical signatures, or an approved overlap no longer exists. Other overlaps are warnings. |
-| New clones | `uvx prek run --hook-stage manual check-new-clones` | The change adds a copy-paste clone (50 tokens, 5 lines) that `origin/main` lacks. |
+| Clones | `jscpd` hook of `prek run --all-files` | `src` holds a copy-paste clone (50 tokens, 5 lines). |
 
-- The first two run in `prek run --all-files`. The third needs the base branch and Node.js, so CI runs it on each pull
-  request and you run it by hand.
+- All three run in `prek run --all-files`. The third needs Node.js.
 - Fix the code, not the check. Remove the clone by calling the existing function, or extract it to the layer that all
   users may import. An `exceptions` entry needs a reason of at least four words and names one pair of contracts.
 - An entry of the registry has a status. Mark an old entry `deprecated` with `replaced_by`, and do not keep two active

@@ -11,7 +11,6 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `mutant_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation.py`, so that they run first. |
 | `check_abstractions.py` | Checks `architecture/abstractions.yml` against the source, and searches the registry and the public symbols (`--check`, `--list`, `--search WORD...`). |
 | `check_contract_overlap.py` | Fails when two registered `Protocol` or `ABC` classes of one context have identical signatures. Other overlaps are warnings. |
-| `check_new_clones.py` | Fails when the change adds a copy-paste clone to `src/ebaml` that a base revision (`origin/main`) lacks. Needs Node.js. |
 | `check_api_breaks.py` | Fails when a change breaks the public API (`ebaml.__all__`) against a base revision and no changelog fragment has a `**BREAKING:**` entry. |
 | `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
 | `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
@@ -69,22 +68,19 @@ limit. Both lists are in the script, with the reason for each. It runs as the `c
 uv run python -m scripts.check_ignore_repeats                   # fails if a rule repeats too often
 ```
 
-## `check_abstractions.py`, `check_contract_overlap.py` and `check_new_clones.py`
+## `check_abstractions.py` and `check_contract_overlap.py`
 
-These three scripts keep the code from growing a second copy of an abstraction. `.claude/rules/reuse.md` has the
+These two scripts keep the code from growing a second copy of an abstraction. `.claude/rules/reuse.md` has the
 process.
 
 ```bash
 uv run python -m scripts.check_abstractions --search graph text   # find capabilities and symbols by word
 uv run python -m scripts.check_abstractions --check               # validate architecture/abstractions.yml
 uv run python -m scripts.check_contract_overlap                    # compare the public Protocol and ABC classes
-uvx prek run --hook-stage manual check-new-clones                  # fail on a clone that origin/main lacks
 ```
 
-- The first two read the source with `ast` and need no network. `--format json` prints stable diagnostics with the
+- Both read the source with `ast` and need no network. `--format json` prints stable diagnostics with the
   fields `rule_id`, `path`, `line`, `capability_id`, `candidate`, `suggestion` and `severity`.
-- `check_new_clones` runs `jscpd` with the options of the `jscpd` hook and `--baseline-from-ref`. It fails with the
-  fetch command if the base revision is missing. In CI the `prek` job fetches the base branch first.
 
 ## `check_exclusions.py`
 

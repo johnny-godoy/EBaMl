@@ -108,15 +108,14 @@ jobs:
         run: |
           mkdir -p "$CI_LOGS"
           uvx prek run --all-files --show-diff-on-failure --color never 2>&1 | tee "$CI_LOGS/prek.log"
-      - name: Check that the pull request adds no clone
-        # The checkout holds the merge of the pull request. The base branch must exist locally for the comparison, so
-        # fetch it first. scripts/check_new_clones.py fails, and does not pass, if the base is missing.
+      - name: Fetch the base branch
+        # The checkout holds the merge of the pull request. The API break check compares with the base branch, so it
+        # must exist locally.
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           git fetch --no-tags --depth=1 origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
-          uv run python -m scripts.check_new_clones --base "origin/${BASE_REF}" 2>&1 | tee -a "$CI_LOGS/prek.log"
       - name: Check that a break of the public API has a changelog entry
         # griffe loads the base revision from git, so the base branch must exist locally (the step above fetched it).
         if: github.event_name == 'pull_request'
