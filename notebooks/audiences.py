@@ -33,6 +33,7 @@ def _():
         likelihood_word,
         points_towards,
         round_value,
+        sample_size_word,
         strength_word,
     )
     from ebaml.core.custom_types import JSONValue
@@ -58,6 +59,7 @@ def _():
         points_towards,
         PromptOptions,
         round_value,
+        sample_size_word,
         strength_word,
     )
 
@@ -74,14 +76,15 @@ def _(mo) -> None:
 
     An audience does two jobs:
 
-    1. **It decides which facts the LLM gets.** Seven methods (`contribution`, `prediction`, `change`, `flip`,
-       `class_output`, `margin` and `share`) return the keys that the audience adds to one kind of fact. A number that
-       the audience leaves out is a number that the LLM cannot repeat.
+    1. **It decides which facts the LLM gets.** One method for each kind of fact (`contribution`, `prediction`,
+       `change`, `flip`, `class_output`, `margin`, `guarantee`, `support`, `lower_bound`, `share` and `sample`) returns
+       the keys that the audience adds to it. A number that the audience leaves out is a number that the LLM cannot
+       repeat.
     2. **It tells the LLM how to write.** The method `guidance` returns the instruction, with its reason.
 
-    All nine methods are abstract, so an author decides on every model number. There are two ways in. **Subclass a
+    All the methods are abstract, so an author decides on every model number. There are two ways in. **Subclass a
     built-in audience** and override the one method that differs: this is the short way. **Subclass `Audience`** and
-    write all nine methods: this is the way for an audience with new rules.
+    write every method: this is the way for an audience with new rules.
 
     This notebook builds six audiences for six readers (a child, a chief executive, a reader of Simplified Technical
     English, a loan officer, a machine learning engineer and a regulator). It shows the facts that each one produces,
@@ -160,7 +163,7 @@ def _(mo) -> None:
     ## 1. The short way: subclass a built-in audience
 
     Some readers need the facts of a layperson (words, no model numbers) and a different instruction. For each of them,
-    the class below subclasses `Layperson` and overrides `guidance`. The other eight methods stay as they are. The
+    the class below subclasses `Layperson` and overrides `guidance`. The other methods stay as they are. The
     readers differ in role and style:
 
     - `Eli5` is a child. The text uses short sentences and one everyday comparison.
@@ -286,8 +289,9 @@ def _(mo) -> None:
 
     A regulator checks that the model uses the right inputs in the right direction. This reader wants the direction and
     the size of each effect, in words, and no probability at all, because a probability depends on the threshold of the
-    bank. The class below subclasses `Audience` itself, so it writes all nine methods. Each one answers the question
-    "which number does this reader get?". The answers are in the table:
+    bank. The classes below subclass `Audience` itself, so they write every method. Each one answers the question
+    "which number does this reader get?". The answers are in the table. The first class holds the methods of the
+    numbers of the model. The second class adds the methods of the conditions of the facts, and the guidance.
 
     | Method | Keys of this audience |
     | --- | --- |
@@ -297,22 +301,18 @@ def _(mo) -> None:
     | `flip` | Whether the flip holds under the uncertainty of the model. |
     | `class_output` | The likelihood of the class after the changes, in words. |
     | `margin` | None. |
+    | `guarantee` | Whether the sufficient reason holds under the uncertainty of the model. |
+    | `support` | Whether the search left out rare values. |
+    | `lower_bound` | None. |
     | `share` | A rough word, `most` or `few`, because the share is a sampling estimate. |
+    | `sample` | The size of the sample, in a word, with the helper `sample_size_word`. |
     """)
 
 
 @app.cell
 def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
-    class Regulator(Audience):
-        """A reader who checks the direction of the effects and wants no probability."""
-
-        @override
-        def guidance(self) -> str:
-            return (
-                "The reader is a model regulator who checks the direction of every effect, so say for each input "
-                "whether it pushes towards or against the prediction, and how strongly. State no probability and no "
-                "number of the model, because the regulator judges the logic of the model and not its calibration."
-            )
+    class RegulatorNumbers(Audience):
+        """The numbers of the model that a regulator gets: directions and sizes in words, and no probability."""
 
         @override
         def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
@@ -326,10 +326,6 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
         @override
         def change(self, change) -> dict[str, JSONValue]:
             return {"direction": "up" if change.score_change > 0 else "down"}
-
-        @override
-        def flip(self, confidence_level) -> dict[str, JSONValue]:
-            return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
         @override
         def class_output(self, output, output_kind) -> dict[str, JSONValue]:
@@ -346,6 +342,38 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
         @override
         def share(self, share: float) -> str:
             return "most" if share > 1 / 2 else "few"
+
+    return (RegulatorNumbers,)
+
+
+@app.cell
+def _(JSONValue, RegulatorNumbers, sample_size_word):
+    class Regulator(RegulatorNumbers):
+        """A reader who checks the direction of the effects and wants no probability."""
+
+        @override
+        def guidance(self) -> str:
+            return (
+                "The reader is a model regulator who checks the direction of every effect, so say for each input "
+                "whether it pushes towards or against the prediction, and how strongly. State no probability and no "
+                "number of the model, because the regulator judges the logic of the model and not its calibration."
+            )
+
+        @override
+        def flip(self, confidence_level) -> dict[str, JSONValue]:
+            return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
+
+        @override
+        def guarantee(self, confidence_level) -> dict[str, JSONValue]:
+            return {"guarantee_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
+
+        @override
+        def support(self, min_support) -> dict[str, JSONValue]:
+            return {"rare_values_left_out": min_support > 0}
+
+        @override
+        def sample(self, n_samples) -> dict[str, JSONValue]:
+            return {"sample_size": sample_size_word(n_samples)}
 
     return (Regulator,)
 
@@ -440,7 +468,7 @@ def _(InvalidOptionError, mo) -> None:
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    **A missing method.** The nine methods are abstract. If you forget one, Python refuses to build the audience, and
+    **A missing method.** The methods are abstract. If you forget one, Python refuses to build the audience, and
     the error names the method. This is the reason for the design: an audience cannot leak a model number by omission.
     """)
 
