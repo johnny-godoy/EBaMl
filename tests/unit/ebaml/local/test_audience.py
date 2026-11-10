@@ -19,8 +19,11 @@ AUDIENCE_METHODS = [
     "flip",
     "class_output",
     "margin",
+    "guarantee",
+    "support",
     "lower_bound",
     "share",
+    "sample",
 ]
 PROMPT_TESTS = Path(__file__).parents[4] / "baml_src" / "tests" / "live" / "prompts.baml"
 
@@ -61,6 +64,47 @@ def test_likelihood_words_start_at_their_threshold(probability: float, word: str
 )
 def test_strength_words_start_at_their_threshold(score: float, word: str) -> None:
     assert audiences.strength_word(score) == word
+
+
+@pytest.mark.parametrize(
+    ("n_samples", "word"),
+    [(1_000_000, "large"), (10_000, "large"), (9_999, "moderate"), (1_000, "moderate"), (999, "small"), (1, "small")],
+)
+def test_sample_size_words_start_at_their_threshold(n_samples: int, word: str) -> None:
+    assert audiences.sample_size_word(n_samples) == word
+
+
+@pytest.mark.parametrize(
+    ("confidence_level", "moved"),
+    [(0.0, False), (0.5, True), (0.95, True)],
+)
+def test_a_layperson_is_told_in_a_word_whether_the_scores_moved(confidence_level: float, *, moved: bool) -> None:
+    # at confidence_level=0 no score moves, so no key may say that a claim survives the uncertainty of the model
+    audience = audiences.Layperson()
+    assert audience.flip(confidence_level) == {"flip_holds_even_if_the_model_is_somewhat_off": moved}
+    assert audience.guarantee(confidence_level) == {"guarantee_holds_even_if_the_model_is_somewhat_off": moved}
+
+
+@pytest.mark.parametrize("confidence_level", [0.0, 0.95])
+def test_a_data_scientist_gets_the_confidence_level_of_each_claim(confidence_level: float) -> None:
+    audience = audiences.DataScientist()
+    assert audience.flip(confidence_level) == {"flip_holds_at_confidence": confidence_level}
+    assert audience.guarantee(confidence_level) == {"guarantee_holds_at_confidence": confidence_level}
+
+
+@pytest.mark.parametrize(("min_support", "left_out"), [(0.0, False), (0.001, True), (0.01, True)])
+def test_each_audience_is_told_whether_rare_values_were_left_out(min_support: float, *, left_out: bool) -> None:
+    # at min_support=0 every bin is plausible, so no key may say that rare values were left out
+    assert audiences.Layperson().support(min_support) == {"rare_values_left_out": left_out}
+    assert audiences.DataScientist().support(min_support) == {
+        "rare_values_left_out": left_out,
+        "min_support": min_support,
+    }
+
+
+def test_each_audience_is_told_the_size_of_the_sample() -> None:
+    assert audiences.Layperson().sample(50) == {"sample_size": "small"}
+    assert audiences.DataScientist().sample(50) == {"number_of_samples": 50}
 
 
 def test_round_keeps_three_decimals() -> None:

@@ -49,6 +49,7 @@ from ebaml.local.audience import (
     points_towards,
     resolve_audience,
     round_value,
+    sample_size_word,
     strength_word,
 )
 from ebaml.local.covering_backend import (
@@ -163,6 +164,7 @@ __all__ = [
     "points_towards",
     "resolve_audience",
     "round_value",
+    "sample_size_word",
     "strength_word",
 ]
 
