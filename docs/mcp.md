@@ -113,8 +113,8 @@ reaches the port can read the model and the rows of the data file.
 
 The server also serves each graph as the resource `ebm://graphs/{feature}`.
 
-`explain_prediction` works for binary classifiers without interactions. For other models, it returns an error with the
-reason. A package error is a tool error with its message.
+`explain_prediction` works for classifiers and regressors without interactions. For other models, it returns an error
+with the reason. A package error is a tool error with its message.
 
 The examples below come from a real session over stdio. The model is an EBM with `interactions=0` that was fitted on
 500 synthetic rows with the features `age`, `income` and `city`. The server started with

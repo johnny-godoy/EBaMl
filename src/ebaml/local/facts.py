@@ -259,16 +259,21 @@ class Change:
 
 @attrs.frozen
 class Counterfactual:
-    """The smallest set of changes after which the decision does not hold, at the requested confidence.
+    """A set of changes after which the decision does not hold, at the requested confidence.
+
+    The set is the smallest one only if ``minimum`` is true. The default counterfactual always has that proof. The
+    counterfactual of ``LocalOptions.target_class`` has it only if the search proves it: ``GreedyCover``,
+    ``LocalSearchCover`` and a ``MipCover`` that ends at its time limit can return a larger set.
 
     Attributes
     ----------
     changes: list[Change]
         The changes.
     new_decision: ClassLabel
-        The decision after the changes: the other class of a binary classifier, or the opposite answer of a regressor.
+        The decision after the changes: the other class of a binary classifier, the class that a multiclass classifier
+        then predicts, or the opposite answer of a regressor.
     new_output: float
-        The output of the model for the new decision: the probability of the other class, or the predicted value.
+        The output of the model for the new decision: the probability of the new class, or the predicted value.
     minimum: bool
         True if no smaller set of changes gives the new decision. Sorting proves it for the default counterfactual. For
         a chosen target class, the search proves it, or the size equals ``lower_bound``.
@@ -510,7 +515,7 @@ def _local_kind(ebm: ExplainableBoostingModel) -> LocalKind:
     Raises
     ------
     UnsupportedModelError
-        If the model is not a binary classifier or a regressor, or its kind is unknown.
+        If the model is not a classifier or a regressor, or its kind is unknown.
 
     """
     message = "Local explanations need a classifier or a regressor."
@@ -731,7 +736,7 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     return SufficientReason(
         features=[step.feature.name for step in order[:count]],
         guaranteed_margin=float(margins[count]),
-        minimum=True,  # the greedy set of a binary classifier is the smallest, as the paper proves
+        minimum=True,  # sorting finds the smallest set of a decision with one margin, as the paper proves
         lower_bound=count,
     )
 
@@ -1164,11 +1169,15 @@ def compute_local_facts(
     instance: Mapping[str, FeatureValue],
     options: LocalOptions | None = None,
 ) -> LocalFacts:
-    """Compute the three local explanations of one prediction of a binary classifier or a regressor.
+    """Compute the three local explanations of one prediction of a classifier or a regressor.
 
-    The function raises an ``UnsupportedModelError`` for an EBM that is not a binary classifier or a regressor, and
-    for an EBM with interactions. It raises an ``InvalidInstanceError`` for an instance that lacks a value or has an
-    unknown category. A regressor explains the answer to ``LocalOptions.decision``.
+    The classifier is binary or multiclass. The function raises an ``UnsupportedModelError`` for an EBM that is not a
+    classifier or a regressor, and for an EBM with interactions. It raises an ``InvalidInstanceError`` for an instance
+    that lacks a value or has an unknown category. A regressor explains the answer to ``LocalOptions.decision``.
+
+    A counterfactual and a sufficient reason are the smallest sets only if their ``minimum`` is true. Sorting proves
+    it for a decision with one margin. A decision with several margins and the counterfactual of a target class
+    depend on ``LocalOptions.search``.
 
     Parameters
     ----------
