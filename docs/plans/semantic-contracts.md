@@ -9,7 +9,6 @@ does now, so the implementing agent knows which parts of the review were already
 
 | Order | Plan | Contract | Main gap found |
 | --- | --- | --- | --- |
-| 5 | [model-consistency](model-consistency.md) | 5 | The checks against `ebm.predict` use a few fixed rows of two fitted models. |
 | 6 | [completion-sampling](completion-sampling.md) | 6 | A test asserts that the share grows, and no test compares the estimate with an exact count. |
 | 7 | [omitted-terms](omitted-terms.md) | 4 | `describe_ebm` leaves out interaction terms with only a log warning. The summary prompt does not know about them. |
 

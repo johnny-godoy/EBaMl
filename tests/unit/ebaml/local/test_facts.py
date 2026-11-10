@@ -4,7 +4,8 @@ import functools
 import itertools
 import math
 import re
-from collections.abc import Callable, Iterator, Sequence
+import statistics
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from decimal import Decimal
 
 import attrs
@@ -14,7 +15,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from ebaml.core.custom_types import FeatureValue
+from ebaml.core.custom_types import ClassLabel, FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -53,8 +54,10 @@ from tests.unit.ebaml.local.conftest import (
     feature_name,
     fit_template,
     model_cases,
+    model_row,
     model_scores,
     oracle_problem,
+    plausible_bins,
 )
 
 CATEGORIES = ["p", "q", "r"]
@@ -1822,3 +1825,233 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     default = local.compute_local_facts(ebm, TWO_CHANGES_MODEL.instance, attrs.evolve(options, target_class=None))
     assert default.counterfactual is not None
     assert default.counterfactual.minimum is True
+
+
+def _label_of(ebm: FittedModel, score: float, limits: Sequence[float]) -> str:
+    """Name the answer of a regressor to its question for a predicted value.
+
+    Returns
+    -------
+    str
+        The label of the side of the value.
+
+    """
+    decision = _decision(limits) or Threshold(float(ebm.intercept_))
+    return str(decision.side(score).label)
+
+
+def _model_decision(ebm: FittedModel, row: Mapping[str, FeatureValue], limits: Sequence[float]) -> ClassLabel:
+    """Ask the EBM for its decision on one input, through the API of interpret.
+
+    Returns
+    -------
+    ClassLabel
+        The predicted class, or the answer of a regressor to its question.
+
+    """
+    predicted = ebm.predict(frame_of_rows([row]))[0]
+    if isinstance(ebm, ExplainableBoostingRegressor):
+        return _label_of(ebm, float(predicted), limits)
+    label: ClassLabel = predicted.item()
+    return label
+
+
+def _value_in(feature: str, bin_label: str) -> FeatureValue:
+    """Pick a value inside the bin that a change names.
+
+    Returns
+    -------
+    FeatureValue
+        The category of a nominal feature, or the middle of the interval of a continuous feature.
+
+    """
+    if feature.startswith("n"):
+        return bin_label
+    low, high = (float(end) for end in bin_label.strip("[)").split(","))
+    return (low + high) / 2
+
+
+MODEL_CASE: Callable[[Callable[..., None]], Callable[..., None]] = given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+)
+
+
+@settings(max_examples=150, deadline=None)
+@MODEL_CASE
+def test_the_prediction_of_the_facts_agrees_with_the_fitted_model(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+) -> None:
+    # contract 5: the class, the scores and the values of the facts are those of the EBM
+    model, limits = case
+    ebm, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    prediction = facts.prediction
+    assert prediction.decision == _model_decision(ebm, model.instance, limits)
+    scores = model_scores(ebm, [model.instance])[0]
+    column = int(np.argmax(scores)) if model.kind == "multiclass" else 0
+    # The graph of a multiclass model centres the scores of each bin over the classes (the multiclass scores proof).
+    # The class score of the facts is then lower than decision_function by one number for all the classes, which
+    # changes no margin and no probability. A model with one output has no centring.
+    centring = 0.0
+    if model.kind == "multiclass":
+        centring = sum(
+            statistics.fmean(model.scores[feature][bin_index]) for feature, bin_index in enumerate(model.instance_bins)
+        )
+    assert prediction.score == pytest.approx(scores[column] - centring)
+    intercept = float(np.ravel(ebm.intercept_)[column])
+    assert intercept + sum(contribution.score for contribution in facts.contributions) == pytest.approx(
+        prediction.score,
+    )
+    assert prediction.output == pytest.approx(_model_output(ebm, model.instance, prediction.decision))
+    assert {contribution.feature: contribution.value for contribution in facts.contributions} == {
+        name: (f"{value:.4g}" if isinstance(value, float) else value) for name, value in model.instance.items()
+    }
+    _, again = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    assert again == facts
+
+
+def _model_output(ebm: FittedModel, row: Mapping[str, FeatureValue], decision: ClassLabel) -> float:
+    """Ask the EBM for its output on one input: the predicted value, or the probability of a class.
+
+    Returns
+    -------
+    float
+        The output.
+
+    """
+    frame = frame_of_rows([row])
+    if isinstance(ebm, ExplainableBoostingRegressor):
+        return float(ebm.predict(frame)[0])
+    return float(ebm.predict_proba(frame)[0][list(ebm.classes_).index(decision)])
+
+
+@settings(max_examples=150, deadline=None)
+@MODEL_CASE
+def test_the_changes_of_a_counterfactual_change_the_decision_of_the_fitted_model(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+) -> None:
+    # contract 5: a counterfactual flips the decision of the EBM, with a value inside each new bin
+    model, limits = case
+    ebm, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    counterfactual = facts.counterfactual
+    assume(counterfactual is not None)
+    assert counterfactual is not None
+    for change in counterfactual.changes:
+        assert change.from_value == next(c.value for c in facts.contributions if c.feature == change.feature)
+    changed = model.instance | {
+        change.feature: _value_in(change.feature, change.to_value) for change in counterfactual.changes
+    }
+    assert _model_decision(ebm, changed, limits) != facts.prediction.decision
+    if isinstance(ebm, ExplainableBoostingRegressor):
+        old_value = model.output_scores(model.instance_bins)[0]
+        new_value = _model_output(ebm, changed, counterfactual.new_decision)
+        # the new decision of a regressor names the limit that the value crossed, and the side that it is on
+        crossed = [limit for limit in limits or (model.intercepts[0],) if (old_value > limit) != (new_value > limit)]
+        assert counterfactual.new_decision in {
+            f"at most {limit:.4g}" if old_value > limit else f"above {limit:.4g}" for limit in crossed
+        }
+    else:
+        assert counterfactual.new_decision == _model_decision(ebm, changed, limits)
+    assert counterfactual.new_output == pytest.approx(_model_output(ebm, changed, counterfactual.new_decision))
+
+
+@settings(max_examples=150, deadline=None)
+@MODEL_CASE
+def test_a_sufficient_reason_keeps_the_decision_of_the_fitted_model_for_every_completion(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+) -> None:
+    # contract 5: with the features of the reason fixed, each allowed completion keeps the decision of the EBM
+    model, limits = case
+    ebm, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
+    reason = facts.sufficient_reason
+    assume(reason is not None)
+    assert reason is not None
+    free = [index for index, _ in enumerate(model.instance_bins) if feature_name(index) not in reason.features]
+    allowed = [
+        plausible_bins(
+            model.weights[index],
+            continuous=index % 2 == 1,
+            min_support=min_support,
+            instance_bin=model.instance_bins[index],
+        )
+        for index in free
+    ]
+    for bins in itertools.product(*allowed):
+        completion = list(model.instance_bins)
+        for index, bin_index in zip(free, bins, strict=True):
+            completion[index] = bin_index
+        assert _model_decision(ebm, model_row(completion), limits) == facts.prediction.decision
+
+
+@pytest.fixture(scope="module")
+def unsorted_ebm(fit_ebm: Callable[..., ExplainableBoostingClassifier]) -> FittedClassifier:
+    """Fit a classifier on categories that are not in sorted order, with missing values in both columns.
+
+    Returns
+    -------
+    FittedClassifier
+        The model and its training data.
+
+    """
+    random_generator = np.random.default_rng(11)
+    # "10" sorts before "9" as text and after it as a number, and "b" is not a number
+    sizes = random_generator.choice(np.array(["9", "10", "b", "2"], dtype=object), 400)
+    amounts = random_generator.normal(size=400)
+    effect = np.select([sizes == "10", sizes == "2", sizes == "b"], [2.0, -2.0, 0.5], 0.0)
+    target = (effect + amounts + random_generator.normal(scale=0.3, size=400) > 0).astype(int)
+    sizes[:20] = None
+    amounts[20:40] = np.nan
+    data = frame_of_columns({"size": sizes, "amount": amounts})
+    return fit_ebm(data, target, interactions=0, random_state=0), data
+
+
+@pytest.mark.parametrize("row", range(40, 64))
+def test_the_facts_align_with_unsorted_categories_and_a_model_with_missing_values(
+    unsorted_ebm: FittedClassifier,
+    row: int,
+) -> None:
+    ebm, data = unsorted_ebm
+    instance = instance_of(data, row)
+    facts = local.compute_local_facts(ebm, instance, local.LocalOptions(confidence_level=0, min_support=0))
+    frame = frame_of_rows([instance])
+    assert facts.prediction.decision == ebm.predict(frame)[0]
+    logits: np.ndarray = ebm.decision_function(frame)
+    assert facts.prediction.score == pytest.approx(logits[0])
+    values = {contribution.feature: contribution.value for contribution in facts.contributions}
+    assert values == {"size": instance["size"], "amount": f"{instance['amount']:.4g}"}
+    by_feature = {contribution.feature: contribution.score for contribution in facts.contributions}
+    # the score of the category is the score that the EBM gives to it alone
+    category_bin = ebm.bins_[0][0][str(instance["size"])]
+    category_score = ebm.term_scores_[0][category_bin]
+    assert by_feature["size"] == pytest.approx(category_score)
+    counterfactual = facts.counterfactual
+    assert counterfactual is not None
+    changed = instance | {change.feature: _value_of_change(change) for change in counterfactual.changes}
+    assert ebm.predict(frame_of_rows([changed]))[0] == counterfactual.new_decision != facts.prediction.decision
+
+
+def _value_of_change(change: local.Change) -> FeatureValue:
+    if change.feature == "size":
+        return change.to_value
+    low, high = (float(end) for end in change.to_value.strip("[)").split(","))
+    return (low + high) / 2
+
+
+@pytest.mark.parametrize("missing", [{"size": None}, {"amount": float("nan")}])
+def test_a_model_with_missing_values_in_training_still_needs_every_input(
+    unsorted_ebm: FittedClassifier,
+    missing: dict[str, FeatureValue],
+) -> None:
+    ebm, data = unsorted_ebm
+    with pytest.raises(InvalidInstanceError, match="is missing"):
+        local.compute_local_facts(ebm, instance_of(data, 50) | missing)

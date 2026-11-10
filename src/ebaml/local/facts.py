@@ -210,7 +210,9 @@ class Prediction:
         The upper end of the confidence interval of ``output``.
     score: float
         The sum of the intercept and the scores, on the scale of the link: the log-odds of the second class, or the
-        predicted value.
+        predicted value. For a multiclass classifier it is the score of the predicted class, with the scores of each
+        bin centred over the classes as in the graphs (``EBMGraph.from_ebm``). It is then lower than
+        ``decision_function`` by one number for all the classes, so the margins and the probabilities do not change.
     score_std: float
         The standard deviation of ``score``.
     margin: float
