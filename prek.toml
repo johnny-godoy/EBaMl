@@ -98,24 +98,12 @@ hooks = [
     name = "jscpd: src has no copy-paste clone",
     language = "node",
     additional_dependencies = ["jscpd@5.4.2"],
-    # This hook fails on any clone (threshold 0) and needs no git history. check-new-clones (CI and the manual stage)
-    # reports the clones that the base branch lacks. Tests repeat setup on purpose, so they are not scanned.
+    # This hook fails on any clone (threshold 0) and needs no git history. Tests repeat setup on purpose, so they are
+    # not scanned.
     entry = "jscpd src --format python --min-tokens 50 --min-lines 5 --threshold 0 --reporters console --no-colors",
     files = "^src/.*\\.py$",
     pass_filenames = false,
     priority = 44,
-  },
-  {
-    id = "check-new-clones",
-    name = "jscpd: the change adds no clone to src/ebaml",
-    language = "system",
-    # Manual stage: it needs the base branch in the local clone, which a commit hook cannot assume. CI runs it on every
-    # pull request. Locally: `uvx prek run --hook-stage manual check-new-clones`.
-    entry = "uv run python -m scripts.check_new_clones",
-    files = "^(src/ebaml/.*\\.py|scripts/check_new_clones\\.py)$",
-    pass_filenames = false,
-    stages = ["manual"],
-    priority = 45,
   },
   {
     id = "pyrefly",

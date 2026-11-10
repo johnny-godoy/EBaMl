@@ -23,7 +23,6 @@ uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, witho
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, marimo check, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, check-ignore-repeats, uv lock --check
 uv run python -m scripts.check_abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
-uvx prek run --hook-stage manual check-new-clones   # fails on a copy-paste clone that origin/main lacks; needs Node.js and origin/main
 uv run --only-group dist python -m scripts.smoke_install dist/ebaml-X.Y.Z-py3-none-any.whl X.Y.Z --extras mcp   # install a built file in a clean environment; the release workflow runs it
 uv run python -m scripts.check_api_breaks --base origin/main   # a break of ebaml.__all__ needs a **BREAKING:** fragment
 uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
