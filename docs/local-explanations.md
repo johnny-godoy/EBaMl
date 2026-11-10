@@ -88,9 +88,23 @@ fixing all the features does not guarantee the prediction (the model is too unce
 ### Completions
 
 Reveal the features one at a time, in the same order as the sufficient reason, and for each step estimate the share of
-completions that get the same prediction. The unknown features are sampled independently from the training
-distribution of the EBM (`bin_weights_`) with a fixed seed. Step 0 is the base rate with nothing known. Only the first `max_steps` features are revealed; if all of them are, the last share is 100% by definition (every input known). Unlike the other two, **these are estimates and must be described as
-approximate.**
+completions that get the same prediction. Step 0 is the base rate with nothing known. Only the first `max_steps`
+features are revealed. If all of them are, the last share is 100% by definition (every input known).
+
+Each share is an estimate from `n_samples` random completions, under these assumptions:
+
+- **Independent inputs.** Each unknown feature is sampled alone, so a completion can be a combination that the data
+  does not contain.
+- **Training weights.** A bin is drawn with its share of the training data of the EBM (`bin_weights_`).
+- **Every bin.** The sample uses all the bins of a feature. The counterfactual and the sufficient reason use only the
+  values that `min_support` allows, so their domain is smaller.
+- **Fitted scores.** The sample uses the scores as the model fitted them. `confidence_level` does not change a share.
+- **A fixed seed.** The same `seed` gives the same shares. Another seed, or another `n_samples`, gives another
+  estimate of the same share.
+
+A share can fall when an input becomes known: the value of the instance can be less favourable than most values of
+that input. The sampling error of a share `p` is about `sqrt(p * (1 - p) / n_samples)`. Unlike the other two,
+**these are estimates and must be described as approximate.**
 
 ## Confidence
 
@@ -424,7 +438,8 @@ To compute the facts alone, with no LLM and no key, call `compute_local_facts(eb
 - **The free features vary independently.** A sufficient reason covers *every* combination of the remaining values,
   including combinations that never occur in the data (a first-class passenger who paid the cheapest fare). That is
   what makes it a guarantee, and also why it can need more features than intuition suggests.
-- **`completions` is an estimate**, and treats the unknown features as independent, as the EBM does.
+- **`completions` is an estimate** under the assumptions of [Completions](#completions): independent inputs, the
+  training weights of every bin, the fitted scores and a fixed seed.
 
 ## Limits
 

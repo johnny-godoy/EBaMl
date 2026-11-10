@@ -763,6 +763,11 @@ def _completions(
 ) -> list[CompletionStep]:
     """Count completions, estimated by sampling the unknown features from their training bin weights.
 
+    The estimate has its own assumptions. The unknown features are independent. Each one takes every bin, also a bin
+    that ``min_support`` leaves out of the other two explanations, with the share of the training weight of the bin.
+    The scores are the fitted ones, so ``confidence_level`` does not change a share. One generator with the seed of
+    the options draws the bins once, and every step uses the same draws.
+
     Parameters
     ----------
     features : Sequence[_Feature]
