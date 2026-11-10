@@ -1,8 +1,8 @@
 """Fail when a change adds a copy-paste clone to ``src/ebaml``.
 
-The ``jscpd`` hook of ``prek.toml`` keeps the share of duplicated lines under 1%. That limit lets a small new clone
-pass, so this check compares the clones of the working tree with the clones of a base revision. It fails on each clone
-that the base lacks, and it ignores the clones that the base already has.
+The ``jscpd`` hook of ``prek.toml`` fails on any clone in ``src`` (threshold 0). This check compares the clones of
+the working tree with the clones of a base revision. It fails on each clone that the base lacks, and it ignores the
+clones that the base already has.
 
 The check scans the handwritten ``src/ebaml`` only. The generated ``src/baml_sdk`` is outside the scan. It uses the
 options of the hook (python, 50 tokens, 5 lines) for both trees, so the check changes the policy and not the detector.
