@@ -274,10 +274,14 @@ reader together, write your own audience (below).
 An audience has two jobs, and the base class `Audience` has one method for each part of them:
 
 - `guidance()` returns the instruction that tells the LLM how to write for this reader, and why.
-- `contribution`, `prediction`, `change`, `flip`, `class_output`, `margin`, `lower_bound` and `share` return the keys that
-  the audience adds to one kind of fact. `facts_to_texts` builds the keys that all audiences share (the names of the features, their values).
+- `contribution`, `prediction`, `change`, `flip`, `class_output`, `margin`, `guarantee`, `support`, `lower_bound`,
+  `share` and `sample` return the keys that the audience adds to one kind of fact. `facts_to_texts` builds the keys
+  that all audiences share (the names of the features, their values).
+- `flip`, `guarantee`, `support` and `sample` state the conditions of the facts: whether the scores moved by their
+  uncertainty (`confidence_level`), whether rare values were left out (`min_support`), and the size of the sample
+  (`n_samples`). The prompts read these keys. The text then claims a condition only when the options set it.
 
-All nine methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
+All the methods are abstract, so the author decides on every model number. To change one rule of a built-in audience,
 subclass it and override that method. This audience keeps the words of the layperson and writes for a chief executive:
 
 ```python
@@ -324,7 +328,7 @@ class LoanOfficer(DataScientist):
 ```
 
 `ebaml` also exports the helpers of the built-in audiences: `likelihood_word`, `strength_word`,
-`round_value` and `points_towards`. Pass the object to `explain_instance(ExplainInstanceRequest(..., audience=LoanOfficer()))`. The
+`sample_size_word`, `round_value` and `points_towards`. Pass the object to `explain_instance(ExplainInstanceRequest(..., audience=LoanOfficer()))`. The
 [custom audiences notebook](audiences-notebook.md) walks through six audiences (a child, a chief executive, a reader of Simplified Technical English, a loan officer, a machine learning engineer and a regulator) and shows their facts side by side.
 
 You can see exactly what the LLM reads, without calling it:
@@ -352,7 +356,9 @@ print(texts.counterfactual)
   "number_of_changes": 1,
   "is_smallest_set": true,
   "after_the_changes": {"predicted_class": 1, "probability": 0.589},
-  "flip_holds_at_confidence": 0.95
+  "flip_holds_at_confidence": 0.95,
+  "rare_values_left_out": true,
+  "min_support": 0.01
 }
 ```
 
@@ -365,7 +371,8 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
   "number_of_changes": 1,
   "is_smallest_set": true,
   "after_the_changes": {"predicted_class": 1, "likelihood": "about as likely as not"},
-  "flip_holds_even_if_the_model_is_somewhat_off": true
+  "flip_holds_even_if_the_model_is_somewhat_off": true,
+  "rare_values_left_out": true
 }
 ```
 
