@@ -28,7 +28,9 @@ from hypothesis import strategies as st
 
 from ebaml.core.custom_types import FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+from ebaml.local.covering_backend import CoveringModel, ModelResult, ModelStatus, SolveSettings
 from ebaml.local.covering_problem import Choice, Cover, CoveringProblem
+from ebaml.local.ortools_backend import OrToolsBackend
 from tests.unit.ebaml.conftest import PandasFrame, frame_of_rows
 
 # the parts of a problem: the worst case of each margin, and groups[group][alternative][margin]
@@ -167,6 +169,38 @@ def random_problem(seed: int, feature_count: int, margin_count: int) -> Covering
     worst = -gains.sum(axis=0) * random_generator.uniform(0.2, 0.4, size=margin_count)
     return CoveringProblem(worst.tolist(), [[row.tolist()] for row in gains])
 
+
+@attrs.define
+class ScriptedBackend:
+    """A ``MipBackend`` that answers the LP with the real backend, and the integer models from a script.
+
+    ``answer`` gets the model of each integer call and returns the result. It obeys the contract: a status, and picks
+    only with a solution.
+    """
+
+    answer: Callable[[CoveringModel], ModelResult] | None = None
+    lp: ModelResult | None = None
+    calls: list[tuple[CoveringModel, SolveSettings]] = attrs.field(factory=list)
+
+    def solve(self, model: CoveringModel, settings: SolveSettings) -> ModelResult:
+        """Answer one model.
+
+        Returns
+        -------
+        ModelResult
+            The scripted answer, or the answer of ``OrToolsBackend`` when there is no script for the model.
+
+        """
+        if not model.integer:
+            return self.lp if self.lp is not None else OrToolsBackend().solve(model, settings)
+        self.calls.append((model, settings))
+        if self.answer is not None:
+            return self.answer(model)
+        return OrToolsBackend().solve(model, settings)
+
+
+# An LP that ends with no solution, so that the lower bound of a solver is the trivial one.
+NO_LP: ModelResult = ModelResult(ModelStatus.NO_SOLUTION)
 
 # The greedy picks {2}, then {0} and {1}, and its removal pass keeps all three. The LP bound is 2, and {1, 3} is the
 # only set of size 2, so a solver must do better than the greedy.
@@ -348,9 +382,28 @@ def template_data(shape: Sequence[int]) -> PandasFrame:
     return frame_of_rows([model_row(row) for row in rows])
 
 
+def fit_template(fit_ebm: Callable[..., FittedModel], kind: str, shape: Sequence[int]) -> FittedModel:
+    """Fit the EBM of one kind and shape. ``build_ebm`` then replaces its numbers.
+
+    Returns
+    -------
+    FittedModel
+        The fitted model.
+
+    """
+    data = template_data(shape)
+    random_generator = np.random.default_rng(len(shape))
+    targets = {
+        "binary": random_generator.integers(0, 2, len(data)),
+        "multiclass": random_generator.integers(0, CLASS_COUNT, len(data)),
+        "regressor": random_generator.normal(size=len(data)),
+    }
+    return fit_ebm(data, targets[kind], interactions=0, random_state=0, regression=kind == "regressor")
+
+
 @pytest.fixture(scope="session")
 def small_templates(fit_ebm: Callable[..., FittedModel]) -> dict[tuple[str, tuple[int, ...]], FittedModel]:
-    """Fit one EBM for each kind and shape. ``build_ebm`` then replaces its numbers.
+    """Fit one EBM for each kind and shape of the strategy of small models.
 
     Returns
     -------
@@ -358,24 +411,7 @@ def small_templates(fit_ebm: Callable[..., FittedModel]) -> dict[tuple[str, tupl
         The fitted model of each kind and shape.
 
     """
-    templates: dict[tuple[str, tuple[int, ...]], FittedModel] = {}
-    for shape in MODEL_SHAPES:
-        data = template_data(shape)
-        random_generator = np.random.default_rng(len(shape))
-        targets = {
-            "binary": random_generator.integers(0, 2, len(data)),
-            "multiclass": random_generator.integers(0, CLASS_COUNT, len(data)),
-            "regressor": random_generator.normal(size=len(data)),
-        }
-        for kind, target in targets.items():
-            templates[kind, shape] = fit_ebm(
-                data,
-                target,
-                interactions=0,
-                random_state=0,
-                regression=kind == "regressor",
-            )
-    return templates
+    return {(kind, shape): fit_template(fit_ebm, kind, shape) for kind in MODEL_KINDS for shape in MODEL_SHAPES}
 
 
 def build_ebm(templates: Templates, model: SmallModel) -> FittedModel:
