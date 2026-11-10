@@ -72,8 +72,8 @@ reduction keeps the optimum and the approximation ratio (Theorem 10). So the har
 @dinur2014 holds for the sufficient reason (Corollary 5). The claim covers the gain table of the sufficient reason.
 It does not cover the counterfactual of a chosen class (@sec-limits).
 
-The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The text of the module docstring
-differs a little from the code for the counterfactual. @sec-limits explains the difference.
+The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The counterfactual and the sufficient
+reason move different scores by $z$ deviations. @sec-limits states the uncertainty model of each claim.
 
 = Model <sec-model>
 
@@ -140,8 +140,8 @@ a minimum over $P_i$. The paper restricts the minimum to $P_i$, and so it needs 
   The change _flips_ the prediction iff $R(S, w) < 0$.
 ])
 
-A feature outside $S$ keeps its score without deviation. The code does this (in `_counterfactual`). The module
-docstring says that every score moves by $z$ deviations. @sec-limits discusses this difference.
+A feature outside $S$ keeps its score without deviation. The code does this (in `_counterfactual`), and the module
+docstring says so. @sec-limits compares this uncertainty model with the model of the sufficient reason.
 
 #notation("drop", [
   $d_i = t_i (c_i) - min_(v in P_i) p_i (v)$. Let $beta_i in P_i$ be a bin where $p_i$ reaches this minimum.
@@ -1009,11 +1009,11 @@ The proof does not cover the following points.
   so there is nothing exact to prove.
 - *`new_output`.* The counterfactual reports the probability of the new class from the mean scores, with no
   deviation. It is a report and not an optimality claim.
-- *The docstring.* The module docstring says that every score moves by $z$ deviations in the direction that makes
-  the claim harder to prove. This holds for the sufficient reason: the fixed and the unknown features both use $g$.
-  For the counterfactual, only the changed features use $p$. The unchanged features keep their mean scores in
-  $M$ (in `_counterfactual`). The proof covers the code. If the docstring is the intention, the counterfactual needs a
-  different definition of $M$, and Theorem 2 needs a new proof.
+- *The uncertainty model of each claim.* The two claims move different scores by $z$ deviations, and the module
+  docstring names both models. For the sufficient reason, each score moves against the decision: the fixed and the
+  unknown features both use $g$. For the counterfactual, only the changed features use $p$. The unchanged features keep
+  their mean scores in $M$ (in `_counterfactual`). The proof covers these two models. A counterfactual that also moves
+  the unchanged features needs a different definition of $M$, and a new proof of Theorem 2.
 - *The tie at the threshold.* A change of a prediction above $tau$ that lands exactly on $tau$ gives the robust margin
   $0$, so the code does not count it as a flip, although the value is then "at most $tau$". This is the same
   convention as the logit $0$ of a classifier. Every change that the code finds does flip the decision (Lemma 8), and
@@ -1061,9 +1061,10 @@ The proof does not cover the following points.
   otherwise. The main effects give the drops $0.6$, $0.6$ and $0$ for $a$, $b$ and $c$, and the margin is $1$. The
   greedy rule needs $0.6 + 0.6 > 1$, so it returns two features. The change of $c$ alone to $1$ gives
   $f = -1 < 0$ and flips the prediction. The code rejects such models (`_features`).
-- *The empirical link to the code.* The test `test_matches_brute_force` in
-  `tests/unit/ebaml/local/test_facts.py` compares the code with a full enumeration on a small model. It checks
-  the link between the code and this model on some inputs. It is not a proof.
+- *The empirical link to the code.* The test `test_the_facts_match_the_oracle_of_the_paper` in
+  `tests/unit/ebaml/local/test_facts.py` compares the code with an oracle on random small models of each kind. The
+  oracle enumerates the changes and the completions by the definitions of @sec-model, with $z > 0$ and with bins
+  outside $P_i$. The test checks the link between the code and this model on some inputs. It is not a proof.
 
 = Computer check <sec-computer>
 
