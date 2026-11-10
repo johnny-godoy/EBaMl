@@ -9,7 +9,6 @@ does now, so the implementing agent knows which parts of the review were already
 
 | Order | Plan | Contract | Main gap found |
 | --- | --- | --- | --- |
-| 6 | [completion-sampling](completion-sampling.md) | 6 | A test asserts that the share grows, and no test compares the estimate with an exact count. |
 | 7 | [omitted-terms](omitted-terms.md) | 4 | `describe_ebm` leaves out interaction terms with only a log warning. The summary prompt does not know about them. |
 
 The order puts the cheap fixes of wrong claims first. Plans 3 and 5 can share one Hypothesis strategy of small models,
