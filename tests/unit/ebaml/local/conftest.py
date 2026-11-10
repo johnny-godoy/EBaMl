@@ -451,6 +451,23 @@ def model_scores(ebm: FittedModel, rows: Sequence[Mapping[str, FeatureValue]]) -
     return np.asarray(scores, dtype=float).reshape(len(rows), -1)
 
 
+def decision_key(model: SmallModel, bins: Sequence[int], limits: Sequence[float] = ()) -> tuple[bool, ...] | int:
+    """Name the decision of a small model for an input, from the drawn numbers.
+
+    Returns
+    -------
+    tuple[bool, ...] | int
+        The winning class of a multiclass classifier. Otherwise, for each limit, whether the score is above it: the
+        limit zero for a binary classifier, and the intercept for a regressor without limits.
+
+    """
+    totals = model.output_scores(bins)
+    if model.kind == "multiclass":
+        return max(range(CLASS_COUNT), key=lambda output: totals[output])
+    default_limit = 0.0 if model.kind == "binary" else model.intercepts[0]
+    return tuple(totals[0] > limit for limit in limits or (default_limit,))
+
+
 def deviation_count(confidence_level: float) -> float:
     """Return the number of deviations of a confidence level, as the paper defines it.
 
