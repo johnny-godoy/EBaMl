@@ -68,11 +68,22 @@ again, and do not reinterpret it.
   person asked for, and proposes the edit that changes the fewest scores when several meet the requirement.
 - A report says only what the numbers show (`.claude/rules/semantic-contracts.md`, contract 3). It names the pair terms
   that still use the feature, so the agent does not tell the person that the whole model is monotone.
+- Concurrency follows `model-editing.md`, `<concurrency>`. The state-changing tools take `expected_revision` and return
+  the stale-revision error with the current head, so an agent reads again. `ModelStore` keeps one session, and its
+  cached `describe_model` text is stored with the revision that it describes. The LLM call runs on that revision with
+  no lock. The result is kept only if it is still the current one, so an edit during the call cannot leave a stale
+  description.
+- `save_model` asks the person (decision 1) with no lock held, then checks `expected_revision` and writes. If the model
+  changed while the person decided, the save fails, and the person confirms again. A confirmation of an older
+  revision must never save a newer one.
+- Check how the installed `mcp` SDK runs a synchronous tool (in the event loop, or in a worker thread). The code must
+  be correct in both cases, and a tool that blocks the event loop for a long time (a metric over a large frame) must
+  run off the loop.
 - Put the edit tools in a module of their own (`mcp/edit_tools.py`), with a name that no other module of `src/ebaml`
   has.
 - The server edits a copy. It never changes the file of `--model`.
-- `ModelStore.model_description` caches the output of `describe_ebm`. Clear it after each edit, undo, redo and
-  checkout, or `describe_model` describes a model that no longer exists. Ship that with a test that fails without it.
+- `ModelStore.model_description` caches the output of `describe_ebm`. It must never describe a model that no longer
+  exists: the cache rule is in the concurrency bullet above. Ship it with a test that fails without it.
 - `--edits <file>` replays a saved history at start, so a later session continues the work. The replay refuses a
   history whose model fingerprint differs from the model of `--model`.
 - `save_model` writes only into a directory that the user gives at start (`--output-dir`). Without that option, the
@@ -89,6 +100,9 @@ again, and do not reinterpret it.
   overwrite a file, and the file of `--model` has the same bytes after a session of edits.
 - A test that each read tool and the explain tool use the edited copy after an edit, and that `describe_model` does
   not return the cached description of the model before the edit.
+- Tests of concurrency: two clients edit in parallel and no edit is lost; a stale `expected_revision` fails; an edit
+  during `describe_model` leaves no stale cached description; a save that waits for a person fails if the model
+  changed meanwhile.
 - A test of the confirmation of decision 1, for a client with elicitation and for one without.
 - 100% coverage, and zero surviving mutants for the changed modules.
 </tests>

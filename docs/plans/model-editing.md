@@ -249,6 +249,34 @@ branch. Each class says in its docstring which GAM Changer tool it follows.
 - `save` takes more fields only when a decision needs them. Ask the user before you add one.
 </session>
 
+<concurrency>
+Several threads can share one session: the MCP server accepts several clients (`streamable-http`), an agent can send
+tool calls in parallel, and `describe_ebm` already uses a thread pool. Do not rely on the GIL.
+
+- **A revision is immutable.** An edit never writes into the model of an existing revision. It copies the model,
+  edits the copy, and adds it as a new revision. Reads (`model`, `model_at`, the report, `edit_effect`, the graph
+  text) take a revision and never see a half-written edit. So readers need no lock, and a slow read (an LLM call, a
+  metric over a large frame) runs on its revision while edits go on.
+- **One lock per session serializes the writers.** `apply`, `undo`, `redo`, `checkout`, `review` and `save` take it.
+  Inside it, the session assigns the id (so ids and positions in the history have the same order), updates the
+  history and the redo stack, and moves the head to the new revision in one step. The lock protects the history and
+  the head only.
+- **Never hold the lock for slow work.** Not for an LLM call, a metric, a file write, or the confirmation of a person
+  (`save` waits for it in `mcp-edit-tools.md`). Compute on a revision, then take the lock, check that the head is
+  unchanged, and commit. This also keeps a long read from starving the writers.
+- **Optimistic check.** `apply`, `undo`, `redo`, `checkout` and `save` take `expected_revision`. If the head differs,
+  they raise `StaleRevisionError` (an `EBaMlError` that names the current head). A `preview` then cannot be applied
+  to a model that changed after it. A caller reads again and retries by itself. The session never retries.
+- **Lock order.** No call takes two session locks, and no call takes the lock twice. So no deadlock is possible.
+- **A save writes with exclusive create** (`open(..., "xb")`), not "check that the name is free, then write", so two
+  saves cannot take the same name, even from two processes.
+- **Tests.** The mutation gate cannot see a removed lock if the test relies on timing. Test the lock with a probe:
+  a lock double that records whether it is held, and an edit function that asserts it. Test the rest
+  deterministically: after N threads call `apply` behind a barrier, the history has N edits and the head equals
+  the sequential replay of the history; a reader during writes always gets a revision that passes the consistency
+  check of `<consistent_model>`; a stale `expected_revision` raises.
+</concurrency>
+
 <report>
 `preview` and `apply` return an `EditReport`, an `attrs` class:
 
