@@ -24,6 +24,8 @@ is the LLM. The edit tools call the deterministic edit API of Python and call no
 </context>
 
 <decisions>
+`editing-decisions.md` is the questionnaire for these decisions (Q5 and Q6). Read the status of each question there first. Ask the user about a pending question before you write code that depends on it.
+
 Ask the user before you write the code of each point.
 
 1. **Who confirms an edit.** GAM Changer saves only edits that a person confirmed. An agent that confirms its own edit
