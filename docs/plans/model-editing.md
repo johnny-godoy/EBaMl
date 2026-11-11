@@ -267,6 +267,12 @@ tool calls in parallel, and `describe_ebm` already uses a thread pool. Do not re
 - **Optimistic check.** `apply`, `undo`, `redo`, `checkout` and `save` take `expected_revision`. If the head differs,
   they raise `StaleRevisionError` (an `EBaMlError` that names the current head). A `preview` then cannot be applied
   to a model that changed after it. A caller reads again and retries by itself. The session never retries.
+- **Ids are not thread safe, and they do not define the order.** `uuid6` 2025.0.1 keeps the last timestamp in a module
+  global (`_last_v7_timestamp`) and updates it with no lock. Two threads can write it out of order, so two ids of
+  one session can get the same millisecond and an order set by random bits, and two processes share nothing. The
+  76 random bits keep the ids unique in every case. So: the position in the history (a sequence number) is the
+  order, and the id only names a revision. Never sort by id. A function of the `edit` layer creates the ids, guarded
+  by a module lock, so that no thread of EBaMl can race on that global. Test that 32 threads get 32 different ids.
 - **Lock order.** No call takes two session locks, and no call takes the lock twice. So no deadlock is possible.
 - **A save writes with exclusive create** (`open(..., "xb")`), not "check that the name is free, then write", so two
   saves cannot take the same name, even from two processes.
