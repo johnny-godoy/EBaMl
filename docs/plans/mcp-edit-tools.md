@@ -76,9 +76,10 @@ again, and do not reinterpret it.
 - `save_model` asks the person (decision 1) with no lock held, then checks `expected_revision` and writes. If the model
   changed while the person decided, the save fails, and the person confirms again. A confirmation of an older
   revision must never save a newer one.
-- Check how the installed `mcp` SDK runs a synchronous tool (in the event loop, or in a worker thread). The code must
-  be correct in both cases, and a tool that blocks the event loop for a long time (a metric over a large frame) must
-  run off the loop.
+- `mcp` 2.3.0 runs each synchronous tool in a worker thread (`anyio.to_thread.run_sync`, measured in
+  `mcp/server/mcpserver/utilities/func_metadata.py`). So two tool calls can run at the same time, on stdio too. Write
+  the edit tools as synchronous functions, and the worker threads keep a slow tool (a metric over a large frame) off
+  the event loop. Re-read that code when the lower bound of `mcp` changes.
 - Put the edit tools in a module of their own (`mcp/edit_tools.py`), with a name that no other module of `src/ebaml`
   has.
 - The server edits a copy. It never changes the file of `--model`.
