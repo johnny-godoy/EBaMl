@@ -53,6 +53,7 @@ from ebaml.local.covering_problem import CoveringProblem
 from ebaml.local.covering_solvers import CoveringSolver, MipCover
 from ebaml.local.decisions import Decision, Margin
 from ebaml.local.local_kinds import LocalKind, Outcome, OutputKind, PredictionFrame, local_kind
+from ebaml.local.minimality import MinimalityStatus
 
 
 @attrs.frozen
@@ -263,9 +264,10 @@ class Change:
 class Counterfactual:
     """A set of changes after which the decision does not hold, at the requested confidence.
 
-    The set is the smallest one only if ``minimum`` is true. The default counterfactual always has that proof. The
-    counterfactual of ``LocalOptions.target_class`` has it only if the search proves it: ``GreedyCover``,
-    ``LocalSearchCover`` and a ``MipCover`` that ends at its time limit can return a larger set.
+    The set is the smallest one only if ``minimality`` says so (``MinimalityStatus.is_smallest``). The default
+    counterfactual always has that proof. The counterfactual of ``LocalOptions.target_class`` has it only if the search
+    proves it: ``GreedyCover``, ``LocalSearchCover`` and a ``MipCover`` that ends at its time limit can return a larger
+    set.
 
     Attributes
     ----------
@@ -276,11 +278,12 @@ class Counterfactual:
         then predicts, or the opposite answer of a regressor.
     new_output: float
         The output of the model for the new decision: the probability of the new class, or the predicted value.
-    minimum: bool
-        True if no smaller set of changes gives the new decision. Sorting proves it for the default counterfactual. For
-        a chosen target class, the search proves it, or the size equals ``lower_bound``.
+    minimality: MinimalityStatus
+        Why the set is, or is not, known to be the smallest. Sorting proves it for the default counterfactual
+        (``SORTING_PROOF``). For a chosen target class, the search proves it (``SOLVER_PROOF``), or the size equals
+        ``lower_bound`` (``AT_LOWER_BOUND``), or the search proves nothing (``UNPROVED``).
     lower_bound: int
-        No set of fewer changes gives the new decision. It equals the number of changes when ``minimum`` is true by a
+        No set of fewer changes gives the new decision. It equals the number of changes when ``minimality`` is a
         proof of sorting or of the solver.
 
     """
@@ -288,7 +291,7 @@ class Counterfactual:
     changes: list[Change]
     new_decision: ClassLabel
     new_output: float
-    minimum: bool
+    minimality: MinimalityStatus
     lower_bound: int
 
 
@@ -302,9 +305,10 @@ class SufficientReason:
         The inputs.
     guaranteed_margin: float
         The worst case of the margin of the decision when these inputs keep their values.
-    minimum: bool
-        True if no smaller set fixes the decision: sorting proves it for a decision with one margin, and the search
-        proves it, or the size equals ``lower_bound``, for several margins.
+    minimality: MinimalityStatus
+        Why the set is, or is not, known to be the smallest. Sorting proves it for a decision with one margin
+        (``SORTING_PROOF``). For several margins, the search proves it (``SOLVER_PROOF``), or the size equals
+        ``lower_bound`` (``AT_LOWER_BOUND``), or the search proves nothing (``UNPROVED``).
     lower_bound: int
         No set of fewer inputs fixes the decision. It is the LP bound of the search for several margins, and the size of
         the set for one margin.
@@ -313,7 +317,7 @@ class SufficientReason:
 
     features: list[str]
     guaranteed_margin: float
-    minimum: bool
+    minimality: MinimalityStatus
     lower_bound: int
 
 
@@ -669,7 +673,7 @@ def _counterfactual(
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
-        minimum=True,  # sorting finds the smallest set of a decision with one margin, as the paper proves
+        minimality=MinimalityStatus.SORTING_PROOF,  # sorting finds the smallest set of one margin, as the paper proves
         lower_bound=len(changes),
     )
 
@@ -738,7 +742,7 @@ def _sufficient_reason(features: Sequence[_Feature], intercept: float, sign: int
     return SufficientReason(
         features=[step.feature.name for step in order[:count]],
         guaranteed_margin=float(margins[count]),
-        minimum=True,  # sorting finds the smallest set of a decision with one margin, as the paper proves
+        minimality=MinimalityStatus.SORTING_PROOF,  # sorting finds the smallest set of one margin, as the paper proves
         lower_bound=count,
     )
 
@@ -876,7 +880,7 @@ def _several_margins_reason(
     return SufficientReason(
         features=[features[choice.group].name for choice in cover.choices],
         guaranteed_margin=cover.guaranteed_margin,
-        minimum=cover.minimum,
+        minimality=cover.minimality,
         lower_bound=cover.lower_bound,
     )
 
@@ -1131,7 +1135,7 @@ def _target_counterfactual(
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
-        minimum=cover.minimum,
+        minimality=cover.minimality,
         lower_bound=cover.lower_bound,
     )
 
@@ -1182,7 +1186,7 @@ def compute_local_facts(
     classifier or a regressor, and for an EBM with interactions. It raises an ``InvalidInstanceError`` for an instance
     that lacks a value or has an unknown category. A regressor explains the answer to ``LocalOptions.decision``.
 
-    A counterfactual and a sufficient reason are the smallest sets only if their ``minimum`` is true. Sorting proves
+    A counterfactual and a sufficient reason are the smallest sets only if their ``minimality`` says so. Sorting proves
     it for a decision with one margin. A decision with several margins and the counterfactual of a target class
     depend on ``LocalOptions.search``.
 

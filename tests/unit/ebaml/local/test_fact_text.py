@@ -11,6 +11,7 @@ from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.local_kinds import OutputKind
+from ebaml.local.minimality import MinimalityStatus
 from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 
@@ -214,8 +215,19 @@ def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
     steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
     return attrs.evolve(
         _text_facts(1.4, [0.6, 0.1], confidence_level),
-        counterfactual=local.Counterfactual([change], new_decision=1, new_output=0.7, minimum=True, lower_bound=1),
-        sufficient_reason=local.SufficientReason(["f0"], 0.9876, minimum=True, lower_bound=1),
+        counterfactual=local.Counterfactual(
+            [change],
+            new_decision=1,
+            new_output=0.7,
+            minimality=MinimalityStatus.SORTING_PROOF,
+            lower_bound=1,
+        ),
+        sufficient_reason=local.SufficientReason(
+            ["f0"],
+            0.9876,
+            minimality=MinimalityStatus.SORTING_PROOF,
+            lower_bound=1,
+        ),
         completions=steps,
     )
 
@@ -290,7 +302,7 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
             [local.Change("f0", "1", "[2, 3)", -0.1)],
             new_decision="loan approved",
             new_output=0.82,
-            minimum=True,
+            minimality=MinimalityStatus.SORTING_PROOF,
             lower_bound=1,
         ),
     )
@@ -337,7 +349,10 @@ def test_the_conditions_of_the_facts_follow_the_options() -> None:
 def test_a_counterfactual_that_is_not_proved_is_not_called_the_smallest() -> None:
     facts = _text_facts_with_everything(0.95)
     assert facts.counterfactual is not None
-    target = attrs.evolve(facts, counterfactual=attrs.evolve(facts.counterfactual, minimum=False))
+    target = attrs.evolve(
+        facts,
+        counterfactual=attrs.evolve(facts.counterfactual, minimality=MinimalityStatus.UNPROVED),
+    )
     assert orjson.loads(local_text.facts_to_texts(facts).counterfactual)["is_smallest_set"] is True
     assert orjson.loads(local_text.facts_to_texts(target).counterfactual)["is_smallest_set"] is False
 
@@ -346,7 +361,7 @@ def test_a_minimal_set_is_not_called_the_smallest() -> None:
     facts = _text_facts_with_everything(0.95)
     minimal = attrs.evolve(
         facts,
-        sufficient_reason=local.SufficientReason(["f0"], 0.5, minimum=False, lower_bound=1),
+        sufficient_reason=local.SufficientReason(["f0"], 0.5, minimality=MinimalityStatus.UNPROVED, lower_bound=1),
     )
     assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_smallest_set"] is False
 
@@ -363,8 +378,13 @@ def test_only_a_data_scientist_gets_the_lower_bound_of_a_set(audience: Audience,
     assert facts.counterfactual is not None
     unproved = attrs.evolve(
         facts,
-        counterfactual=attrs.evolve(facts.counterfactual, minimum=False, lower_bound=0),
-        sufficient_reason=local.SufficientReason(["f0", "f1"], 0.5, minimum=False, lower_bound=1),
+        counterfactual=attrs.evolve(facts.counterfactual, minimality=MinimalityStatus.UNPROVED, lower_bound=0),
+        sufficient_reason=local.SufficientReason(
+            ["f0", "f1"],
+            0.5,
+            minimality=MinimalityStatus.UNPROVED,
+            lower_bound=1,
+        ),
     )
     texts = local_text.facts_to_texts(unproved, audience)
     counterfactual = orjson.loads(texts.counterfactual)

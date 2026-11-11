@@ -166,7 +166,7 @@ def create_server(
         -------
         str
             JSON with the facts and their texts. The facts have the counterfactual (changes that flip the prediction,
-            the fewest ones when ``minimum`` is true), the sufficient reason (the features that fix the prediction)
+            the fewest ones when ``minimality`` proves it), the sufficient reason (the features that fix the prediction)
             and the share of completions with the same prediction.
 
         """

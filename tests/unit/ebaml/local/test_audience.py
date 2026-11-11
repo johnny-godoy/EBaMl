@@ -9,6 +9,7 @@ from ebaml.core.exceptions import InvalidOptionError
 from ebaml.local import audience as audiences
 from ebaml.local import facts as local
 from ebaml.local.local_kinds import OutputKind
+from ebaml.local.minimality import MinimalityStatus
 from tests.unit.ebaml.conftest import returning
 
 AUDIENCE_METHODS = [
@@ -240,6 +241,6 @@ def test_a_data_scientist_gets_the_value_interval_and_margin_of_a_regressor() ->
         "score": 12.346,
     }
     assert audience.class_output(12.3456, OutputKind.VALUE) == {"predicted_value": 12.346}
-    reason = local.SufficientReason(["f"], 1.23456, minimum=True, lower_bound=1)
+    reason = local.SufficientReason(["f"], 1.23456, minimality=MinimalityStatus.SORTING_PROOF, lower_bound=1)
     assert audience.margin(reason, OutputKind.VALUE) == {"guaranteed_margin": 1.235}
     assert audience.margin(reason, OutputKind.PROBABILITY) == {"guaranteed_margin_logit": 1.235}

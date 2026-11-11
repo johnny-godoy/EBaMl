@@ -52,8 +52,9 @@ this number (Theorem 6).
 
 *Claim 5 (solvers).* For a decision with several margins, the code builds a covering problem, and a `CoveringSolver`
 of `covering_solvers.py` solves it: `MipCover`, `LocalSearchCover` or `GreedyCover`. Each set that a solver returns is
-sufficient, because the code checks it with the definition of @sec-covering. The flag `minimum` is true only if the MIP
-solver reports a proved optimum, or if the size of the set equals a lower bound (Theorem 5, Corollary 3, Lemma 17). A
+sufficient, because the code checks it with the definition of @sec-covering. The status `minimality` says that the set is
+the smallest only if the MIP solver reports a proved optimum (`SOLVER_PROOF`), or if the size of the set equals a lower
+bound (`AT_LOWER_BOUND`) (Theorem 5, Corollary 3, Lemma 17). A
 proved optimum rests on the certificate of the MIP solver, which Lean does not check, and on floating-point tolerances
 (@sec-solvers). The removal pass of the greedy returns a set from which no feature can be removed (Theorem 4).
 
@@ -474,9 +475,9 @@ brute-force oracle of the tests does, visits at most $2^n$ sets. The code does n
 
 Each solver of the code checks the empty set first. When the empty set is not sufficient, the lower bound of the
 solver is at least $1$: the code takes `max(1, ...)` of the LP value in `_lower_bound`, and it uses $1$ when the solver
-has no backend for the LP. So a result with one feature reaches the bound, and its flag
-`minimum` is true. Corollary 3 proves this case. For a larger result, the flag rests on the solver or on the bound of
-Lemma 17. An example shows that the two passes of the greedy alone do not give a smallest set. Take three margins with
+has no backend for the LP. So a result with one feature reaches the bound, and its status
+`minimality` is `AT_LOWER_BOUND`. Corollary 3 proves this case. For a larger result, the status rests on the solver or on
+the bound of Lemma 17. An example shows that the two passes of the greedy alone do not give a smallest set. Take three margins with
 $W = (-3/2, -5/2, -7/2)$ and four features with the gains $h_1 = (2, 2, 0)$, $h_2 = (2, 0, 2)$, $h_3 = (1, 2, 3)$
 and $h_4 = (0, 3, 3)$. The first pass adds the features $3, 1, 2$, and the set is sufficient. No feature can be
 removed, but $\{2, 4\}$ is also sufficient and has fewer features. The test problem `GREEDY_IS_NOT_OPTIMAL` is this
@@ -596,7 +597,7 @@ Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 a
   [$"prune"$], [`for pick in reversed(list(picked))`], [`greedy_cover`],
   [$F$ is sufficient], [`all(margin > 0 for margin in self.margins(choices))`], [`CoveringProblem.sufficient`],
   [the bound $1$ of Corollary 3], [`max(1, math.ceil(...))`, or `1` with no backend], [`_lower_bound`, `_open`],
-  [the flag `minimum`], [`proved or len(ordered) <= lower_bound`], [`make_cover`],
+  [the status `minimality`], [`len(ordered) <= lower_bound`, then `proved`], [`make_cover`],
 )
 
 
@@ -668,7 +669,7 @@ The sufficient reason of the predicted class has one condition for each rival, s
 
 Lemma 11 puts the sufficient reason of a multiclass classifier under Lemma 6, Theorems 4 and 5 and Corollary 3, as
 Lemma 9 does for the answer "inside". The function `_gain_table` computes the numbers, and the search of
-`LocalOptions.search` solves the problem. The flag `minimum` has the same meaning as in Claim 5.
+`LocalOptions.search` solves the problem. The status `minimality` has the same meaning as in Claim 5.
 
 #lemma("the deviation of a margin", [
   Let $sigma_x, sigma_y >= 0$ be the deviations of two scores, and let $rho in [-1, 1]$ be their correlation. The
@@ -854,7 +855,7 @@ counterfactual of a chosen class picks at most one bin for each feature. This co
 and the paper states nothing about its approximability.
 
 *Meaning for the code.* `MipCover` runs a MIP solver with a time limit, `GreedyCover` and `LocalSearchCover` prove no
-ratio, and the flag `minimum` needs a proof of the MIP solver or the lower bound of Lemma 17. These facts match the
+ratio, and the status `minimality` needs a proof of the MIP solver or the lower bound of Lemma 17. These facts match the
 hardness. The test `test_the_mip_solves_set_cover_through_the_reduction_of_the_proof` runs the reduction on small
 instances, and compares the size of `MipCover`, with each of the three solvers of OR-Tools, with the size of a
 smallest cover.
@@ -952,12 +953,12 @@ times larger, and it tries three values. When the greedy found a set of size $g$
 picks. A solver that ends with the status `OPTIMAL` then proves its set smallest among the sets whose margins reach
 $epsilon$, and a solver that proves this MIP infeasible proves the set of the greedy smallest in the same sense
 (Theorem 5). A set whose smallest margin is positive but below $epsilon$ times the size of its numbers can be missed. In
-that case the flag `minimum` can be true for a set that is not the smallest. Lean does not check the certificate of a
+that case the status `minimality` can say that a set is the smallest when it is not. Lean does not check the certificate of a
 solver, and no solver on PyPI gives an exact answer in rational numbers.
 
 *The time limit.* If the time limit ends before the MIP solver proves the optimum, `MipCover` returns the set that the
-solver found, which is smaller than the greedy set, or else the greedy set, and `minimum` is true only if its size equals
-the bound of Lemma 17. If no set is known, the problem of the sufficient reason returns all its features, which Lemma 6
+solver found, which is smaller than the greedy set, or else the greedy set, and `minimality` is `AT_LOWER_BOUND` only if its
+size equals the bound of Lemma 17. If no set is known, the problem of the sufficient reason returns all its features, which Lemma 6
 shows to be sufficient when any set is, and the counterfactual of a chosen class raises `SearchLimitError`, because
 `None` would claim that no set exists. `GreedyCover` and `LocalSearchCover` raise it too when the greedy finds no set
 of a problem with negative gains.
@@ -1034,7 +1035,7 @@ The proof does not cover the following points.
   that is larger than one. One margin is the case that sorting solves exactly (Theorem 3).
 - *The solvers.* A proved optimum rests on the certificate of HiGHS, SCIP or CP-SAT, which Lean does not check, and on
   their floating-point tolerances. A set whose smallest margin is positive but below $epsilon$ times the size of its
-  numbers can be missed, so the flag `minimum` can be wrong in that case (@sec-solvers). The lower bound depends on the
+  numbers can be missed, so the status `minimality` can be wrong in that case (@sec-solvers). The lower bound depends on the
   tolerances of GLOP. Lemmas 15 to 17 and Corollary 6 are proved on paper, and Lean checks none of them.
 - *The statement `card_search_space`.* Theorem 5 keeps the bound $2^n$ of a search by size. No function of the code
   searches by size, so this part describes the oracle of the tests only.

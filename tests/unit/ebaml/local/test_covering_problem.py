@@ -1,8 +1,10 @@
 """Tests for the covering problem: the check of a set, its properties, the result and the reduction."""
 
+import pytest
 from hypothesis import given, settings
 
 from ebaml.local.covering_problem import Choice, Cover, CoveringProblem, make_cover, reduce_problem
+from ebaml.local.minimality import MinimalityStatus
 from tests.unit.ebaml.local.conftest import ProblemParts, oracle_size, problem_parts
 
 
@@ -31,10 +33,31 @@ def test_the_scale_of_a_margin_is_its_largest_absolute_number() -> None:
 
 def test_a_cover_reaching_its_bound_is_the_smallest_set() -> None:
     problem = CoveringProblem([-1.0], [[[2.0]], [[3.0]]])
-    assert make_cover(problem, [Choice(1, 0)], 1, proved=False) == Cover([Choice(1, 0)], 2.0, 1, minimum=True)
+    one = make_cover(problem, [Choice(1, 0)], 1, proved=False)
+    assert one == Cover([Choice(1, 0)], 2.0, 1, MinimalityStatus.AT_LOWER_BOUND)
     two = make_cover(problem, [Choice(1, 0), Choice(0, 0)], 1, proved=False)
-    assert two == Cover([Choice(0, 0), Choice(1, 0)], 4.0, 1, minimum=False)
-    assert make_cover(problem, [Choice(1, 0), Choice(0, 0)], 1, proved=True).minimum
+    assert two == Cover([Choice(0, 0), Choice(1, 0)], 4.0, 1, MinimalityStatus.UNPROVED)
+
+
+@pytest.mark.parametrize(
+    ("size", "proved", "status"),
+    [
+        (2, False, MinimalityStatus.UNPROVED),
+        (2, True, MinimalityStatus.SOLVER_PROOF),
+        # a size at the bound needs no proof of the solver, and the proof adds nothing to it
+        (1, False, MinimalityStatus.AT_LOWER_BOUND),
+        (1, True, MinimalityStatus.AT_LOWER_BOUND),
+    ],
+)
+def test_the_status_of_a_cover_names_the_reason_for_its_claim(
+    size: int,
+    *,
+    proved: bool,
+    status: MinimalityStatus,
+) -> None:
+    problem = CoveringProblem([-1.0], [[[2.0]], [[3.0]]])
+    choices = [Choice(1, 0), Choice(0, 0)][:size]
+    assert make_cover(problem, choices, 1, proved=proved).minimality is status
 
 
 def _reduced(problem: CoveringProblem) -> CoveringProblem:

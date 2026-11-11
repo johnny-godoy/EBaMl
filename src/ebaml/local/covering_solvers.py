@@ -11,7 +11,7 @@ There is one class for each algorithm:
   (``Stop.OPTIMAL`` or ``Stop.FIRST``) and its time limit are parameters.
 
 Every solver checks the empty set first, and reports a lower bound on the smallest size: the LP relaxation, rounded up,
-when it has a backend for the LP, else ``1``. A result is marked as the smallest set (``Cover.minimum``) only if the
+when it has a backend for the LP, else ``1``. A result is marked as the smallest set (``Cover.minimality``) only if the
 check in Python accepts it, and either the MIP solver proves it optimal or its size equals the lower bound. The solvers
 work with floating-point tolerances, and Lean does not check the certificate of a solver, so the proof paper
 (``proofs/papers/local-explanations/paper.typ``) states the limits.
@@ -198,8 +198,9 @@ class GreedyCover:
     Examples
     --------
     >>> problem = CoveringProblem([-2.0], [[[1.0]], [[3.0]], [[2.0]]])
-    >>> GreedyCover(bound_backend=None).solve(problem, seed=0)
-    Cover(choices=[Choice(group=1, alternative=0)], guaranteed_margin=1.0, lower_bound=1, minimum=True)
+    >>> cover = GreedyCover(bound_backend=None).solve(problem, seed=0)
+    >>> cover.choices, cover.lower_bound, str(cover.minimality)
+    ([Choice(group=1, alternative=0)], 1, 'at_lower_bound')
 
     """
 
@@ -255,7 +256,7 @@ class LocalSearchCover:
     ...     [-1.5, -2.5, -3.5], [[[2.0, 2.0, 0.0]], [[2.0, 0.0, 2.0]], [[1.0, 2.0, 3.0]], [[0.0, 3.0, 3.0]]]
     ... )
     >>> cover = LocalSearchCover().solve(problem, seed=0)
-    >>> [choice.group for choice in cover.choices], cover.minimum
+    >>> [choice.group for choice in cover.choices], cover.minimality.is_smallest
     ([1, 3], True)
 
     """
@@ -307,7 +308,7 @@ class MipCover:
     The search runs the greedy first, and asks the solver for a set smaller than the greedy set, so a proof that none
     exists proves the greedy set the smallest. With ``Stop.OPTIMAL`` the solver ends only when it proves the optimum,
     or at the time limit. With ``Stop.FIRST`` it ends at the first smaller set. If the time limit ends first, the search
-    returns the best set that it found, with ``minimum`` false unless the set reaches the lower bound.
+    returns the best set that it found, with ``minimality`` ``UNPROVED`` unless the set reaches the lower bound.
 
     Attributes
     ----------
@@ -321,7 +322,7 @@ class MipCover:
     Examples
     --------
     >>> cover = MipCover().solve(CoveringProblem([-1.0, -1.0], [[[2.0, 0.0]], [[0.0, 2.0]]]), seed=0)
-    >>> [choice.group for choice in cover.choices], cover.minimum
+    >>> [choice.group for choice in cover.choices], cover.minimality.is_smallest
     ([0, 1], True)
 
     """

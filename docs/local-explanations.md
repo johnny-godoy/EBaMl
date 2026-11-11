@@ -59,15 +59,24 @@ makes the first two queries solvable exactly: the [proof](local-explanations-pro
 
 | Explanation | Query in the paper | Question | How it is computed |
 | --- | --- | --- | --- |
-| `counterfactual` | Minimum change required | What is the *fewest* inputs to change so that the prediction flips? | Exact when `minimum` is true. |
-| `sufficient_reason` | Minimum sufficient reason | What is the *fewest* inputs that settle the prediction, whatever the other inputs are? | Exact when `minimum` is true. |
+| `counterfactual` | Minimum change required | What is the *fewest* inputs to change so that the prediction flips? | Exact when `minimality` proves it. |
+| `sufficient_reason` | Minimum sufficient reason | What is the *fewest* inputs that settle the prediction, whatever the other inputs are? | Exact when `minimality` proves it. |
 | `completions` | Count completions | If only some inputs are known, what share of the possible completions get this prediction? | Estimated by sampling. |
 
-Each result names the guarantee that it has. `minimum` is true when no smaller set exists. Sorting proves it for a
-decision with one margin: a binary classifier, and a regressor with a threshold. A decision with several margins (a
+Each result names the guarantee that it has. `minimality` says why the set is, or is not, known to be the smallest.
+Sorting proves it for a decision with one margin: a binary classifier, and a regressor with a threshold. A decision with several margins (a
 multiclass classifier, the answer "inside" of an interval) and the counterfactual of a target class use a search, and
-`minimum` is then true only if the search proves it. The two sections below describe the case with one margin.
+`minimality` is then a proof only if the search proves it. The two sections below describe the case with one margin.
 [Regressors](#regressors) and [Multiclass classifiers](#multiclass-classifiers) describe the search.
+
+| `MinimalityStatus` | Meaning |
+| --- | --- |
+| `SORTING_PROOF` | One margin. Sorting finds the smallest set, and the [proof](local-explanations-proof.md) covers it. |
+| `SOLVER_PROOF` | The MIP solver proved that no smaller set is sufficient. The proof rests on the certificate of the solver. |
+| `AT_LOWER_BOUND` | The set has as many members as the lower bound, so no smaller set exists. The bound rests on the LP solver. |
+| `UNPROVED` | The search found a set, but it did not prove that the set is the smallest. A smaller set can exist. |
+
+`MinimalityStatus.is_smallest` is false only for `UNPROVED`. The prompts read this boolean as `is_smallest_set`.
 
 ### Counterfactual
 
@@ -140,7 +149,7 @@ no score, so no claim covers the uncertainty of the model.
 | `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
 | `sufficient_reason.features` | The features that fix the prediction. | The features that fix the answer. |
 | `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. | The worst case of the distance from the threshold, with these features fixed. |
-| `counterfactual.minimum`, `sufficient_reason.minimum` | True if no smaller set exists. It is always true for one margin. | The same. It can be false for the answer "inside" of an interval. |
+| `counterfactual.minimality`, `sufficient_reason.minimality` | A `MinimalityStatus`: `SORTING_PROOF`, `SOLVER_PROOF`, `AT_LOWER_BOUND` or `UNPROVED`. It is always `SORTING_PROOF` for one margin. | The same. It can be `UNPROVED` for the answer "inside" of an interval. |
 | `counterfactual.lower_bound`, `sufficient_reason.lower_bound` | No set has fewer members than this number. | The same. |
 | `completions` | One `CompletionStep(fixed, share)` for each step. | The same. |
 
@@ -179,7 +188,7 @@ Sorting does not find the smallest set for that. The problem is a covering probl
 it exists unless P = NP ([proof page](local-explanations-proof.md)). `LocalOptions.search` chooses the algorithm. Each
 class is one algorithm:
 
-| Solver | Algorithm | `minimum` is true when |
+| Solver | Algorithm | `minimality` is a proof when |
 | --- | --- | --- |
 | `MipCover(backend=OrToolsBackend(), stop=Stop.OPTIMAL, time_limit=10.0)` (default) | Branch and bound over all sets in a MIP solver. `OrToolsBackend(OrToolsSolver.SCIP)` or `OrToolsSolver.CP_SAT` choose another solver than HiGHS. `stop=Stop.FIRST` ends at the first set smaller than the greedy set. | The solver proves the optimum, or the size equals the lower bound. |
 | `LocalSearchCover(iterations=100, destroy_share=0.1, seed=None)` | Starts from the greedy set, removes a random part of it, builds it again with the greedy, and keeps the smallest set. `None` uses `LocalOptions.seed`. It needs no MIP solver. | The size equals the lower bound. |
@@ -188,9 +197,9 @@ class is one algorithm:
 Every solver checks the empty set first and reports a lower bound, `lower_bound`: no set has fewer inputs. The bound
 comes from the LP relaxation of the problem, which the backend solves. `GreedyCover(bound_backend=None)` and
 `LocalSearchCover(bound_backend=None)` run no LP, and their bound is `1`. If the time limit of `MipCover` ends before
-the solver proves the optimum, it returns the best set that it found, and `minimum` is false unless the set reaches the
-bound. A decision with one margin ignores `search`, because sorting finds its smallest set exactly. When `minimum` is
-false, the prompt tells the LLM not to call the set the smallest, and a data scientist gets the lower bound in the
+the solver proves the optimum, it returns the best set that it found, and `minimality` is `UNPROVED` unless the set
+reaches the bound. A decision with one margin ignores `search`, because sorting finds its smallest set exactly. When `minimality` is
+`UNPROVED`, the prompt tells the LLM not to call the set the smallest, and a data scientist gets the lower bound in the
 facts.
 
 The MIP solver is behind the `MipBackend` protocol: a class with a method `solve(model, settings)` that solves a
@@ -218,7 +227,7 @@ from ebaml import Interval, LocalSearchCover
 options = LocalOptions(decision=Interval(20.0, 40.0), search=LocalSearchCover())
 reason = compute_local_facts(regressor, instance, options).sufficient_reason
 if reason is not None:
-    print(reason.features, reason.minimum, reason.lower_bound)
+    print(reason.features, reason.minimality, reason.lower_bound)
 ```
 
 `explain_instance` takes the same options with `local=LocalOptions(decision=Threshold(30.0))`. The explanations of a
