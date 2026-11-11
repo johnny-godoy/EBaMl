@@ -157,7 +157,7 @@ user again, and do not reinterpret it.
    caller passes `allow_unreviewed=True`. `mcp-edit-tools.md` decides how a person confirms the edits of an agent.
 6. **Revisions and saves.** Every history entry is a revision with an id, and a read of the model takes a revision
    (see `<session>`). Every `save` needs a message and adds an entry to the history (see `<session>`). The ids are
-   UUIDs of version 7 from the `uuid6` package.
+   UUIDs of version 7 from `uuid_utils.compat.uuid7()` (see `<session>`).
 7. **`.gamchanger` fixture (0.9.0).** The user exports a real file from <https://interpret.ml/gam-changer/> (a
    continuous edit, a nominal edit and an `equal-*` edit). Ask for it before you write the round-trip test.
 8. **Rounding of a loaded file (0.9.0).** `load_gamchanger` emits an edit only for a bin whose score differs after
@@ -228,10 +228,13 @@ branch. Each class says in its docstring which GAM Changer tool it follows.
   a person or an agent can read any version without a checkout.
 - `history_table()` returns the commits as rows: id, time, kind (`edit` or `save`), feature, edit type, description,
   reason, `reviewed`.
-- The id of an entry is a time-ordered UUID (version 7) from the `uuid6` package (`uuid6.uuid7()`). Python 3.13 has no
-  `uuid.uuid7`. Declare `uuid6` as a direct dependency. `EditSession` takes an id factory (`Callable[[], UUID]`), so a
-  test passes a fixed sequence and a replay keeps the stored ids. Show a short unique prefix of the random tail in
-  tables, because the leading characters are the time.
+- The id of an entry is a time-ordered UUID (version 7), made by `uuid_utils.compat.uuid7()` of the `uuid-utils`
+  package. It returns a real `uuid.UUID`, which the type hints (`beartype`) need. Plain `uuid_utils.uuid7()` returns
+  another class, and converting its result by hand is slower than `compat`. Python 3.13 has no `uuid.uuid7`. When
+  3.14 is the lowest version that the package supports, use `uuid.uuid7` and drop the dependency. Declare
+  `uuid-utils` as a direct dependency. `EditSession` takes an id factory (`Callable[[], UUID]`), so a test passes a
+  fixed sequence and a replay keeps the stored ids. Show a short unique prefix of the random tail in tables, because
+  the leading characters are the time.
 - A history entry holds the edit, a generated description ("Set 6 bins of age (95.5 to 105) to 0.4574"), the message
   of the person (the reason, as the paper asks), the time, an id and `reviewed`. A new `apply` after an `undo` drops
   the redo stack, as GAM Changer does.
@@ -267,12 +270,12 @@ tool calls in parallel, and `describe_ebm` already uses a thread pool. Do not re
 - **Optimistic check.** `apply`, `undo`, `redo`, `checkout` and `save` take `expected_revision`. If the head differs,
   they raise `StaleRevisionError` (an `EBaMlError` that names the current head). A `preview` then cannot be applied
   to a model that changed after it. A caller reads again and retries by itself. The session never retries.
-- **Ids are not thread safe, and they do not define the order.** `uuid6` 2025.0.1 keeps the last timestamp in a module
-  global (`_last_v7_timestamp`) and updates it with no lock. Two threads can write it out of order, so two ids of
-  one session can get the same millisecond and an order set by random bits, and two processes share nothing. The
-  76 random bits keep the ids unique in every case. So: the position in the history (a sequence number) is the
-  order, and the id only names a revision. Never sort by id. A function of the `edit` layer creates the ids, guarded
-  by a module lock, so that no thread of EBaMl can race on that global. Test that 32 threads get 32 different ids.
+- **Ids name a revision, and they do not define the order.** The position in the history (a sequence number) is the
+  order. Never sort by id. Reason: the generators keep the last timestamp (and a counter) in shared state. `uuid6` and
+  `uuid.uuid7` of Python 3.14 do it in module globals that they read and write with no lock, so two threads can
+  produce ids out of order (one out-of-order id showed in a run of 8 threads with `uuid.uuid7`). `uuid-utils` is
+  native code, and its locking was not checked. A function of the `edit` layer creates the ids, guarded by a module
+  lock. The 74 to 76 random bits keep ids unique in every case. Test that 32 threads get 32 different ids.
 - **Lock order.** No call takes two session locks, and no call takes the lock twice. So no deadlock is possible.
 - **A save writes with exclusive create** (`open(..., "xb")`), not "check that the name is free, then write", so two
   saves cannot take the same name, even from two processes.
