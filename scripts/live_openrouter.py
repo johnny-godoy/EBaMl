@@ -70,7 +70,7 @@ def main() -> int:
         )
         _check(description.strip(), "empty description")
 
-        summary = describe_ebm(DescribeEBMRequest(ebm, num_sentences=5, max_concurrency=2))
+        summary = describe_ebm(DescribeEBMRequest(ebm, num_sentences=5, max_concurrency=2)).text
         _check(summary.strip(), "empty summary")
 
     usages = [log for log in logs if log["event"] == "usage"]

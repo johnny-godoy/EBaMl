@@ -25,6 +25,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey, TokenWeights, WeightsEntry, WeightsTable
 from ebaml.llm import descriptors
+from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
 from ebaml.llm.token_learning import TokenLearner
@@ -204,7 +205,11 @@ def test_describe_ebm(
     summary_calls: dict[str, Any] = {}
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
-    assert descriptors.describe_ebm(DescribeEBMRequest(fake_ebm, num_sentences=9, max_concurrency=2)) == "answer"
+    assert descriptors.describe_ebm(DescribeEBMRequest(fake_ebm, num_sentences=9, max_concurrency=2)) == EBMDescription(
+        "answer",
+        [],
+        [],
+    )
     assert sorted(call["graph"] for call in graph_calls) == ["graph0", "graph1"]
     assert all(call["num_sentences"] == 7 for call in graph_calls)
     assert summary_calls["feature_importances"] == "f0: 1.00\nf1: 2.00"
@@ -247,7 +252,7 @@ def test_describe_ebm_retries_a_truncated_graph(
 
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", cot))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
-    assert descriptors.describe_ebm(DescribeEBMRequest(fake_ebm)) == "answer"
+    assert descriptors.describe_ebm(DescribeEBMRequest(fake_ebm)).text == "answer"
     assert seen.count("short") == 2
 
 
@@ -1116,7 +1121,9 @@ def test_describe_ebm_warns_about_the_skipped_interaction_terms(
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
     with capture_logs() as logs:
-        descriptors.describe_ebm(DescribeEBMRequest(ebm))
+        described = descriptors.describe_ebm(DescribeEBMRequest(ebm))
+    # a program reads the omitted parts from the result, without a log or the text
+    assert described == EBMDescription("answer", ["f0 & f1"], [])
     assert [log for log in logs if log["log_level"] == "warning"] == [
         {
             "event": "interactions_skipped",
@@ -1169,10 +1176,8 @@ def test_describe_ebm_of_a_multiclass_classifier_describes_every_feature(
     graph_calls: list[dict[str, Any]] = []
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", returning(counted)))
-    assert (
-        descriptors.describe_ebm(DescribeEBMRequest(multiclass_ebm, graph=GraphOptions(overbudget_percent=0)))
-        == "answer"
-    )
+    described = descriptors.describe_ebm(DescribeEBMRequest(multiclass_ebm, graph=GraphOptions(overbudget_percent=0)))
+    assert described == EBMDescription("answer", [], [])
     assert len(graph_calls) == len(multiclass_ebm.feature_names_in_)
     for call in graph_calls:
         assert [line for line in call["graph"].splitlines() if line.startswith("Class:")] == [
@@ -1226,7 +1231,8 @@ def test_describe_ebm_skips_a_feature_without_a_term(
     monkeypatch.setattr(baml_sdk, "describe_graph_cot", fake_sdk("describe_graph_cot", appending(graph_calls, counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm", fake_sdk("summarize_ebm", recording(summary_calls, counted)))
     with capture_logs() as logs:
-        descriptors.describe_ebm(DescribeEBMRequest(ebm))
+        described = descriptors.describe_ebm(DescribeEBMRequest(ebm))
+    assert described == EBMDescription("answer", [], ["f0"])
     assert [call["graph"] for call in graph_calls] == ["graph1"]
     assert summary_calls["feature_importances"] == "f1: 2.00"
     assert summary_calls["graph_descriptions"] == "f1: answer"
@@ -1289,7 +1295,8 @@ def test_each_entry_point_names_or_rejects_a_model_with_an_interaction(
 
     # describe_ebm: named in the summary prompt and in the log
     with capture_logs() as logs:
-        descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+        described = descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+    assert (described.skipped_terms, described.skipped_features) == ([term], [])
     assert [call["omitted_terms"] for call in calls["summarize_ebm"]] == [[term]]
     assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [[term]]
     assert all(call["omitted_terms"] == [] for call in calls["describe_graph_cot"])
@@ -1320,7 +1327,8 @@ def test_each_entry_point_names_or_rejects_a_model_with_a_removed_term(
 
     # describe_ebm: named in the summary prompt and in the log
     with capture_logs() as logs:
-        descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+        described = descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+    assert (described.skipped_terms, described.skipped_features) == ([], [REMOVED_FEATURE])
     assert [call["omitted_features"] for call in calls["summarize_ebm"]] == [[REMOVED_FEATURE]]
     assert [call["omitted_terms"] for call in calls["summarize_ebm"]] == [[]]
     assert [log["features"] for log in logs if log["event"] == "features_skipped"] == [[REMOVED_FEATURE]]

@@ -163,8 +163,12 @@ from ebaml import DescribeEBMRequest, DescribeGraphRequest, PromptOptions, descr
 ebm = ExplainableBoostingClassifier().fit(X, y)
 
 print(describe_graph(DescribeGraphRequest(ebm, feature_index=0)))
-print(describe_ebm(DescribeEBMRequest(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="..."))))
+print(describe_ebm(DescribeEBMRequest(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="..."))).text)
 ```
+
+`describe_ebm` returns an `EBMDescription`. Its field `text` is the description. Its fields `skipped_terms` and
+`skipped_features` name the interaction terms and the features without a graph that the description leaves out. The text
+says so too, and the same names reach the log as `interactions_skipped` and `features_skipped` warnings.
 
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
@@ -199,7 +203,7 @@ print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=Gra
 from ebaml import DescribeEBMRequest, ExplainInstanceRequest, describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
-global_explanation = describe_ebm(DescribeEBMRequest(ebm))  # computed once, prepended to every local prompt
+global_explanation = describe_ebm(DescribeEBMRequest(ebm)).text  # computed once, prepended to every local prompt
 
 explanation = explain_instance(ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson"))
 print(explanation.counterfactual)      # what would have to change to flip the prediction
@@ -416,7 +420,7 @@ Pass the shorthand `"provider/model"`:
 ```python
 from ebaml import DescribeEBMRequest, describe_ebm
 
-print(describe_ebm(DescribeEBMRequest(ebm, model="anthropic/claude-haiku-4-5")))
+print(describe_ebm(DescribeEBMRequest(ebm, model="anthropic/claude-haiku-4-5")).text)
 ```
 
 Pass `ModelOptions` to set more:
@@ -425,7 +429,7 @@ Pass `ModelOptions` to set more:
 from ebaml import ModelOptions
 
 model = ModelOptions(provider="anthropic", model="claude-haiku-4-5", temperature=0.2, max_output_tokens=8000)
-print(describe_ebm(DescribeEBMRequest(ebm, model=model)))
+print(describe_ebm(DescribeEBMRequest(ebm, model=model)).text)
 ```
 
 EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o-mini"` selects the provider

@@ -253,7 +253,7 @@ def _(describe_graph, DescribeGraphRequest, ebm, graph_button, GraphOptions, mo,
 def _(describe_ebm, DescribeEBMRequest, ebm, mo, model_button) -> None:
     mo.stop(not model_button.value, mo.md("Press the second button to describe the model."))
     with mo.status.spinner("Asking the LLM (three turns per feature, then the summary)..."):
-        model_description = describe_ebm(DescribeEBMRequest(ebm, num_sentences=8))
+        model_description = describe_ebm(DescribeEBMRequest(ebm, num_sentences=8)).text
     mo.md(model_description)
 
 

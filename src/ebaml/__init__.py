@@ -1,7 +1,7 @@
 """Talk 2 EBM in BAML.
 
 Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance`` and
-``LocalExplanation`` load on first use, because the module that holds them can run
+``LocalExplanation`` and ``EBMDescription`` load on first use, because the module that holds them can run
 ``baml generate``.
 """
 
@@ -86,7 +86,7 @@ from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 
 if TYPE_CHECKING:
-    from ebaml.llm.descriptors import LocalExplanation, describe_ebm, describe_graph, explain_instance
+    from ebaml.llm.descriptors import EBMDescription, LocalExplanation, describe_ebm, describe_graph, explain_instance
 
 __version__: str = version("ebaml")
 
@@ -107,6 +107,7 @@ __all__ = [
     "Decision",
     "DescribeEBMRequest",
     "DescribeGraphRequest",
+    "EBMDescription",
     "EBMGraph",
     "EBMGraphError",
     "EBMGraphShapeError",
@@ -195,7 +196,7 @@ def __getattr__(name: str) -> object:
         If ``name`` is not a public name that loads on first use.
 
     """
-    lazy_names = {"LocalExplanation", "describe_ebm", "describe_graph", "explain_instance"}
+    lazy_names = {"EBMDescription", "LocalExplanation", "describe_ebm", "describe_graph", "explain_instance"}
     if name not in lazy_names:
         msg = f"module {__name__!r} has no attribute {name!r}"
         raise AttributeError(msg)

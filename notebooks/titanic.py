@@ -221,7 +221,7 @@ def _(
                 max_concurrency=2,
                 prompt=PromptOptions(dataset_description=dataset_description, graph_description=graph_description),
             ),
-        )
+        ).text
     mo.md(summary)
 
 

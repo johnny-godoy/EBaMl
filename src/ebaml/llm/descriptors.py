@@ -550,7 +550,32 @@ def _describe_graphs(
         return [future.result() for future in futures]
 
 
-def describe_ebm(request: DescribeEBMRequest) -> str:
+@attrs.frozen
+class EBMDescription:
+    """The description of an EBM, and the parts of the model that it leaves out.
+
+    A reader of ``text`` learns from the text itself what the description leaves out. A program reads the same
+    information from the two lists, with no need to parse a log or the text.
+
+    Attributes
+    ----------
+    text: str
+        The description. Pass it as ``global_explanation`` to ``explain_instance``.
+    skipped_terms: list[str]
+        The names of the interaction terms that the description leaves out. The list is empty for a model without
+        interactions.
+    skipped_features: list[str]
+        The names of the features that have no main-effect term, because ``exclude`` or ``remove_terms`` left them
+        out. The description has no graph for them.
+
+    """
+
+    text: str
+    skipped_terms: list[str]
+    skipped_features: list[str]
+
+
+def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
     """Ask the LLM to describe an EBM.
 
     Each feature graph is described like in ``describe_graph`` (concurrently, at most ``max_concurrency`` at a time,
@@ -570,8 +595,8 @@ def describe_ebm(request: DescribeEBMRequest) -> str:
 
     Returns
     -------
-    str
-        The description of the EBM.
+    EBMDescription
+        The description of the EBM, and the names of the interaction terms and the features that it leaves out.
 
     """
     # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
@@ -620,11 +645,12 @@ def describe_ebm(request: DescribeEBMRequest) -> str:
         output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),
         samples=[],
     )
-    return _log_usage(
+    text = _log_usage(
         "describe_ebm",
         baml_sdk.Counted(text=summary.text, usage=usage),
         truncated_attempts=sum(item.truncated_attempts for item in described),
     )
+    return EBMDescription(text, omitted_terms, omitted_features)
 
 
 @attrs.frozen
