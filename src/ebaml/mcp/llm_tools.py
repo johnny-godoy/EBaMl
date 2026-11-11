@@ -44,5 +44,5 @@ def describe_model(store: ModelStore, llm: ModelOptions) -> str:
 
     """
     if store.model_description is None:
-        store.model_description = describe_ebm(DescribeEBMRequest(store.ebm, model=llm))
+        store.model_description = describe_ebm(DescribeEBMRequest(store.ebm, model=llm)).text
     return store.model_description

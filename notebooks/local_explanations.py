@@ -384,7 +384,7 @@ def _(describe_button, describe_ebm, DescribeEBMRequest, ebm, has_api_key, mo, P
                 max_concurrency=2,
                 prompt=PromptOptions(dataset_description=dataset_description),
             ),
-        )
+        ).text
     mo.md(global_explanation)
     return dataset_description, global_explanation
 

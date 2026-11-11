@@ -3,6 +3,7 @@
 import pytest
 
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools
@@ -36,11 +37,11 @@ def test_describe_model_computes_the_text_once(
     ebm, _ = continuous_ebm
     calls: list[ModelOptions] = []
 
-    def fake_describe_ebm(request: DescribeEBMRequest) -> str:
+    def fake_describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
         assert request.ebm is ebm
         assert isinstance(request.model, ModelOptions)
         calls.append(request.model)
-        return "model text"
+        return EBMDescription("model text", [], [])
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
     store = ModelStore(ebm=ebm)

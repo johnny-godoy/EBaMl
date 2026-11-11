@@ -9,7 +9,7 @@ from interpret.glassbox import ExplainableBoostingClassifier
 from ebaml import DescribeEBMRequest, ExplainInstanceRequest, PromptOptions, describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
-global_explanation = describe_ebm(DescribeEBMRequest(ebm, prompt=PromptOptions(dataset_description="...")))  # once per model
+global_explanation = describe_ebm(DescribeEBMRequest(ebm, prompt=PromptOptions(dataset_description="..."))).text  # once per model
 
 explanation = explain_instance(ExplainInstanceRequest(
     ebm,
