@@ -135,31 +135,33 @@ Measured behavior that the design must handle:
 </context>
 
 <decisions>
-`editing-decisions.md` is the questionnaire for these decisions. Read the status of each question there first. Ask the user about a pending question before you write code that depends on it.
+The user answered these questions. Each answer binds you. If the code shows that an answer no longer fits, ask the
+user again, and do not reinterpret it.
 
-Ask the user these questions before you write code that depends on them. Each one changes a semantic contract
-(`.claude/rules/semantic-contracts.md`), so do not choose alone. The recommendation is the default of this plan.
-
-1. **Uncertainty of an edited bin (contract 7).** The local explanations move each score by its standard deviation.
-   A standard deviation of 0 makes an edited score look certain, and a robust guarantee can then hold that did not
-   hold on the fitted model. Options: (a) set it to 0, as GAM Changer does; (b) keep the fitted value. Recommendation:
-   (a), and the session records the edited bins, the docstrings name the rule ("a score that a person sets has no
-   fitted uncertainty"), and `docs/editing.md` says what it means for a local explanation of an edited model.
-2. **Re-centring.** Recommendation: no edit re-centres. A person who sets a score to 0.38 must read 0.38 in the graph,
-   and GAM Changer never moves the intercept. Offer one explicit edit, `Recenter(feature)`, that moves the weighted
-   mean of a term into the intercept and changes no prediction. `Monotonize` then follows GAM Changer and adds no
-   constant, which differs from `interpret`'s `monotonize`. Say so in its docstring.
-3. **A selection that does not end on a bin edge.** A person asks for "age 81 to 87" and the bins are `[80.5, 83.5)`
-   and so on. Options: (a) raise an error that lists the nearest edges; (b) select each bin that overlaps the interval.
-   Recommendation: (a) in 0.7.0, because (b) changes scores that the person did not name. The split of a bin comes with
-   the bin edits of 0.9.0.
-4. **"This feature must not be used".** Options: (a) `ZeroTerm` sets the scores to 0 and keeps the term, as the delete
-   tool of GAM Changer; (b) `RemoveTerms` removes the term with `remove_terms`. Recommendation: both, and
-   `RemoveFeature(feature)` means every term that uses the feature, pair terms included. The model keeps its input
+1. **Uncertainty of an edited bin (contract 7).** Set the standard deviation of each edited bin to 0, as GAM Changer
+   does. The session records the edited bins. The docstrings name the rule ("a score that a person sets has no fitted
+   uncertainty"), and `docs/editing.md` says what it means for a local explanation of an edited model.
+2. **Re-centring.** A direct edit (`Shift`, `SetScores`, `Align`, `Interpolate`, `FitLine`) never re-centres, so a
+   person who sets a score to 0.38 reads 0.38. `Monotonize` adds the constant that keeps the weighted mean of the term,
+   as `interpret`'s `monotonize` does with `passthrough=0.0`. `Recenter(feature)` moves the weighted mean of a term
+   into the intercept and changes no prediction. Each report holds the shift of the weighted mean of the term. The MCP
+   tool descriptions explain why `Recenter` matters (`mcp-edit-tools.md`).
+3. **Selection.** The parameter of an edit is the bins, so no selection can end off a bin edge. A continuous or
+   ordinal feature is addressed by bin position (see `<selection>`), and a nominal feature by category name. An
+   interval of values is a convenience that selects every bin that overlaps it. The report lists the bins that it
+   resolved to, so nobody edits a bin unseen.
+4. **"This feature must not be used".** Offer `ZeroTerm` (scores to 0, the term stays), `RemoveTerms`, and
+   `RemoveFeature`, which removes every term that uses the feature, pair terms included. The model keeps its input
    columns, so the pipeline around it does not change.
-5. **Who reviews.** GAM Changer refuses to save an edit that no person confirmed. Recommendation: each history entry has
-   `reviewed: bool`, `EditSession.save` refuses unreviewed entries unless the caller passes `allow_unreviewed=True`, and
-   `mcp-edit-tools.md` decides how a person confirms the edits of an agent.
+5. **Who reviews.** Each history entry has `reviewed: bool`. `EditSession.save` refuses unreviewed entries unless the
+   caller passes `allow_unreviewed=True`. `mcp-edit-tools.md` decides how a person confirms the edits of an agent.
+6. **Revisions.** Every history entry is a revision with an id, and a read of the model takes a revision (see
+   `<session>`).
+7. **`.gamchanger` fixture (0.9.0).** The user exports a real file from <https://interpret.ml/gam-changer/> (a
+   continuous edit, a nominal edit and an `equal-*` edit). Ask for it before you write the round-trip test.
+8. **Rounding of a loaded file (0.9.0).** `load_gamchanger` emits an edit only for a bin whose score differs after
+   rounding to 4 decimals. The result differs from `get_edited_model` by up to 0.00005 on the other bins, and the docs
+   say so.
 </decisions>
 
 <design_0_7_0>
@@ -182,8 +184,12 @@ function that writes scores owns it. No edit writes a fitted attribute itself.
 An edit names its bins with a selection, not with positions in `term_scores_`, because a position is off by one
 (the missing bin is first) and changes when the bins change.
 
-- `Interval(low, high)` for a continuous or ordinal feature, `Categories([...])` for a nominal feature, `MissingBin()`,
-  `UnseenBin()` and `WholeGraph()`. "A missing value scores 0" is `SetScores(feature, MissingBin(), 0.0)`.
+- `Bins(first, last)` for a continuous or ordinal feature: positions among the real bins, counted from 0, with
+  `last` included. They exclude the missing and the unseen bin, so the position of a bin is the same as in the
+  graph text and in `list_bins`. `Categories([...])` for a nominal feature, `MissingBin()`, `UnseenBin()` and
+  `WholeGraph()`. "A missing value scores 0" is `SetScores(feature, MissingBin(), 0.0)`.
+- `Interval(low, high)` selects every bin that overlaps the interval and resolves to `Bins` before the edit runs.
+  The report names the resolved bins and their edges.
 - An unknown feature, an unknown category, an empty selection, or a selection that the feature type does not allow
   raises an `EBaMlError` subclass with the fix steps, for example the edges or the categories that exist.
 - A feature with a pair term: the edit changes the main effect only. The report names the pair terms that still use the
@@ -215,7 +221,16 @@ branch. Each class says in its docstring which GAM Changer tool it follows.
 
 <session>
 - `EditSession(ebm)`: `preview(edit)` (the report, with no change), `apply(edit, message)`, `undo()`, `redo()`,
-  `checkout(entry_id)`, `review(entry_id)`, `model` (the edited copy), `history` and `save(...)` (decision 5).
+  `checkout(revision)`, `review(revision)`, `model` (the edited copy), `model_at(revision)` (a read-only copy),
+  `history` and `save(...)` (decision 5).
+- A **revision** is `"original"`, `"current"` or the id of a history entry. `model_at` and the read tools take it, so
+  a person or an agent can read any version without a checkout.
+- `history_table()` returns the commits as rows: id, time, feature, edit type, description, reason, `reviewed`. `save`
+  writes the same table next to the model.
+- The id of an entry is a time-ordered UUID (version 7). Python 3.13 has no `uuid.uuid7`, and the stdlib has it from
+  3.14. Evaluate and choose: (a) a small own function built from the injected clock and an injected random source
+  (no dependency, deterministic in tests); (b) the `uuid-utils` package. Prefer (a) and write the reason in the PR.
+  Show a short unique prefix of the random tail in tables, because the leading characters are the time.
 - A history entry holds the edit, a generated description ("Set 6 bins of age (95.5 to 105) to 0.4574"), the message
   of the person (the reason, as the paper asks), the time, an id and `reviewed`. A new `apply` after an `undo` drops
   the redo stack, as GAM Changer does.
