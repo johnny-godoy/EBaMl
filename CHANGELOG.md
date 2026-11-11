@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.6.9'></a>
+## [0.6.9] - 2026-11-11
+
+### Added
+
+- `MinimalityStatus` says why a counterfactual or a sufficient reason is, or is not, known to be the smallest set: `SORTING_PROOF`, `SOLVER_PROOF`, `AT_LOWER_BOUND` or `UNPROVED`. `MinimalityStatus.is_smallest` is false only for `UNPROVED`.
+- `EBMDescription` holds the description of an EBM (`text`) and the names of what it leaves out (`skipped_terms` and `skipped_features`).
+
+### Changed
+
+- **BREAKING:** `describe_ebm` returns an `EBMDescription` and not a `str`. Use its field `text` where you used the string, for example as `global_explanation` of `explain_instance`.
+- **BREAKING:** `Counterfactual.minimum`, `SufficientReason.minimum` and `Cover.minimum` are now `minimality`, a `MinimalityStatus` and not a `bool`. Read `minimality.is_smallest` for the old meaning. The `is_smallest_set` key of the facts for the prompts is unchanged.
+
 <a id='changelog-0.6.8'></a>
 ## [0.6.8] - 2026-11-11
 
