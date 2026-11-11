@@ -135,6 +135,8 @@ Measured behavior that the design must handle:
 </context>
 
 <decisions>
+`editing-decisions.md` is the questionnaire for these decisions. Read the status of each question there first. Ask the user about a pending question before you write code that depends on it.
+
 Ask the user these questions before you write code that depends on them. Each one changes a semantic contract
 (`.claude/rules/semantic-contracts.md`), so do not choose alone. The recommendation is the default of this plan.
 
