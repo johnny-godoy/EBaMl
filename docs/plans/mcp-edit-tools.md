@@ -24,17 +24,19 @@ is the LLM. The edit tools call the deterministic edit API of Python and call no
 </context>
 
 <decisions>
-`editing-decisions.md` is the questionnaire for these decisions (Q5 and Q6). Read the status of each question there first. Ask the user about a pending question before you write code that depends on it.
+The user answered these questions. Each answer binds you. If the code shows that an answer no longer fits, ask the user
+again, and do not reinterpret it.
 
-Ask the user before you write the code of each point.
-
-1. **Who confirms an edit.** GAM Changer saves only edits that a person confirmed. An agent that confirms its own edit
-   proves nothing. Options: (a) `save_model` asks the person through MCP elicitation, with the list of the edits and
-   their reasons; (b) `save_model` writes the model and marks each edit "not reviewed by a person" in the history file;
-   (c) both: (a) when the client supports elicitation, else (b). Recommendation: (c).
-2. **Which model the other tools read after an edit.** Recommendation: the read tools and the explain tool read the
-   edited copy, and each result says how many edits the session holds. `get_graph` takes `version` (`original` or
-   `current`), so the agent can compare.
+1. **Who confirms an edit.** `save_model` asks the person through MCP elicitation, with the list of the edits and their
+   reasons. If the client does not support elicitation, it writes the model and marks each edit "not reviewed by a
+   person" in the history file.
+2. **Revisions.** The read tools (`get_graph` and the others) take `revision`: `original`, `current` or the id of a
+   revision of the history (`model-editing.md`, `<session>`). The default is `current`, and each result says how many
+   edits the session holds. A read of a revision never changes the model of the session.
+3. **History.** A tool returns the history as a table of commits (id, time, feature, edit type, description, reason,
+   reviewed). `save_model` writes the same table next to the model.
+4. **Re-centring.** The descriptions of the edit tools tell the agent that a direct edit does not re-centre, that the
+   report shows the shift of the weighted mean, and when to call `Recenter`.
 </decisions>
 
 <tools>
@@ -45,7 +47,7 @@ Ask the user before you write the code of each point.
 | `apply_edit` | applies one edit to the session copy of the model, and returns the same report |
 | `undo_edit`, `redo_edit` | undoes the last edit, or applies it again |
 | `checkout_edit` | sets the model to its state after one entry of the history |
-| `list_edits` | the history of the session, as replayable JSON |
+| `list_edits` | the history of the session as a table of commits, and as replayable JSON on request |
 | `check_constraints` | the business constraints that the model breaks, each with the edit that repairs it (from 0.9.0) |
 | `affected_rows` | the Feature Panel of GAM Changer: which other features differ most between the affected rows and all rows (from 0.9.0, needs `--data`) |
 | `save_model` | writes the edited model and the edit history |
