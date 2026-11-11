@@ -54,7 +54,7 @@ the *gains*.
   flip. A classifier has the same convention at the log-odds zero.
 - The order of the greedy. The proof allows any order, and it proves only that no feature can be removed.
 - The certificates of the solvers. An optimal result of HiGHS, SCIP or CP-SAT rests on the solver and on its
-  floating-point tolerances. A set whose smallest margin is positive but tiny can be missed, so `minimum` can be wrong
+  floating-point tolerances. A set whose smallest margin is positive but tiny can be missed, so `minimality` can be wrong
   in that case.
 - The reduction of the problem, the lower bound of the LP and the coverage of the greedy. The paper proves the first
   two on paper, and Lean checks none of them. The lower bound also depends on the tolerances of the LP solver. EBaMl
@@ -126,7 +126,7 @@ of the other features.
   | `LocalSearchCover` | Remove a random part of the greedy set and build it again, with a seed. | *Minimal*: no feature of the set can be removed. *Minimum* when the size equals the lower bound. |
   | `GreedyCover` | Add the feature with the largest gain of coverage, then remove each feature that is not necessary. | *Minimal*: no feature of the set can be removed. *Minimum* when the size equals the lower bound. |
 
-  `SufficientReason.minimum` tells which claim the result has, and `SufficientReason.lower_bound` gives the bound of
+  `SufficientReason.minimality` tells which claim the result has, and `SufficientReason.lower_bound` gives the bound of
   the LP relaxation.
 
 ### Count completions
@@ -153,7 +153,7 @@ this bound.
 | `Counterfactual.new_decision` | The other class. | The other decision. | The new predicted class. |
 | `Counterfactual.new_output` | The probability of the new class. | The new predicted value. | The probability of the new class. |
 | `SufficientReason.guaranteed_margin` | The worst case of the margin. | The worst case of the margin. | The smallest worst case over the margins. |
-| `SufficientReason.minimum` | Always true (proved). | True for one margin. | See the solver. |
+| `SufficientReason.minimality` | Always `SORTING_PROOF`. | `SORTING_PROOF` for one margin. | See the solver. |
 | `SufficientReason.lower_bound`, `Counterfactual.lower_bound` | The size of the set. | The size of the set for one margin, else the bound of the LP. | The bound of the LP for a covering problem. |
 
 ## How the proof is checked

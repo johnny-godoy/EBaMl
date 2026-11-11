@@ -74,7 +74,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
             {"feature": c.feature, "from": c.from_value, "to": c.to_value} | audience.change(c) for c in cf.changes
         ]
         counterfactual["number_of_changes"] = len(cf.changes)
-        counterfactual["is_smallest_set"] = cf.minimum
+        counterfactual["is_smallest_set"] = cf.minimality.is_smallest
         counterfactual |= audience.lower_bound(cf.lower_bound, "changes")
         # the class after the changes and its probability share one object, so the LLM cannot read the probability
         # as one of the old class
@@ -92,7 +92,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     sufficient: dict[str, JSONValue] = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
-        sufficient["is_smallest_set"] = sr.minimum
+        sufficient["is_smallest_set"] = sr.minimality.is_smallest
         sufficient |= audience.lower_bound(sr.lower_bound, "features")
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)

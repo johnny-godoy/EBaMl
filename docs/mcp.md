@@ -260,7 +260,7 @@ The agent gives the number of a row of the data file with `row`. It can also giv
       "new_decision": 0,
       "new_output": 0.9612725381888545
     },
-    "sufficient_reason": {"features": ["income", "age"], "guaranteed_margin": 0.5450951842389209, "minimum": true},
+    "sufficient_reason": {"features": ["income", "age"], "guaranteed_margin": 0.5450951842389209, "minimality": "sorting_proof"},
     "completions": [
       {"fixed": [], "share": 0.6124},
       {"fixed": ["income"], "share": 0.7017},

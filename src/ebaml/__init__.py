@@ -1,7 +1,8 @@
 """Talk 2 EBM in BAML.
 
 Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance`` and
-``LocalExplanation`` load on first use, because the module that holds them can run ``baml generate``.
+``LocalExplanation`` load on first use, because the module that holds them can run
+``baml generate``.
 """
 
 from importlib.metadata import version
@@ -81,6 +82,7 @@ from ebaml.local.facts import (
     compute_local_facts,
 )
 from ebaml.local.local_kinds import OutputKind
+from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 
 if TYPE_CHECKING:
@@ -126,6 +128,7 @@ __all__ = [
     "LocalFacts",
     "LocalOptions",
     "LocalSearchCover",
+    "MinimalityStatus",
     "MipBackend",
     "MipCover",
     "MissingAPIKeyError",

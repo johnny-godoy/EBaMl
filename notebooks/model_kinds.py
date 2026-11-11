@@ -196,9 +196,10 @@ def _(mo) -> None:
       for a regressor.
     - `Counterfactual.new_decision` is the class that is predicted after the changes. For a regressor, it is the other
       answer.
-    - `SufficientReason.minimum` tells whether no smaller set of features fixes the decision. It is always true for a
-      binary classifier. For a decision with several margins, it depends on the solver that `LocalOptions.search`
-      names, and `SufficientReason.lower_bound` gives the fewest features that any set needs.
+    - `SufficientReason.minimality` tells why a set of features is, or is not, known to be the smallest one that fixes
+      the decision. It is always `SORTING_PROOF` for a binary classifier. For a decision with several margins, it
+      depends on the solver that `LocalOptions.search` names. `SufficientReason.lower_bound` gives the fewest features
+      that any set needs.
 
     A multiclass classifier has one margin for each other class: the score of the predicted class minus the score of
     that class. The option `target_class` asks for the fewest changes that lead to a chosen class, over every choice of
@@ -270,7 +271,7 @@ def _(attrs, facts, instance, mo) -> None:
         sections.extend([
             mo.md(
                 f"The counterfactual changes the decision to **{counterfactual.new_decision}**, with output"
-                f" **{counterfactual.new_output:.2f}**. `minimum` is **{counterfactual.minimum}**:",
+                f" **{counterfactual.new_output:.2f}**. `minimality` is **{counterfactual.minimality}**:",
             ),
             mo.ui.table([attrs.asdict(change) for change in counterfactual.changes], selection=None),
         ])
@@ -280,7 +281,7 @@ def _(attrs, facts, instance, mo) -> None:
         sections.append(
             mo.md(
                 f"The sufficient reason is **{', '.join(sufficient.features)}**, with a guaranteed margin of"
-                f" **{sufficient.guaranteed_margin:.2f}**. `minimum` is **{sufficient.minimum}**.",
+                f" **{sufficient.guaranteed_margin:.2f}**. `minimality` is **{sufficient.minimality}**.",
             ),
         )
     mo.vstack(sections)
@@ -300,7 +301,7 @@ def _(mo) -> None:
     - `GreedyCover()` adds the input with the largest gain until the set is enough.
 
     The last two need no MIP solver. The table runs each solver on the flower and the confidence level above, with the
-    target class `setosa` for the counterfactual. It shows the size of each set, the flag `minimum`, the lower bound
+    target class `setosa` for the counterfactual. It shows the size of each set, its `minimality`, the lower bound
     and the time. `MipCover` has a `time_limit` in seconds. A set is marked as the smallest only if the MIP solver
     proves it or the set reaches the lower bound. The iris model has three features, so every solver finds the same sets
     here. The solvers differ on models with many features.
@@ -345,10 +346,10 @@ def _(
         search_rows.append({
             "solver": solver_name,
             "changes to setosa": "none" if target_change is None else len(target_change.changes),
-            "changes: minimum": None if target_change is None else target_change.minimum,
+            "changes: minimality": None if target_change is None else target_change.minimality.value,
             "changes: lower bound": None if target_change is None else target_change.lower_bound,
             "sufficient reason": "none" if search_reason is None else ", ".join(search_reason.features),
-            "reason: minimum": None if search_reason is None else search_reason.minimum,
+            "reason: minimality": None if search_reason is None else search_reason.minimality.value,
             "reason: lower bound": None if search_reason is None else search_reason.lower_bound,
             "seconds": round(seconds, 3),
         })

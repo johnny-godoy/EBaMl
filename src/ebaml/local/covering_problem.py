@@ -13,6 +13,8 @@ from collections.abc import Sequence
 
 import attrs
 
+from ebaml.local.minimality import MinimalityStatus
+
 # A solver cannot test a strict ">", so it asks each margin to reach this share of the size of the numbers of the
 # margin. The greedy uses the same share for its deficits. The check in Python then uses ">" on the real numbers.
 MARGIN_EPSILON = 1e-6
@@ -137,15 +139,16 @@ class Cover:
         No sufficient set has fewer picks than this. It is the LP relaxation of the problem, rounded up, when the solver
         has a backend for the LP, and ``1`` otherwise: the solver checks the empty set first. The LP bound depends on
         the tolerances of the LP solver.
-    minimum: bool
-        True if no smaller set is sufficient: the solver proved the set optimal, or its size equals ``lower_bound``.
+    minimality: MinimalityStatus
+        ``SOLVER_PROOF`` if the solver proved the set optimal, ``AT_LOWER_BOUND`` if its size equals ``lower_bound``,
+        and ``UNPROVED`` otherwise.
 
     """
 
     choices: list[Choice]
     guaranteed_margin: float
     lower_bound: int
-    minimum: bool
+    minimality: MinimalityStatus
 
 
 def make_cover(problem: CoveringProblem, choices: Sequence[Choice], lower_bound: int, *, proved: bool) -> Cover:
@@ -165,12 +168,18 @@ def make_cover(problem: CoveringProblem, choices: Sequence[Choice], lower_bound:
     Returns
     -------
     Cover
-        The picks by group, their smallest margin, the bound, and ``minimum``, which is also true when the size reaches
-        the bound.
+        The picks by group, their smallest margin, the bound, and ``minimality``. A size at the bound is
+        ``AT_LOWER_BOUND``, whether or not the solver also proved the set.
 
     """
     ordered = sorted(choices)
-    return Cover(ordered, min(problem.margins(ordered)), lower_bound, minimum=proved or len(ordered) <= lower_bound)
+    if len(ordered) <= lower_bound:
+        minimality = MinimalityStatus.AT_LOWER_BOUND
+    elif proved:
+        minimality = MinimalityStatus.SOLVER_PROOF
+    else:
+        minimality = MinimalityStatus.UNPROVED
+    return Cover(ordered, min(problem.margins(ordered)), lower_bound, minimality)
 
 
 def reduce_problem(problem: CoveringProblem) -> list[list[int]]:

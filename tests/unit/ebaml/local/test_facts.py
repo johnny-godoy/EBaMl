@@ -27,6 +27,7 @@ from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearc
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.local_kinds import MulticlassLocal, Outcome, OutputKind
+from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from tests.unit.ebaml.conftest import (
     MISSING_VALUE,
@@ -129,7 +130,7 @@ def test_matches_brute_force(
     assert facts.sufficient_reason is not None
     assert len(facts.sufficient_reason.features) == sufficient
     # the brute force shows that no smaller set is sufficient, which is what minimum claims
-    assert facts.sufficient_reason.minimum
+    assert facts.sufficient_reason.minimality.is_smallest
 
 
 def test_counterfactual_really_flips(categorical_ebm: FittedClassifier) -> None:
@@ -389,7 +390,7 @@ def test_multiclass_facts_are_the_smallest_by_brute_force(row: int) -> None:
     assert (None if facts.counterfactual is None else len(facts.counterfactual.changes)) == expected_flip
     assert (None if facts.sufficient_reason is None else len(facts.sufficient_reason.features)) == expected_reason
     if facts.sufficient_reason is not None:
-        assert facts.sufficient_reason.minimum
+        assert facts.sufficient_reason.minimality.is_smallest
 
 
 @settings(max_examples=40, deadline=None)
@@ -529,10 +530,10 @@ def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert len(counterfactual.changes) >= smallest
     assert counterfactual.lower_bound <= smallest
-    if counterfactual.minimum:
+    if counterfactual.minimality.is_smallest:
         assert len(counterfactual.changes) == smallest
     if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
-        assert counterfactual.minimum
+        assert counterfactual.minimality.is_smallest
         assert len(counterfactual.changes) == smallest
 
 
@@ -572,7 +573,8 @@ def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest
     assert counterfactual is not None
     assert counterfactual.new_decision == "c0"
     assert [(change.feature, change.to_value) for change in counterfactual.changes] == [("f0", "f01")]
-    assert counterfactual.minimum is True
+    # one change reaches the lower bound of 1, so no proof of the solver is needed
+    assert counterfactual.minimality is MinimalityStatus.AT_LOWER_BOUND
     assert counterfactual.lower_bound == 1
 
 
@@ -1066,7 +1068,7 @@ def test_sufficient_reason_fixes_the_largest_gains_first() -> None:
     features = [_hand("f3", [0.5, 0.0]), _hand("f1", [2.0, -1.0]), _hand("f2", [1.0, -0.5])]
     # the worst case is -1.5 (-1, -0.5 and 0); the gains are 3 (f1), 1.5 (f2) and 0.5 (f3)
     reason = local._sufficient_reason(features, intercept=0.0, sign=1, z=0.0)
-    assert reason == local.SufficientReason(["f1"], 1.5, minimum=True, lower_bound=1)
+    assert reason == local.SufficientReason(["f1"], 1.5, minimality=MinimalityStatus.SORTING_PROOF, lower_bound=1)
 
 
 def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> None:
@@ -1074,7 +1076,7 @@ def test_sufficient_reason_needs_no_feature_when_the_outcome_is_certain() -> Non
     assert local._sufficient_reason([_hand("f", [1.0, 2.0])], 0.0, 1, 0.0) == local.SufficientReason(
         [],
         1.0,
-        minimum=True,
+        minimality=MinimalityStatus.SORTING_PROOF,
         lower_bound=0,
     )
 
@@ -1084,7 +1086,7 @@ def test_sufficient_reason_needs_a_margin_above_zero() -> None:
     assert local._sufficient_reason([_hand("f", [0.0, 1.0], 1)], 0.0, 1, 0.0) == local.SufficientReason(
         ["f"],
         1.0,
-        minimum=True,
+        minimality=MinimalityStatus.SORTING_PROOF,
         lower_bound=1,
     )
     # when the margin stays at 0, the outcome is not certain
@@ -1380,7 +1382,7 @@ def test_regressor_threshold_matches_brute_force(
     if sufficient is not None:
         assert facts.sufficient_reason is not None
         assert len(facts.sufficient_reason.features) == sufficient
-        assert facts.sufficient_reason.minimum
+        assert facts.sufficient_reason.minimality.is_smallest
 
 
 def _sufficient_sizes(
@@ -1458,10 +1460,10 @@ def test_regressor_interval_matches_brute_force(
     assert not any(sufficient[chosen - {feature}] for feature in chosen)
     smallest = min(len(subset) for subset, ok in sufficient.items() if ok)
     assert reason.lower_bound <= smallest
-    if reason.minimum:
+    if reason.minimality.is_smallest:
         assert len(chosen) == smallest
     if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
-        assert reason.minimum
+        assert reason.minimality.is_smallest
         assert len(chosen) == smallest
 
 
@@ -1574,7 +1576,7 @@ def test_the_facts_match_the_oracle_of_the_paper(
     if counterfactual is not None:
         # a tie can give another set of the same size, so the oracle checks the set and not its members
         assert problem.flips([names.index(change.feature) for change in counterfactual.changes])
-        assert counterfactual.minimum is True
+        assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
         assert counterfactual.lower_bound == len(counterfactual.changes)
 
     reason = facts.sufficient_reason
@@ -1583,7 +1585,7 @@ def test_the_facts_match_the_oracle_of_the_paper(
         guaranteed = problem.worst_case_margin([names.index(name) for name in reason.features])
         assert guaranteed > 0
         assert reason.guaranteed_margin == pytest.approx(guaranteed)
-        assert reason.minimum is True
+        assert reason.minimality.is_smallest
 
 
 @settings(max_examples=200, deadline=None)
@@ -1610,8 +1612,8 @@ def test_more_confidence_never_makes_a_claim_easier(
         assert len(low.counterfactual.changes) <= len(high.counterfactual.changes)
     if high.sufficient_reason is not None:
         assert low.sufficient_reason is not None
-        assert low.sufficient_reason.minimum is True
-        assert high.sufficient_reason.minimum is True
+        assert low.sufficient_reason.minimality.is_smallest
+        assert high.sufficient_reason.minimality.is_smallest
         assert len(low.sufficient_reason.features) <= len(high.sufficient_reason.features)
         # sorting gives the set with the largest guaranteed margin of its size, so two sets of one size compare
         if case[0].kind == "binary" and len(low.sufficient_reason.features) == len(high.sufficient_reason.features):
@@ -1725,56 +1727,74 @@ def _feasible_pair(model: CoveringModel) -> ModelResult:
     return ModelResult(ModelStatus.FEASIBLE, picks, float(len(picks)))
 
 
+def _optimal_pair(model: CoveringModel) -> ModelResult:
+    # the answer of a MIP solver that proves the optimum
+    picks = [choice for choice in model.choices if choice.group in {0, 3}]
+    return ModelResult(ModelStatus.OPTIMAL, picks, float(len(picks)))
+
+
 @pytest.fixture(scope="module")
 def greedy_gap_ebm(fit_ebm: Callable[..., FittedModel]) -> FittedModel:
     templates = {("regressor", GREEDY_GAP_SHAPE): fit_template(fit_ebm, "regressor", GREEDY_GAP_SHAPE)}
     return build_ebm(templates, GREEDY_GAP_MODEL)
 
 
+SORTING: MinimalityStatus = MinimalityStatus.SORTING_PROOF
+SOLVER: MinimalityStatus = MinimalityStatus.SOLVER_PROOF
+AT_BOUND: MinimalityStatus = MinimalityStatus.AT_LOWER_BOUND
+UNPROVED: MinimalityStatus = MinimalityStatus.UNPROVED
+
+
 @pytest.mark.parametrize(
     ("decision", "search", "expected"),
     [
         # one margin: sorting proves the size, whatever the search is
-        pytest.param(Threshold(-2.5), GreedyCover(bound_backend=None), (2, 2, True), id="sorting"),
-        pytest.param(GREEDY_GAP_INTERVAL, MipCover(), (2, 2, True), id="mip-optimal"),
+        pytest.param(Threshold(-2.5), GreedyCover(bound_backend=None), (2, 2, SORTING), id="sorting"),
+        pytest.param(GREEDY_GAP_INTERVAL, MipCover(), (2, 2, AT_BOUND), id="mip-optimal-at-the-bound"),
+        pytest.param(
+            GREEDY_GAP_INTERVAL,
+            MipCover(ScriptedBackend(answer=_optimal_pair, lp=NO_LP)),
+            (2, 1, SOLVER),
+            id="mip-optimal-above-the-bound",
+        ),
         pytest.param(
             GREEDY_GAP_INTERVAL,
             MipCover(ScriptedBackend(answer=_feasible_pair, lp=NO_LP)),
-            (2, 1, False),
+            (2, 1, UNPROVED),
             id="mip-time-limit",
         ),
         pytest.param(
             GREEDY_GAP_INTERVAL,
             MipCover(ScriptedBackend(answer=_feasible_pair)),
-            (2, 2, True),
+            (2, 2, AT_BOUND),
             id="mip-time-limit-at-the-bound",
         ),
-        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(), (3, 2, False), id="greedy"),
-        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(bound_backend=None), (3, 1, False), id="greedy-no-bound"),
-        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(iterations=0), (3, 2, False), id="local-search-no-step"),
-        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(), (2, 2, True), id="local-search-at-the-bound"),
+        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(), (3, 2, UNPROVED), id="greedy"),
+        pytest.param(GREEDY_GAP_INTERVAL, GreedyCover(bound_backend=None), (3, 1, UNPROVED), id="greedy-no-bound"),
+        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(iterations=0), (3, 2, UNPROVED), id="local-search-no-step"),
+        pytest.param(GREEDY_GAP_INTERVAL, LocalSearchCover(), (2, 2, AT_BOUND), id="local-search-at-the-bound"),
     ],
 )
 def test_each_way_to_find_a_sufficient_reason_reports_the_guarantee_that_it_has(
     greedy_gap_ebm: FittedModel,
     decision: Threshold | Interval,
     search: CoveringSolver,
-    expected: tuple[int, int, bool],
+    expected: tuple[int, int, MinimalityStatus],
 ) -> None:
-    # expected: the size of the set, its lower bound, and whether the set is proved the smallest
+    # expected: the size of the set, its lower bound, and the reason why the set is, or is not, the smallest
     # contract 2: the claim "smallest" reaches the prompt only on a path that established it. The fallback to every
     # group (_no_set_found) cannot be reached from the facts, and test_covering_solvers covers it.
     options = local.LocalOptions(confidence_level=0, min_support=0, decision=decision, search=search)
     facts = local.compute_local_facts(greedy_gap_ebm, GREEDY_GAP_MODEL.instance, options)
     reason = facts.sufficient_reason
     assert reason is not None
-    assert (len(reason.features), reason.lower_bound, reason.minimum) == expected
-    _, lower_bound, minimum = expected
+    assert (len(reason.features), reason.lower_bound, reason.minimality) == expected
+    _, lower_bound, status = expected
     assert reason.guaranteed_margin > 0
     expert = orjson.loads(facts_to_texts(facts, DataScientist()).sufficient_reason)
-    assert expert["is_smallest_set"] is minimum
+    assert expert["is_smallest_set"] is status.is_smallest
     assert expert["smallest_possible_number_of_features"] == lower_bound
-    assert orjson.loads(facts_to_texts(facts).sufficient_reason)["is_smallest_set"] is minimum
+    assert orjson.loads(facts_to_texts(facts).sufficient_reason)["is_smallest_set"] is status.is_smallest
 
 
 # A classifier with three classes. The instance has class 0, and class 2 needs a change of both features.
@@ -1792,20 +1812,19 @@ TWO_CHANGES_MODEL: SmallModel = SmallModel(
 
 
 @pytest.mark.parametrize(
-    ("search", "lower_bound", "minimum"),
+    ("search", "lower_bound", "status"),
     [
-        pytest.param(MipCover(), 2, True, id="mip-optimal"),
-        pytest.param(GreedyCover(), 2, True, id="greedy-at-the-bound"),
-        pytest.param(GreedyCover(bound_backend=None), 1, False, id="greedy-no-bound"),
-        pytest.param(LocalSearchCover(bound_backend=None), 1, False, id="local-search-no-bound"),
+        pytest.param(MipCover(), 2, AT_BOUND, id="mip-optimal"),
+        pytest.param(GreedyCover(), 2, AT_BOUND, id="greedy-at-the-bound"),
+        pytest.param(GreedyCover(bound_backend=None), 1, UNPROVED, id="greedy-no-bound"),
+        pytest.param(LocalSearchCover(bound_backend=None), 1, UNPROVED, id="local-search-no-bound"),
     ],
 )
 def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     small_templates: Templates,
     search: CoveringSolver,
     lower_bound: int,
-    *,
-    minimum: bool,
+    status: MinimalityStatus,
 ) -> None:
     ebm = build_ebm(small_templates, TWO_CHANGES_MODEL)
     options = local.LocalOptions(confidence_level=0, min_support=0, target_class=2, search=search)
@@ -1813,18 +1832,18 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     counterfactual = facts.counterfactual
     assert counterfactual is not None
     assert counterfactual.new_decision == 2
-    assert (len(counterfactual.changes), counterfactual.lower_bound, counterfactual.minimum) == (
+    assert (len(counterfactual.changes), counterfactual.lower_bound, counterfactual.minimality) == (
         2,
         lower_bound,
-        minimum,
+        status,
     )
     expert = orjson.loads(facts_to_texts(facts, DataScientist()).counterfactual)
-    assert expert["is_smallest_set"] is minimum
+    assert expert["is_smallest_set"] is status.is_smallest
     assert expert["smallest_possible_number_of_changes"] == lower_bound
     # the default counterfactual of the same instance is one margin at a time, so sorting proves it
     default = local.compute_local_facts(ebm, TWO_CHANGES_MODEL.instance, attrs.evolve(options, target_class=None))
     assert default.counterfactual is not None
-    assert default.counterfactual.minimum is True
+    assert default.counterfactual.minimality is SORTING
 
 
 def _label_of(ebm: FittedModel, score: float, limits: Sequence[float]) -> str:
