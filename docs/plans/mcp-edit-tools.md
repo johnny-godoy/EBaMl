@@ -34,7 +34,9 @@ again, and do not reinterpret it.
    revision of the history (`model-editing.md`, `<session>`). The default is `current`, and each result says how many
    edits the session holds. A read of a revision never changes the model of the session.
 3. **History.** A tool returns the history as a table of commits (id, time, feature, edit type, description, reason,
-   reviewed). `save_model` writes the same table next to the model.
+   reviewed). `save_model` needs a `message` (the change that the saved model holds), adds a `save` entry to the table,
+   and writes the table next to the model (`model-editing.md`, `<session>`). The agent writes the message, and the
+   person sees it in the elicitation of decision 1.
 4. **Re-centring.** The descriptions of the edit tools tell the agent that a direct edit does not re-centre, that the
    report shows the shift of the weighted mean, and when to call `Recenter`.
 </decisions>
@@ -50,7 +52,7 @@ again, and do not reinterpret it.
 | `list_edits` | the history of the session as a table of commits, and as replayable JSON on request |
 | `check_constraints` | the business constraints that the model breaks, each with the edit that repairs it (from 0.9.0) |
 | `affected_rows` | the Feature Panel of GAM Changer: which other features differ most between the affected rows and all rows (from 0.9.0, needs `--data`) |
-| `save_model` | writes the edited model and the edit history |
+| `save_model` | needs a `message`, adds a `save` entry to the history, and writes the edited model and the history table |
 
 - The edit is one argument with a `kind` field (`set_scores`, `monotonize`, and so on) and the fields of that edit. The
   JSON schema lists each kind, so the agent sees every edit without a tool for each one. A new edit of `ebaml.edit` is
