@@ -155,8 +155,9 @@ user again, and do not reinterpret it.
    columns, so the pipeline around it does not change.
 5. **Who reviews.** Each history entry has `reviewed: bool`. `EditSession.save` refuses unreviewed entries unless the
    caller passes `allow_unreviewed=True`. `mcp-edit-tools.md` decides how a person confirms the edits of an agent.
-6. **Revisions.** Every history entry is a revision with an id, and a read of the model takes a revision (see
-   `<session>`).
+6. **Revisions and saves.** Every history entry is a revision with an id, and a read of the model takes a revision
+   (see `<session>`). Every `save` needs a message and adds an entry to the history (see `<session>`). The ids are
+   UUIDs of version 7 from the `uuid6` package.
 7. **`.gamchanger` fixture (0.9.0).** The user exports a real file from <https://interpret.ml/gam-changer/> (a
    continuous edit, a nominal edit and an `equal-*` edit). Ask for it before you write the round-trip test.
 8. **Rounding of a loaded file (0.9.0).** `load_gamchanger` emits an edit only for a bin whose score differs after
@@ -225,19 +226,27 @@ branch. Each class says in its docstring which GAM Changer tool it follows.
   `history` and `save(...)` (decision 5).
 - A **revision** is `"original"`, `"current"` or the id of a history entry. `model_at` and the read tools take it, so
   a person or an agent can read any version without a checkout.
-- `history_table()` returns the commits as rows: id, time, feature, edit type, description, reason, `reviewed`. `save`
-  writes the same table next to the model.
-- The id of an entry is a time-ordered UUID (version 7). Python 3.13 has no `uuid.uuid7`, and the stdlib has it from
-  3.14. Evaluate and choose: (a) a small own function built from the injected clock and an injected random source
-  (no dependency, deterministic in tests); (b) the `uuid-utils` package. Prefer (a) and write the reason in the PR.
-  Show a short unique prefix of the random tail in tables, because the leading characters are the time.
+- `history_table()` returns the commits as rows: id, time, kind (`edit` or `save`), feature, edit type, description,
+  reason, `reviewed`.
+- The id of an entry is a time-ordered UUID (version 7) from the `uuid6` package (`uuid6.uuid7()`). Python 3.13 has no
+  `uuid.uuid7`. Declare `uuid6` as a direct dependency. `EditSession` takes an id factory (`Callable[[], UUID]`), so a
+  test passes a fixed sequence and a replay keeps the stored ids. Show a short unique prefix of the random tail in
+  tables, because the leading characters are the time.
 - A history entry holds the edit, a generated description ("Set 6 bins of age (95.5 to 105) to 0.4574"), the message
   of the person (the reason, as the paper asks), the time, an id and `reviewed`. A new `apply` after an `undo` drops
   the redo stack, as GAM Changer does.
 - `history` is replayable JSON, written with `orjson`, with a format version and a fingerprint of the original model
   (feature names, bin edges, a hash of the scores). `EditSession.replay(ebm, history)` refuses a model with another
   fingerprint, because bins that moved make a selection mean other rows.
-- Save the model with `skops.io` (`.claude/rules/libraries.md`), and the history next to it.
+- **Save is a commit.** `save(path, message, *, author=None, allow_unreviewed=False)` needs a `message`: the
+  description of the change that the saved model holds, for example the business requirement that the edits serve. A
+  save adds an entry of kind `save` to the history, and then writes the model with `skops.io`
+  (`.claude/rules/libraries.md`) and the history table next to it. The entry holds the id, the time, the message,
+  the author if given, the ids of the edits since the previous save, whether a person reviewed them, the name of the
+  file and a hash of the saved model. So the history shows which revision became which file, and why.
+- A `save` entry is not an edit. `undo`, `redo`, `checkout` and `replay` skip it, and no edit removes it. A save that
+  fails (an unreviewed entry, a write error) adds no entry.
+- `save` takes more fields only when a decision needs them. Ask the user before you add one.
 </session>
 
 <report>
