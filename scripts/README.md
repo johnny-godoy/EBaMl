@@ -175,17 +175,20 @@ and `cosmic-ray.toml`. The script:
 
 1. creates a session in `.mutation/session.sqlite` and drops mutants on `# pragma: no mutate` lines,
 2. if you give `--base`, drops the mutants that touch no line changed since that revision; if you give `--module`,
-   drops the mutants of all other modules,
+   drops the mutants of all other modules; if you give `--part 2/4`, keeps the second of four equal parts of what is
+   left (the mutants have a fixed order, so each job of a split run gets a different part),
 3. runs the test baseline with one coverage context for each test, and stops if a test fails,
 4. splits the work items of each module over the shards and runs them concurrently,
 5. prints a progress line every minute, with the finished, surviving and remaining mutants,
-6. merges the results back and prints the survival rate.
+6. merges the results back and prints the number of surviving mutants and of mutants that did not run.
 
-Three measures keep each mutant fast. The baseline writes a coverage map: the tests that execute each line of the
-mutated modules (`mutant_tests.py`). Under a mutant, each shard runs the tests that execute the mutated statements
-first, then the other tests of the mutated module, then the rest (`tests/unit/conftest.py` reads `MUTATION_FIRST`,
-`MUTATION_MODULE`, `MUTATION_ORIGINAL` and `MUTATION_COVERAGE`). The run stops at the first failure, so a killed mutant
-runs only a few tests, and a surviving mutant runs all of them. All shards share one cache of fitted EBMs, which the
+Four measures keep each mutant fast. The baseline writes a coverage map: the tests that execute each line of the
+mutated modules (`mutant_tests.py`). Under a mutant, each shard first runs only the tests that execute the mutated
+statements (`mutant_run.py`, the test command of the shards). Pytest then collects only their files, not the whole
+suite, which takes about as long as the run of a killed mutant. If these tests pass, the script runs the full command:
+the tests that execute the mutated statements first, then the other tests of the mutated module, then the rest
+(`tests/unit/conftest.py` reads `MUTATION_FIRST`, `MUTATION_MODULE`, `MUTATION_ORIGINAL` and `MUTATION_COVERAGE`). The
+run stops at the first failure, so a killed mutant runs only a few tests, and a surviving mutant runs all of them. All shards share one cache of fitted EBMs, which the
 baseline fills (`tests/unit/ebaml/conftest.py` reads `EBAML_FIT_CACHE`). Without these variables, the tests run in the
 normal order and fit every model.
 
@@ -194,14 +197,28 @@ uv run python scripts/mutation.py      # one shard per CPU
 uv run python scripts/mutation.py 4    # four shards
 uv run python scripts/mutation.py --base origin/main   # only the lines changed since main
 uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # only one module
+uv run python scripts/mutation.py --module src/ebaml/local/facts.py --part 2/3   # the second of three parts of it
+uv run python scripts/mutation.py --base origin/main --time-limit 3000   # stop after 50 minutes
 ```
+
+Each mutant costs a start of Python and an import of `ebaml`, about 4 seconds, so the run time grows with the number of
+mutants. A runner has 4 CPUs, which is the limit of one job. To run more mutants in the same time, split the run over
+jobs with `--part`. `--time-limit` is the safety net: the run stops at the limit, keeps the results of the finished
+mutants, and exits with code 3 if no mutant survived (code 1 if one did), so that the report shows the survivors and the
+number of mutants that did not run.
 
 If no line of `src/ebaml` changed, the script exits with code 0 and runs nothing. The PR run in CI uses `--base`. A
 change can let a mutant survive on a line that did not change, so the weekly run mutates all lines. The workflow
 `mutation-weekly.yml` runs all modules each Monday, and only if code changed in the last 7 days. It starts one job for
-each module with `--module`, and opens one issue that lists the surviving mutants of all jobs.
+each module with `--module`, and splits a module of more than 500 lines into one job for each 500 lines with `--part`.
+Each job has a time limit of 50 minutes. The workflow opens one issue that lists the jobs that did not pass and the
+surviving mutants of all jobs. It opens the issue for a job that hit the limit too.
 
-Exits non-zero if any mutant survives. CI requires a 100% mutation score. Settings (module path, timeout, test command)
+The PR run splits the changed lines into parts of about 400 lines, at most 8, one job for each part (`mutant plan` and
+`mutant part` in `ci.yml`). The job `mutation (changed modules, 100% score)` sums them up, because the ruleset requires
+that name. Make a large pull request smaller if it needs more than 8 parts.
+
+Exits non-zero if any mutant survives or if the time limit stops the run. CI requires a 100% mutation score. Settings (module path, timeout, test command)
 are in `cosmic-ray.toml`.
 
 ## `fit_token_weights.py`

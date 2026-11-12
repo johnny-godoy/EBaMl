@@ -10,6 +10,9 @@ every test, so the order changes the time of the run but not its result.
 import ast
 import difflib
 from collections.abc import Collection, Mapping, Sequence
+from pathlib import Path
+
+import orjson
 
 
 def mutated_lines(original: str, mutated: str) -> set[int]:
@@ -91,3 +94,30 @@ def covering_tests(coverage: Mapping[str, Sequence[str]], original: str, mutated
     """
     lines = statement_lines(original, mutated_lines(original, mutated))
     return {test for line in lines for test in coverage.get(str(line), ())}
+
+
+def covering_from_environment(root: Path, environ: Mapping[str, str]) -> set[str]:
+    """Find the tests of the mutant that a mutation run describes in its environment variables.
+
+    ``scripts/mutation.py`` sets ``MUTATION_MODULE`` to the path of the mutated module, ``MUTATION_ORIGINAL`` to the
+    project root with the unmutated source, and ``MUTATION_COVERAGE`` to the coverage map of the baseline.
+
+    Parameters
+    ----------
+    root: Path
+        The project root of the shard, with the mutated module.
+    environ: Mapping[str, str]
+        The environment variables.
+
+    Returns
+    -------
+    set[str]
+        The node ids of the tests that execute the mutated statements. The set is empty without the variables.
+
+    """
+    path = environ.get("MUTATION_MODULE")
+    if not (path and "MUTATION_ORIGINAL" in environ and "MUTATION_COVERAGE" in environ):
+        return set()
+    coverage = orjson.loads(Path(environ["MUTATION_COVERAGE"]).read_bytes()).get(path, {})
+    original = (Path(environ["MUTATION_ORIGINAL"]) / path).read_text()
+    return covering_tests(coverage, original, (root / path).read_text())

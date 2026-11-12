@@ -5,16 +5,20 @@ each module in the main session are split over the shards, executed concurrently
 the main session for reporting. A shard runs the tests of its own module first, because they kill most mutants of that
 module, and all shards share one cache of fitted models. A progress line appears every minute.
 
-Usage: ``uv run python scripts/mutation.py [shards] [--base REF | --module PATH ...]``. With ``--base``, only the
-mutants on the lines that changed since ``REF`` run. With ``--module``, all mutants of the given modules run. Exits
-non-zero if any mutant survives.
+Usage: ``uv run python scripts/mutation.py [shards] [--base REF | --module PATH ...] [--part INDEX/COUNT]
+[--time-limit SECONDS]``. With ``--base``, only the mutants on the lines that changed since ``REF`` run. With
+``--module``, all mutants of the given modules run. With ``--part 2/4``, only the second of four equal parts of the
+selected mutants run, so that jobs can share a large run. With ``--time-limit``, the run stops after that many seconds,
+keeps the results so far, and reports the mutants that did not run. Exits with 1 if any mutant survives, and with 3 if
+the time limit stopped the run and no mutant survived.
 """
 
-import itertools
+import functools
 import os
 import re
 import shlex
 import shutil
+import signal
 import sqlite3
 import subprocess  # ruff: ignore[suspicious-subprocess-import] -- must launch cosmic-ray and the interpreter as subprocesses
 import sys
@@ -40,6 +44,8 @@ CONFIG = ROOT / "cosmic-ray.toml"
 SESSION = ROOT / ".mutation" / "session.sqlite"
 COPIED = ("src", "tests", "benchmark", "scripts", "pyproject.toml", "cosmic-ray.toml")
 POLL_SECONDS = 60
+EXIT_SURVIVED = 1
+EXIT_TIME_LIMIT = 3
 # the new side of a hunk header of ``git diff -U0``: ``+start`` or ``+start,count``
 HUNK: re.Pattern[str] = re.compile(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@")
 
@@ -192,6 +198,93 @@ def keep_modules(session: Path, modules: Collection[str]) -> None:
     keep_lines(session, {module: range(1, sys.maxsize) for module in modules})
 
 
+def keep_part(session: Path, index: int, count: int) -> None:
+    """Keep one of ``count`` equal parts of the work items, and drop the others.
+
+    The mutants are ordered by module, position and operator, which do not change between runs, so each job of a split
+    run sees the same order. The part takes every ``count``-th mutant, so that the parts have a similar load.
+
+    Parameters
+    ----------
+    session: Path
+        The cosmic-ray session.
+    index: int
+        The number of the part to keep, from 1 to ``count``.
+    count: int
+        The number of parts.
+
+    """
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
+        query = (
+            "SELECT job_id FROM mutation_specs "
+            "ORDER BY module_path, start_pos_row, start_pos_col, operator_name, occurrence"
+        )
+        job_ids = [row[0] for row in db.execute(query)]
+        dropped = [(job,) for position, job in enumerate(job_ids) if position % count != index - 1]
+        db.executemany("DELETE FROM work_items WHERE job_id = ?", dropped)
+        db.executemany("DELETE FROM mutation_specs WHERE job_id = ?", dropped)
+        db.commit()
+
+
+def parse_part(text: str) -> tuple[int, int]:
+    """Read a part such as ``2/4``.
+
+    Parameters
+    ----------
+    text: str
+        The part, as ``INDEX/COUNT``.
+
+    Returns
+    -------
+    tuple[int, int]
+        The index and the count. The tuple is a pair of related numbers, not a set of fields.
+
+    Raises
+    ------
+    ValueError
+        If the text is not two whole numbers with ``1 <= INDEX <= COUNT``.
+
+    """
+    try:
+        index, count = (int(piece) for piece in text.split("/"))
+    except ValueError:
+        index, count = 0, 0
+    if not 1 <= index <= count:
+        msg = f"the part must be INDEX/COUNT with 1 <= INDEX <= COUNT, not {text!r}"
+        raise ValueError(msg)
+    return index, count
+
+
+def count_survivors() -> int:
+    """Count the mutants of the main session that survived.
+
+    Returns
+    -------
+    int
+        The number of results with the outcome ``SURVIVED``.
+
+    """
+    with closing(sqlite3.connect(SESSION)) as db, db:  # closing releases the file, db commits
+        return int(db.execute("SELECT COUNT(*) FROM work_results WHERE test_outcome = 'SURVIVED'").fetchone()[0])
+
+
+def count_unfinished() -> int:
+    """Count the mutants of the main session that have no result.
+
+    Returns
+    -------
+    int
+        The number of work items without a result.
+
+    """
+    with closing(sqlite3.connect(SESSION)) as db, db:  # closing releases the file, db commits
+        return int(
+            db.execute(
+                "SELECT COUNT(*) FROM work_items WHERE job_id NOT IN (SELECT job_id FROM work_results)",
+            ).fetchone()[0],
+        )
+
+
 def make_shard(workdir: Path, module: str, index: int, shards: int) -> Shard:
     """Copy the project into its own directory, together with the share of the work items of the shard.
 
@@ -220,6 +313,16 @@ def make_shard(workdir: Path, module: str, index: int, shards: int) -> Shard:
             shutil.copytree(source, path / name, ignore=shutil.ignore_patterns("__pycache__"))
         else:
             shutil.copy(source, path / name)
+    # the shard runs the covering tests before the full suite (scripts/mutant_run.py); the baseline keeps the full one
+    config = path / "cosmic-ray.toml"
+    config.write_text(
+        re.sub(
+            r"^test-command = .*$",
+            lambda _: f"test-command = {orjson.dumps(f'{sys.executable} -m scripts.mutant_run').decode()}",
+            config.read_text(),
+            flags=re.MULTILINE,
+        ),
+    )
     session = path / "session.sqlite"
     shutil.copy(SESSION, session)
     with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
@@ -276,6 +379,18 @@ def build_coverage_map(
     return result
 
 
+def test_command() -> str:
+    """Read the full test command of cosmic-ray from its configuration.
+
+    Returns
+    -------
+    str
+        The command, as written in ``cosmic-ray.toml``.
+
+    """
+    return str(tomllib.loads(CONFIG.read_text())["cosmic-ray"]["test-command"])
+
+
 def run_baseline(workdir: Path, modules: Collection[str]) -> int:
     """Run the tests on the unmutated code, and write the coverage map and the cache of fitted models for the shards.
 
@@ -293,7 +408,7 @@ def run_baseline(workdir: Path, modules: Collection[str]) -> int:
 
     """
     (workdir / "fits").mkdir()
-    command = shlex.split(tomllib.loads(CONFIG.read_text())["cosmic-ray"]["test-command"])
+    command = shlex.split(test_command())
     if command[0] == "python":
         command[0] = sys.executable
     data = workdir / ".coverage"
@@ -313,7 +428,32 @@ def run_baseline(workdir: Path, modules: Collection[str]) -> int:
     return 0
 
 
-def exec_shard(shard: Shard, workdir: Path) -> None:
+def wait_until(process: subprocess.Popen[bytes], deadline: float | None) -> bool:
+    """Wait for a process that leads its own process group, and kill the group at the deadline.
+
+    Parameters
+    ----------
+    process : subprocess.Popen[bytes]
+        The process. It was started with ``start_new_session=True``.
+    deadline : float, optional
+        The ``time.monotonic()`` value at which to kill the group. Without a deadline, wait until the process ends.
+
+    Returns
+    -------
+    bool
+        True if the process ended by itself, False if the deadline killed it.
+
+    """
+    try:
+        process.wait(timeout=None if deadline is None else max(0.0, deadline - time.monotonic()))
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+        return False
+    return True
+
+
+def exec_shard(shard: Shard, workdir: Path, deadline: float | None = None) -> bool:
     """Execute the work items of a shard against the copy of the project of that shard.
 
     Parameters
@@ -322,11 +462,21 @@ def exec_shard(shard: Shard, workdir: Path) -> None:
         The shard.
     workdir: Path
         The directory that holds the shards, the coverage map and the cache of fitted models of the baseline.
+    deadline: float, optional
+        The ``time.monotonic()`` value at which to stop the shard. The results of the finished mutants stay in the
+        session of the shard. Without a deadline, the shard runs until all its work items are done.
+
+    Returns
+    -------
+    bool
+        True if the shard finished all its work items, False if the deadline stopped it.
 
     """
     env = {
         **os.environ,
         "PYTHONPATH": str(shard.path / "src"),
+        # scripts/mutant_run.py runs the tests that execute the mutated statements, then this full command
+        "MUTATION_TEST_COMMAND": test_command(),
         # tests/unit/conftest.py runs the tests that execute the mutated statements first, then the tests of this
         # module, so a killed mutant stops the run early
         "MUTATION_FIRST": Path(shard.module).stem,
@@ -337,8 +487,24 @@ def exec_shard(shard: Shard, workdir: Path) -> None:
         "EBAML_FIT_CACHE": str(workdir / "fits"),
     }
     started = time.monotonic()
-    run(sys.executable, "-m", "cosmic_ray.cli", "exec", "cosmic-ray.toml", "session.sqlite", cwd=shard.path, env=env)
-    logger.info("shard done", module=shard.module, shard=shard.path.name, seconds=round(time.monotonic() - started))
+    # a session of its own makes the whole process group of cosmic-ray and its workers stop together
+    process = subprocess.Popen(
+        [sys.executable, "-m", "cosmic_ray.cli", "exec", "cosmic-ray.toml", "session.sqlite"],
+        cwd=shard.path,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    finished = wait_until(process, deadline)
+    logger.info(
+        "shard done",
+        module=shard.module,
+        shard=shard.path.name,
+        seconds=round(time.monotonic() - started),
+        finished=finished,
+    )
+    return finished
 
 
 def count_results(sessions: Sequence[Path], seen: dict[Path, tuple[int, int]]) -> tuple[int, int]:
@@ -424,7 +590,11 @@ def count_mutants() -> int:
         )
 
 
-def select_mutants(base: str | None, modules: Sequence[str] | None) -> None:
+def select_mutants(
+    base: str | None,
+    modules: Sequence[str] | None,
+    part: tuple[int, int] | None = None,
+) -> None:
     """Drop the work items of the main session that the run does not need.
 
     Parameters
@@ -433,6 +603,8 @@ def select_mutants(base: str | None, modules: Sequence[str] | None) -> None:
         Keep only the mutants on the lines that changed since this revision.
     modules: Sequence[str], optional
         Keep only the mutants of these modules. Without ``base`` and ``modules``, all mutants stay.
+    part: tuple[int, int], optional
+        The index and the count of the part to keep, after the other filters.
 
     """
     if base:
@@ -442,6 +614,9 @@ def select_mutants(base: str | None, modules: Sequence[str] | None) -> None:
     elif modules:
         keep_modules(SESSION, modules)
         logger.info("partial run", modules=sorted(modules))
+    if part:
+        keep_part(SESSION, *part)
+        logger.info("part of the run", index=part[0], count=part[1])
 
 
 _WHICH = cyclopts.Group("Which modules", validator=cyclopts.validators.MutuallyExclusive())
@@ -455,6 +630,8 @@ def main(
     *,
     base: Annotated[str | None, cyclopts.Parameter(group=_WHICH)] = None,
     module: Annotated[list[str] | None, cyclopts.Parameter(group=_WHICH, negative_iterable=())] = None,
+    part: str | None = None,
+    time_limit: float | None = None,
 ) -> int:
     """Run the mutation testing in shards.
 
@@ -466,11 +643,15 @@ def main(
         Mutate only the modules that changed since this revision.
     module: list[str], optional
         Mutate only this module. Repeat the flag for more modules.
+    part: str, optional
+        Run one equal part of the selected mutants, as ``INDEX/COUNT``. Jobs that run the other parts share the run.
+    time_limit: float, optional
+        Stop after this many seconds, keep the results so far, and report the mutants that did not run.
 
     Returns
     -------
     int
-        The exit code: non-zero if the baseline fails or any mutant survives.
+        The exit code: 1 if the baseline fails or any mutant survives, 3 if only the time limit stopped the run.
 
     """
     SESSION.parent.mkdir(exist_ok=True)
@@ -482,11 +663,17 @@ def main(
     if missing:
         sys.stderr.write(f"no such module: {', '.join(missing)}\n")
         return 2
-    select_mutants(base, module)
+    try:
+        selected_part = parse_part(part) if part else None
+    except ValueError as error:
+        sys.stderr.write(f"{error}\n")
+        return 2
+    select_mutants(base, module, selected_part)
     modules = sorted(session_modules(SESSION))
     if not modules:
         logger.info("no mutants to run")
         return 0
+    deadline = None if time_limit is None else time.monotonic() + time_limit
     total = count_mutants()
     logger.info("mutants", total=total, modules=modules, shards=shards)
 
@@ -503,15 +690,18 @@ def main(
         monitor.start()
         try:
             with ThreadPoolExecutor(max_workers=shards) as pool:
-                list(pool.map(exec_shard, prepared, itertools.repeat(workdir)))
+                list(pool.map(functools.partial(exec_shard, workdir=workdir, deadline=deadline), prepared))
         finally:
             stop.set()
             monitor.join()
         merge_results(sessions)
 
-    rate = float(run(sys.executable, "-m", "cosmic_ray.tools.survival_rate", str(SESSION)).strip())
-    logger.info("mutation score", survival_rate=rate)
-    return int(rate > 0)
+    survived = count_survivors()
+    unfinished = count_unfinished()
+    logger.info("mutation result", survived=survived, unfinished=unfinished, total=total)
+    if survived:
+        return EXIT_SURVIVED
+    return EXIT_TIME_LIMIT if unfinished else 0
 
 
 if __name__ == "__main__":
