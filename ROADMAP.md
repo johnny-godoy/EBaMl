@@ -25,7 +25,7 @@ EBaMl will reach three goals:
 | 0.4.0 | EBM2MCP: tools to read an EBM and to explain one prediction. | None | 0.1.0, 0.2.0, 0.3.0 | Done |
 | 0.5.0 | Local explanations of regressors. | None | 0.4.0 | Done |
 | 0.6.0 | Local explanations of multiclass classifiers. | None | 0.5.0 | Done |
-| 0.7.0 | Model editing in Python, in `ebaml.edit`: the edits of GAM Changer that keep the bins, with a history. | [model-editing](docs/plans/model-editing.md) | 0.4.0 | Planned |
+| 0.7.0 | Model editing in Python, in `ebaml.edit`: the edits of GAM Changer that keep the bins, with a history. | [model-editing](docs/plans/model-editing.md) | 0.4.0 | Done |
 | 0.8.0 | EBM2MCP: edit tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 0.7.0 | Planned |
 | 0.9.0 | GAM Changer parity: edits of the bins, the effect of an edit on data and on subgroups, business constraints, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 0.8.0 | Planned |
 | 0.10.0 | Editing of every model kind. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 0.6.0, 0.9.0 | Planned |
