@@ -49,6 +49,7 @@ NOTEBOOKS: tuple[Path, ...] = (
     ROOT / "notebooks" / "model_providers.py",
     ROOT / "notebooks" / "multiclass.py",
     ROOT / "notebooks" / "model_kinds.py",
+    ROOT / "notebooks" / "model_editing.py",
     ROOT / "notebooks" / "mcp_server.py",
     ROOT / "notebooks" / "baml_agent.py",
     ROOT / "notebooks" / "chat.py",
