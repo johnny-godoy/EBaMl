@@ -33,8 +33,12 @@ dependencies = [
     "ortools>=9.15.6755",
     "pandas>=3.1.0",
     "progressbar2>=4.6.0",
+    "scikit-learn>=1.9.1",
     "scipy>=1.18.1",
+    # only ebaml.edit writes and ebaml.mcp reads the files of saved models with it
+    "skops>=0.16.0",
     "structlog>=26.1.0",
+    "uuid-utils>=0.12.0",
 ]
 
 [project.optional-dependencies]
@@ -46,7 +50,6 @@ mcp = [
     "mcp>=2.3.0",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.1.0",
-    "skops>=0.16.0",
 ]
 
 [project.scripts]
@@ -251,14 +254,14 @@ root_package = "ebaml"
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Layers: mcp over llm over local over graphs over core"
+name = "Layers: mcp over llm over local over edit over graphs over core"
 type = "layers"
-layers = ["ebaml.mcp", "ebaml.llm", "ebaml.local", "ebaml.graphs", "ebaml.core"]
+layers = ["ebaml.mcp", "ebaml.llm", "ebaml.local", "ebaml.edit", "ebaml.graphs", "ebaml.core"]
 
 [[tool.importlinter.contracts]]
 name = "Domain code does not import the BAML SDK"
 type = "forbidden"
-source_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.benchmark"]
+source_modules = ["ebaml.core", "ebaml.graphs", "ebaml.edit", "ebaml.local", "ebaml.benchmark"]
 forbidden_modules = ["baml_sdk", "baml_bridge"]
 
 [[tool.importlinter.contracts]]
@@ -272,7 +275,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "Only ebaml.mcp imports the MCP SDK"
 type = "forbidden"
-source_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.llm", "ebaml.benchmark"]
+source_modules = ["ebaml.core", "ebaml.graphs", "ebaml.edit", "ebaml.local", "ebaml.llm", "ebaml.benchmark"]
 forbidden_modules = ["mcp"]
 
 [[tool.importlinter.contracts]]
@@ -306,7 +309,7 @@ allow_indirect_imports = true
 name = "The benchmark stands alone"
 type = "forbidden"
 source_modules = ["ebaml.benchmark"]
-forbidden_modules = ["ebaml.core", "ebaml.graphs", "ebaml.local", "ebaml.llm", "ebaml.mcp"]
+forbidden_modules = ["ebaml.core", "ebaml.graphs", "ebaml.edit", "ebaml.local", "ebaml.llm", "ebaml.mcp"]
 
 [tool.pyrefly]
 # The strict preset reports implicit `Any` in parameters, lambdas, attributes, empty containers and type arguments.
