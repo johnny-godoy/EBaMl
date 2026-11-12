@@ -170,6 +170,30 @@ capabilities:
     keywords: [backend, mip, lp, solver, ortools, highs, scip, optimization, model]
     status: active
 
+  - id: model-edit
+    responsibility: Change the graph of one feature of a fitted EBM, as one frozen class for each kind of edit
+    owner: ebaml.edit
+    symbol: ebaml.edit.edits:Edit
+    consumers: [ebaml.llm, ebaml.mcp]
+    keywords: [edit, graph, bins, monotone, model, change]
+    status: active
+
+  - id: bin-selection
+    responsibility: Name the bins of one feature that an edit changes, by bin number, category or value
+    owner: ebaml.edit
+    symbol: ebaml.edit.selections:Selection
+    consumers: [ebaml.llm, ebaml.mcp]
+    keywords: [selection, bins, interval, category, missing]
+    status: active
+
+  - id: edit-session
+    responsibility: Apply, undo, redo, review and save the edits of one model, with a history
+    owner: ebaml.edit
+    symbol: ebaml.edit.edit_session:EditSession
+    consumers: [ebaml.llm, ebaml.mcp]
+    keywords: [session, history, undo, redo, save, revision]
+    status: active
+
   - id: benchmark-usage
     responsibility: Describe the tokens that a provider reports for a benchmark reply, as a contract
     owner: ebaml.benchmark

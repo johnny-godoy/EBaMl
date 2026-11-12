@@ -9,9 +9,10 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
 | --- | --- | --- |
 | `ebaml.core` | Shared kernel: errors and types. | No other `ebaml` package. |
 | `ebaml.graphs` | Extract and simplify an `EBMGraph`, convert it to and from text. | `core` |
-| `ebaml.local` | Compute the facts of one prediction, render them as text. | `graphs`, `core` |
-| `ebaml.llm` | The edge: the calls into `baml_sdk`, their options, the retry. | `local`, `graphs`, `core` |
-| `ebaml.mcp` | The MCP server: tools that read an EBM and explain a prediction. Only this layer imports `mcp`. | `llm`, `local`, `graphs`, `core` |
+| `ebaml.local` | Compute the facts of one prediction, render them as text. | `edit`, `graphs`, `core` |
+| `ebaml.edit` | Change the graphs of a fitted EBM: selections, edits, the history and the session. | `graphs`, `core` |
+| `ebaml.llm` | The edge: the calls into `baml_sdk`, their options, the retry. | `local`, `edit`, `graphs`, `core` |
+| `ebaml.mcp` | The MCP server: tools that read an EBM and explain a prediction. Only this layer imports `mcp`. | `llm`, `local`, `edit`, `graphs`, `core` |
 | `ebaml.benchmark` | The TalkToEBM benchmark. It stands alone. | Nothing from `ebaml`. |
 
 - Only `llm/descriptors.py` imports `baml_sdk`. The reason: domain code then runs in a plain unit test (SOLID: D).
