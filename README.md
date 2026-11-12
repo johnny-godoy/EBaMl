@@ -22,6 +22,7 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Local explanations (`explain_instance`) | ✅ | ✅ | ✅ | ❌ |
 | MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
+| Editing (`EditSession`) | ✅ | ✅ | ❌ | ⚠️ |
 
 ✅ supported. ⚠️ partly supported: the main effects are described, and the interaction terms are skipped.
 `describe_graph` and `describe_ebm` name them in the prompt, so the description says that it leaves them out, and they
@@ -258,6 +259,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
 | `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
 | `baml_src/tests/` | The BAML tests: offline tests on a scripted client, one `<source>_test.baml` for each source file, and the live prompt tests in `live/`. |
+| `src/ebaml/edit/` | Model editing: the selections of bins, the edits, the report, and the session with its history. It calls no LLM. |
 | `src/ebaml/mcp/`, `baml_src/mcp_agent.baml` | The MCP server (`ebaml-mcp`), the agent that reads it through its tools, and the terminal chat (`ebaml-chat`). |
 | `baml.toml` | Generator config for the Python SDK. |
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |

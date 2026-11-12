@@ -12,11 +12,13 @@
 - [Choosing the model](providers.md): OpenRouter is only the default. Pass `model=` to use OpenAI, Anthropic, Gemini, Ollama and more.
 - [Usage](usage.md): describe a graph or a whole model, and how the model, retries and token budget behave.
 - [Local explanations](local-explanations.md): why did the model predict this for this input? A counterfactual, a sufficient reason and the share of completions, computed exactly and put in words for a layperson or a data scientist.
+- [Editing a model](editing.md): change the graphs of an EBM to meet a requirement of the business, with a report, a history and a review for each edit.
 - [Notebook](notebook.md): a worked example on the Titanic data, with its output.
 - [Local explanations notebook](local-notebook.md): the same, one passenger at a time, with its output.
 - [Model providers notebook](providers-notebook.md): the same request sent to OpenRouter, OpenAI, Anthropic, Ollama and a gateway, side by side.
 - [Multiclass notebook](multiclass-notebook.md): the graphs and the descriptions of an EBM with three classes.
 - [Model kinds notebook](model-kinds-notebook.md): a binary classifier, a multiclass classifier and a regressor side by side.
+- [Model editing notebook](editing-notebook.md): smooth a jump, flatten a dip, make a range monotone and neutralize a category, with the report after each edit.
 - [Benchmark](benchmark.md): how well does a model read EBM graphs?
 - [API reference](api.md): every public function and class.
 
