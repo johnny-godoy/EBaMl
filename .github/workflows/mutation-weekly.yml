@@ -3,7 +3,10 @@ name: Mutation (weekly)
 # Full mutation run over every module. The PR run in ci.yml covers only changed modules, so this run catches a mutant
 # that a change elsewhere lets survive. It skips the work when no code changed in the last 7 days, because the project
 # can lie idle for longer than a week. Each module runs in its own job, so the modules run in parallel and one slow
-# module cannot hit the time limit of the others. One issue lists the survivors of all modules.
+# module cannot hit the time limit of the others. A long module splits into parts of about 500 lines, one job for each
+# part (`--part`), so that the run time of a job does not grow with the module. A job stops itself after 50 minutes
+# (`--time-limit`), keeps the results so far and fails, so that a slow job reports its survivors and the mutants that
+# did not run. One issue lists the survivors and the incomplete jobs of all modules.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -31,7 +34,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       run: ${{ steps.changes.outputs.run }}
-      modules: ${{ steps.modules.outputs.modules }}
+      matrix: ${{ steps.modules.outputs.matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,12 +48,19 @@ jobs:
           if [ "$changed" -gt 0 ] || [ "$FORCE" = "true" ]; then run=true; else run=false; fi
           echo "run=$run" >> "$GITHUB_OUTPUT"
           echo "Commits touching code in the last 7 days: $changed (run=$run)"
-      - name: List the modules
+      - name: List the modules, and split each long module into parts of about 500 lines
         id: modules
-        run: echo "modules=$(find src/ebaml -name '*.py' -not -path 'src/ebaml/*/__init__.py' | sort | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+        run: |
+          matrix=$(find src/ebaml -name '*.py' -not -path 'src/ebaml/*/__init__.py' | sort | while read -r module; do
+            parts=$(( ($(wc -l < "$module") + 499) / 500 ))
+            [ "$parts" -ge 1 ] || parts=1
+            for part in $(seq "$parts"); do jq -cn --arg module "$module" --arg part "$part/$parts" '{module: $module, part: $part}'; done
+          done | jq -sc .)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix" | jq -r '.[] | "\(.module) \(.part)"'
 
   mutation:
-    name: mutation (${{ matrix.module }})
+    name: mutation (${{ matrix.module }} ${{ matrix.part }})
     needs: plan
     if: needs.plan.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -58,23 +68,34 @@ jobs:
     strategy:
       fail-fast: false # a surviving mutant in one module must not hide the result of the others
       matrix:
-        module: ${{ fromJSON(needs.plan.outputs.modules) }}
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - name: Run cosmic-ray on the module, fail on any surviving mutant
         env:
           MODULE: ${{ matrix.module }}
-        run: |
+          PART: ${{ matrix.part }}
+        run: | # the job limit is 60 minutes; the script stops at 50, so that the steps below still have time to run
           mkdir -p /tmp/ci-logs
-          uv run python scripts/mutation.py "$(nproc)" --module "$MODULE" 2>&1 | tee /tmp/ci-logs/mutation.log
+          uv run python scripts/mutation.py "$(nproc)" --module "$MODULE" --part "$PART" --time-limit 3000 2>&1 | tee /tmp/ci-logs/mutation.log
       - name: Collect the session and list surviving mutants with diffs
         if: always()
+        env:
+          MODULE: ${{ matrix.module }}
+          PART: ${{ matrix.part }}
+          JOB_STATUS: ${{ job.status }}
         run: | # the artifact action skips a path that has a hidden directory, so copy out of .mutation/
           mkdir -p mutation-out
           cp .mutation/session.sqlite mutation-out/ || true
           uv run python -m cosmic_ray.tools.report .mutation/session.sqlite --surviving-only --show-diff \
             > mutation-out/survivors.txt || true
+          if [ "$JOB_STATUS" != success ]; then # the issue lists only the jobs that did not pass
+            {
+              echo "$MODULE part $PART ($JOB_STATUS)"
+              grep -E "mutation result|time limit|Baseline failed|no such module" /tmp/ci-logs/mutation.log | tail -n 3 || true
+            } > mutation-out/status.txt
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -85,7 +106,9 @@ jobs:
   report:
     name: report
     needs: mutation
-    if: failure()
+    # A job that hits its time limit ends as `cancelled`, not `failure`, so `failure()` alone would skip this job.
+    # `!cancelled()` is false only when someone cancels the whole run.
+    if: ${{ !cancelled() && (needs.mutation.result == 'failure' || needs.mutation.result == 'cancelled') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -101,10 +124,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "The weekly full mutation run found surviving mutants or failed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "The weekly full mutation run found surviving mutants, stopped at its time limit, or failed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo
+            echo "Jobs that did not pass (a job that stopped at its time limit has survivors so far and some mutants that did not run):"
+            echo '```'
+            cat /tmp/mutation/*/status.txt 2>/dev/null | head -c 10000 || true
+            echo '```'
+            echo
+            echo "Surviving mutants:"
             echo '```diff'
-            cat /tmp/mutation/*/survivors.txt 2>/dev/null | head -c 50000 || true
+            cat /tmp/mutation/*/survivors.txt 2>/dev/null | head -c 45000 || true
             echo '```'
           } > /tmp/issue.md
           gh issue create --repo "$GITHUB_REPOSITORY" --title "Weekly mutation run failed ($(date -u +%F))" --body-file /tmp/issue.md
