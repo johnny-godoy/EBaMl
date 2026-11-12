@@ -14,7 +14,9 @@ from ebaml.core.exceptions import (
     EBMGraphShapeError,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
+    EditError,
     GraphTextError,
+    HistoryError,
     InvalidInstanceError,
     InvalidOptionError,
     LLMRequestError,
@@ -24,17 +26,23 @@ from ebaml.core.exceptions import (
     RateLimitedError,
     SDKUnavailableError,
     SearchLimitError,
+    SelectionError,
+    StaleRevisionError,
     TokenFitError,
+    UnreviewedEditError,
     UnsupportedModelError,
 )
 
 # the errors for a bad value; code that caught ValueError before they existed must still catch them
 VALUE_ERRORS = [
     EBMGraphShapeError,
+    EditError,
     GraphTextError,
+    HistoryError,
     InvalidInstanceError,
     InvalidOptionError,
     OptionRangeError,
+    SelectionError,
     TokenFitError,
     UnsupportedModelError,
 ]
@@ -61,7 +69,7 @@ def test_graph_error_hierarchy(exc: type[Exception]) -> None:
 
 def test_every_error_of_the_module_derives_from_the_base_class() -> None:
     errors = [value for _, value in inspect.getmembers(exceptions, inspect.isclass) if issubclass(value, Exception)]
-    assert len(errors) == 18
+    assert len(errors) == 23
     assert all(issubclass(error, EBaMlError) for error in errors)
 
 
@@ -72,7 +80,15 @@ def test_an_error_for_a_bad_value_is_a_value_error(exc: type[Exception]) -> None
 
 @pytest.mark.parametrize(
     "exc",
-    [EBaMlError, EBMGraphError, EBMGraphSimplificationError, EBMGraphTokenLimitError, SearchLimitError],
+    [
+        EBaMlError,
+        EBMGraphError,
+        EBMGraphSimplificationError,
+        EBMGraphTokenLimitError,
+        SearchLimitError,
+        StaleRevisionError,
+        UnreviewedEditError,
+    ],
 )
 def test_an_error_that_was_not_a_value_error_stays_so(exc: type[Exception]) -> None:
     assert not issubclass(exc, ValueError)
@@ -92,3 +108,9 @@ def test_a_provider_failure_is_an_llm_request_error(exc: type[Exception]) -> Non
 def test_the_package_exports_every_error() -> None:
     errors = {name for name, value in inspect.getmembers(exceptions, inspect.isclass) if issubclass(value, Exception)}
     assert errors <= set(ebaml.__all__)
+
+
+def test_the_edit_errors_form_one_family() -> None:
+    assert issubclass(SelectionError, EditError)
+    assert issubclass(HistoryError, EditError)
+    assert issubclass(EditError, EBaMlError)
