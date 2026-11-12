@@ -1,10 +1,14 @@
 """Tests for the choice of the mutants that the mutation run executes."""
 
+import signal
 import sqlite3
+import subprocess  # ruff: ignore[suspicious-subprocess-import] -- starts a real child process to test the deadline kill
 import sys
+import time
 from contextlib import closing
 from pathlib import Path
 
+import pytest
 from coverage import CoverageData
 from scripts import mutation
 from scripts.fixed_command import run_fixed
@@ -51,11 +55,15 @@ def make_session(path: Path, specs: list[tuple[str, str, int, int]]) -> Path:
         db.execute("CREATE TABLE work_items (job_id VARCHAR PRIMARY KEY)")
         db.execute(
             "CREATE TABLE mutation_specs (module_path VARCHAR, start_pos_row INTEGER, end_pos_row INTEGER, "
+            "start_pos_col INTEGER DEFAULT 0, operator_name VARCHAR DEFAULT '', occurrence INTEGER DEFAULT 0, "
             "job_id VARCHAR PRIMARY KEY)",
+        )
+        db.execute(
+            "CREATE TABLE work_results (job_id VARCHAR PRIMARY KEY, worker_outcome VARCHAR, test_outcome VARCHAR)",
         )
         db.executemany("INSERT INTO work_items VALUES (?)", [(job,) for job, *_ in specs])
         db.executemany(
-            "INSERT INTO mutation_specs VALUES (?, ?, ?, ?)",
+            "INSERT INTO mutation_specs (module_path, start_pos_row, end_pos_row, job_id) VALUES (?, ?, ?, ?)",
             [(module, start, end, job) for job, module, start, end in specs],
         )
     return session
@@ -117,3 +125,62 @@ def test_the_script_starts_when_it_is_run_by_path() -> None:
     result = run_fixed([sys.executable, str(Path(mutation.__file__)), "--help"], cwd=Path(mutation.__file__).parents[1])
     assert result.returncode == 0, result.stderr
     assert "mutation testing" in result.stdout
+
+
+def test_keep_part_splits_the_mutants_by_position_into_parts_that_cover_all_of_them(tmp_path: Path) -> None:
+    specs = [(f"job{row}", "src/ebaml/a.py", row, row) for row in (7, 3, 5, 1, 9)]
+    parts = []
+    for index in (1, 2):
+        directory = tmp_path / str(index)
+        directory.mkdir()
+        session = make_session(directory, specs)
+        mutation.keep_part(session, index, 2)
+        parts.append(jobs(session))
+    # the order is by row, not by job id: rows 1, 3, 5, 7, 9 alternate between the parts
+    assert parts == [{"job1", "job5", "job9"}, {"job3", "job7"}]
+
+
+def test_parse_part_reads_the_index_and_the_count() -> None:
+    assert mutation.parse_part("2/4") == (2, 4)
+
+
+@pytest.mark.parametrize("text", ["0/4", "5/4", "2", "a/b", "1/2/3", ""])
+def test_parse_part_rejects_an_index_outside_the_count_or_a_bad_form(text: str) -> None:
+    with pytest.raises(ValueError, match="INDEX/COUNT"):
+        mutation.parse_part(text)
+
+
+def test_the_counts_name_the_survivors_and_the_mutants_without_a_result(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = make_session(tmp_path, [(job, "src/ebaml/a.py", 1, 1) for job in ("killed", "survived", "open")])
+    with closing(sqlite3.connect(session)) as db, db:  # closing releases the file, db commits
+        db.executemany(
+            "INSERT INTO work_results VALUES (?, 'NORMAL', ?)",
+            [("killed", "KILLED"), ("survived", "SURVIVED")],
+        )
+    monkeypatch.setattr(mutation, "SESSION", session)
+    assert mutation.count_survivors() == 1
+    assert mutation.count_unfinished() == 1
+
+
+def start_sleeper(seconds: int) -> "subprocess.Popen[bytes]":
+    return subprocess.Popen(  # ruff: ignore[subprocess-without-shell-equals-true] -- fixed argv from sys.executable
+        [sys.executable, "-c", f"import time; time.sleep({seconds})"],
+        start_new_session=True,
+    )
+
+
+def test_wait_until_kills_a_process_that_runs_past_the_deadline() -> None:
+    process = start_sleeper(60)
+    started = time.monotonic()
+    assert mutation.wait_until(process, time.monotonic() + 0.5) is False
+    assert time.monotonic() - started < 30
+    assert process.returncode == -signal.SIGKILL
+
+
+def test_wait_until_lets_a_process_that_ends_in_time_finish() -> None:
+    process = start_sleeper(0)
+    assert mutation.wait_until(process, time.monotonic() + 60) is True
+    assert mutation.wait_until(start_sleeper(0), None) is True
