@@ -121,3 +121,30 @@ class TokenFitError(EBaMlError, ValueError):
 
 class SearchLimitError(EBaMlError):
     """Exception raised when a covering search ends at its limit with no set and no proof that no set exists."""
+
+
+class EditError(EBaMlError, ValueError):
+    """Exception raised when an edit of an EBM cannot run, for example an edit that needs an order on a nominal feature.
+
+    The message names the cause and lists the steps that fix it.
+    """
+
+
+class SelectionError(EditError):
+    """Exception raised when the bins of an edit do not exist, or the feature type does not allow the selection."""
+
+
+class StaleRevisionError(EBaMlError):
+    """Exception raised when the head of an edit session is not the revision that the caller expected.
+
+    The message names the current head. The caller reads the session again and decides what to do. The session never
+    retries by itself.
+    """
+
+
+class UnreviewedEditError(EBaMlError):
+    """Exception raised when a save needs the review of an edit that nobody reviewed."""
+
+
+class HistoryError(EditError):
+    """Exception raised when the history of an edit session cannot be read, or does not fit the model."""
