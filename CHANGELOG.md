@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.7.1'></a>
+## [0.7.1] - 2026-11-13
+
+### Added
+
+- `ebaml-mcp` and `ebaml-chat` read the `--data` file as Parquet or CSV. They detect the format from the first bytes of the file, not from its extension. Parquet keeps the type of each column, so the docs and examples use it.
+- A `--data` file that is empty, is cut off, or is neither Parquet nor UTF-8 CSV raises `DataFileError` with the file name and the fix.
+
 <a id='changelog-0.7.0'></a>
 ## [0.7.0] - 2026-11-13
 
