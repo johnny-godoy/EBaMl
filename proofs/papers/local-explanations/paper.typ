@@ -1102,7 +1102,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`d6a95b038f97ad644dddcef7f2fa55a40c318803`],
+  [Lean sources checked at commit], [`4784b6b006e3c9fc629af0c482b5bfb8fac0e453`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -1119,7 +1119,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout d6a95b038f97ad644dddcef7f2fa55a40c318803
+git checkout 4784b6b006e3c9fc629af0c482b5bfb8fac0e453
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
