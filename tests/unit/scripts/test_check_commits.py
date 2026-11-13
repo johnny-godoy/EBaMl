@@ -59,15 +59,6 @@ def test_a_thin_trailer_does_not_excuse_a_large_commit() -> None:
     assert check_commits.size_problem("refactor: move a module", message, 2000) is not None
 
 
-def test_main_checks_a_message_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    message = tmp_path / "COMMIT_EDITMSG"
-    message.write_text("feat: Add a thing\n\nBody.\n")
-    assert check_commits.main(["--message-file", str(message)]) == 1
-    assert "lower-case" in capsys.readouterr().err
-    message.write_text("feat: add a thing\n")
-    assert check_commits.main(["--message-file", str(message)]) == 0
-
-
 @pytest.fixture
 def commit(git: GitRunner) -> Callable[[Path, str, int, str], None]:
     def make_commit(repo: Path, name: str, lines: int, message: str) -> None:
@@ -109,3 +100,29 @@ def test_main_reports_each_bad_commit_of_a_branch(
     assert "period" in err
     assert "'feat: add b' changes 500 lines" in err
     assert "fixup!" not in err
+
+
+def test_main_checks_a_message_file(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    message = repo / "COMMIT_EDITMSG"
+    message.write_text("feat: Add a thing\n\nBody.\n")
+    assert check_commits.main(["--message-file", str(message)]) == 1
+    assert "lower-case" in capsys.readouterr().err
+    message.write_text("feat: add a thing\n")
+    assert check_commits.main(["--message-file", str(message)]) == 0
+
+
+def test_the_hook_rejects_a_large_staged_change_without_a_trailer(
+    repo: Path,
+    git: GitRunner,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (repo / "big.py").write_text("x\n" * 500, encoding="utf-8")
+    git(repo, "add", "-A")
+    message = repo / "COMMIT_EDITMSG"
+    message.write_text("feat: add big\n")
+    assert check_commits.main(["--message-file", str(message)]) == 1
+    assert "'feat: add big' changes 500 lines" in capsys.readouterr().err
+    message.write_text("feat: add big\n\nLarge-Commit: a generated fixture file\n")
+    assert check_commits.main(["--message-file", str(message)]) == 0
+    message.write_text("Merge branch 'main'\n")
+    assert check_commits.main(["--message-file", str(message)]) == 0
