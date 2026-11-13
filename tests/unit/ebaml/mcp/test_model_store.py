@@ -3,6 +3,7 @@
 import ast
 from pathlib import Path
 
+import polars as pl
 import pytest
 import skops.io
 
@@ -53,8 +54,30 @@ def test_load_model_does_not_trust_other_types_in_a_skops_file(tmp_path: Path) -
         load_model(tmp_path / "other_type.skops")
 
 
+def test_load_data_reads_a_parquet_file_and_keeps_its_column_types(tmp_path: Path) -> None:
+    """Parquet keeps the type of a column. A CSV reader would read the text column ``code`` as integers."""
+    pl.DataFrame({"code": ["001", "002"], "b": [2, 4]}).write_parquet(tmp_path / "data.parquet")
+    frame = load_data(tmp_path / "data.parquet")
+    assert frame["code"].to_list() == ["001", "002"]
+    assert frame["b"].to_list() == [2, 4]
+
+
 def test_load_data_reads_a_csv_file(tmp_path: Path) -> None:
     (tmp_path / "data.csv").write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
+    assert load_data(tmp_path / "data.csv")["b"].to_list() == [2, 4]
+
+
+def test_load_data_chooses_the_reader_by_the_first_bytes_and_not_by_the_extension(tmp_path: Path) -> None:
+    """A Parquet file named ``.csv``, and a CSV file named ``.parquet``, still load."""
+    pl.DataFrame({"a": [1, 3], "b": [2, 4]}).write_parquet(tmp_path / "parquet_inside.csv")
+    (tmp_path / "csv_inside.parquet").write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
+    assert load_data(tmp_path / "parquet_inside.csv")["b"].to_list() == [2, 4]
+    assert load_data(tmp_path / "csv_inside.parquet")["b"].to_list() == [2, 4]
+
+
+def test_load_data_reads_a_csv_file_whose_first_column_starts_with_the_parquet_mark(tmp_path: Path) -> None:
+    """The mark at the start alone does not make a Parquet file: the file must end with the mark too."""
+    (tmp_path / "data.csv").write_text("PAR1,b\n1,2\n3,4\n", encoding="utf-8")
     assert load_data(tmp_path / "data.csv")["b"].to_list() == [2, 4]
 
 
@@ -82,7 +105,7 @@ _LOADERS = {"joblib.load", "pickle.load", "pickle.loads", "skops.io.load", "skop
 
 
 def _loader_calls(node: ast.AST, function: str = "<module>") -> list[tuple[str, str]]:
-    """Find each call that reads a model or a CSV file below a syntax node.
+    """Find each call that reads a model, a Parquet file or a CSV file below a syntax node.
 
     Returns
     -------
@@ -97,7 +120,7 @@ def _loader_calls(node: ast.AST, function: str = "<module>") -> list[tuple[str, 
             continue
         if isinstance(child, ast.Call):
             name = ast.unparse(child.func)
-            if name in _LOADERS or name.endswith(".read_csv"):
+            if name in _LOADERS or name.endswith((".read_csv", ".read_parquet")):
                 found.append((name, function))
         found += _loader_calls(child, function)
     return found
@@ -115,6 +138,7 @@ def test_only_load_model_reads_a_pickle_and_only_model_store_reads_files() -> No
         "mcp/model_store.py": [
             ("skops.io.load", "_load_skops"),
             ("joblib.load", "load_model"),
+            ("pl.read_parquet", "load_data"),
             ("pl.read_csv", "load_data"),
         ],
     }

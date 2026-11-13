@@ -93,9 +93,9 @@ def _(ExplainableBoostingClassifier, Path, np, pl, skops, tempfile):
     classifier = ExplainableBoostingClassifier(feature_names=people.columns, interactions=0, random_state=0)
     classifier.fit(people, approved)
     model_file = workdir / "model.skops"
-    data_file = workdir / "train.csv"
+    data_file = workdir / "train.parquet"
     skops.io.dump(classifier, model_file)
-    people.write_csv(data_file)
+    people.write_parquet(data_file)
     return approved, data_file, model_file, people, workdir
 
 
@@ -501,7 +501,7 @@ def _(mo) -> None:
     Claude Code starts the server for you. Replace the paths with the files that you saved:
 
     ```bash
-    claude mcp add ebaml -- ebaml-mcp --model /path/to/model.skops --data /path/to/train.csv
+    claude mcp add ebaml -- ebaml-mcp --model /path/to/model.skops --data /path/to/train.parquet
     ```
 
     Claude Desktop reads an entry in `claude_desktop_config.json`:
@@ -511,7 +511,7 @@ def _(mo) -> None:
       "mcpServers": {
         "ebaml": {
           "command": "ebaml-mcp",
-          "args": ["--model", "/path/to/model.skops", "--data", "/path/to/train.csv"]
+          "args": ["--model", "/path/to/model.skops", "--data", "/path/to/train.parquet"]
         }
       }
     }

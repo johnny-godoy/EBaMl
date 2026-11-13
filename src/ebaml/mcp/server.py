@@ -238,7 +238,7 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     model: Path
         EBM in a skops file, which runs no code, or in a pickled or joblib file, which does.
     data: Path, optional
-        CSV file with the rows for the row argument.
+        Parquet or CSV file with the rows for the row argument.
     llm: str, optional
         PROVIDER/MODEL of the LLM tools. Without it the server has none.
     transport: Literal["stdio", "streamable-http"]

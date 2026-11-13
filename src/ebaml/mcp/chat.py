@@ -28,7 +28,7 @@ def server_arguments(model: Path, data: Path | None) -> list[str]:
     model: Path
         The file of the EBM.
     data: Path, optional
-        The CSV file with the rows that the chat can explain.
+        The Parquet or CSV file with the rows that the chat can explain.
 
     Returns
     -------
@@ -67,7 +67,7 @@ def chat(
     model: Path
         EBM in a skops file, which runs no code, or in a pickled or joblib file, which does.
     data: Path, optional
-        CSV file with the rows to explain. Ask about a row by its number.
+        Parquet or CSV file with the rows to explain. Ask about a row by its number.
     llm: str, optional
         PROVIDER/MODEL of the agent. The default is OpenRouter's free model, which needs OPENROUTER_API_KEY.
     max_steps: int

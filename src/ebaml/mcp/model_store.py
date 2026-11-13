@@ -5,6 +5,7 @@ The user gives the paths at start. No tool argument names a path, so an agent ca
 
 import os
 import zipfile
+from pathlib import Path
 
 import attrs
 import joblib  # ruff: ignore[banned-api] -- ebaml-mcp also loads the joblib files that users saved, and the user trusts the file by naming its path
@@ -161,13 +162,38 @@ def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
     return model
 
 
+_PARQUET_MAGIC = b"PAR1"
+
+
+def _is_parquet(path: str | os.PathLike[str]) -> bool:
+    """Test the magic bytes: a Parquet file starts and ends with ``PAR1``, and a CSV file has no such mark.
+
+    Returns
+    -------
+    bool
+        True if the file starts and ends with the Parquet mark.
+
+    """
+    magic_size = len(_PARQUET_MAGIC)
+    with Path(path).open("rb") as file:
+        header = file.read(magic_size)
+        if header != _PARQUET_MAGIC:
+            return False
+        file.seek(-magic_size, os.SEEK_END)
+        return file.read(magic_size) == _PARQUET_MAGIC
+
+
 def load_data(path: str | os.PathLike[str]) -> Frame:
-    """Read the CSV file of the data.
+    """Read the rows from a Parquet file, or from a CSV file.
+
+    The function reads the first bytes of the file, not its extension. A file that starts and ends with the Parquet
+    mark ``PAR1`` is a Parquet file, and Parquet keeps the type of each column. Any other file is a CSV file, and
+    polars infers the type of each column from the text.
 
     Parameters
     ----------
     path: str | os.PathLike[str]
-        The CSV file.
+        The Parquet file, or the CSV file.
 
     Returns
     -------
@@ -175,4 +201,5 @@ def load_data(path: str | os.PathLike[str]) -> Frame:
         The rows.
 
     """
-    return nw.from_native(pl.read_csv(os.fspath(path)))  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a polars frame
+    frame = pl.read_parquet(os.fspath(path)) if _is_parquet(path) else pl.read_csv(os.fspath(path))
+    return nw.from_native(frame)  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a polars frame

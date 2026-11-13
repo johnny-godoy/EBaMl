@@ -484,7 +484,7 @@ def chat_with_mcp(
     command: str
         The program that starts the MCP server, for example the path of ``ebaml-mcp``.
     arguments: Sequence[str]
-        The arguments of the program, for example ``["--model", "model.skops", "--data", "train.csv"]``.
+        The arguments of the program, for example ``["--model", "model.skops", "--data", "train.parquet"]``.
     model: ModelOptions | str | None, default=None
         The LLM of the chat, as ``ModelOptions`` or the ``"provider/model"`` shorthand. ``None`` selects OpenRouter's
         ``openrouter/free``.
