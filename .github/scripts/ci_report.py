@@ -8,14 +8,17 @@ Four subcommands, all stdlib only:
     exactly what failed and how to fix it. Also emits ``::error`` annotations so findings show on the diff.
 
 ``assemble``
-    Run in the final job. Combines every snippet with the job results in ``$NEEDS`` (``toJSON(needs)``) into one
-    markdown report: written to ``$CI_REPORT/comment.md`` and the step summary.
+    Run in the final job. Waits until every gate has finished, then combines the snippets with the check runs of the
+    commit into one markdown report: written to ``$CI_REPORT/comment.md`` and the step summary.
 
 ``watch``
-    Run in the ``progress`` job, next to the gates. Every ``POLL_SECONDS`` seconds it reads the state of the gate jobs
+    Run in the ``progress`` job, next to the gates. Every ``POLL_SECONDS`` seconds it reads the check runs of the commit
     from the GitHub API and updates the PR comment ("CI in progress"), until all gates have finished. When a gate
     fails, the comment shows the failure report of that gate at once. The report is the artifact that the failed job
-    uploads.
+    uploads. A gate of another workflow has no such artifact, so the comment links to its job log.
+
+The gates cover every workflow that runs on a pull request (``GATES``). ``scripts/check_report_gates.py`` fails when a
+job of such a workflow is neither a gate nor on its list of jobs that are no gate.
 
 ``post <file>``
     Create the PR comment from a file, or replace it if it exists. The ``report`` job uses it for the final report.
@@ -35,7 +38,7 @@ import urllib.request
 import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 LOGS: Path = Path(os.environ.get("CI_LOGS", Path(tempfile.gettempdir()) / "ci-logs"))
 REPORT: Path = Path(os.environ.get("CI_REPORT", Path(tempfile.gettempdir()) / "ci-report"))
@@ -50,17 +53,51 @@ PAGE_SIZE = 100
 FORBIDDEN = (401, 403)
 REDIRECT = 302
 MARKER = "<!-- ci-report -->"
-FINISHED = frozenset({"success", "failure", "cancelled", "skipped"})
+SETTLE_SECONDS = 15 * 60
+FINISHED = frozenset({"success", "failure", "cancelled", "skipped", "absent"})
+CONCLUSIONS = {
+    "success": "success",
+    "failure": "failure",
+    "timed_out": "failure",
+    "action_required": "failure",
+    "startup_failure": "failure",
+    "cancelled": "cancelled",
+    "stale": "cancelled",
+    "skipped": "skipped",
+    "neutral": "skipped",
+}
 
-# (job id, title) in fail-fast order.
+
+class Gate(NamedTuple):
+    """One check that the report covers.
+
+    ``check`` is the name of the job, as GitHub names its check run. ``runs`` tells when the job exists:
+    ``always`` (every pull request and every push), ``pull_request`` (every pull request) or ``some`` (only when the
+    changed paths match the ``paths:`` filter of its workflow, so the report cannot wait for it).
+    """
+
+    id: str
+    check: str
+    title: str
+    runs: str
+
+
+# In fail-fast order. The gates of ci.yml come first: each has a builder in ``BUILDERS`` and a failure report. The
+# gates of the other workflows have none, so the report links to their job logs.
 GATES = [
-    ("prek", "prek hooks"),
-    ("trufflehog", "trufflehog (secrets)"),
-    ("semgrep", "semgrep (base rules)"),
-    ("trivy", "trivy (vulnerabilities, secrets, misconfig)"),
-    ("baml", "BAML fmt, check, test"),
-    ("pytest", "pytest + 100% coverage"),
-    ("mutation", "mutation score 100%"),
+    Gate("prek", "prek", "prek hooks", "always"),
+    Gate("trufflehog", "trufflehog", "trufflehog (secrets)", "always"),
+    Gate("semgrep", "semgrep", "semgrep (base rules)", "always"),
+    Gate("trivy", "trivy", "trivy (vulnerabilities, secrets, misconfig)", "always"),
+    Gate("baml", "baml check + test", "BAML fmt, check, test", "always"),
+    Gate("pytest", "pytest (100% coverage)", "pytest + 100% coverage", "always"),
+    Gate("mutation", "mutation (changed modules, 100% score)", "mutation score 100%", "always"),
+    Gate("docs", "docs build", "docs build", "always"),
+    Gate("fragment", "fragment", "changelog fragment", "pull_request"),
+    Gate("title", "title", "pull request title", "pull_request"),
+    Gate("commits", "commits", "commit messages", "pull_request"),
+    Gate("prompts", "live prompt tests", "live prompt tests", "some"),
+    Gate("proofs", "lake build", "Lean proofs", "some"),
 ]
 
 PREK_HINTS = {
@@ -596,30 +633,99 @@ def upsert_comment(text: str) -> None:
     api("POST", f"/repos/{repository}/issues/{number}/comments", {"body": body})
 
 
-def gate_states(jobs: Sequence[Mapping[str, str | None]]) -> dict[str, str]:
-    """Find the state of each gate in the jobs of the run.
+def head_sha() -> str:
+    """Read the commit that the checks of the run belong to.
+
+    Returns
+    -------
+    str
+        The head commit of the pull request, or the commit of the push.
+
+    """
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+    return str(event["pull_request"]["head"]["sha"]) if "pull_request" in event else os.environ["GITHUB_SHA"]
+
+
+def check_runs() -> list[Mapping[str, Any]]:
+    """Read the latest check run of each job of every workflow that ran on the commit.
+
+    Returns
+    -------
+    list[Mapping[str, Any]]
+        The check runs, as the GitHub API returns them.
+
+    """
+    repository = os.environ["GITHUB_REPOSITORY"]
+    path = f"/repos/{repository}/commits/{head_sha()}/check-runs?filter=latest&per_page={PAGE_SIZE}"
+    return list(api("GET", path)["check_runs"])
+
+
+def gate_states(runs: Sequence[Mapping[str, str | None]], event_name: str) -> dict[str, str]:
+    """Find the state of each gate in the check runs of the commit.
 
     Parameters
     ----------
-    jobs: Sequence[Mapping[str, str | None]]
-        The jobs of the run, as the GitHub API returns them.
+    runs: Sequence[Mapping[str, str | None]]
+        The check runs, from ``check_runs``.
+    event_name: str
+        The event of the run (``pull_request`` or ``push``). A gate that the event never starts has the state
+        ``absent``, so the report does not wait for it.
 
     Returns
     -------
     dict[str, str]
-        The state of each gate: ``waiting``, ``running``, or the conclusion of the job.
+        The state of each gate: ``absent``, ``waiting``, ``running``, or the conclusion of the check run.
 
     """
-    states = {gate: "waiting" for gate, _ in GATES}
-    for job in jobs:
-        name = job["name"] or ""
-        for gate, _ in GATES:
-            if name == gate or name.startswith(f"{gate} "):
-                if job["status"] == "completed":
-                    states[gate] = job["conclusion"] or "cancelled"
-                elif job["status"] == "in_progress":
-                    states[gate] = "running"
+    by_name = {run["name"]: run for run in runs}
+    states: dict[str, str] = {}
+    for gate in GATES:
+        expected = gate.runs == "always" or (gate.runs == "pull_request" and event_name == "pull_request")
+        run = by_name.get(gate.check)
+        if run is None:
+            states[gate.id] = "waiting" if expected else "absent"
+        elif run["status"] == "completed":
+            states[gate.id] = CONCLUSIONS.get(run["conclusion"] or "", "cancelled")
+        else:
+            states[gate.id] = "running" if run["status"] == "in_progress" else "waiting"
     return states
+
+
+def log_links(runs: Sequence[Mapping[str, str | None]]) -> dict[str, str]:
+    """Find the job log of each gate that has a check run.
+
+    Parameters
+    ----------
+    runs: Sequence[Mapping[str, str | None]]
+        The check runs, from ``check_runs``.
+
+    Returns
+    -------
+    dict[str, str]
+        The URL of the check run of each gate, by gate id.
+
+    """
+    by_name = {run["name"]: run for run in runs}
+    return {gate.id: by_name[gate.check]["html_url"] or "" for gate in GATES if gate.check in by_name}
+
+
+def log_pointer(url: str) -> str:
+    """Write the text for a failed gate that has no failure report.
+
+    Parameters
+    ----------
+    url: str
+        The URL of the job log, or an empty string if the job has none.
+
+    Returns
+    -------
+    str
+        The markdown that tells the reader where to find the error.
+
+    """
+    if url:
+        return f"No failure report exists for this gate. Open the [job log]({url}) for the error."
+    return "The job failed before the tool produced a report (setup or runner error). Open the job log."
 
 
 def render_progress(states: Mapping[str, str], reports: Mapping[str, str] | None = None) -> str:
@@ -639,6 +745,7 @@ def render_progress(states: Mapping[str, str], reports: Mapping[str, str] | None
 
     """
     icons = {
+        "absent": "⚪ not started (no relevant change)",
         "waiting": "⏳ waiting",
         "running": "🔄 running",
         "success": "✅ passed",
@@ -646,18 +753,19 @@ def render_progress(states: Mapping[str, str], reports: Mapping[str, str] | None
         "cancelled": "🚫 cancelled",
         "skipped": "⏭️ skipped (no relevant change, or blocked by an earlier gate)",
     }
-    finished = sum(state in FINISHED for state in states.values())
+    tracked = [gate for gate in GATES if states[gate.id] != "absent"]
+    finished = sum(states[gate.id] in FINISHED for gate in tracked)
     failed = sum(state == "failure" for state in states.values())
-    heading = f"## 🔄 CI in progress: {finished} of {len(GATES)} gates finished"
+    heading = f"## 🔄 CI in progress: {finished} of {len(tracked)} gates finished"
     if failed:
         heading += f", {failed} failed"
     lines = [heading, "", "This comment updates by itself when a gate changes. The final report replaces it.", ""]
     lines += ["| Gate | State |", "|---|---|"]
-    lines += [f"| {title} | {icons.get(states[gate], states[gate])} |" for gate, title in GATES]
+    lines += [f"| {gate.title} | {icons.get(states[gate.id], states[gate.id])} |" for gate in GATES]
     lines.append("")
-    for gate, title in GATES:
-        if states[gate] == "failure" and (report := (reports or {}).get(gate)):
-            lines += [f"### ❌ {title}", "", report.strip(), ""]
+    for gate in GATES:
+        if states[gate.id] == "failure" and (report := (reports or {}).get(gate.id)):
+            lines += [f"### ❌ {gate.title}", "", report.strip(), ""]
     sha = os.environ.get("GITHUB_SHA", "")[:7]
     lines += [f"<sub>Commit `{sha}` · [live run logs]({run_url()})</sub>", ""]
     return "\n".join(lines)
@@ -680,12 +788,17 @@ def update_progress(posted: str, reports: dict[str, str]) -> tuple[bool, str]:
         Whether all gates have finished, and the text that the PR comment now holds.
 
     """
-    repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
-    states = gate_states(api("GET", f"/repos/{repository}/actions/runs/{run_id}/jobs?per_page={PAGE_SIZE}")["jobs"])
+    runs = check_runs()
+    states = gate_states(runs, os.environ["GITHUB_EVENT_NAME"])
     if all(state in FINISHED for state in states.values()):
         return True, posted
+    links = log_links(runs)
     for gate, state in states.items():
-        if state == "failure" and gate not in reports and (report := download_report(gate)):
+        if state != "failure" or gate in reports:
+            continue
+        if gate not in BUILDERS:
+            reports[gate] = log_pointer(links.get(gate, ""))
+        elif report := download_report(gate):
             reports[gate] = report  # an empty result means the job has not uploaded yet, so ask again next poll
     text = render_progress(states, reports)
     if text != posted:
@@ -735,36 +848,61 @@ def post(path: str) -> None:
         sys.stderr.write("no write access to the PR (a fork PR?); the report stays in the run summary\n")
 
 
+def settle() -> tuple[dict[str, str], dict[str, str]]:
+    """Wait until every gate has finished, or until ``SETTLE_SECONDS`` have passed.
+
+    The gates of ci.yml have finished when this runs. The gates of the other workflows run in parallel, so they may
+    still run.
+
+    Returns
+    -------
+    tuple[dict[str, str], dict[str, str]]
+        The state of each gate, and the URL of its job log.
+
+    """
+    deadline = time.monotonic() + SETTLE_SECONDS
+    states = {gate.id: "waiting" for gate in GATES}
+    links: dict[str, str] = {}
+    while True:
+        try:
+            runs = check_runs()
+        except urllib.error.URLError as error:  # HTTPError is a URLError
+            sys.stderr.write(f"check run read failed: {error}\n")
+        else:
+            states, links = gate_states(runs, os.environ["GITHUB_EVENT_NAME"]), log_links(runs)
+        if all(state in FINISHED for state in states.values()) or time.monotonic() >= deadline:
+            return states, links
+        time.sleep(POLL_SECONDS)
+
+
 def assemble() -> None:
-    """Combine the snippets and the job results into the PR comment and the step summary."""
-    needs = json.loads(os.environ["NEEDS"])
+    """Combine the snippets and the check runs into the PR comment and the step summary."""
     sha = os.environ.get("GITHUB_SHA", "")[:7]
     icons = {
+        "absent": "⚪ not started (no relevant change)",
         "success": "✅ passed",
         "failure": "❌ **failed**",
         "cancelled": "🚫 cancelled",
         "skipped": "⏭️ skipped (no relevant change, or blocked by an earlier gate)",
     }
-    results = {gate: needs.get(gate, {}).get("result", "skipped") for gate, _ in GATES}
-    failed = [(gate, title) for gate, title in GATES if results[gate] == "failure"]
+    results, links = settle()
+    tracked = [gate for gate in GATES if results[gate.id] != "absent"]
+    failed = [gate for gate in GATES if results[gate.id] == "failure"]
 
     if failed:
-        lines = [f"## ❌ CI failed: {len(failed)} of {len(GATES)} gates", ""]
-    elif all(r in {"success", "skipped"} for r in results.values()):
+        lines = [f"## ❌ CI failed: {len(failed)} of {len(tracked)} gates", ""]
+    elif all(r in {"success", "skipped", "absent"} for r in results.values()):
         # With no failure, a skipped gate is one that the changed files cannot affect (see `changes` in ci.yml).
         passed = sum(r == "success" for r in results.values())
-        lines = ["## ✅ CI passed", "", f"{passed} of {len(GATES)} gates green on `{sha}`; the others need no run."]
+        lines = ["## ✅ CI passed", "", f"{passed} of {len(tracked)} gates green on `{sha}`; the others need no run."]
     else:
         lines = ["## ⚠️ CI did not finish", ""]
     lines += ["| Gate | Result |", "|---|---|"]
-    lines += [f"| {title} | {icons.get(results[gate], results[gate])} |" for gate, title in GATES]
+    lines += [f"| {gate.title} | {icons.get(results[gate.id], results[gate.id])} |" for gate in GATES]
     lines.append("")
-    for gate, title in failed:
-        path = REPORT / f"{gate}.md"
-        body = (
-            read(path) or "The job failed before the tool produced a report (setup or runner error). Open the job log."
-        )
-        lines += [f"### ❌ {title}", "", body.strip(), ""]
+    for gate in failed:
+        body = read(REPORT / f"{gate.id}.md") or log_pointer(links.get(gate.id, ""))
+        lines += [f"### ❌ {gate.title}", "", body.strip(), ""]
     lines.append(f"<sub>Commit `{sha}` · [full run logs]({run_url()})</sub>")
     text = "\n".join(lines) + "\n"
     REPORT.mkdir(parents=True, exist_ok=True)

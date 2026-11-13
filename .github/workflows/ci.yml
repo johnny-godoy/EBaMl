@@ -37,6 +37,10 @@ env:
 #   progress: runs next to the gates on same-repo PRs; keeps one PR comment up to date ("CI in progress") while they run
 #   report:  always runs after all of them, replaces that comment with what failed and how to fix it
 #
+# The progress comment and the report cover every workflow that runs on the pull request (docs, changelog, commits,
+# and the path-filtered prompt tests and proofs), not only the jobs of this file. They read the check runs of the
+# commit (`checks: read`). `scripts/check_report_gates.py` fails when a job has no place in the report.
+#
 # Every gate tees its output to $CI_LOGS. A failed gate then runs `ci_report.py snippet <gate>`, which turns the logs
 # into a short "what failed / how to fix" section and uploads it for the report job.
 jobs:
@@ -362,6 +366,7 @@ jobs:
     permissions:
       contents: read
       actions: read
+      checks: read
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -377,9 +382,10 @@ jobs:
     if: always()
     needs: [changes, prek, trufflehog, semgrep, trivy, baml, pytest, mutation, progress] # progress ends first, so it cannot overwrite the report
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 25 # the report waits up to 15 minutes for the gates of the other workflows
     permissions:
       contents: read
+      checks: read
       pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -392,7 +398,7 @@ jobs:
           merge-multiple: true
       - name: Build report
         env:
-          NEEDS: ${{ toJSON(needs) }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/ci_report.py assemble
       - name: Post the report as the PR comment
         # Fork PRs get a read-only token, so commenting is best effort; the report is still in the run summary.
