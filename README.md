@@ -378,7 +378,7 @@ keeps it up for the whole chat. It needs the `mcp` extra and the BAML toolchain.
 `OPENROUTER_API_KEY`.
 
 ```bash
-ebaml-chat --model model.skops --data train.csv
+ebaml-chat --model model.skops --data train.parquet
 ```
 
 ```text

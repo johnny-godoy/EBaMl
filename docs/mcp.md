@@ -49,24 +49,26 @@ os.chdir(start_directory)
 Start the server. The same option loads a skops file or a joblib file, and the server reads the format from the file:
 
 ```bash
-ebaml-mcp --model model.skops --data train.csv
+ebaml-mcp --model model.skops --data train.parquet
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--model PATH` | The EBM in a skops file, or in a pickled or joblib file. This option is required. |
-| `--data PATH` | A CSV file with the rows for the `row` argument of `explain_prediction`. |
+| `--data PATH` | A Parquet or CSV file with the rows for the `row` argument of `explain_prediction`. |
 | `--llm PROVIDER/MODEL` | Turn on the LLM tools. See [Choosing the model](providers.md). Without it, the server has no LLM tools. |
 | `--transport` | `stdio` (the default) or `streamable-http`. |
 | `--host ADDRESS` | The address of the `streamable-http` transport. The default is `127.0.0.1`, which accepts this computer only. |
 | `--port NUMBER` | The port of the `streamable-http` transport. The default is `8000`. |
+
+The server reads the first bytes of the data file, not its extension. A file that starts and ends with the Parquet mark `PAR1` is a Parquet file. Parquet keeps the type of each column. Any other file is a CSV file, and the server infers the types from the text.
 
 ## Connect a client
 
 Claude Code:
 
 ```bash
-claude mcp add ebaml -- ebaml-mcp --model /path/to/model.skops --data /path/to/train.csv
+claude mcp add ebaml -- ebaml-mcp --model /path/to/model.skops --data /path/to/train.parquet
 ```
 
 Claude Desktop. Add this entry to `claude_desktop_config.json`:
@@ -76,7 +78,7 @@ Claude Desktop. Add this entry to `claude_desktop_config.json`:
   "mcpServers": {
     "ebaml": {
       "command": "ebaml-mcp",
-      "args": ["--model", "/path/to/model.skops", "--data", "/path/to/train.csv"]
+      "args": ["--model", "/path/to/model.skops", "--data", "/path/to/train.parquet"]
     }
   }
 }
@@ -93,7 +95,7 @@ npx @modelcontextprotocol/inspector ebaml-mcp --model /path/to/model.skops
 Use the `streamable-http` transport when the client runs on another computer or in a container:
 
 ```bash
-ebaml-mcp --model model.skops --data train.csv --transport streamable-http --port 9000
+ebaml-mcp --model model.skops --data train.parquet --transport streamable-http --port 9000
 ```
 
 The client connects to `http://127.0.0.1:9000/mcp`. The server has no login. Keep the default host `127.0.0.1`
@@ -118,7 +120,7 @@ with the reason. A package error is a tool error with its message.
 
 The examples below come from a real session over stdio. The model is an EBM with `interactions=0` that was fitted on
 500 synthetic rows with the features `age`, `income` and `city`. The server started with
-`--model model.skops --data train.csv`. A result that is long is shortened, and `...` marks the cut.
+`--model model.skops --data train.parquet`. A result that is long is shortened, and `...` marks the cut.
 
 ### Example session: read the model
 
@@ -184,13 +186,13 @@ model, or about one row of the data, and ask follow-up questions. The command st
 other command.
 
 ```bash
-ebaml-chat --model model.skops --data train.csv
+ebaml-chat --model model.skops --data train.parquet
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--model PATH` | The EBM in a skops file, or in a pickled or joblib file. This option is required. The same warning as for `ebaml-mcp` applies. |
-| `--data PATH` | A CSV file with the rows that you can ask about, by their number. |
+| `--data PATH` | A Parquet or CSV file with the rows that you can ask about, by their number. |
 | `--llm PROVIDER/MODEL` | The LLM of the agent. See [Choosing the model](providers.md). The default model needs `OPENROUTER_API_KEY`. |
 | `--max-steps NUMBER` | The most rounds of tool calls for one answer. The default is `12`. |
 
@@ -225,7 +227,7 @@ the model call them. It returns the report and the names of the tools that the m
 the BAML toolchain and `OPENROUTER_API_KEY`, or a model that you choose with `model=`.
 
 ```bash
-baml run -e 'root.explain_with_mcp("Which features drive the model?", "ebaml-mcp", ["--model", "model.skops", "--data", "train.csv"])' --output-format json
+baml run -e 'root.explain_with_mcp("Which features drive the model?", "ebaml-mcp", ["--model", "model.skops", "--data", "train.parquet"])' --output-format json
 ```
 
 The `tool_calls` field shows that the report rests on tool results. A report with an empty `tool_calls` has no

@@ -152,7 +152,7 @@ function chat_with_tools(
 }
 
 // Entry point called from Python or the command line. `command` and `args` start the MCP server, for example
-// `ebaml-mcp` with `["--model", "model.skops", "--data", "train.csv"]`. The connection closes on every path.
+// `ebaml-mcp` with `["--model", "model.skops", "--data", "train.parquet"]`. The connection closes on every path.
 function explain_with_mcp(
     question: string,
     command: string,
