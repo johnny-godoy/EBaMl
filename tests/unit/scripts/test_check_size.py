@@ -26,6 +26,13 @@ def test_a_function_is_measured_from_its_def_line_to_its_last_line(tmp_path: Pat
     assert measures["module.py::long"].is_over
 
 
+def test_the_docstring_of_a_function_does_not_count(tmp_path: Path) -> None:
+    # a limit that counted documentation would push authors to write less of it
+    docstring = '    """Describe.\n\n' + "\n".join("    More." for _ in range(FUNCTION_LINES)) + '\n    """\n'
+    measures = _measures(tmp_path, f"def documented():\n{docstring}    return 1\n")
+    assert measures["module.py::documented"].size == 2
+
+
 def test_a_test_file_has_a_higher_limit_than_a_source_file(tmp_path: Path) -> None:
     assert _measures(tmp_path, "x = 1\n")["module.py"].limit == SOURCE_FILE_LINES
     assert _measures(tmp_path, "x = 1\n", is_test=True)["module.py"].limit == TEST_FILE_LINES

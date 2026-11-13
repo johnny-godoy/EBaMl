@@ -5,7 +5,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | Script | What it does |
 | --- | --- |
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
-| `check_size.py` | Fails when a file has more than 800 lines (tests: 1200), a function has more than 100 lines, or a class has more than 15 public or 10 private methods. `size_baseline.toml` lists the units that are over today. |
+| `check_size.py` | Fails when a file has more than 800 lines (tests: 1200), a function has more than 100 lines without its docstring, or a class has more than 15 public or 10 private methods. `size_baseline.toml` lists the units that are over today. |
 | `check_ignore_repeats.py` | Fails when one ignore rule has more than 5 sites outside the files that hold the shared fix. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |

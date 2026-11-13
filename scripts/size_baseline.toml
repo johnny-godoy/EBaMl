@@ -5,9 +5,7 @@
 # change that mixes it with a feature is hard to review.
 [allowed]
 "scripts/check_abstractions.py" = 1155
-"src/ebaml/graphs/ebm_graph.py::EBMGraph.from_ebm" = 104
-"src/ebaml/graphs/ebm_graph.py::EBMGraph.to_text" = 130
 "src/ebaml/local/facts.py" = 1274
-"src/ebaml/mcp/server.py::create_server" = 124
+"src/ebaml/mcp/server.py::create_server" = 109
 "tests/unit/ebaml/llm/test_descriptors.py" = 1606
 "tests/unit/ebaml/local/test_facts.py" = 2167
