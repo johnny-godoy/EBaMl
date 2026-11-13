@@ -2,9 +2,7 @@
 
 import io
 import os
-from pathlib import Path
 
-import orjson
 import progressbar
 import pytest
 from hypothesis import settings
@@ -27,12 +25,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
     module = os.environ.get("MUTATION_FIRST")
     if not module:
         return
-    covering: set[str] = set()
-    path = os.environ.get("MUTATION_MODULE")
-    if path and "MUTATION_ORIGINAL" in os.environ and "MUTATION_COVERAGE" in os.environ:
-        coverage = orjson.loads(Path(os.environ["MUTATION_COVERAGE"]).read_bytes()).get(path, {})
-        original = (Path(os.environ["MUTATION_ORIGINAL"]) / path).read_text()
-        covering = mutant_tests.covering_tests(coverage, original, (config.rootpath / path).read_text())
+    covering = mutant_tests.covering_from_environment(config.rootpath, os.environ)
     items.sort(key=lambda item: (item.nodeid not in covering, item.path.stem != f"test_{module}"))
 
 

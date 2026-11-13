@@ -27,7 +27,9 @@ env:
 #   stage 1: prek, trufflehog, semgrep, trivy
 #   stage 2: baml, pytest (need prek only, so they start while the scanners still run)
 #   stage 3: mutation (needs every gate above; slowest). Pull requests only: only the lines changed against the base
-#            run. A push to main skips it, because its pull request mutated the same lines; mutation-weekly.yml runs all.
+#            run, split into parts of about 400 lines, one job for each part (mutation-plan, mutation-shards: the jobs `mutant plan` and `mutant part`). The job
+#            `mutation` sums up the parts under the name that the ruleset requires. A push to main skips it, because its
+#            pull request mutated the same lines; mutation-weekly.yml runs all.
 #
 # The ruleset requires every gate on every pull request, so a gate that the changed files cannot affect is skipped with
 # a job-level `if`, not removed with a workflow-level `paths:` filter. GitHub counts a skipped job as a pass, and a
@@ -89,6 +91,7 @@ jobs:
               - ".github/workflows/ci.yml"
               - ".github/actions/**"
               - "scripts/mutation.py"
+              - "scripts/mutant_*.py"
               - "cosmic-ray.toml"
 
   prek:
@@ -264,9 +267,33 @@ jobs:
         with:
           gate: pytest
 
-  mutation:
-    name: mutation (changed modules, 100% score)
-    needs: [changes, prek, trufflehog, semgrep, trivy, baml, pytest]
+  mutation-plan:
+    name: mutant plan # not `mutation ...`: the progress comment reads the jobs whose names start with a gate id
+    needs: [changes]
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.src == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      parts: ${{ steps.parts.outputs.parts }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the line count needs the merge base with the base revision
+      - name: Split the changed lines into parts of about 400 lines, at most 8
+        id: parts
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: | # one job runs about 400 changed lines in 15 to 25 minutes, so a large pull request uses more jobs
+          lines=$(git diff -U0 --no-color --no-ext-diff "$BASE...HEAD" -- src/ebaml | grep -c '^+[^+]' || true)
+          parts=$(( (lines + 399) / 400 ))
+          [ "$parts" -ge 1 ] || parts=1
+          [ "$parts" -le 8 ] || parts=8
+          echo "Added lines of src/ebaml: $lines, parts: $parts"
+          echo "parts=$(jq -cn --argjson parts "$parts" '[range(1; $parts + 1) | "\(.)/\($parts)"]')" >> "$GITHUB_OUTPUT"
+
+  mutation-shards:
+    name: mutant part ${{ matrix.part }}
+    needs: [changes, mutation-plan, prek, trufflehog, semgrep, trivy, baml, pytest]
     # A skipped gate does not block this job, so a failed or cancelled gate must be named. Without `!cancelled()` the
     # default `success()` would skip the job whenever any gate is skipped.
     if: >-
@@ -274,32 +301,57 @@ jobs:
       && needs.changes.outputs.src == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false # a surviving mutant in one part must not hide the result of the others
+      matrix:
+        part: ${{ fromJSON(needs.mutation-plan.outputs.parts || '["1/1"]') }} # the plan is skipped when no job needs the matrix
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # the changed-module filter needs the merge base with the base revision
       - uses: ./.github/actions/setup
-      - name: Run cosmic-ray on the changed lines, fail on any surviving mutant
+      - name: Run cosmic-ray on the changed lines of this part, fail on any surviving mutant
         env:
           BASE: origin/${{ github.base_ref }}
+          PART: ${{ matrix.part }}
+        # The job limit is 60 minutes. The script stops at 50, keeps the results so far, and fails, so that the report
+        # shows the survivors and the number of mutants that did not run.
         run: |
           mkdir -p "$CI_LOGS"
-          uv run python scripts/mutation.py "$(nproc)" --base "$BASE" 2>&1 | tee "$CI_LOGS/mutation.log"
+          uv run python scripts/mutation.py "$(nproc)" --base "$BASE" --part "$PART" --time-limit 3000 2>&1 | tee "$CI_LOGS/mutation.log"
       - name: List surviving mutants with diffs
-        if: failure()
+        if: failure() || cancelled()
         run: |
           uv run python -m cosmic_ray.tools.report .mutation/session.sqlite --surviving-only --show-diff \
             > "$CI_LOGS/mutation-survivors.txt" || true
       - uses: ./.github/actions/failure-report
-        if: failure()
+        if: failure() || cancelled()
         with:
           gate: mutation
+          suffix: -${{ strategy.job-index }} # each part uploads its own artifact; two parts cannot share a name
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: mutation-session
+          name: mutation-session-${{ strategy.job-index }}
           path: .mutation/
           if-no-files-found: ignore
+
+  # The ruleset requires this name, so it stays the name of one job that sums up the parts.
+  mutation:
+    name: mutation (changed modules, 100% score)
+    needs: [mutation-shards]
+    # `!cancelled()` is false only when the whole run is cancelled (a newer push). A part that hits its job limit ends
+    # as `cancelled`, and that must fail this job.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail unless every part passed or was skipped
+        env:
+          RESULT: ${{ needs.mutation-shards.result }}
+        run: |
+          echo "Result of the mutation parts: $RESULT"
+          [ "$RESULT" = success ] || [ "$RESULT" = skipped ]
 
   progress:
     name: progress

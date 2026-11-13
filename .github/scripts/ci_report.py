@@ -397,8 +397,17 @@ def mutation() -> str:
             "**Fix:** make `uv run pytest -x -o addopts='' tests/unit` pass on its own first. If it only times out, "
             "raise `timeout` in `cosmic-ray.toml`; CI runners are slower than laptops."
         )
-    rate = re.search(r"survival rate: ([\d.]+)%", log)
-    head = f"**{rate.group(1)}% of mutants survived, 0% allowed**\n" if rate else "**Surviving mutants**\n"
+    unfinished = re.search(r"mutation result\s+survived=\d+ total=(\d+) unfinished=([1-9]\d*)", log)
+    if unfinished and not survivors:
+        return (
+            f"**The time limit stopped the mutation run: {unfinished.group(2)} of {unfinished.group(1)} mutants of "
+            f"this part did not run**\n{block(log[-MAX_LOG_TAIL:])}\n"
+            "**Fix:** the run has no survivor so far. Make the changed lines smaller, or split the pull request: "
+            "each part of the run has 50 minutes."
+        )
+    head = "**Surviving mutants**\n"
+    if unfinished:
+        head += f"The time limit also stopped the run: {unfinished.group(2)} mutants of this part did not run.\n"
     return (
         head
         + block(survivors or log[-MAX_LOG_TAIL:])
@@ -535,12 +544,19 @@ def download_report(gate: str) -> str:
 
     """
     repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
-    listing = api("GET", f"/repos/{repository}/actions/runs/{run_id}/artifacts?name=report-{gate}")
-    artifacts = [artifact for artifact in listing["artifacts"] if not artifact["expired"]]
-    if not artifacts:
-        return ""
-    with zipfile.ZipFile(io.BytesIO(fetch_archive(artifacts[0]["archive_download_url"]))) as archive:
-        return "\n".join(archive.read(name).decode("utf-8", errors="replace") for name in archive.namelist())
+    listing = api("GET", f"/repos/{repository}/actions/runs/{run_id}/artifacts?per_page={PAGE_SIZE}")
+    # a gate that runs in parallel parts uploads one artifact for each failed part: `report-<gate>-<part>`
+    names = (f"report-{gate}", f"report-{gate}-")
+    artifacts = [
+        artifact
+        for artifact in listing["artifacts"]
+        if not artifact["expired"] and (artifact["name"] == names[0] or artifact["name"].startswith(names[1]))
+    ]
+    texts: list[str] = []
+    for artifact in artifacts:
+        with zipfile.ZipFile(io.BytesIO(fetch_archive(artifact["archive_download_url"]))) as archive:
+            texts += [archive.read(name).decode("utf-8", errors="replace") for name in archive.namelist()]
+    return "\n".join(texts)
 
 
 def pull_request_number() -> int:
