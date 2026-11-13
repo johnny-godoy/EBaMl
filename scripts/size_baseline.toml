@@ -2,19 +2,12 @@
 # its entry, and when it is under the limit, delete the entry. Do not add an entry for new code: split the code.
 
 # reason: these units were over a limit before the check existed. Splitting them is a refactor of its own, and a
-# change that mixes it with a feature is hard to review. The audience classes are one class for each case of a table,
-# so each one needs every method of the base class.
+# change that mixes it with a feature is hard to review.
 [allowed]
 "scripts/check_abstractions.py" = 1155
-"src/ebaml/edit/edit_session.py::EditSession:public" = 14
-"src/ebaml/edit/model_view.py::TermView:public" = 11
 "src/ebaml/graphs/ebm_graph.py::EBMGraph.from_ebm" = 104
 "src/ebaml/graphs/ebm_graph.py::EBMGraph.to_text" = 130
-"src/ebaml/local/audience.py::Audience:public" = 12
-"src/ebaml/local/audience.py::Layperson:public" = 12
-"src/ebaml/local/audience.py::DataScientist:public" = 12
 "src/ebaml/local/facts.py" = 1274
 "src/ebaml/mcp/server.py::create_server" = 124
 "tests/unit/ebaml/llm/test_descriptors.py" = 1606
-"tests/unit/ebaml/local/test_fact_text.py::_Marker:public" = 11
 "tests/unit/ebaml/local/test_facts.py" = 2167
