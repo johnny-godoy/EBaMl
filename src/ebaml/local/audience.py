@@ -19,7 +19,7 @@ import abc
 from collections.abc import Callable, Mapping
 from typing import override
 
-from ebaml.core.custom_types import JSONValue
+from ebaml.core.custom_types import JSONObject
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.local.facts import Change, Contribution, Prediction, SufficientReason
 from ebaml.local.local_kinds import OutputKind
@@ -138,18 +138,18 @@ def points_towards(contribution: Contribution, prediction: Prediction) -> bool:
 
 def _likelihood(
     probability: float,
-) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
     return {"likelihood": likelihood_word(probability)}
 
 
 def _predicted_value(
     value: float,
-) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
     return {"predicted_value": round_value(value)}
 
 
 # The rule for each kind of output. A new kind of output is a new row.
-_PLAIN_OUTPUT: Mapping[OutputKind, Callable[[float], dict[str, JSONValue]]] = {
+_PLAIN_OUTPUT: Mapping[OutputKind, Callable[[float], JSONObject]] = {
     OutputKind.PROBABILITY: _likelihood,
     OutputKind.CLASS_PROBABILITY: _likelihood,
     OutputKind.VALUE: _predicted_value,
@@ -206,7 +206,7 @@ class Audience(abc.ABC):
         self,
         contribution: Contribution,
         prediction: Prediction,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the size of one contribution."""
 
     @abc.abstractmethod
@@ -214,21 +214,21 @@ class Audience(abc.ABC):
         self,
         prediction: Prediction,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe how sure the model is of the prediction."""
 
     @abc.abstractmethod
     def change(
         self,
         change: Change,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the size of one change of the counterfactual."""
 
     @abc.abstractmethod
     def flip(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell how sure the flip of the counterfactual is."""
 
     @abc.abstractmethod
@@ -236,7 +236,7 @@ class Audience(abc.ABC):
         self,
         output: float,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the key that tells the output after the changes: the probability of a class, or a predicted value."""
 
     @abc.abstractmethod
@@ -244,21 +244,21 @@ class Audience(abc.ABC):
         self,
         reason: SufficientReason,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that describe the margin of the sufficient reason."""
 
     @abc.abstractmethod
     def guarantee(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell whether the sufficient reason holds under the uncertainty of the scores."""
 
     @abc.abstractmethod
     def support(
         self,
         min_support: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell whether the counterfactual and the sufficient reason left out rare values."""
 
     @abc.abstractmethod
@@ -266,7 +266,7 @@ class Audience(abc.ABC):
         self,
         lower_bound: int,
         items: str,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that give the fewest ``items`` (``"changes"`` or ``"features"``) that any set needs."""
 
     @abc.abstractmethod
@@ -277,7 +277,7 @@ class Audience(abc.ABC):
     def sample(
         self,
         n_samples: int,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         """Return the keys that tell how large the sample behind the shares of the completions is."""
 
 
@@ -300,7 +300,7 @@ class Layperson(Audience):
         self,
         contribution: Contribution,
         prediction: Prediction,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         direction = "towards" if points_towards(contribution, prediction) else "against"
         return {"effect": f"{strength_word(contribution.score)} {direction} this prediction"}
 
@@ -309,21 +309,21 @@ class Layperson(Audience):
         self,
         prediction: Prediction,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return _PLAIN_OUTPUT[prediction.output_kind](prediction.output)
 
     @override
     def change(
         self,
         change: Change,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {}
 
     @override
     def flip(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
     @override
@@ -331,7 +331,7 @@ class Layperson(Audience):
         self,
         output: float,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return _PLAIN_OUTPUT[output_kind](output)
 
     @override
@@ -339,21 +339,21 @@ class Layperson(Audience):
         self,
         reason: SufficientReason,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {}
 
     @override
     def guarantee(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"guarantee_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
     @override
     def support(
         self,
         min_support: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"rare_values_left_out": min_support > 0}
 
     @override
@@ -361,7 +361,7 @@ class Layperson(Audience):
         self,
         lower_bound: int,
         items: str,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         # a bound on an unknown smallest size confuses this reader more than it helps
         return {}
 
@@ -373,7 +373,7 @@ class Layperson(Audience):
     def sample(
         self,
         n_samples: int,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"sample_size": sample_size_word(n_samples)}
 
 
@@ -393,7 +393,7 @@ class DataScientist(Audience):
         self,
         contribution: Contribution,
         prediction: Prediction,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"score": round_value(contribution.score), "std": round_value(contribution.std)}
 
     @override
@@ -401,7 +401,7 @@ class DataScientist(Audience):
         self,
         prediction: Prediction,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {
             _OUTPUT_KEYS[prediction.output_kind]: round_value(prediction.output),
             "confidence_interval": [round_value(prediction.lower), round_value(prediction.upper)],
@@ -413,14 +413,14 @@ class DataScientist(Audience):
     def change(
         self,
         change: Change,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"score_change": round_value(change.score_change)}
 
     @override
     def flip(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"flip_holds_at_confidence": confidence_level}
 
     @override
@@ -428,7 +428,7 @@ class DataScientist(Audience):
         self,
         output: float,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {_OUTPUT_KEYS[output_kind]: round_value(output)}
 
     @override
@@ -436,21 +436,21 @@ class DataScientist(Audience):
         self,
         reason: SufficientReason,
         output_kind: OutputKind,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {_MARGIN_KEYS[output_kind]: round_value(reason.guaranteed_margin)}
 
     @override
     def guarantee(
         self,
         confidence_level: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"guarantee_holds_at_confidence": confidence_level}
 
     @override
     def support(
         self,
         min_support: float,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"rare_values_left_out": min_support > 0, "min_support": min_support}
 
     @override
@@ -458,7 +458,7 @@ class DataScientist(Audience):
         self,
         lower_bound: int,
         items: str,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         # the gap to the bound tells this reader how much to trust a set that is not proved smallest
         return {f"smallest_possible_number_of_{items}": lower_bound}
 
@@ -470,7 +470,7 @@ class DataScientist(Audience):
     def sample(
         self,
         n_samples: int,
-    ) -> dict[str, JSONValue]:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    ) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
         return {"number_of_samples": n_samples}
 
 

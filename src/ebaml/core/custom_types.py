@@ -33,6 +33,8 @@ type FeatureValue = str | float | Decimal | np.generic | NAType | None
 # for those when it writes the text. The numeric tower already lets float cover bool, but JSON has true and false as a
 # type of its own, so the hint names bool.
 type JSONValue = str | bool | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
+# A JSON object: the fragment of a JSON document that a function builds and its caller merges or writes.
+type JSONObject = dict[str, JSONValue]
 
 
 class Normalization(enum.StrEnum):

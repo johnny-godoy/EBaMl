@@ -10,7 +10,7 @@ from collections.abc import Mapping
 import attrs
 import orjson
 
-from ebaml.core.custom_types import JSONValue
+from ebaml.core.custom_types import JSONObject, JSONValue
 from ebaml.local.audience import Audience, Layperson
 from ebaml.local.facts import LocalFacts
 from ebaml.local.local_kinds import OutputKind
@@ -61,14 +61,14 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     """
     p = facts.prediction
     decision_key = _DECISION_KEYS[p.output_kind]
-    prediction: dict[str, JSONValue] = {decision_key: p.decision}
+    prediction: JSONObject = {decision_key: p.decision}
     prediction["contributions_largest_first"] = [
         {"feature": c.feature, "value": c.value} | audience.contribution(c, p) for c in facts.contributions
     ]
     prediction |= audience.prediction(p, facts.confidence_level)
 
     cf = facts.counterfactual
-    counterfactual: dict[str, JSONValue] = {"flip_possible": cf is not None}
+    counterfactual: JSONObject = {"flip_possible": cf is not None}
     if cf is not None:
         counterfactual["changes"] = [
             {"feature": c.feature, "from": c.from_value, "to": c.to_value} | audience.change(c) for c in cf.changes
@@ -89,7 +89,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason
-    sufficient: dict[str, JSONValue] = {"exists": sr is not None}
+    sufficient: JSONObject = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
         sufficient["is_smallest_set"] = sr.minimality.is_smallest

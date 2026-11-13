@@ -10,7 +10,7 @@ from typing import cast
 import attrs
 from beartype.roar import BeartypeCallHintViolation
 
-from ebaml.core.custom_types import JSONValue
+from ebaml.core.custom_types import JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit import edits, selections
 from ebaml.edit.edits import Edit
@@ -48,7 +48,7 @@ SELECTION_TYPES: dict[str, type[Selection]] = {
 
 
 # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-def to_record(item: Edit | Selection) -> dict[str, JSONValue]:
+def to_record(item: Edit | Selection) -> JSONObject:
     """Write an edit or a selection as a record.
 
     Parameters
@@ -59,7 +59,7 @@ def to_record(item: Edit | Selection) -> dict[str, JSONValue]:
 
     Returns
     -------
-    dict[str, JSONValue]
+    JSONObject
         The name of the class under ``type``, and each field.
 
     """

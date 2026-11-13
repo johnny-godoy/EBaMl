@@ -344,7 +344,7 @@ as a percentage in place of the probability, the confidence interval and the log
 contributions. The changes, the flip and the margin keep the numbers of the data scientist.
 
 ```python
-from ebaml.core.custom_types import JSONValue
+from ebaml.core.custom_types import JSONObject
 from ebaml import DataScientist, round_value
 
 
@@ -354,11 +354,11 @@ class LoanOfficer(DataScientist):
         return "The reader is a loan officer, so quote percentages and skip the statistics of the model."
 
     @override
-    def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+    def contribution(self, contribution, prediction) -> JSONObject:
         return {}
 
     @override
-    def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
+    def prediction(self, prediction, confidence_level) -> JSONObject:
         return {"percent": round_value(100 * prediction.output)}
 ```
 
