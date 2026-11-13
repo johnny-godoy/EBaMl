@@ -106,3 +106,35 @@ def test_the_final_report_waits_until_the_deadline_for_a_gate_that_never_reports
     states, links = ci_report.settle()
     assert states["docs"] == "waiting"
     assert links == {}
+
+
+LOG = (
+    b"2026-01-01T00:00:00.1234567Z \x1b[36;1mstep one\x1b[0m\n"
+    b"2026-01-01T00:00:01.0000000Z title: bad title\n"
+    b"2026-01-01T00:00:02.0000000Z ##[error]Process completed with exit code 1.\n"
+    b"2026-01-01T00:00:03.0000000Z Post job cleanup.\n"
+)
+
+
+def test_a_failed_gate_shows_the_log_around_its_first_error(
+    ci_report: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested: list[str] = []
+
+    def fetch(url: str) -> bytes:
+        requested.append(url)
+        return LOG
+
+    monkeypatch.setattr(ci_report, "fetch_archive", fetch)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    text = ci_report.failure_text("https://github.com/owner/repo/actions/runs/7/job/42")
+    assert requested == ["https://api.github.com/repos/owner/repo/actions/jobs/42/logs"]
+    assert "step one\ntitle: bad title\n##[error]Process completed with exit code 1.\nPost job cleanup." in text
+    assert "\x1b" not in text
+    assert "[job log](https://github.com/owner/repo/actions/runs/7/job/42)" in text
+
+
+@pytest.mark.parametrize("url", ["", "https://example.test/not-a-job"])
+def test_a_failed_gate_without_a_job_log_only_points_to_it(ci_report: ModuleType, url: str) -> None:
+    assert ci_report.failure_text(url) == ci_report.log_pointer(url)

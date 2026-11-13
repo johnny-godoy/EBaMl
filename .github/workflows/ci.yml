@@ -385,6 +385,7 @@ jobs:
     timeout-minutes: 25 # the report waits up to 15 minutes for the gates of the other workflows
     permissions:
       contents: read
+      actions: read # the log of a failed job of another workflow
       checks: read
       pull-requests: write
     steps:
