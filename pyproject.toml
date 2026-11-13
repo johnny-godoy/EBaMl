@@ -22,7 +22,7 @@ dependencies = [
     "attrs>=26.1.0",
     # The wheel ships a baml_sdk that names its toolchain, and baml-bridge refuses another one. baml.toml pins the same
     # version. scripts/check_toolchain_pin.py checks both and uv.lock.
-    "baml-bridge==0.23.0",
+    "baml-bridge==0.25.2",
     "beartype>=0.23.1",
     "interpret>=0.7.8",
     "narwhals>=2.28.0",
