@@ -17,7 +17,9 @@ no sum of scores reaches. A margin of a drawn model is then never zero, and no s
 """
 
 import copy
+import functools
 import itertools
+import math
 import statistics
 from collections.abc import Callable, Mapping, Sequence
 
@@ -28,10 +30,22 @@ from hypothesis import strategies as st
 
 from ebaml.core.custom_types import FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.local import fact_features as fact_features_module
 from ebaml.local.covering_backend import CoveringModel, ModelResult, ModelStatus, SolveSettings
 from ebaml.local.covering_problem import Choice, Cover, CoveringProblem
+from ebaml.local.local_kinds import Outcome
+from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend
-from tests.unit.ebaml.conftest import PandasFrame, frame_of_rows
+from tests.unit.ebaml.conftest import (
+    FittedClassifier,
+    FittedRegressor,
+    PandasFrame,
+    fake_model,
+    frame_of_columns,
+    frame_of_matrix,
+    frame_of_rows,
+)
 
 # the parts of a problem: the worst case of each margin, and groups[group][alternative][margin]
 type ProblemParts = tuple[list[float], list[list[list[float]]]]
@@ -744,3 +758,188 @@ def oracle_problem(
         instance_bins=model.instance_bins,
         deviation_count=deviation_count(confidence_level),
     )
+
+
+# the helpers that the tests of several modules of the local explanations share
+CATEGORIES = ["p", "q", "r"]
+
+
+NAMES = ["f0", "f1", "f2"]
+
+
+@pytest.fixture(scope="module")
+def categorical_ebm(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier],
+) -> FittedClassifier:
+    rng = np.random.default_rng(1)
+    data = frame_of_columns({name: rng.choice(CATEGORIES, 900) for name in NAMES})
+    effect = data["f0"].map({"p": 1.5, "q": 0.0, "r": -1.5}) + data["f1"].map({"p": 0.5, "q": 0.0, "r": -0.5})
+    effect += data["f2"].map({"p": 0.2, "q": 0.0, "r": -0.2}) + rng.normal(size=900) * 0.3
+    target = (effect > 0).astype(int)
+    return fit_ebm(data, target, interactions=0, random_state=0), data
+
+
+def scored_feature(
+    scores: list[float],
+    bin_index: int,
+    *,
+    std: float = 0.0,
+    plausible: list[bool] | None = None,
+) -> fact_features_module.Feature:
+    graph = EBMGraph(
+        "f",
+        "nominal",
+        [str(bin_index) for bin_index, _ in enumerate(scores)],
+        scores,
+        [std] * len(scores),
+    )
+    weights = np.ones(len(scores))
+    return fact_features_module.Feature(
+        "f",
+        graph,
+        weights,
+        bin_index,
+        "v",
+        np.array(plausible or [True] * len(scores)),
+    )
+
+
+def probability_after(margin: float, _replaced: Sequence[tuple[fact_features_module.Feature, int]]) -> Outcome:
+    """Return the other class, with its probability from the log-odds margin of the class that holds.
+
+    Returns
+    -------
+    Outcome
+        The other class and its probability.
+
+    """
+    return Outcome("other", 1 / (1 + math.exp(margin)))
+
+
+@functools.cache
+def multiclass_model() -> FittedClassifier:
+    """Fit a three-class model on a small grid, so that each feature has few bins and a search can try every one.
+
+    Returns
+    -------
+    FittedClassifier
+        The model and its training data.
+
+    """
+    rng = np.random.default_rng(0)
+    frame = frame_of_matrix(rng.integers(0, 4, size=(240, 3)).astype(float), ["a", "b", "c"])
+    target = (frame["a"] + frame["b"] + rng.integers(0, 2, 240) > 3).astype(int) + (frame["c"] > 2).astype(int)
+    model = ExplainableBoostingClassifier(interactions=0, random_state=0).fit(frame, target)
+    return model, frame
+
+
+def sig(x: float) -> float:
+    return 1 / (1 + math.exp(-x))
+
+
+# build a feature with categories name0, name1, ... and the instance in bin ``bin_index``
+def hand(  # ruff: ignore[too-many-arguments] -- keyword-only options of a test helper, each one set by few tests
+    name: str,
+    scores: list[float],
+    bin_index: int = 0,
+    *,
+    stds: list[float] | None = None,
+    weights: list[float] | None = None,
+    plausible: list[bool] | None = None,
+) -> fact_features_module.Feature:
+    x_vals = [f"{name}{bin_index}" for bin_index, _ in enumerate(scores)]
+    graph = EBMGraph(name, "nominal", x_vals, scores, stds or [0.0] * len(scores))
+    return fact_features_module.Feature(
+        name,
+        graph,
+        np.array(weights or [1.0] * len(scores)),
+        bin_index,
+        x_vals[bin_index],
+        np.array(plausible or [True] * len(scores)),
+    )
+
+
+def model_features(
+    *,
+    term_features: list[tuple[int, ...]],
+    classes: list[str],
+    link: str = "logit",
+) -> ExplainableBoostingClassifier:
+    return fake_model(
+        feature_names_in_=["a", "b"],
+        term_features_=term_features,
+        classes_=np.array(classes),
+        link_=link,
+    )
+
+
+type FeatureParts = tuple[list[float], list[float], list[bool], int]
+
+
+@st.composite
+def feature_parts(draw: st.DrawFn) -> FeatureParts:
+    n_bins = draw(st.integers(min_value=2, max_value=3))
+    scores = draw(st.lists(st.floats(min_value=-3, max_value=3), min_size=n_bins, max_size=n_bins))
+    stds = draw(st.lists(st.floats(min_value=0, max_value=1), min_size=n_bins, max_size=n_bins))
+    bin_index = draw(st.integers(min_value=0, max_value=n_bins - 1))
+    plausible = draw(st.lists(st.booleans(), min_size=n_bins, max_size=n_bins))
+    plausible[bin_index] = True  # _features always offers the bin of the instance
+    return scores, stds, plausible, bin_index
+
+
+def build(parts: Sequence[FeatureParts]) -> list[fact_features_module.Feature]:
+    features = []
+    for index, (scores, stds, plausible, bin_index) in enumerate(parts):
+        name = f"f{index}"
+        graph = EBMGraph(name, "nominal", [str(bin_index) for bin_index, _ in enumerate(scores)], scores, stds)
+        features.append(
+            fact_features_module.Feature(
+                name,
+                graph,
+                np.ones(len(scores)),
+                bin_index,
+                str(bin_index),
+                np.array(plausible),
+            ),
+        )
+    return features
+
+
+def sign_of(features: Sequence[fact_features_module.Feature], intercept: float) -> int:
+    # a logit of 0 is the negative class, as in compute_local_facts
+    return 1 if intercept + sum(f.current for f in features) > 0 else -1
+
+
+# the properties recompute a sum in another order than the code, so they allow for the float error of that sum
+TOLERANCE = 1e-9
+
+
+FEATURES: st.SearchStrategy[list[FeatureParts]] = st.lists(feature_parts(), min_size=1, max_size=4)
+
+
+INTERCEPT: st.SearchStrategy[float] = st.floats(min_value=-2, max_value=2)
+
+
+Z: st.SearchStrategy[float] = st.floats(min_value=0, max_value=2.5)
+
+
+@pytest.fixture(scope="module")
+def categorical_regressor(
+    fit_ebm: Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor],
+) -> FittedRegressor:
+    rng = np.random.default_rng(2)
+    data = frame_of_columns({name: rng.choice(CATEGORIES, 900) for name in NAMES})
+    target = data["f0"].map({"p": 3.0, "q": 0.0, "r": -3.0}) + data["f1"].map({"p": 1.0, "q": 0.0, "r": -1.0})
+    target += data["f2"].map({"p": 0.4, "q": 0.0, "r": -0.4}) + rng.normal(size=900) * 0.2
+    ebm = fit_ebm(data, target, interactions=0, random_state=0, regression=True)
+    assert isinstance(ebm, ExplainableBoostingRegressor)
+    return ebm, data
+
+
+SORTING: MinimalityStatus = MinimalityStatus.SORTING_PROOF
+
+
+AT_BOUND: MinimalityStatus = MinimalityStatus.AT_LOWER_BOUND
+
+
+UNPROVED: MinimalityStatus = MinimalityStatus.UNPROVED

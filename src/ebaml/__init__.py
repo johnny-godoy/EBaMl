@@ -102,7 +102,7 @@ from ebaml.local.covering_solvers import (
 )
 from ebaml.local.decisions import Decision, Interval, Threshold
 from ebaml.local.fact_text import FactTexts, facts_to_texts
-from ebaml.local.facts import (
+from ebaml.local.fact_types import (
     Change,
     CompletionStep,
     Contribution,
@@ -111,8 +111,8 @@ from ebaml.local.facts import (
     LocalOptions,
     Prediction,
     SufficientReason,
-    compute_local_facts,
 )
+from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver

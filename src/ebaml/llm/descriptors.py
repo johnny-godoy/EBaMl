@@ -27,7 +27,8 @@ from ebaml.llm.retry import ShrinkingGraphCall, call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
 from ebaml.local.audience import resolve_audience
 from ebaml.local.fact_text import facts_to_texts
-from ebaml.local.facts import LocalFacts, compute_local_facts
+from ebaml.local.fact_types import LocalFacts
+from ebaml.local.facts import compute_local_facts
 
 # `baml_sdk` is generated and gitignored, so a checkout may lack it. Generate it before the import, or explain the fix.
 ensure_sdk()

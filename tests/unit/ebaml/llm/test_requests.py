@@ -5,7 +5,7 @@ import pytest
 
 from ebaml.llm.options import GraphOptions, PromptOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
-from ebaml.local.facts import LocalOptions
+from ebaml.local.fact_types import LocalOptions
 from tests.unit.ebaml.conftest import fake_model
 
 OPTION_NAMES = {"graph", "prompt", "local", "model", "language"}

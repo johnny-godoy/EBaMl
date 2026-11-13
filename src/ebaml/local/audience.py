@@ -21,7 +21,7 @@ from typing import override
 
 from ebaml.core.custom_types import JSONObject
 from ebaml.core.exceptions import InvalidOptionError
-from ebaml.local.facts import Change, Contribution, Prediction, SufficientReason
+from ebaml.local.fact_types import Change, Contribution, Prediction, SufficientReason
 from ebaml.local.local_kinds import OutputKind
 
 _LIKELIHOOD_WORDS = (

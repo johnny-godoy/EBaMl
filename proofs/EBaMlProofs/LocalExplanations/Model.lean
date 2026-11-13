@@ -6,7 +6,7 @@ import Mathlib.Tactic.Ring
 /-!
 # The EBM model and the two optimality theorems
 
-This file formalizes the model of `src/ebaml/local/facts.py` and applies the abstract result of
+This file formalizes the model of the algorithms in `src/ebaml/local/` and applies the abstract result of
 `EBaMlProofs.Greedy` to it.
 
 * `Model` and the definitions that follow it are Section 2 of the paper.

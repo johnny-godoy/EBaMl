@@ -8,8 +8,9 @@ import pytest
 
 from ebaml.core.custom_types import JSONObject
 from ebaml.local import fact_text as local_text
-from ebaml.local import facts as local
+from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
+from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
 from tests.unit.ebaml.conftest import FittedClassifier, instance_of
@@ -19,13 +20,13 @@ def test_the_default_audience_is_a_layperson(
     continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
-    facts = local.compute_local_facts(ebm, instance_of(data, 0))
+    facts = compute_local_facts(ebm, instance_of(data, 0))
     assert local_text.facts_to_texts(facts) == local_text.facts_to_texts(facts, Layperson())
 
 
 def test_texts_hide_numbers_from_layperson(continuous_ebm: FittedClassifier) -> None:
     ebm, data = continuous_ebm
-    facts = local.compute_local_facts(ebm, instance_of(data, 0))
+    facts = compute_local_facts(ebm, instance_of(data, 0))
     layperson = local_text.facts_to_texts(facts)
     expert = local_text.facts_to_texts(facts, DataScientist())
     for text in attrs.astuple(layperson):
