@@ -10,7 +10,7 @@ from typing import cast
 import attrs
 from beartype.roar import BeartypeCallHintViolation
 
-from ebaml.core.custom_types import JSONObject, JSONValue
+from ebaml.core.custom_types import JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit import edits, selections
 from ebaml.edit.edits import Edit
@@ -70,7 +70,7 @@ def to_record(item: Edit | Selection) -> JSONObject:
 
 
 def _arguments(
-    record: Mapping[str, JSONValue],
+    record: JSONMapping,
 ) -> dict[
     str,
     object,

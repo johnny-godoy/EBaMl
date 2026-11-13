@@ -34,6 +34,8 @@ type FeatureValue = str | float | Decimal | np.generic | NAType | None
 # type of its own, so the hint names bool.
 type JSONValue = str | bool | float | Sequence[JSONValue] | Mapping[str, JSONValue] | None
 # A JSON object: the fragment of a JSON document that a function builds and its caller merges or writes.
+# A read-only JSON object, for a parameter that only reads the pairs (types.md: inputs abstract, outputs concrete).
+type JSONMapping = Mapping[str, JSONValue]
 type JSONObject = dict[str, JSONValue]
 
 
