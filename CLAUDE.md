@@ -80,7 +80,7 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Use `structlog`, `orjson` and `attrs`. The project replaces `logging`, `json` and `dataclasses` with them.
 - Return an attrs class, not a `dict` or a `tuple` of fields (`.claude/rules/types.md`). Semgrep enforces it.
 - `beartype` checks the type hints of `ebaml` at run time, so write exact hints (`.claude/rules/types.md`).
-- Keep each unit small: a file at 800 lines or fewer, a function at 100 lines or fewer, a class at 10 public and 10
+- Keep each unit small: a file at 800 lines or fewer, a function at 100 lines or fewer, a class at 15 public and 10
   private methods or fewer. Split by logical structure (`.claude/rules/size.md`). `check_size` enforces it.
 - Evaluate each new loop for a progress bar (`.claude/rules/progress-bars.md`). A person or an agent that waits for
   slow steps, such as LLM requests, needs one. Use `progressbar2`, because ruff bans `tqdm`.

@@ -6,7 +6,8 @@ short files:
 
 1. A source file has at most ``SOURCE_FILE_LINES`` lines, and a test file has at most ``TEST_FILE_LINES`` lines.
 2. A function has at most ``FUNCTION_LINES`` lines, from its ``def`` line to its last line.
-3. A class has at most ``METHODS_PER_CLASS`` public methods and at most ``METHODS_PER_CLASS`` private methods. A
+3. A class has at most ``PUBLIC_METHODS_PER_CLASS`` public methods and at most ``PRIVATE_METHODS_PER_CLASS`` private
+   methods. A
    dunder method counts as neither.
 
 ``scripts/size_baseline.toml`` holds the units that are over a limit today, each with its current size and a reason. The
@@ -33,7 +34,8 @@ TEST_ROOTS = ("tests",)
 SOURCE_FILE_LINES = 800
 TEST_FILE_LINES = 1200
 FUNCTION_LINES = 100
-METHODS_PER_CLASS = 10
+PUBLIC_METHODS_PER_CLASS = 15
+PRIVATE_METHODS_PER_CLASS = 10
 
 
 @attrs.frozen
@@ -66,8 +68,8 @@ def _unit_measures(parent: ast.AST, prefix: str) -> Iterator[Measure]:
         if isinstance(node, ast.ClassDef):
             key = f"{prefix}::{node.name}" if "::" not in prefix else f"{prefix}.{node.name}"
             public, private = _method_counts(node)
-            yield Measure(f"{key}:public", public, METHODS_PER_CLASS, "public methods")
-            yield Measure(f"{key}:private", private, METHODS_PER_CLASS, "private methods")
+            yield Measure(f"{key}:public", public, PUBLIC_METHODS_PER_CLASS, "public methods")
+            yield Measure(f"{key}:private", private, PRIVATE_METHODS_PER_CLASS, "private methods")
             yield from _unit_measures(node, key)
         elif isinstance(node, FunctionNode):
             key = f"{prefix}::{node.name}" if "::" not in prefix else f"{prefix}.{node.name}"

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from scripts.check_size import (
     FUNCTION_LINES,
-    METHODS_PER_CLASS,
+    PUBLIC_METHODS_PER_CLASS,
     SOURCE_FILE_LINES,
     TEST_FILE_LINES,
     Measure,
@@ -51,7 +51,7 @@ def test_two_methods_with_one_name_in_two_classes_have_two_keys(tmp_path: Path) 
 
 
 def test_a_class_over_the_method_limit_is_over(tmp_path: Path) -> None:
-    methods = "".join(f"    def method_{number}(self): ...\n" for number in range(METHODS_PER_CLASS + 1))
+    methods = "".join(f"    def method_{number}(self): ...\n" for number in range(PUBLIC_METHODS_PER_CLASS + 1))
     assert _measures(tmp_path, f"class A:\n{methods}")["module.py::A:public"].is_over
 
 
