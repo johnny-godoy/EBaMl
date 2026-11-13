@@ -16,7 +16,7 @@ import attrs
 import numpy as np
 import orjson
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit.edit_records import edit_from_record, to_record
 from ebaml.edit.edits import Edit
@@ -70,7 +70,7 @@ class HistoryEntry(abc.ABC):
 
     @abc.abstractmethod
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-    def to_record(self) -> dict[str, JSONValue]:
+    def to_record(self) -> JSONObject:
         """Write the entry as a record of JSON values."""
 
 
@@ -100,7 +100,7 @@ class EditEntry(HistoryEntry):
 
     @override
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-    def to_record(self) -> dict[str, JSONValue]:
+    def to_record(self) -> JSONObject:
         return {
             "kind": "edit",
             "id": str(self.id),
@@ -142,7 +142,7 @@ class SaveEntry(HistoryEntry):
 
     @override
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-    def to_record(self) -> dict[str, JSONValue]:
+    def to_record(self) -> JSONObject:
         return {
             "kind": "save",
             "id": str(self.id),
@@ -205,12 +205,12 @@ class Fingerprint:
     scores: str
 
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-    def to_record(self) -> dict[str, JSONValue]:
+    def to_record(self) -> JSONObject:
         """Write the fingerprint as a record of JSON values.
 
         Returns
         -------
-        dict[str, JSONValue]
+        JSONObject
             The features, the terms and the two hashes.
 
         """
@@ -280,7 +280,7 @@ def encode_history(model_fingerprint: Fingerprint, head: str, entries: Sequence[
         The JSON text.
 
     """
-    document: dict[str, JSONValue] = {
+    document: JSONObject = {
         "format_version": FORMAT_VERSION,
         "fingerprint": model_fingerprint.to_record(),
         "head": head,

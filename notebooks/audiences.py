@@ -36,7 +36,7 @@ def _():
         sample_size_word,
         strength_word,
     )
-    from ebaml.core.custom_types import JSONValue
+    from ebaml.core.custom_types import JSONObject
 
     return (
         Audience,
@@ -50,7 +50,7 @@ def _():
         facts_to_texts,
         fetch_openml,
         InvalidOptionError,
-        JSONValue,
+        JSONObject,
         Layperson,
         likelihood_word,
         mo,
@@ -241,7 +241,7 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(DataScientist, JSONValue, round_value):
+def _(DataScientist, JSONObject, round_value):
     class LoanOfficer(DataScientist):
         """A reader who needs the chance of the outcome as a percentage, and nothing else about the model."""
 
@@ -253,11 +253,11 @@ def _(DataScientist, JSONValue, round_value):
             )
 
         @override
-        def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+        def contribution(self, contribution, prediction) -> JSONObject:
             return {}
 
         @override
-        def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
+        def prediction(self, prediction, confidence_level) -> JSONObject:
             return {"percent": round_value(100 * prediction.output)}
 
     class MLEngineer(DataScientist):
@@ -272,7 +272,7 @@ def _(DataScientist, JSONValue, round_value):
             )
 
         @override
-        def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+        def contribution(self, contribution, prediction) -> JSONObject:
             ratio = abs(contribution.score) / contribution.std if contribution.std > 0 else None
             return {
                 **super().contribution(contribution, prediction),
@@ -310,33 +310,33 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
+def _(Audience, JSONObject, likelihood_word, points_towards, strength_word):
     class RegulatorNumbers(Audience):
         """The numbers of the model that a regulator gets: directions and sizes in words, and no probability."""
 
         @override
-        def contribution(self, contribution, prediction) -> dict[str, JSONValue]:
+        def contribution(self, contribution, prediction) -> JSONObject:
             direction = "towards" if points_towards(contribution, prediction) else "against"
             return {"direction": direction, "size": strength_word(contribution.score)}
 
         @override
-        def prediction(self, prediction, confidence_level) -> dict[str, JSONValue]:
+        def prediction(self, prediction, confidence_level) -> JSONObject:
             return {}
 
         @override
-        def change(self, change) -> dict[str, JSONValue]:
+        def change(self, change) -> JSONObject:
             return {"direction": "up" if change.score_change > 0 else "down"}
 
         @override
-        def class_output(self, output, output_kind) -> dict[str, JSONValue]:
+        def class_output(self, output, output_kind) -> JSONObject:
             return {"likelihood": likelihood_word(output)}
 
         @override
-        def margin(self, reason, output_kind) -> dict[str, JSONValue]:
+        def margin(self, reason, output_kind) -> JSONObject:
             return {}
 
         @override
-        def lower_bound(self, lower_bound, items) -> dict[str, JSONValue]:
+        def lower_bound(self, lower_bound, items) -> JSONObject:
             return {}
 
         @override
@@ -347,7 +347,7 @@ def _(Audience, JSONValue, likelihood_word, points_towards, strength_word):
 
 
 @app.cell
-def _(JSONValue, RegulatorNumbers, sample_size_word):
+def _(JSONObject, RegulatorNumbers, sample_size_word):
     class Regulator(RegulatorNumbers):
         """A reader who checks the direction of the effects and wants no probability."""
 
@@ -360,19 +360,19 @@ def _(JSONValue, RegulatorNumbers, sample_size_word):
             )
 
         @override
-        def flip(self, confidence_level) -> dict[str, JSONValue]:
+        def flip(self, confidence_level) -> JSONObject:
             return {"flip_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
         @override
-        def guarantee(self, confidence_level) -> dict[str, JSONValue]:
+        def guarantee(self, confidence_level) -> JSONObject:
             return {"guarantee_holds_even_if_the_model_is_somewhat_off": confidence_level > 0}
 
         @override
-        def support(self, min_support) -> dict[str, JSONValue]:
+        def support(self, min_support) -> JSONObject:
             return {"rare_values_left_out": min_support > 0}
 
         @override
-        def sample(self, n_samples) -> dict[str, JSONValue]:
+        def sample(self, n_samples) -> JSONObject:
             return {"sample_size": sample_size_word(n_samples)}
 
     return (Regulator,)

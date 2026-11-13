@@ -6,7 +6,7 @@ import attrs
 import orjson
 import pytest
 
-from ebaml.core.custom_types import JSONValue
+from ebaml.core.custom_types import JSONObject
 from ebaml.local import fact_text as local_text
 from ebaml.local import facts as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
@@ -118,39 +118,39 @@ class _Marker(Layperson):
     """An audience that marks each key, so a test sees which method made it."""
 
     @override
-    def contribution(self, contribution: local.Contribution, prediction: local.Prediction) -> dict[str, JSONValue]:
+    def contribution(self, contribution: local.Contribution, prediction: local.Prediction) -> JSONObject:
         return {"c": contribution.feature, "of": prediction.decision}
 
     @override
-    def prediction(self, prediction: local.Prediction, confidence_level: float) -> dict[str, JSONValue]:
+    def prediction(self, prediction: local.Prediction, confidence_level: float) -> JSONObject:
         return {"p": prediction.decision, "level": confidence_level}
 
     @override
-    def change(self, change: local.Change) -> dict[str, JSONValue]:
+    def change(self, change: local.Change) -> JSONObject:
         return {"ch": change.feature}
 
     @override
-    def flip(self, confidence_level: float) -> dict[str, JSONValue]:
+    def flip(self, confidence_level: float) -> JSONObject:
         return {"fl": confidence_level > 0}
 
     @override
-    def class_output(self, output: float, output_kind: OutputKind) -> dict[str, JSONValue]:
+    def class_output(self, output: float, output_kind: OutputKind) -> JSONObject:
         return {"co": output}
 
     @override
-    def margin(self, reason: local.SufficientReason, output_kind: OutputKind) -> dict[str, JSONValue]:
+    def margin(self, reason: local.SufficientReason, output_kind: OutputKind) -> JSONObject:
         return {"m": reason.features}
 
     @override
-    def guarantee(self, confidence_level: float) -> dict[str, JSONValue]:
+    def guarantee(self, confidence_level: float) -> JSONObject:
         return {"g": confidence_level}
 
     @override
-    def support(self, min_support: float) -> dict[str, JSONValue]:
+    def support(self, min_support: float) -> JSONObject:
         return {"su": min_support}
 
     @override
-    def lower_bound(self, lower_bound: int, items: str) -> dict[str, JSONValue]:
+    def lower_bound(self, lower_bound: int, items: str) -> JSONObject:
         return {f"lb_{items}": lower_bound}
 
     @override
@@ -158,7 +158,7 @@ class _Marker(Layperson):
         return f"s{share}"
 
     @override
-    def sample(self, n_samples: int) -> dict[str, JSONValue]:
+    def sample(self, n_samples: int) -> JSONObject:
         return {"sa": n_samples}
 
 
