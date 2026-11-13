@@ -29,7 +29,7 @@ from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
 from ebaml.llm.token_learning import TokenLearner
-from ebaml.local import facts as local
+from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (

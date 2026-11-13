@@ -8,7 +8,8 @@ from ebaml.core.custom_types import FeatureValue
 from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.local.audience import resolve_audience
 from ebaml.local.fact_text import FactTexts, facts_to_texts
-from ebaml.local.facts import LocalFacts, LocalOptions, compute_local_facts
+from ebaml.local.fact_types import LocalFacts, LocalOptions
+from ebaml.local.facts import compute_local_facts
 from ebaml.mcp.model_store import ModelStore
 
 

@@ -12,7 +12,7 @@ import attrs
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local.audience import Audience
-from ebaml.local.facts import LocalOptions
+from ebaml.local.fact_types import LocalOptions
 
 
 @attrs.frozen

@@ -7,7 +7,7 @@ import pytest
 
 from ebaml.core.exceptions import InvalidOptionError
 from ebaml.local import audience as audiences
-from ebaml.local import facts as local
+from ebaml.local import fact_types as local
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
 from tests.unit.ebaml.conftest import returning

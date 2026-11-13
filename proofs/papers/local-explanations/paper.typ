@@ -20,7 +20,7 @@
 *Summary.* EBaMl explains one prediction of a binary, multiclass or regression Explainable Boosting Machine (EBM) in two exact ways. The
 _minimum change required_ is the fewest features to change so that the prediction flips. The _minimum sufficient
 reason_ is the fewest features to fix so that no values of the other features can flip the prediction. Both queries
-come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/facts.py` solves both with
+come from Barceló, Monet, Pérez and Subercaseaux @barcelo2020. The code in `src/ebaml/local/` solves both with
 one sort. This paper proves that the sort is optimal. A regressor reduces to the binary case by a shift of the intercept, and the answer "inside an interval" has two margins.
 The counterfactual of two margins is the smaller of two exact answers. The sufficient reason of two margins is a
 covering problem. The code solves it with a MIP solver, a local search or a greedy, and the paper states what a result proves. A multiclass classifier has one margin for each rival
@@ -38,7 +38,7 @@ one term per feature, and this is the only fact that the proof needs.
 the prediction. No set with fewer features has a change that flips the prediction. If the function returns `None`, no
 change of any set of features flips the prediction.
 
-*Claim 2 (minimum sufficient reason).* The function `_sufficient_reason`, with the order of `_fixing_order`, returns
+*Claim 2 (minimum sufficient reason).* The function `_sufficient_reason`, with the order of `fixing_order`, returns
 a set of features that is sufficient. No set with fewer features is sufficient. If the function returns `None`, no set
 of features is sufficient, and the set of all features is not sufficient either.
 
@@ -73,12 +73,12 @@ reduction keeps the optimum and the approximation ratio (Theorem 10). So the har
 @dinur2014 holds for the sufficient reason (Corollary 5). The claim covers the gain table of the sufficient reason.
 It does not cover the counterfactual of a chosen class (@sec-limits).
 
-The proof does not cover the other parts of `facts.py`. @sec-limits lists them. The counterfactual and the sufficient
+The proof does not cover the other parts of the code. @sec-limits lists them. The counterfactual and the sufficient
 reason move different scores by $z$ deviations. @sec-limits states the uncertainty model of each claim.
 
 = Model <sec-model>
 
-This section fixes the model and the glossary. The model follows `facts.py` line by line. The glossary gives one
+This section fixes the model and the glossary. The model follows the code line by line. The glossary gives one
 term to each concept, and the text uses this term everywhere.
 
 *Glossary.*
@@ -103,7 +103,7 @@ term to each concept, and the text uses this term everywhere.
   [decision], [The claim that the explanations keep. A decision holds while every one of its margins is positive.],
 )
 
-The code reads a model with one term per feature, and it rejects interaction terms (`_features`). The model is
+The code reads a model with one term per feature, and it rejects interaction terms (`read_features`). The model is
 therefore the data below. A bin set $B_i$ may be any set. Only $P_i$ must be finite, and it is, because the
 code stores one flag per bin.
 
@@ -114,7 +114,7 @@ code stores one flag per bin.
   `confidence_level` in $[0, 1)$ with the inverse normal distribution, so $z >= 0$.
 ])
 
-The code marks $c_i$ as plausible for each feature (in `_features`). Therefore $P_i$ is not empty, and a minimum
+The code marks $c_i$ as plausible for each feature (in `read_features`). Therefore $P_i$ is not empty, and a minimum
 over $P_i$ exists.
 
 #notation("sign and margin", [
@@ -132,7 +132,7 @@ The sign is $-1$ for $L = 0$. This is the same as in the code (`sign = 1 if logi
   prediction to stay.
 ])
 
-The code gives the value $+infinity$ to each bin outside $P_i$ (in `_robust_scores`). A minimum over all bins is then
+The code gives the value $+infinity$ to each bin outside $P_i$ (in `robust_scores`). A minimum over all bins is then
 a minimum over $P_i$. The paper restricts the minimum to $P_i$, and so it needs no extended reals.
 
 #notation("change and robust margin", [
@@ -163,7 +163,8 @@ docstring says so. @sec-limits compares this uncertainty model with the model of
   the code returns `None`.
 ])
 
-*Correspondence of symbols to the code.* The code is in `src/ebaml/local/facts.py`. The table names the function
+*Correspondence of symbols to the code.* The code is in `src/ebaml/local/facts.py`, `fact_features.py`,
+`counterfactuals.py`, `sufficient_reasons.py` and `completions.py`. The table names the function
 that computes each symbol.
 
 #table(
@@ -175,16 +176,16 @@ that computes each symbol.
   [$b$], [`intercept = float(np.ravel(ebm.intercept_)[0])`], [`compute_local_facts`],
   [$L$], [`logit = intercept + sum(f.current ...)`], [`compute_local_facts`],
   [$epsilon$], [`sign = 1 if logit > 0 else -1`], [`compute_local_facts`],
-  [$t_i (v)$], [`scores = sign * feature.scores`], [`_robust_scores`],
-  [$P_i$, $c_i in P_i$], [`_plausible_bins`, then `plausible[bin_index] = True`], [`_plausible_bins, _features`],
-  [$p_i$, $g_i$], [`scores + stds` and `scores - stds`, with `np.inf` outside $P_i$], [`_robust_scores`],
+  [$t_i (v)$], [`scores = sign * feature.scores`], [`robust_scores`],
+  [$P_i$, $c_i in P_i$], [`_plausible_bins`, then `plausible[bin_index] = True`], [`_plausible_bins, read_features`],
+  [$p_i$, $g_i$], [`scores + stds` and `scores - stds`, with `np.inf` outside $P_i$], [`robust_scores`],
   [$M$], [`margin = sign * intercept + sum(sign * f.current ...)`], [`_counterfactual`],
   [$min p_i$, $beta_i$], [`best = int(np.argmin(pessimistic))`], [`_counterfactual`],
   [$d_i$], [`sign * feature.current - float(pessimistic[best])`], [`_counterfactual`],
   [order $e$ for $d$], [`sorted(drops, ..., reverse=True)`], [`_counterfactual`],
   [first $k$ with $Pi_k > M$], [`np.flatnonzero(margin - np.cumsum(...) < 0)`, `flips[0] + 1`], [`_counterfactual`],
-  [$h_i$], [`guaranteed[feature.bin_index] - guaranteed.min()`], [`_fixing_order`],
-  [order $e$ for $h$], [`sorted(gains, ..., reverse=True)`], [`_fixing_order`],
+  [$h_i$], [`guaranteed[feature.bin_index] - guaranteed.min()`], [`fixing_order`],
+  [order $e$ for $h$], [`sorted(gains, ..., reverse=True)`], [`fixing_order`],
   [$W(emptyset)$], [`worst = sign * intercept + sum(... .min() ...)`], [`_sufficient_reason`],
   [$W(emptyset) + Pi_k$], [`margins = worst + np.concatenate(([0.0], np.cumsum(...)))`], [`_sufficient_reason`],
   [first $k$ with $W(emptyset) + Pi_k > 0$], [`np.flatnonzero(margins > 0)`, `enough[0]`], [`_sufficient_reason`],
@@ -502,7 +503,7 @@ The code (`Threshold.side` and `Interval.side`) chooses the margins as follows.
 
 The next lemmas apply to the margin with the data $(sigma, tau)$ when $sigma$ is the sign that the claim has. Let
 $m_tau$ be the model of @sec-model with the intercept $b - tau$ and the same scores, deviations, plausible bins and
-instance bins. The code does this shift: it passes `intercept - margin.threshold` to the algorithms (`_Bound` in
+instance bins. The code does this shift: it passes `intercept - margin.threshold` to the algorithms (`Bound` in
 `compute_local_facts`).
 
 #lemma("the shift", [
@@ -577,7 +578,7 @@ The sufficient reason of a decision with the margins $m_k$ is a covering problem
 ]
 
 Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 and Corollary 3. The function
-`_gain_table` computes the numbers $W_k$ and $h_(k,i)$, and `_several_margins_reason` gives them to the solver of
+`gain_table` computes the numbers $W_k$ and $h_(k,i)$, and `_several_margins_reason` gives them to the solver of
 `LocalOptions.search` as a problem with one alternative for each feature.
 
 *Correspondence of symbols to the code* for this section.
@@ -588,11 +589,11 @@ Lemma 9 puts the sufficient reason of "inside" under Lemma 6, Theorems 4 and 5 a
   inset: 5pt,
   [*Symbol*], [*Computed by*], [*Function*],
   [$(sigma, tau)$], [`Margin(sign, threshold, opposite)`], [`Threshold.side`, `Interval.side`],
-  [intercept $b - tau$], [`_Bound(intercept - margin.threshold, margin.sign)`], [`compute_local_facts`],
+  [intercept $b - tau$], [`Bound(intercept - margin.threshold, margin.sign)`], [`compute_local_facts`],
   [the answer for a margin], [`_counterfactual(features, intercept - margin.threshold, margin.sign, ...)`], [`_smallest_counterfactual`],
   [$min(k_1, k_2)$], [`min(found, key=lambda c: len(c.changes), default=None)`], [`_smallest_counterfactual`],
-  [$W_k (emptyset)$], [`bound.sign * bound.intercept + sum(scores.min() ...)`], [`_gain_table`],
-  [$h_(k,i)$], [`scores[f.bin_index] - scores.min()`], [`_gain_table`],
+  [$W_k (emptyset)$], [`bound.sign * bound.intercept + sum(scores.min() ...)`], [`gain_table`],
+  [$h_(k,i)$], [`scores[f.bin_index] - scores.min()`], [`gain_table`],
   [first pass of `Greedy`], [`_next_pick` until `problem.sufficient(picked)`], [`greedy_cover`],
   [$"prune"$], [`for pick in reversed(list(picked))`], [`greedy_cover`],
   [$F$ is sufficient], [`all(margin > 0 for margin in self.margins(choices))`], [`CoveringProblem.sufficient`],
@@ -607,7 +608,7 @@ A multiclass EBM has one score $s_(k,i) (v)$ for each class $k$, each feature $i
 $b_k$ for each class. The score of the class $k$ at the instance is $S_k = b_k + sum_i s_(k,i) (c_i)$. The predicted
 class $w$ has the highest score. `MulticlassLocal.frame` gives it one margin for each rival $j != w$: the sign is $1$,
 the threshold is $0$, and `Margin.columns` names the pair $(w, j)$. The code reads the scores, the intercepts and the
-deviations of the pair in `_Feature.against`, `Margin.offset` and `Margin.value`.
+deviations of the pair in `Feature.against`, `Margin.offset` and `Margin.value`.
 
 Let $m_j$ be the model of @sec-model with the intercept $b_w - b_j$, the scores $s_(w,i) - s_(j,i)$, the deviations
 $sigma_(w,i) + sigma_(j,i)$, and the same plausible bins and instance bins. The deviation of a difference of two scores
@@ -668,7 +669,7 @@ The sufficient reason of the predicted class has one condition for each rival, s
 ]
 
 Lemma 11 puts the sufficient reason of a multiclass classifier under Lemma 6, Theorems 4 and 5 and Corollary 3, as
-Lemma 9 does for the answer "inside". The function `_gain_table` computes the numbers, and the search of
+Lemma 9 does for the answer "inside". The function `gain_table` computes the numbers, and the search of
 `LocalOptions.search` solves the problem. The status `minimality` has the same meaning as in Claim 5.
 
 #lemma("the deviation of a margin", [
@@ -693,11 +694,11 @@ of @sec-model takes the deviation of each margin as given, so the proof covers t
   [$w$], [`int(np.argmax(scores))`], [`MulticlassLocal.frame`],
   [margin of $m_j$], [`Margin(1, 0.0, self.classes[rival], (winner, rival))`], [`MulticlassLocal.frame`],
   [$b_w - b_j$], [`intercepts[winner] - intercepts[rival]`], [`Margin.offset`],
-  [$s_(w,i) - s_(j,i)$], [`scores[:, winner] - scores[:, rival]`], [`_Feature.scores`],
-  [$sigma_(w,i) + sigma_(j,i)$], [`stds[:, winner] + stds[:, rival]`], [`_Feature.stds`],
+  [$s_(w,i) - s_(j,i)$], [`scores[:, winner] - scores[:, rival]`], [`Feature.scores`],
+  [$sigma_(w,i) + sigma_(j,i)$], [`stds[:, winner] + stds[:, rival]`], [`Feature.stds`],
   [the answer for a rival], [`_counterfactual(... margin.offset(intercepts), margin.sign, ...)`], [`_smallest_counterfactual`],
   [the rival with the smallest position], [`min(found, key=lambda c: len(c.changes), default=None)`], [`_smallest_counterfactual`],
-  [$W_j (emptyset)$, $h_(j,i)$], [`_robust_scores(f.against(bound.columns), ...)`], [`_gain_table`],
+  [$W_j (emptyset)$, $h_(j,i)$], [`robust_scores(f.against(bound.columns), ...)`], [`gain_table`],
 )
 
 = The sufficient reason of several margins is NP-hard <sec-hardness>
@@ -882,7 +883,7 @@ are on paper only, and @sec-limits lists this fact.
 group has a finite list of _alternatives_ $a$ with a gain $h_(k,a)$ for each margin $k$. A gain can be negative. A
 _set of picks_ takes at most one alternative from each group, and its size is the number of picks. It is sufficient iff
 $W_k + sum_(a "picked") h_(k,a) > 0$ for each $k$. The sufficient reason has one alternative for each group, with the
-gains of `_gain_table`, which are not negative. This is the problem of @sec-covering. The counterfactual of a chosen
+gains of `gain_table`, which are not negative. This is the problem of @sec-covering. The counterfactual of a chosen
 class $j$ has one alternative for each plausible bin $v$ other than the bin of the instance, with the gain
 $s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alternatives` computes it.
 
@@ -1006,7 +1007,7 @@ The proof does not cover the following points.
 - *Ties in `np.argmin`.* When two bins reach the minimum of $p_i$, `np.argmin` returns the first. The proof allows
   any bin $beta_i$ at the minimum, and the value $d_i$ does not depend on the choice. The size of the answer is the
   same, but the named bin may differ. The proof does not model which one.
-- *Completions.* `_completions` samples the unknown features from the training weights. The result is an estimate,
+- *Completions.* `sample_completions` samples the unknown features from the training weights. The result is an estimate,
   so there is nothing exact to prove.
 - *`new_output`.* The counterfactual reports the probability of the new class from the mean scores, with no
   deviation. It is a report and not an optimality claim.
@@ -1061,7 +1062,7 @@ The proof does not cover the following points.
   score be $f = 1 - 0.6 a - 0.6 b + u(b, c)$, where $u(b, c) = -2$ for $(b, c) = (0, 1)$ and $u(b, c) = 0$
   otherwise. The main effects give the drops $0.6$, $0.6$ and $0$ for $a$, $b$ and $c$, and the margin is $1$. The
   greedy rule needs $0.6 + 0.6 > 1$, so it returns two features. The change of $c$ alone to $1$ gives
-  $f = -1 < 0$ and flips the prediction. The code rejects such models (`_features`).
+  $f = -1 < 0$ and flips the prediction. The code rejects such models (`read_features`).
 - *The empirical link to the code.* The test `test_the_facts_match_the_oracle_of_the_paper` in
   `tests/unit/ebaml/local/test_facts.py` compares the code with an oracle on random small models of each kind. The
   oracle enumerates the changes and the completions by the definitions of @sec-model, with $z > 0$ and with bins
@@ -1109,7 +1110,8 @@ the versions, the expected output and a table from each statement to its Lean na
 
 The files in `proofs/EBaMlProofs/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
 are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
-`src/ebaml/local/facts.py`. Read the paper together with the version of that file at the commit of this paper.
+`src/ebaml/local/facts.py`, `fact_features.py`, `counterfactuals.py`, `sufficient_reasons.py` and
+`completions.py`. Read the paper together with the version of those files at the commit of this paper.
 
 *Commands from a clean clone.*
 

@@ -12,7 +12,7 @@ import orjson
 
 from ebaml.core.custom_types import JSONMapping, JSONObject
 from ebaml.local.audience import Audience, Layperson
-from ebaml.local.facts import LocalFacts
+from ebaml.local.fact_types import LocalFacts
 from ebaml.local.local_kinds import OutputKind
 
 

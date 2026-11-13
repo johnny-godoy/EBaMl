@@ -9,7 +9,7 @@ from scripts.fixed_command import run_fixed
 import ebaml
 from ebaml.core.custom_types import coerce_enum
 from ebaml.llm import descriptors
-from ebaml.local import facts as local
+from ebaml.local import fact_types as local
 
 
 def test_package_docstring() -> None:
