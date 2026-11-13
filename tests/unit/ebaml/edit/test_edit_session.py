@@ -25,7 +25,7 @@ from ebaml.core.exceptions import (
     UnreviewedEditError,
     UnsupportedModelError,
 )
-from ebaml.edit.edit_session import EditSession
+from ebaml.edit.edit_session import EditSession, RevisionInfo
 from ebaml.edit.edits import Direction, Edit, EditOutcome, Monotonize, Recenter, SetScores, Shift
 from ebaml.edit.history import EditEntry, SaveEntry
 from ebaml.edit.model_view import term_view
@@ -213,6 +213,41 @@ def test_model_at_reads_any_revision_without_a_checkout(edit_ebm: ExplainableBoo
     assert session.revision == str(first)
     with pytest.raises(EditError, match=r"no revision 'nothing'. The revisions are \['original', 'current'"):
         session.model_at("nothing")
+
+
+def test_revision_info_names_the_revision_and_says_what_the_head_holds(
+    edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    session = _session(edit_ebm)
+    assert session.revision_info() == RevisionInfo("original", "original", 0)
+    session.apply(Shift("score", Bins(2, 4), 0.5), "One")
+    session.apply(Shift("score", Bins(6, 8), 0.5), "Two")
+    first, second = (str(entry.id) for entry in session.history)
+    assert session.revision_info("current") == RevisionInfo(second, second, 2)
+    session.undo()
+    assert session.revision_info() == RevisionInfo(first, first, 1)
+    assert session.revision_info(second) == RevisionInfo(second, first, 1)
+    assert session.revision_info("original") == RevisionInfo("original", first, 1)
+    with pytest.raises(EditError, match="no revision 'nothing'"):
+        session.revision_info("nothing")
+
+
+def test_the_pending_table_lists_the_edits_that_the_next_save_records(
+    edit_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    session = _session(edit_ebm)
+    assert session.history_table(pending_only=True) == []
+    session.apply(Shift("score", Bins(2, 4), 0.5), "One")
+    session.apply(Shift("score", Bins(6, 8), 0.5), "Two")
+    assert [row.reason for row in session.history_table(pending_only=True)] == ["One", "Two"]
+    assert session.history_table(pending_only=True) == session.history_table()
+    session.undo()
+    assert [row.reason for row in session.history_table(pending_only=True)] == ["One"]
+    session.save(tmp_path / "one.skops", "Release", allow_unreviewed=True)
+    assert session.history_table(pending_only=True) == []
+    session.apply(Shift("score", Bins(6, 8), 0.5), "Three")
+    assert session.history_table(pending_only=True) == session.history_table()[-1:]
 
 
 def test_a_call_with_a_stale_expected_revision_raises_and_changes_nothing(

@@ -66,7 +66,7 @@ async def test_summary_of_a_binary_classifier(binary_server: MCPServer) -> None:
 
 async def test_features_are_sorted_by_importance(binary_server: MCPServer) -> None:
     _, text = await _call(binary_server, "list_features")
-    features = orjson.loads(text)
+    features = orjson.loads(text)["features"]
     importances = [feature["importance"] for feature in features]
     assert importances == sorted(importances, reverse=True)
     assert {feature["name"] for feature in features} == {"a", "b", "c"}
@@ -105,7 +105,8 @@ async def test_explain_prediction_by_instance_and_by_row(
     _, by_row = await _call(server, "explain_prediction", {"row": 0})
     assert orjson.loads(by_instance) == orjson.loads(by_row)
     result = orjson.loads(by_row)
-    assert set(result) == {"facts", "texts"}
+    assert set(result) == {"facts", "texts", "session"}
+    assert result["session"] == {"revision": "original", "head": "original", "edit_count": 0}
     assert result["facts"]["prediction"]["decision"] in {0, 1}
     assert set(result["texts"]) == {"prediction", "counterfactual", "sufficient_reason", "completions"}
 
@@ -151,7 +152,7 @@ async def test_summary_of_a_regressor_and_a_multiclass_classifier(
 
 async def test_features_and_graphs_of_a_regressor(regression_ebm: ExplainableBoostingRegressor) -> None:
     server = create_server(ModelStore(ebm=regression_ebm))
-    features = orjson.loads((await _call(server, "list_features"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])["features"]
     is_error, graph = await _call(server, "get_graph", {"feature": "a"})
     assert {feature["name"]: feature["type"] for feature in features} == {"a": "continuous", "c": "nominal"}
     assert features[0]["name"] == "a"
@@ -161,7 +162,7 @@ async def test_features_and_graphs_of_a_regressor(regression_ebm: ExplainableBoo
 
 async def test_features_and_graphs_of_a_multiclass_classifier(multiclass_ebm: ExplainableBoostingClassifier) -> None:
     server = create_server(ModelStore(ebm=multiclass_ebm))
-    features = orjson.loads((await _call(server, "list_features"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])["features"]
     is_error, graph = await _call(server, "get_graph", {"feature": "c"})
     assert {feature["name"] for feature in features} == {"a", "c"}
     assert not is_error
@@ -175,7 +176,7 @@ async def test_a_model_with_an_interaction_names_it_and_the_tools_skip_it(
 ) -> None:
     server = create_server(ModelStore(ebm=interaction_ebm))
     summary = orjson.loads((await _call(server, "get_model_summary"))[1])
-    features = orjson.loads((await _call(server, "list_features"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])["features"]
     interaction_graph = await _call(server, "get_graph", {"feature": "p x q"})
     assert summary["skipped_terms"] == ["p x q"]
     assert summary["feature_count"] == 2
@@ -220,13 +221,13 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
     model_calls: list[ModelOptions] = []
 
     def fake_describe_graph(request: DescribeGraphRequest) -> str:
-        assert request.ebm is ebm
+        assert request.ebm.term_scores_[0].tolist() == ebm.term_scores_[0].tolist()
         assert isinstance(request.model, ModelOptions)
         graph_calls.append((request.feature_index, request.model))
         return f"words about feature {request.feature_index}"
 
     def fake_describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
-        assert request.ebm is ebm
+        assert request.ebm.term_scores_[0].tolist() == ebm.term_scores_[0].tolist()
         assert isinstance(request.model, ModelOptions)
         model_calls.append(request.model)
         return EBMDescription(f"words about the model, call {len(model_calls)}", [], [])
@@ -425,9 +426,9 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
     assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction"}
     assert not any(result.is_error for result in (summary, features, graph, explanation))
     assert orjson.loads(texts[0])["kind"] == "BinaryClassifier"
-    assert orjson.loads(texts[1])[0]["name"] == "a"
+    assert orjson.loads(texts[1])["features"][0]["name"] == "a"
     assert "Feature Name: a" in texts[2]
-    assert set(orjson.loads(texts[3])) == {"facts", "texts"}
+    assert set(orjson.loads(texts[3])) == {"facts", "texts", "session"}
 
 
 async def test_the_real_command_listens_with_streamable_http_on_the_given_port(saved_files: tuple[Path, Path]) -> None:
@@ -474,7 +475,7 @@ async def test_the_tools_name_or_reject_a_model_that_they_cover_in_part(
     ebm, data = partial_models[kind, case]
     server = create_server(ModelStore(ebm=ebm))
     summary = orjson.loads((await _call(server, "get_model_summary"))[1])
-    features = orjson.loads((await _call(server, "list_features"))[1])
+    features = orjson.loads((await _call(server, "list_features"))[1])["features"]
     names = list(ebm.feature_names_in_)
     interactions = [" x ".join(names[index] for index in term) for term in ebm.term_features_ if len(term) > 1]
     with_graph = {names[term[0]] for term in ebm.term_features_ if len(term) == 1}

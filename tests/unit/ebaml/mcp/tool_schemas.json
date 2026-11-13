@@ -58,6 +58,11 @@
           "default": null,
           "title": "Instance"
         },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        },
         "row": {
           "anyOf": [
             {
@@ -95,6 +100,11 @@
           "title": "Normalization",
           "type": "string"
         },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        },
         "x_axis_precision": {
           "anyOf": [
             {
@@ -127,12 +137,24 @@
       "type": "object"
     },
     "get_model_summary": {
-      "properties": {},
+      "properties": {
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
       "title": "get_model_summaryArguments",
       "type": "object"
     },
     "list_features": {
-      "properties": {},
+      "properties": {
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
       "title": "list_featuresArguments",
       "type": "object"
     }

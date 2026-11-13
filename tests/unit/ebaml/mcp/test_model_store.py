@@ -10,7 +10,12 @@ import pytest
 import skops.io
 
 import ebaml
-from ebaml.core.exceptions import DataFileError, InvalidInstanceError, UnsupportedModelError
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
+from ebaml.core.exceptions import DataFileError, EditError, InvalidInstanceError, UnsupportedModelError
+from ebaml.edit.edit_session import RevisionInfo
+from ebaml.edit.edits import SetScores
+from ebaml.edit.model_view import term_view
+from ebaml.edit.selections import Bins
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame, save_model
 
@@ -159,6 +164,61 @@ def test_row_instance_checks_the_row_and_the_columns(
     with pytest.raises(InvalidInstanceError, match="no column"):
         ModelStore(ebm=ebm, data=data.drop("b")).row_instance(0)
     assert set(ModelStore(ebm=ebm, data=data).row_instance(len(data) - 1)) == {"a", "b", "c"}
+
+
+def test_a_read_of_a_revision_gives_the_model_with_the_edits_of_that_revision(
+    continuous_ebm: FittedClassifier,
+) -> None:
+    ebm, _ = continuous_ebm
+    store = ModelStore(ebm=ebm)
+    session = store.editing()
+    session.apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
+    edit = session.revision
+    before, after, same = store.read("original"), store.read(edit), store.read()
+    assert before.info == RevisionInfo("original", edit, 1)
+    assert after.info == same.info == RevisionInfo(edit, edit, 1)
+    assert term_view(after.model, "a").scores[1] == pytest.approx(5.0)
+    assert term_view(before.model, "a").scores[1] == term_view(ebm, "a").scores[1]
+    # the store never changes the model that the user loaded, and a read gives a copy
+    assert after.model is not session.model_at(edit)
+    assert term_view(ebm, "a").scores[1] != pytest.approx(5.0)
+    with pytest.raises(EditError, match="no revision 'nothing'"):
+        store.read("nothing")
+
+
+def test_a_model_that_the_edits_do_not_support_has_reads_and_no_session(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    store = ModelStore(ebm=multiclass_ebm)
+    assert store.session is None
+    for revision in ("original", "current"):
+        read = store.read(revision)
+        assert read.model is multiclass_ebm
+        assert read.info == RevisionInfo("original", "original", 0)
+    with pytest.raises(EditError, match="only revisions are 'original' and 'current', not 'abc'"):
+        store.read("abc")
+    with pytest.raises(UnsupportedModelError, match="no edit session"):
+        store.editing()
+    store.keep_description("original", "text")
+    assert store.described("original") == "text"
+
+
+def test_the_kept_description_belongs_to_the_revision_that_it_describes(continuous_ebm: FittedClassifier) -> None:
+    """Contract: the store never serves the description of a model that is no longer the head."""
+    ebm, _ = continuous_ebm
+    store = ModelStore(ebm=ebm)
+    assert store.described("original") is None
+    store.keep_description("original", "words about the original")
+    assert store.described("original") == "words about the original"
+    store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
+    edit = store.editing().revision
+    assert store.described(edit) is None
+    assert store.described("original") == "words about the original"
+    store.keep_description("original", "a late text of the old head")
+    assert store.described("original") == "words about the original"
+    store.keep_description(edit, "words about the edit")
+    assert store.described(edit) == "words about the edit"
+    assert store.described("original") is None
 
 
 _LOADERS = {"joblib.load", "pickle.load", "pickle.loads", "skops.io.load", "skops.io.loads"}
