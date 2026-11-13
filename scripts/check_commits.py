@@ -8,7 +8,8 @@ two more rules of ``.claude/rules/commits-and-prs.md``:
   purpose and a reviewer can read it. A larger commit needs the trailer ``Large-Commit: <reason>``, for example a file
   move or a generated test fixture.
 
-Run it as a ``commit-msg`` hook (``--message-file``), or on the commits of a branch (``--base``). Merge commits and the
+Run it as a ``commit-msg`` hook (``--message-file``), or on the commits of a branch (``--base``). The hook measures the
+staged changes, so a commit that is too large fails when you make it, and not only in CI. Merge commits and the
 commits that git writes for ``fixup!`` and ``squash!`` are skipped.
 """
 
@@ -199,7 +200,7 @@ def check(
     Parameters
     ----------
     message_file: Path, optional
-        The file that holds the commit message (the ``commit-msg`` hook).
+        The file that holds the commit message (the ``commit-msg`` hook). The size check reads the staged changes.
     base: str, optional
         Check every commit from this revision to HEAD (CI).
 
@@ -212,8 +213,14 @@ def check(
     if message_file is None:
         # the group needs exactly one flag, so --base is set here
         return _report(branch_problems(cast(str, base)))
-    subject = message_file.read_text(encoding="utf-8").split("\n", 1)[0]
-    return _report(subject_problems(subject))
+    message = message_file.read_text(encoding="utf-8")
+    subject = message.split("\n", 1)[0]
+    problems = subject_problems(subject)
+    if not subject.startswith(SKIPPED_PREFIXES):
+        size = size_problem(subject, message, changed_lines(_git("diff", "--cached", "--numstat")))
+        if size is not None:
+            problems.append(size)
+    return _report(problems)
 
 
 def main(argv: Sequence[str]) -> int:

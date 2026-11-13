@@ -62,7 +62,7 @@ BREAKING CHANGE: what breaks, and what users must change.
 ## Guards
 
 - `prek install` installs a `commit-msg` hook: `cz check` (commitizen) checks the conventional commit form, and
-  `scripts/check_commits.py --message-file` checks the style of the description. The `SessionStart` hook in
+  `scripts/check_commits.py --message-file` checks the style of the description and the size of the staged changes. The `SessionStart` hook in
   `.claude/settings.json` runs `prek install` in each Claude Code session.
 - `.github/workflows/commits.yml` checks the title and each commit of a pull request, with the same tools and the size
   limit (`scripts/check_commits.py --base`).
