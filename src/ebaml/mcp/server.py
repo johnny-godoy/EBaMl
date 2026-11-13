@@ -78,6 +78,24 @@ def create_server(
 
     """
     server = MCPServer("ebaml", instructions=_INSTRUCTIONS)
+    _register_read_tools(server, store)
+    _register_explain_tools(server, store)
+    if llm is not None:
+        _register_llm_tools(server, store, llm)
+    return server
+
+
+def _register_read_tools(server: MCPServer, store: ModelStore) -> None:
+    """Register the tools and the resource that read the model.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add them to.
+    store: ModelStore
+        The session.
+
+    """
 
     @server.tool()
     def get_model_summary() -> str:
@@ -150,6 +168,19 @@ def create_server(
         with _tool_errors():
             return read_tools.graph_text(store, feature)
 
+
+def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
+    """Register the tool that explains one prediction.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add it to.
+    store: ModelStore
+        The session.
+
+    """
+
     @server.tool()
     def explain_prediction(
         instance: Mapping[str, FeatureValue] | None = None,
@@ -178,10 +209,6 @@ def create_server(
                 confidence_level=confidence_level,
             )
             return _json(attrs.asdict(explanation))
-
-    if llm is not None:
-        _register_llm_tools(server, store, llm)
-    return server
 
 
 def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:
