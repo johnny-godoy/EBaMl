@@ -98,38 +98,43 @@ def _register_read_tools(server: MCPServer, store: ModelStore) -> None:
     """
 
     @server.tool()
-    def get_model_summary() -> str:
+    def get_model_summary(revision: str = "current") -> str:
         """Summarize the model: its kind, outputs or classes, intercept and number of features.
 
-        Call this first. It also names the interaction terms that the other tools skip.
+        Call this first. It also names the interaction terms that the other tools skip. Give revision to read the
+        model as it was at an earlier edit: ``original``, ``current`` or the id of a revision of list_edits. A read of
+        a revision never changes the model.
 
         Returns
         -------
         str
-            JSON with the kind, outputs, classes, score_meaning, intercept, feature_count and skipped_terms.
+            JSON with the kind, outputs, classes, score_meaning, intercept, feature_count, skipped_terms and session
+            (the revision that the call read, the head, and how many edits the head holds).
 
         """
         with _tool_errors():
-            return _json(attrs.asdict(read_tools.model_summary(store), recurse=False))
+            return _json(attrs.asdict(read_tools.model_summary(store, revision)))
 
     @server.tool()
-    def list_features() -> str:
+    def list_features(revision: str = "current") -> str:
         """List the features of the model with their type and importance, the most important first.
 
-        Call this to choose the feature to read with get_graph.
+        Call this to choose the feature to read with get_graph. Give revision to read an earlier edit of the model.
 
         Returns
         -------
         str
-            JSON list with the name, type and importance of each feature.
+            JSON with the session (the revision that the call read, the head, and how many edits the head holds) and
+            the list of features, each with its name, type and importance.
 
         """
         with _tool_errors():
-            return _json([attrs.asdict(feature) for feature in read_tools.list_features(store)])
+            return _json(attrs.asdict(read_tools.list_features(store, revision)))
 
     @server.tool()
-    def get_graph(
+    def get_graph(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- one parameter for each option of the tool
         feature: str,
+        revision: str = "current",
         normalization: Literal["none", "min_max", "z_score"] = "none",
         x_axis_precision: int | None = None,
         y_axis_precision: int | None = None,
@@ -138,17 +143,20 @@ def _register_read_tools(server: MCPServer, store: ModelStore) -> None:
         """Read the graph of one feature: the score of the model for each value or interval of the feature.
 
         Use list_features for the names. A high score raises the prediction. Lower max_tokens to get a shorter text.
+        Give revision to read the graph as it was at an earlier edit, for example ``original`` to compare it with the
+        current graph.
 
         Returns
         -------
         str
-            The text of the graph.
+            A line with the revision and the number of edits that the head holds, then the text of the graph.
 
         """
         with _tool_errors():
             return read_tools.graph_text(
                 store,
                 feature,
+                revision=revision,
                 normalization=normalization,
                 x_axis_precision=x_axis_precision,
                 y_axis_precision=y_axis_precision,
@@ -186,28 +194,32 @@ def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
         instance: Mapping[str, FeatureValue] | None = None,
         row: int | None = None,
         confidence_level: float = 0.95,
+        revision: str = "current",
     ) -> str:
         """Explain one prediction of a classifier or a regressor with exact facts.
 
         A regressor's explanation keeps the answer to the question "is the predicted value above the average
         prediction?". Give the value of every feature in instance, or give the number of a row of the data that the
-        server loaded.
+        server loaded. The explanation uses the model at revision, which is the current model with all edits by
+        default.
 
         Returns
         -------
         str
-            JSON with the facts and their texts. The facts have the counterfactual (changes that flip the prediction,
-            the fewest ones when ``minimality`` proves it), the sufficient reason (the features that fix the prediction)
-            and the share of completions with the same prediction.
+            JSON with the session (the revision that the call read), the facts and their texts. The facts have the
+            counterfactual (changes that flip the prediction, the fewest ones when ``minimality`` proves it), the
+            sufficient reason (the features that fix the prediction) and the share of completions with the same
+            prediction.
 
         """
         with _tool_errors():
-            explanation = explain_tools.explain_prediction(
-                store,
+            request = explain_tools.PredictionRequest(
                 instance=instance,
                 row=row,
                 confidence_level=confidence_level,
+                revision=revision,
             )
+            explanation = explain_tools.explain_prediction(store, request)
             return _json(attrs.asdict(explanation))
 
 

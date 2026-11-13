@@ -17,28 +17,161 @@ import skops.io.exceptions
 
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import DataFileError, InvalidInstanceError, UnsupportedModelError
+from ebaml.core.exceptions import DataFileError, EditError, InvalidInstanceError, UnsupportedModelError
+from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession, RevisionInfo
+
+
+@attrs.frozen(eq=False)
+class RevisionRead:
+    """A copy of the model at one revision, and the state of the session when the tool read it.
+
+    Attributes
+    ----------
+    model: ExplainableBoostingModel
+        A copy of the model at ``info.revision``. A reader can use it with no lock, because an edit never changes it.
+    info: RevisionInfo
+        The fixed name of the revision, the head, and the number of edits that the head holds.
+
+    """
+
+    model: ExplainableBoostingModel
+    info: RevisionInfo
+
+
+@attrs.frozen
+class _Described:
+    """The text of ``describe_ebm`` and the revision that it describes."""
+
+    revision: str
+    text: str
+
+
+def _start_session(ebm: ExplainableBoostingModel) -> EditSession | None:
+    """Start an edit session on a model, or give ``None`` if the edits do not support the model.
+
+    Returns
+    -------
+    EditSession | None
+        The session. The reads of the server work with no session, and the edit tools raise the error of the session.
+
+    """
+    try:
+        return EditSession(ebm)
+    except UnsupportedModelError:
+        return None
 
 
 @attrs.define
 class ModelStore:
     """The EBM of the session and what the tools need besides it.
 
+    The store never changes the loaded model. The edit session works on a copy, so each read of a revision gives the
+    model with the edits of that revision.
+
     Attributes
     ----------
-    ebm: ExplainableBoostingModel
-        The fitted EBM.
+    original: ExplainableBoostingModel
+        The fitted EBM that the user loaded. The constructor takes it as ``ebm``.
     data: Frame | None
         The rows that the ``row`` argument of the explain tool indexes. Wrap a pandas or polars frame with
         ``narwhals.from_native``.
-    model_description: str | None
-        The output of ``describe_ebm``. The first call computes it and the next calls reuse it.
+    session: EditSession | None
+        The edits of the session. The default is a new session on ``original``, or ``None`` for a model that the
+        edits do not support (a multiclass classifier). Pass a replayed session to continue the work of an earlier
+        session.
 
     """
 
-    ebm: ExplainableBoostingModel
+    original: ExplainableBoostingModel = attrs.field(alias="ebm")
     data: Frame | None = None
-    model_description: str | None = None
+    session: EditSession | None = attrs.field(
+        default=attrs.Factory(lambda self: _start_session(self.original), takes_self=True),
+    )
+    _described: _Described | None = attrs.field(default=None, init=False)
+
+    def read(self, revision: str = CURRENT) -> RevisionRead:
+        """Read the model at a revision. The read never changes the model of the session.
+
+        Parameters
+        ----------
+        revision: str
+            ``original``, ``current`` or the id of a revision of the history.
+
+        Returns
+        -------
+        RevisionRead
+            A copy of the model at the revision, and the state of the session. ``current`` becomes the id of the head.
+
+        Raises
+        ------
+        EditError
+            If the model has no edit session and the revision is not ``original`` or ``current``. The session raises
+            the same error for a revision that it does not hold.
+
+        """
+        if self.session is None:
+            if revision not in {ORIGINAL, CURRENT}:
+                msg = (
+                    f"The model has no edits, so its only revisions are {ORIGINAL!r} and {CURRENT!r}, not {revision!r}."
+                )
+                raise EditError(msg)
+            return RevisionRead(self.original, RevisionInfo(ORIGINAL, ORIGINAL, 0))
+        info = self.session.revision_info(revision)
+        return RevisionRead(self.session.model_at(info.revision), info)
+
+    def editing(self) -> EditSession:
+        """Give the edit session.
+
+        Returns
+        -------
+        EditSession
+            The session that the edit tools use.
+
+        Raises
+        ------
+        UnsupportedModelError
+            If the model is one that the edits do not support. The message of ``EditSession`` says which.
+
+        """
+        if self.session is None:
+            msg = "Editing supports binary classifiers and regressors. A multiclass classifier has no edit session."
+            raise UnsupportedModelError(msg)
+        return self.session
+
+    def described(self, revision: str) -> str | None:
+        """Give the kept description of the model if it describes this revision.
+
+        Parameters
+        ----------
+        revision: str
+            The fixed name of a revision, as ``RevisionRead.info.revision`` gives it.
+
+        Returns
+        -------
+        str | None
+            The output of ``describe_ebm``, or ``None`` if the store keeps none for this revision.
+
+        """
+        kept = self._described
+        return kept.text if kept is not None and kept.revision == revision else None
+
+    def keep_description(self, revision: str, text: str) -> None:
+        """Keep the description of a revision, but only if the head is still this revision.
+
+        An edit during the slow LLM call moves the head. The description then describes a model that is no longer the
+        current one, so the store drops it.
+
+        Parameters
+        ----------
+        revision: str
+            The fixed name of the revision that the text describes.
+        text: str
+            The output of ``describe_ebm``.
+
+        """
+        head = ORIGINAL if self.session is None else self.session.revision
+        if head == revision:
+            self._described = _Described(revision, text)
 
     def feature_index(self, feature: str) -> int:
         """Find the index of a feature by its name.
@@ -51,7 +184,7 @@ class ModelStore:
         Returns
         -------
         int
-            The index of the feature in ``feature_names_in_``.
+            The index of the feature in ``feature_names_in_``. Edits never change the features of the model.
 
         Raises
         ------
@@ -59,7 +192,7 @@ class ModelStore:
             If the model has no feature with this name.
 
         """
-        names = list(self.ebm.feature_names_in_)
+        names = list(self.original.feature_names_in_)
         if feature not in names:
             msg = f"The model has no feature {feature!r}. The features are: {names}."
             raise InvalidInstanceError(msg)
@@ -91,7 +224,7 @@ class ModelStore:
         if not 0 <= row < len(self.data):
             msg = f"The row {row} does not exist. The data has {len(self.data)} rows, numbered from 0."
             raise InvalidInstanceError(msg)
-        names = list(self.ebm.feature_names_in_)
+        names = list(self.original.feature_names_in_)
         missing = [name for name in names if name not in self.data.columns]
         if missing:
             msg = f"The data has no column for these features: {missing}."

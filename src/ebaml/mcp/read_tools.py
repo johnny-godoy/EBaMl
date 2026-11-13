@@ -8,6 +8,7 @@ import numpy as np
 
 from ebaml.core.custom_types import ClassLabel, Normalization
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
+from ebaml.edit.edit_session import CURRENT, RevisionInfo
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
@@ -35,6 +36,8 @@ class ModelSummary:
         The number of features that have a graph.
     skipped_terms: list[str]
         The interaction terms. The tools skip them.
+    session: RevisionInfo
+        The revision that the summary reads, the head, and the number of edits that the head holds.
 
     """
 
@@ -45,6 +48,7 @@ class ModelSummary:
     intercept: list[float]
     feature_count: int
     skipped_terms: list[str]
+    session: RevisionInfo
 
 
 @attrs.frozen
@@ -56,13 +60,23 @@ class FeatureInfo:
     importance: float
 
 
-def model_summary(store: ModelStore) -> ModelSummary:
+@attrs.frozen
+class FeatureList:
+    """The features with a graph, the most important first, and the revision that the list reads."""
+
+    session: RevisionInfo
+    features: list[FeatureInfo]
+
+
+def model_summary(store: ModelStore, revision: str = CURRENT) -> ModelSummary:
     """Summarize the model.
 
     Parameters
     ----------
     store: ModelStore
         The session.
+    revision: str, default="current"
+        ``original``, ``current`` or the id of a revision of the history.
 
     Returns
     -------
@@ -70,7 +84,8 @@ def model_summary(store: ModelStore) -> ModelSummary:
         The kind, the outputs, the intercept, the number of features and the interaction terms that the tools skip.
 
     """
-    ebm = store.ebm
+    read = store.read(revision)
+    ebm = read.model
     kind = model_kind(ebm)
     names = list(ebm.feature_names_in_)
     # only a classifier has class labels; one check at the entry narrows the union of the two interpret classes
@@ -86,24 +101,29 @@ def model_summary(store: ModelStore) -> ModelSummary:
         intercept=np.ravel(ebm.intercept_).astype(float).tolist(),
         feature_count=len(main_effect_features(ebm)),
         skipped_terms=skipped,
+        session=read.info,
     )
 
 
-def list_features(store: ModelStore) -> list[FeatureInfo]:
+def list_features(store: ModelStore, revision: str = CURRENT) -> FeatureList:
     """List the features with a graph, the most important first.
 
     Parameters
     ----------
     store: ModelStore
         The session.
+    revision: str, default="current"
+        The revision to list. See ``model_summary``.
 
     Returns
     -------
-    list[FeatureInfo]
-        The name, the type and the importance of each feature, sorted by importance.
+    FeatureList
+        The name, the type and the importance of each feature, sorted by importance, and the revision that the list
+        reads.
 
     """
-    ebm = store.ebm
+    read = store.read(revision)
+    ebm = read.model
     importances = ebm.term_importances()
     features = [
         FeatureInfo(
@@ -113,13 +133,14 @@ def list_features(store: ModelStore) -> list[FeatureInfo]:
         )
         for index in main_effect_features(ebm)
     ]
-    return sorted(features, key=lambda feature: feature.importance, reverse=True)
+    return FeatureList(read.info, sorted(features, key=lambda feature: feature.importance, reverse=True))
 
 
 def graph_text(  # ruff: ignore[too-many-arguments] -- one argument for each option of the get_graph tool
     store: ModelStore,
     feature: str,
     *,
+    revision: str = CURRENT,
     normalization: Normalization | str = Normalization.NONE,
     x_axis_precision: int | None = None,
     y_axis_precision: int | None = None,
@@ -133,6 +154,8 @@ def graph_text(  # ruff: ignore[too-many-arguments] -- one argument for each opt
         The session.
     feature: str
         The name of the feature.
+    revision: str, default="current"
+        ``original``, ``current`` or the id of a revision of the history.
     normalization: Normalization | str, default=Normalization.NONE
         See ``EBMGraph.from_ebm``.
     x_axis_precision: int, optional
@@ -145,13 +168,17 @@ def graph_text(  # ruff: ignore[too-many-arguments] -- one argument for each opt
     Returns
     -------
     str
-        The text of ``EBMGraph.to_text``.
+        A line that names the revision and the edits that the head holds, then the text of ``EBMGraph.to_text``.
 
     """
-    graph = EBMGraph.from_ebm(store.ebm, store.feature_index(feature), normalization)
-    return graph.to_text(
+    read = store.read(revision)
+    graph = EBMGraph.from_ebm(read.model, store.feature_index(feature), normalization)
+    text = graph.to_text(
         x_axis_precision=x_axis_precision,
         y_axis_precision=y_axis_precision,
         max_tokens=max_tokens,
         check_budget=check_token_budget,
     )
+    info = read.info
+    note = f"Revision {info.revision}. The head is {info.head}, and it holds {info.edit_count} applied edits."
+    return f"{note}\n{text}"

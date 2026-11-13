@@ -47,6 +47,19 @@ def _utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+@attrs.frozen
+class RevisionInfo:
+    """A revision and the state of the session at the moment of the read.
+
+    ``revision`` is ``original`` or the id of an edit, never ``current``. ``head`` is the revision of the head, and
+    ``edit_count`` is the number of edits that the head holds.
+    """
+
+    revision: str
+    head: str
+    edit_count: int
+
+
 @attrs.frozen(eq=False)
 class _State:
     """The whole state of a session. A writer replaces it in one step, so a reader sees one consistent state."""
@@ -68,6 +81,17 @@ class _State:
 
     def last_save_sequence(self) -> int:
         return max((save.sequence for save in self.saves), default=-1)
+
+    def pending_edits(self) -> list[EditEntry]:
+        """List the applied edits that no save has recorded yet, in the order of their sequence numbers.
+
+        Returns
+        -------
+        list[EditEntry]
+            The edits that the next save records.
+
+        """
+        return [entry for entry in self.edits[: self.position] if entry.sequence > self.last_save_sequence()]
 
     def entries(self) -> tuple[HistoryEntry, ...]:
         return tuple(sorted((*self.edits, *self.saves), key=lambda entry: entry.sequence))
@@ -169,6 +193,25 @@ class EditSession:
         """The head: ``original``, or the id of the last applied edit."""
         return self._state.head_revision
 
+    def revision_info(self, revision: str | uuid.UUID = CURRENT) -> "RevisionInfo":
+        """Name a revision by its fixed name, and say what the head holds.
+
+        Parameters
+        ----------
+        revision : str | uuid.UUID
+            The revision to name. ``current`` names the head.
+
+        Returns
+        -------
+        RevisionInfo
+            The fixed name of the revision, the head, and the number of edits that the head holds.
+
+        """
+        state = self._state
+        position = state.position_of(revision)
+        name = ORIGINAL if position == 0 else str(state.edits[position - 1].id)
+        return RevisionInfo(revision=name, head=state.head_revision, edit_count=state.position)
+
     @property
     def model(self) -> ExplainableBoostingModel:
         """A copy of the model at the head. Changing it does not change the session."""
@@ -197,8 +240,14 @@ class EditSession:
         """The entries in the order of their sequence numbers: the edits, and the saves."""
         return self._state.entries()
 
-    def history_table(self) -> list[HistoryRow]:
+    def history_table(self, *, pending_only: bool = False) -> list[HistoryRow]:
         """List the entries as rows: id, time, kind, feature, edit type, description, reason and review.
+
+        Parameters
+        ----------
+        pending_only : bool
+            If ``True``, list only the applied edits that no save has recorded yet. These are the edits that the next
+            ``save`` records. The short ids stay the same as in the whole table.
 
         Returns
         -------
@@ -206,9 +255,11 @@ class EditSession:
             One row for each entry. ``short_id`` is a short unique prefix of the random tail of the id.
 
         """
-        entries = self._state.entries()
+        state = self._state
+        entries = state.entries()
         shorts = short_ids([entry.id for entry in entries])
-        return [entry.row(shorts[entry.id]) for entry in entries]
+        chosen = state.pending_edits() if pending_only else entries
+        return [entry.row(shorts[entry.id]) for entry in chosen]
 
     def to_json(self) -> bytes:
         """Write the history as JSON that ``replay`` reads.
@@ -424,7 +475,7 @@ class EditSession:
         _require_message(message)
         state = self._state
         state.check_expected(expected_revision)
-        pending = [entry for entry in state.edits[: state.position] if entry.sequence > state.last_save_sequence()]
+        pending = state.pending_edits()
         unreviewed = [entry for entry in pending if not entry.reviewed]
         if unreviewed and not allow_unreviewed:
             ids = [str(entry.id) for entry in unreviewed]
