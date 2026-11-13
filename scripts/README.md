@@ -10,6 +10,8 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
 | `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
 | `mutant_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation.py`, so that they run first. |
+| `abstractions_registry.py` | Parses `architecture/abstractions.yml` into typed classes. `check_abstractions.py` and `check_contract_overlap.py` use it. |
+| `abstractions_index.py` | Indexes the classes and functions of `src/ebaml` with `ast`, without importing them. |
 | `check_abstractions.py` | Checks `architecture/abstractions.yml` against the source, and searches the registry and the public symbols (`--check`, `--list`, `--search WORD...`). |
 | `check_contract_overlap.py` | Fails when two registered `Protocol` or `ABC` classes of one context have identical signatures. Other overlaps are warnings. |
 | `check_api_breaks.py` | Fails when a change breaks the public API (`ebaml.__all__`) against a base revision and no changelog fragment has a `**BREAKING:**` entry. |
