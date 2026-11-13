@@ -1,6 +1,8 @@
 """Tests of the session state and the loading of the files that the user names."""
 
 import ast
+import io
+import zipfile
 from pathlib import Path
 
 import polars as pl
@@ -8,7 +10,7 @@ import pytest
 import skops.io
 
 import ebaml
-from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
+from ebaml.core.exceptions import DataFileError, InvalidInstanceError, UnsupportedModelError
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame, save_model
 
@@ -79,6 +81,64 @@ def test_load_data_reads_a_csv_file_whose_first_column_starts_with_the_parquet_m
     """The mark at the start alone does not make a Parquet file: the file must end with the mark too."""
     (tmp_path / "data.csv").write_text("PAR1,b\n1,2\n3,4\n", encoding="utf-8")
     assert load_data(tmp_path / "data.csv")["b"].to_list() == [2, 4]
+
+
+def _excel_like_bytes() -> bytes:
+    """Build a small zip archive, which is the container of an Excel file.
+
+    Returns
+    -------
+    bytes
+        The archive.
+
+    """
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("sheet.xml", "<sheet/>")
+    return buffer.getvalue()
+
+
+_NEITHER_PARQUET_NOR_CSV = {
+    "an Excel file": _excel_like_bytes(),
+    "random bytes": bytes(range(256)),
+    "text that is not UTF-8": "name,city\nAna,Concepción\n".encode("latin-1"),
+}
+
+
+@pytest.mark.parametrize("content", _NEITHER_PARQUET_NOR_CSV.values(), ids=_NEITHER_PARQUET_NOR_CSV.keys())
+def test_load_data_names_the_file_and_the_formats_when_it_is_neither_parquet_nor_csv(
+    content: bytes,
+    tmp_path: Path,
+) -> None:
+    """Polars reads a binary file as a frame of no rows with the bytes as column names, so the error came much later."""
+    (tmp_path / "rows.dat").write_bytes(content)
+    with pytest.raises(DataFileError, match=r"rows\.dat.*neither Parquet nor UTF-8 CSV.*write_parquet.*write_csv"):
+        load_data(tmp_path / "rows.dat")
+
+
+def test_load_data_says_that_a_parquet_file_is_cut_off(tmp_path: Path) -> None:
+    pl.DataFrame({"a": [1, 2]}).write_parquet(tmp_path / "rows.parquet")
+    (tmp_path / "rows.parquet").write_bytes((tmp_path / "rows.parquet").read_bytes()[:-6])
+    with pytest.raises(DataFileError, match=r"rows\.parquet.*starts with the Parquet mark.*does not end with it"):
+        load_data(tmp_path / "rows.parquet")
+
+
+def test_load_data_says_that_a_file_is_empty(tmp_path: Path) -> None:
+    (tmp_path / "rows.csv").write_bytes(b"")
+    with pytest.raises(DataFileError, match=r"rows\.csv.*is empty"):
+        load_data(tmp_path / "rows.csv")
+
+
+@pytest.mark.parametrize(
+    ("content", "reader"),
+    [(b"PAR1 not a real body PAR1", "Parquet"), (b"a,b\n1,2,3\n", "CSV")],
+    ids=["parquet", "csv"],
+)
+def test_load_data_names_the_file_when_the_reader_fails(content: bytes, reader: str, tmp_path: Path) -> None:
+    (tmp_path / "rows.dat").write_bytes(content)
+    with pytest.raises(DataFileError, match=rf"rows\.dat.*as {reader}") as caught:
+        load_data(tmp_path / "rows.dat")
+    assert isinstance(caught.value.__cause__, pl.exceptions.PolarsError)
 
 
 def test_row_instance_without_data_is_an_error(

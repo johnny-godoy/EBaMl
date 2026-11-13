@@ -79,6 +79,10 @@ class UnsupportedModelError(EBaMlError, ValueError):
     """Exception raised when a function does not support the kind of EBM, such as one with interactions."""
 
 
+class DataFileError(EBaMlError, ValueError):
+    """Exception raised when a data file is empty, is neither Parquet nor UTF-8 CSV, or fails to read."""
+
+
 class InvalidInstanceError(EBaMlError, ValueError):
     """Exception raised when the instance to explain lacks a value or has a value that the EBM did not see."""
 
