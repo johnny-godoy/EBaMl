@@ -9,6 +9,7 @@ from ebaml.core import exceptions
 from ebaml.core.custom_types import FeatureType
 from ebaml.core.exceptions import (
     APIKeyRejectedError,
+    DataFileError,
     EBaMlError,
     EBMGraphError,
     EBMGraphShapeError,
@@ -35,6 +36,7 @@ from ebaml.core.exceptions import (
 
 # the errors for a bad value; code that caught ValueError before they existed must still catch them
 VALUE_ERRORS = [
+    DataFileError,
     EBMGraphShapeError,
     EditError,
     GraphTextError,
@@ -69,7 +71,7 @@ def test_graph_error_hierarchy(exc: type[Exception]) -> None:
 
 def test_every_error_of_the_module_derives_from_the_base_class() -> None:
     errors = [value for _, value in inspect.getmembers(exceptions, inspect.isclass) if issubclass(value, Exception)]
-    assert len(errors) == 23
+    assert len(errors) == 24
     assert all(issubclass(error, EBaMlError) for error in errors)
 
 

@@ -13,6 +13,7 @@ import ebaml.core.beartype_hook  # ruff: ignore[unused-import] -- the import ins
 from ebaml.core.custom_types import FeatureType, Normalization
 from ebaml.core.exceptions import (
     APIKeyRejectedError,
+    DataFileError,
     EBaMlError,
     EBMGraphError,
     EBMGraphShapeError,
@@ -138,6 +139,7 @@ __all__ = [
     "CoveringModel",
     "CoveringProblem",
     "CoveringSolver",
+    "DataFileError",
     "DataScientist",
     "Decision",
     "DescribeEBMRequest",

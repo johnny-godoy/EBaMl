@@ -61,7 +61,7 @@ ebaml-mcp --model model.skops --data train.parquet
 | `--host ADDRESS` | The address of the `streamable-http` transport. The default is `127.0.0.1`, which accepts this computer only. |
 | `--port NUMBER` | The port of the `streamable-http` transport. The default is `8000`. |
 
-The server reads the first bytes of the data file, not its extension. A file that starts and ends with the Parquet mark `PAR1` is a Parquet file. Parquet keeps the type of each column. Any other file is a CSV file, and the server infers the types from the text.
+The server reads the first bytes of the data file, not its extension. A file that starts and ends with the Parquet mark `PAR1` is a Parquet file. Parquet keeps the type of each column. A file of UTF-8 text is a CSV file, and the server infers the types from the text. An empty file, a Parquet file that is cut off, and any other binary file raise a `DataFileError` that names the file and says how to save the rows.
 
 ## Connect a client
 

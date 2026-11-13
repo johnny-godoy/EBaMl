@@ -3,6 +3,7 @@
 The user gives the paths at start. No tool argument names a path, so an agent cannot make the server load a file.
 """
 
+import codecs
 import os
 import zipfile
 from pathlib import Path
@@ -16,7 +17,7 @@ import skops.io.exceptions
 
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
+from ebaml.core.exceptions import DataFileError, InvalidInstanceError, UnsupportedModelError
 
 
 @attrs.define
@@ -163,32 +164,93 @@ def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
 
 
 _PARQUET_MAGIC = b"PAR1"
+_SAMPLE_SIZE = 8192
+_FORMAT_FIX = "Save the rows with DataFrame.write_parquet (best) or DataFrame.write_csv, as UTF-8 text."
 
 
-def _is_parquet(path: str | os.PathLike[str]) -> bool:
-    """Test the magic bytes: a Parquet file starts and ends with ``PAR1``, and a CSV file has no such mark.
+@attrs.frozen
+class _FileProbe:
+    """What the first and the last bytes of a file say about its format.
+
+    Attributes
+    ----------
+    size: int
+        The size of the file in bytes.
+    starts_with_mark: bool
+        Whether the file starts with the Parquet mark ``PAR1``.
+    ends_with_mark: bool
+        Whether the file ends with the Parquet mark ``PAR1``.
+    is_text: bool
+        Whether the first bytes are UTF-8 text with no NUL byte.
+
+    """
+
+    size: int
+    starts_with_mark: bool
+    ends_with_mark: bool
+    is_text: bool
+
+    @property
+    def is_parquet(self) -> bool:
+        """Whether the file starts and ends with the Parquet mark."""
+        return self.starts_with_mark and self.ends_with_mark
+
+    def problem(self) -> str | None:
+        """Say why the file is neither Parquet nor CSV.
+
+        Returns
+        -------
+        str | None
+            The reason, or ``None`` if the file is Parquet or looks like CSV text. Text that starts with ``PAR1`` is a
+            CSV file, for example one whose first column is ``PAR1_id``, because a Parquet body is binary.
+
+        """
+        if self.size == 0:
+            return "The file is empty."
+        if self.is_parquet or self.is_text:
+            return None
+        if self.starts_with_mark:
+            return "The file starts with the Parquet mark but does not end with it, so it is cut off."
+        return "The file is neither Parquet nor UTF-8 CSV: it has no Parquet mark, and it is not UTF-8 text."
+
+
+def _probe(path: str | os.PathLike[str]) -> _FileProbe:
+    """Read the first and the last bytes of a file.
 
     Returns
     -------
-    bool
-        True if the file starts and ends with the Parquet mark.
+    _FileProbe
+        The facts that the bytes show.
 
     """
     magic_size = len(_PARQUET_MAGIC)
     with Path(path).open("rb") as file:
-        header = file.read(magic_size)
-        if header != _PARQUET_MAGIC:
-            return False
-        file.seek(-magic_size, os.SEEK_END)
-        return file.read(magic_size) == _PARQUET_MAGIC
+        sample = file.read(_SAMPLE_SIZE)
+        size = file.seek(0, os.SEEK_END)
+        file.seek(max(size - magic_size, 0))
+        tail = file.read(magic_size)
+    # The incremental decoder accepts a multibyte character that the end of the sample cuts in two.
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    try:
+        decoder.decode(sample)
+    except UnicodeDecodeError:
+        is_text = False
+    else:
+        is_text = b"\x00" not in sample
+    return _FileProbe(
+        size=size,
+        starts_with_mark=sample.startswith(_PARQUET_MAGIC),
+        ends_with_mark=tail == _PARQUET_MAGIC,
+        is_text=is_text,
+    )
 
 
 def load_data(path: str | os.PathLike[str]) -> Frame:
     """Read the rows from a Parquet file, or from a CSV file.
 
-    The function reads the first bytes of the file, not its extension. A file that starts and ends with the Parquet
-    mark ``PAR1`` is a Parquet file, and Parquet keeps the type of each column. Any other file is a CSV file, and
-    polars infers the type of each column from the text.
+    The function reads the first and the last bytes of the file, not its extension. A file that starts and ends with
+    the Parquet mark ``PAR1`` is a Parquet file, and Parquet keeps the type of each column. A file of UTF-8 text is a
+    CSV file, and polars infers the type of each column from the text.
 
     Parameters
     ----------
@@ -200,6 +262,23 @@ def load_data(path: str | os.PathLike[str]) -> Frame:
     Frame
         The rows.
 
+    Raises
+    ------
+    DataFileError
+        If the file is empty, is cut off, is neither Parquet nor UTF-8 CSV, or the reader fails. The message names the
+        file and says how to save it. Polars reads a binary file as a CSV file of no rows, so the check of the bytes
+        comes first.
+
     """
-    frame = pl.read_parquet(os.fspath(path)) if _is_parquet(path) else pl.read_csv(os.fspath(path))
+    probe = _probe(path)
+    problem = probe.problem()
+    if problem is not None:
+        msg = f"Cannot read the data file {os.fspath(path)!r}. {problem} {_FORMAT_FIX}"
+        raise DataFileError(msg)
+    try:
+        frame = pl.read_parquet(os.fspath(path)) if probe.is_parquet else pl.read_csv(os.fspath(path))
+    except pl.exceptions.PolarsError as error:
+        format_name = "Parquet" if probe.is_parquet else "CSV"
+        msg = f"Cannot read the data file {os.fspath(path)!r} as {format_name}: {error} {_FORMAT_FIX}"
+        raise DataFileError(msg) from error
     return nw.from_native(frame)  # pyrefly: ignore[no-matching-overload] -- pyrefly rejects every overload of narwhals.from_native for a polars frame
