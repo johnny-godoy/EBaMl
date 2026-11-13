@@ -241,6 +241,15 @@ hooks = [
     priority = 50,
   },
   {
+    id = "check-report-gates",
+    name = "the CI report covers every job that runs on a pull request",
+    language = "system",
+    entry = "uv run python -m scripts.check_report_gates",
+    files = "^\\.github/(rulesets/.*\\.json|scripts/ci_report\\.py|workflows/.*\\.ya?ml)$",
+    pass_filenames = false,
+    priority = 50,
+  },
+  {
     id = "commitizen",
     name = "commit message: conventional commit",
     language = "system",

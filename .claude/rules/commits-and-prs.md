@@ -70,4 +70,7 @@ BREAKING CHANGE: what breaks, and what users must change.
 - `.github/rulesets/main.json` makes the CI gates, the docs build and the `Changelog` and `Commits` checks required on
   `main`. The `check-ruleset` hook (`scripts/check_ruleset.py`) fails if a required check is not the name of a job that
   runs on every pull request. If you rename such a job, change the ruleset in the same pull request.
+- The CI report (`.github/scripts/ci_report.py`, `GATES`) covers every job of every workflow that runs on a pull
+  request. The `check-report-gates` hook (`scripts/check_report_gates.py`) fails if a job is neither a gate nor in
+  `NOT_GATES` with its reason. Add the gate in the same pull request as a new job or workflow.
 - Do not bypass a hook with `--no-verify`.
