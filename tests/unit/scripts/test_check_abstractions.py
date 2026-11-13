@@ -5,7 +5,7 @@ from pathlib import Path
 
 import orjson
 import pytest
-from scripts import check_abstractions
+from scripts import abstractions_index, abstractions_registry, check_abstractions
 
 PYPROJECT = """
 [[tool.importlinter.contracts]]
@@ -86,14 +86,14 @@ def test_valid_registry_passes(tmp_path: Path) -> None:
 
 def test_private_helper_and_unregistered_class_need_no_entry(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
-    index = check_abstractions.build_index(root)
+    index = abstractions_index.build_index(root)
     assert "ebaml.graphs.terms:_private_helper" not in index.symbols
     assert "ebaml.graphs.terms:TermTable" in index.symbols
     assert rules(root) == []
 
 
 def test_index_holds_each_kind_of_public_name_and_skips_the_generated_sdk(tmp_path: Path) -> None:
-    index = check_abstractions.build_index(make_repo(tmp_path))
+    index = abstractions_index.build_index(make_repo(tmp_path))
     kinds = {symbol.name: symbol.kind for symbol in index.symbols.values()}
     assert kinds == {
         "main_term": "function",
@@ -211,16 +211,16 @@ def test_diagnostic_renders_for_a_person(tmp_path: Path) -> None:
     assert finding.render().startswith(
         "architecture/abstractions.yml:3: missing-symbol [term-lookup] (ebaml.graphs.terms:zzz) - ",
     )
-    warning = check_abstractions.Diagnostic("rule", "file", 1, "", "", "text", severity="warning")
+    warning = abstractions_registry.Diagnostic("rule", "file", 1, "", "", "text", severity="warning")
     assert warning.render() == "warning: file:1: rule - text"
 
 
 def test_search_ranks_capabilities_before_other_symbols(tmp_path: Path) -> None:
     root = make_repo(tmp_path)
-    registry, _ = check_abstractions.load_registry(root)
+    registry, _ = abstractions_registry.load_registry(root)
     hits = check_abstractions.search(
         registry,
-        check_abstractions.build_index(root),
+        abstractions_index.build_index(root),
         ["term", "lookup"],
         ["llm", "graphs", "core"],
     )
@@ -233,10 +233,10 @@ def test_search_ranks_capabilities_before_other_symbols(tmp_path: Path) -> None:
 
 def test_search_reads_the_registry_line_when_the_symbol_is_gone(tmp_path: Path) -> None:
     root = make_repo(tmp_path, registry_of(entry(symbol="ebaml.graphs.terms:gone")))
-    registry, _ = check_abstractions.load_registry(root)
+    registry, _ = abstractions_registry.load_registry(root)
     [hit] = check_abstractions.search(
         registry,
-        check_abstractions.build_index(root),
+        abstractions_index.build_index(root),
         ["feature"],
         ["llm", "graphs", "core"],
     )
@@ -245,10 +245,10 @@ def test_search_reads_the_registry_line_when_the_symbol_is_gone(tmp_path: Path) 
 
 def test_search_cuts_camel_case_names(tmp_path: Path) -> None:
     root = make_repo(tmp_path, None)
-    registry, _ = check_abstractions.load_registry(root)
+    registry, _ = abstractions_registry.load_registry(root)
     hits = check_abstractions.search(
         registry,
-        check_abstractions.build_index(root),
+        abstractions_index.build_index(root),
         ["table"],
         ["llm", "graphs", "core"],
     )
@@ -300,4 +300,4 @@ def test_main_search_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
 
 
 def test_the_registry_of_this_repository_is_right() -> None:
-    assert check_abstractions.check(check_abstractions.ROOT) == []
+    assert check_abstractions.check(abstractions_registry.ROOT) == []

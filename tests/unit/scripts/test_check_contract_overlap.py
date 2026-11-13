@@ -6,7 +6,7 @@ from pathlib import Path
 
 import orjson
 import pytest
-from scripts import check_abstractions, check_contract_overlap
+from scripts import abstractions_registry, check_contract_overlap
 
 LAYERS = ["llm", "graphs", "core"]
 PYPROJECT = """
@@ -47,7 +47,7 @@ def make_repo(root: Path, modules: dict[str, str], registry: str = "schema_versi
 
 
 def findings(root: Path) -> list[tuple[str, str]]:
-    registry, _ = check_abstractions.load_registry(root)
+    registry, _ = abstractions_registry.load_registry(root)
     contracts = check_contract_overlap.find_contracts(root, LAYERS)
     return [
         (item.severity, item.rule_id)
@@ -176,7 +176,7 @@ def test_consumer_contract_in_a_higher_layer_warns_with_the_inversion_cue(tmp_pa
         tmp_path,
         {"graphs/__init__.py": "", "graphs/reader.py": READER, "llm/__init__.py": "", "llm/copy.py": COPY},
     )
-    registry, _ = check_abstractions.load_registry(root)
+    registry, _ = abstractions_registry.load_registry(root)
     contracts = check_contract_overlap.find_contracts(root, LAYERS)
     [finding] = check_contract_overlap.overlap_diagnostics(contracts, registry, "r.yml")
     assert "own Protocol" in finding.suggestion

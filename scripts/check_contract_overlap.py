@@ -29,7 +29,8 @@ from typing import Annotated, Literal
 import attrs
 import cyclopts
 
-from scripts.check_abstractions import (
+from scripts.abstractions_index import module_name
+from scripts.abstractions_registry import (
     ACTIVE,
     ERROR,
     ROOT,
@@ -39,10 +40,9 @@ from scripts.check_abstractions import (
     Diagnostic,
     OverlapException,
     Registry,
-    emit,
     load_registry,
-    module_name,
 )
+from scripts.check_abstractions import emit
 from scripts.check_layout import layer_names
 
 CONTRACT_BASES = frozenset({"Protocol", "ABC"})
