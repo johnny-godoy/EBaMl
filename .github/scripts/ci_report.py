@@ -44,6 +44,11 @@ LOGS: Path = Path(os.environ.get("CI_LOGS", Path(tempfile.gettempdir()) / "ci-lo
 REPORT: Path = Path(os.environ.get("CI_REPORT", Path(tempfile.gettempdir()) / "ci-report"))
 MAX_CHARS = 6000
 MAX_LOG_TAIL = 3000
+ERROR_CONTEXT_BEFORE = 25
+ERROR_CONTEXT_AFTER = 10
+LOG_NOISE: re.Pattern[str] = re.compile(
+    r"^\d{4}-\d\d-\d\dT[\d:.]+Z |\x1b\[[\d;]*m",
+)  # the timestamp that Actions adds, and ANSI colors
 PERCENT = 100
 SNIPPET_ARGC = 3
 POST_ARGC = 3
@@ -709,6 +714,51 @@ def log_links(runs: Sequence[Mapping[str, str | None]]) -> dict[str, str]:
     return {gate.id: by_name[gate.check]["html_url"] or "" for gate in GATES if gate.check in by_name}
 
 
+def job_log_excerpt(url: str) -> str:
+    """Read the lines around the first error of a job log.
+
+    Parameters
+    ----------
+    url : str
+        The URL of the check run of an Actions job (``.../job/<id>``).
+
+    Returns
+    -------
+    str
+        The lines before and after the first ``##[error]`` line, or an empty string if the log is not available.
+
+    """
+    match = re.search(r"/job/(\d+)$", url)
+    if match is None:
+        return ""
+    base = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+    try:
+        raw = fetch_archive(f"{base}/repos/{os.environ['GITHUB_REPOSITORY']}/actions/jobs/{match[1]}/logs")
+    except urllib.error.URLError:  # HTTPError is a URLError. The pointer to the log is then the report.
+        return ""
+    lines = [LOG_NOISE.sub("", line) for line in raw.decode("utf-8", errors="replace").splitlines()]
+    first = next((position for position, line in enumerate(lines) if "##[error]" in line), len(lines))
+    return clip("\n".join(lines[max(first - ERROR_CONTEXT_BEFORE, 0) : first + ERROR_CONTEXT_AFTER]), MAX_LOG_TAIL)
+
+
+def failure_text(url: str) -> str:
+    """Write the report of a failed gate that uploads no failure report.
+
+    Parameters
+    ----------
+    url : str
+        The URL of the job log, or an empty string if the job has none.
+
+    Returns
+    -------
+    str
+        The excerpt of the log around the first error, then the pointer to the whole log.
+
+    """
+    excerpt = job_log_excerpt(url)
+    return f"{block(excerpt)}\n\n{log_pointer(url)}" if excerpt.strip() else log_pointer(url)
+
+
 def log_pointer(url: str) -> str:
     """Write the text for a failed gate that has no failure report.
 
@@ -724,7 +774,7 @@ def log_pointer(url: str) -> str:
 
     """
     if url:
-        return f"No failure report exists for this gate. Open the [job log]({url}) for the error."
+        return f"Open the [job log]({url}) for the whole output."
     return "The job failed before the tool produced a report (setup or runner error). Open the job log."
 
 
@@ -797,7 +847,7 @@ def update_progress(posted: str, reports: dict[str, str]) -> tuple[bool, str]:
         if state != "failure" or gate in reports:
             continue
         if gate not in BUILDERS:
-            reports[gate] = log_pointer(links.get(gate, ""))
+            reports[gate] = failure_text(links.get(gate, ""))
         elif report := download_report(gate):
             reports[gate] = report  # an empty result means the job has not uploaded yet, so ask again next poll
     text = render_progress(states, reports)
@@ -901,7 +951,7 @@ def assemble() -> None:
     lines += [f"| {gate.title} | {icons.get(results[gate.id], results[gate.id])} |" for gate in GATES]
     lines.append("")
     for gate in failed:
-        body = read(REPORT / f"{gate.id}.md") or log_pointer(links.get(gate.id, ""))
+        body = read(REPORT / f"{gate.id}.md") or failure_text(links.get(gate.id, ""))
         lines += [f"### ❌ {gate.title}", "", body.strip(), ""]
     lines.append(f"<sub>Commit `{sha}` · [full run logs]({run_url()})</sub>")
     text = "\n".join(lines) + "\n"
