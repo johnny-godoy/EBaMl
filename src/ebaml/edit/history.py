@@ -16,7 +16,7 @@ import attrs
 import numpy as np
 import orjson
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONObject, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit.edit_records import edit_from_record, to_record
 from ebaml.edit.edits import Edit
@@ -289,21 +289,21 @@ def encode_history(model_fingerprint: Fingerprint, head: str, entries: Sequence[
     return orjson.dumps(document, option=orjson.OPT_INDENT_2)
 
 
-def _object(value: JSONValue, what: str) -> Mapping[str, JSONValue]:
+def _object(value: JSONValue, what: str) -> JSONMapping:
     if not isinstance(value, Mapping):
         msg = f"{what} must be an object, but it is {value!r}."
         raise HistoryError(msg)
     return value
 
 
-def _field(record: Mapping[str, JSONValue], key: str) -> JSONValue:
+def _field(record: JSONMapping, key: str) -> JSONValue:
     if key not in record:
         msg = f"A history record lacks the field {key!r}: {dict(record)!r}"
         raise HistoryError(msg)
     return record[key]
 
 
-def _text(record: Mapping[str, JSONValue], key: str) -> str:
+def _text(record: JSONMapping, key: str) -> str:
     value = _field(record, key)
     if not isinstance(value, str):
         msg = f"The field {key!r} of a history record must be a text, but it is {value!r}."
@@ -311,11 +311,11 @@ def _text(record: Mapping[str, JSONValue], key: str) -> str:
     return value
 
 
-def _optional_text(record: Mapping[str, JSONValue], key: str) -> str | None:
+def _optional_text(record: JSONMapping, key: str) -> str | None:
     return None if _field(record, key) is None else _text(record, key)
 
 
-def _flag(record: Mapping[str, JSONValue], key: str) -> bool:
+def _flag(record: JSONMapping, key: str) -> bool:
     value = _field(record, key)
     if not isinstance(value, bool):
         msg = f"The field {key!r} of a history record must be true or false, but it is {value!r}."
@@ -323,7 +323,7 @@ def _flag(record: Mapping[str, JSONValue], key: str) -> bool:
     return value
 
 
-def _count(record: Mapping[str, JSONValue], key: str) -> int:
+def _count(record: JSONMapping, key: str) -> int:
     value = _field(record, key)
     if isinstance(value, bool) or not isinstance(value, int):
         msg = f"The field {key!r} of a history record must be a whole number, but it is {value!r}."
@@ -331,7 +331,7 @@ def _count(record: Mapping[str, JSONValue], key: str) -> int:
     return value
 
 
-def _list(record: Mapping[str, JSONValue], key: str) -> Sequence[JSONValue]:
+def _list(record: JSONMapping, key: str) -> Sequence[JSONValue]:
     value = _field(record, key)
     if isinstance(value, str) or not isinstance(value, Sequence):
         msg = f"The field {key!r} of a history record must be a list, but it is {value!r}."
@@ -339,7 +339,7 @@ def _list(record: Mapping[str, JSONValue], key: str) -> Sequence[JSONValue]:
     return value
 
 
-def _texts(record: Mapping[str, JSONValue], key: str) -> tuple[str, ...]:
+def _texts(record: JSONMapping, key: str) -> tuple[str, ...]:
     items = _list(record, key)
     if not all(isinstance(item, str) for item in items):
         msg = f"The field {key!r} of a history record must be a list of texts, but it is {items!r}."
@@ -363,7 +363,7 @@ def _time(text: str) -> datetime:
         raise HistoryError(msg) from error
 
 
-def _edit_entry(record: Mapping[str, JSONValue]) -> EditEntry:
+def _edit_entry(record: JSONMapping) -> EditEntry:
     return EditEntry(
         id=_uuid(_text(record, "id")),
         sequence=_count(record, "sequence"),
@@ -376,7 +376,7 @@ def _edit_entry(record: Mapping[str, JSONValue]) -> EditEntry:
     )
 
 
-def _save_entry(record: Mapping[str, JSONValue]) -> SaveEntry:
+def _save_entry(record: JSONMapping) -> SaveEntry:
     return SaveEntry(
         id=_uuid(_text(record, "id")),
         sequence=_count(record, "sequence"),
