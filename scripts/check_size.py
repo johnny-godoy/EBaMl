@@ -5,7 +5,8 @@ reader lose the start. The limits below are rough, and they follow the logical s
 short files:
 
 1. A source file has at most ``SOURCE_FILE_LINES`` lines, and a test file has at most ``TEST_FILE_LINES`` lines.
-2. A function has at most ``FUNCTION_LINES`` lines, from its ``def`` line to its last line.
+2. A function has at most ``FUNCTION_LINES`` lines, from its ``def`` line to its last line, without its docstring.
+   Documentation is not logic, so a limit that counts it pushes authors to write less of it.
 3. A class has at most ``PUBLIC_METHODS_PER_CLASS`` public methods and at most ``PRIVATE_METHODS_PER_CLASS`` private
    methods. A
    dunder method counts as neither.
@@ -56,6 +57,16 @@ class Measure:
 FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 
 
+def _code_lines(node: FunctionNode) -> int:
+    # from the ``def`` line to the last line, without the docstring
+    total = (node.end_lineno or node.lineno) - node.lineno + 1
+    first = node.body[0]
+    is_docstring = (
+        isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str)
+    )
+    return total - ((first.end_lineno or first.lineno) - first.lineno + 1 if is_docstring else 0)
+
+
 def _method_counts(node: ast.ClassDef) -> tuple[int, int]:
     names = [member.name for member in node.body if isinstance(member, FunctionNode)]
     methods = [name for name in names if not (name.startswith("__") and name.endswith("__"))]
@@ -73,7 +84,7 @@ def _unit_measures(parent: ast.AST, prefix: str) -> Iterator[Measure]:
             yield from _unit_measures(node, key)
         elif isinstance(node, FunctionNode):
             key = f"{prefix}::{node.name}" if "::" not in prefix else f"{prefix}.{node.name}"
-            lines = (node.end_lineno or node.lineno) - node.lineno + 1
+            lines = _code_lines(node)
             yield Measure(key, lines, FUNCTION_LINES, "lines")
             yield from _unit_measures(node, key)
         else:
