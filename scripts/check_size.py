@@ -4,16 +4,12 @@ A reader can keep about seven things in mind, and a function that needs more tha
 reader lose the start. The limits below are rough, and they follow the logical structure of the code, not a taste for
 short files:
 
-1. A source file has at most ``SOURCE_FILE_LINES`` lines, and a test file has at most ``TEST_FILE_LINES`` lines.
+1. A source file has at most ``SOURCE_FILE_LINES`` lines. A test file has no limit: a test is a list of independent
+   cases, and the layout rule ties it to one source module, so a long list of cases is no sign of a messy module.
 2. A function has at most ``FUNCTION_LINES`` lines, from its ``def`` line to its last line, without its docstring.
    Documentation is not logic, so a limit that counts it pushes authors to write less of it.
 3. A class has at most ``PUBLIC_METHODS_PER_CLASS`` public methods and at most ``PRIVATE_METHODS_PER_CLASS`` private
-   methods. A
-   dunder method counts as neither.
-
-``scripts/size_baseline.toml`` holds the units that are over a limit today, each with its current size and a reason. The
-size of such a unit may not grow, and the entry goes when the unit is under the limit again. A shrunk unit must lower
-its entry, so the baseline only moves down.
+   methods. A dunder method counts as neither.
 
 Run it as a module from the repo root: ``uv run python -m scripts.check_size``. ``.claude/rules/size.md`` says how to
 split a unit that is too big.
@@ -21,19 +17,16 @@ split a unit that is too big.
 
 import ast
 import sys
-import tomllib
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import attrs
 
 ROOT = Path(__file__).resolve().parent.parent
-BASELINE = ROOT / "scripts" / "size_baseline.toml"
 # The directories whose files the project writes. ``src/baml_sdk`` is generated, so it is not here.
 SOURCE_ROOTS = ("src/ebaml", "scripts", "benchmark")
 TEST_ROOTS = ("tests",)
 SOURCE_FILE_LINES = 800
-TEST_FILE_LINES = 1200
 FUNCTION_LINES = 100
 PUBLIC_METHODS_PER_CLASS = 15
 PRIVATE_METHODS_PER_CLASS = 10
@@ -99,20 +92,21 @@ def measure_file(path: Path, relative: str, *, is_test: bool) -> list[Measure]:
     path: Path
         The file to read.
     relative: str
-        The path from the repo root, with ``/``, which names the file in the baseline.
+        The path from the repo root, with ``/``, which names the file in a message.
     is_test: bool
-        Whether the file is a test, which has a higher limit for its length.
+        Whether the file is a test, whose length has no limit.
 
     Returns
     -------
     list[Measure]
-        One measure for the file, then one for each function and one for each side of each class.
+        One measure for a source file, then one for each function and one for each side of each class.
 
     """
     source = path.read_text(encoding="utf-8")
-    limit = TEST_FILE_LINES if is_test else SOURCE_FILE_LINES
-    file_measure = Measure(relative, len(source.splitlines()), limit, "lines")
-    return [file_measure, *_unit_measures(ast.parse(source), relative)]
+    units = list(_unit_measures(ast.parse(source), relative))
+    if is_test:
+        return units
+    return [Measure(relative, len(source.splitlines()), SOURCE_FILE_LINES, "lines"), *units]
 
 
 def project_measures(root: Path = ROOT) -> list[Measure]:
@@ -140,50 +134,30 @@ def project_measures(root: Path = ROOT) -> list[Measure]:
     return measures
 
 
-def size_problems(measures: Iterable[Measure], baseline: Mapping[str, int]) -> list[str]:
-    """Compare the measures with the limits and with the baseline.
+def size_problems(measures: Iterable[Measure]) -> list[str]:
+    """Compare the measures with the limits.
 
     Parameters
     ----------
     measures: Iterable[Measure]
         The sizes of the units.
-    baseline: Mapping[str, int]
-        The allowed size of each unit that is over its limit today.
 
     Returns
     -------
     list[str]
-        One message for each unit that grew past its limit or its entry, each entry that is stale, and each entry that
-        names no unit.
+        One message for each unit that is over its limit.
 
     """
-    by_key = {measure.key: measure for measure in measures}
-    problems: list[str] = []
-    for measure in by_key.values():
-        allowed = baseline.get(measure.key, measure.limit)
-        if measure.size > allowed:
-            problems.append(
-                f"{measure.key}: {measure.size} {measure.what}, and the limit is {allowed}. "
-                "Split the unit. See .claude/rules/size.md.",
-            )
-    for key, allowed in baseline.items():
-        measure = by_key.get(key)
-        if measure is None:
-            problems.append(f"{key}: the baseline names a unit that does not exist. Delete the entry.")
-        elif not measure.is_over:
-            problems.append(f"{key}: now {measure.size}, under the limit {measure.limit}. Delete the baseline entry.")
-        elif measure.size < allowed:
-            problems.append(f"{key}: now {measure.size}, and the entry says {allowed}. Lower the entry.")
-    return problems
+    return [
+        f"{measure.key}: {measure.size} {measure.what}, and the limit is {measure.limit}. "
+        "Split the unit. See .claude/rules/size.md."
+        for measure in measures
+        if measure.is_over
+    ]
 
 
-def main(argv: Sequence[str] = ()) -> int:
-    """Report every unit that is over its limit and not in the baseline, and every stale entry.
-
-    Parameters
-    ----------
-    argv: Sequence[str]
-        With ``--baseline``, print the entries for every unit that is over its limit, for a new baseline file.
+def main() -> int:
+    """Report every unit that is over its limit.
 
     Returns
     -------
@@ -191,18 +165,11 @@ def main(argv: Sequence[str] = ()) -> int:
         The process exit code: 0 if no unit is over a limit, 1 otherwise.
 
     """
-    measures = project_measures()
-    if "--baseline" in argv:
-        for measure in measures:
-            if measure.is_over:
-                sys.stdout.write(f'"{measure.key}" = {measure.size}\n')
-        return 0
-    baseline: Mapping[str, int] = tomllib.loads(BASELINE.read_text(encoding="utf-8"))["allowed"]
-    problems = size_problems(measures, baseline)
+    problems = size_problems(project_measures())
     for problem in problems:
         sys.stderr.write(f"{problem}\n")
     return 1 if problems else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())
