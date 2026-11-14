@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.2'></a>
+## [0.8.2] - 2026-11-14
+
+### Changed
+
+- EBaMl requires `baml-bridge` 0.25.2 and the BAML toolchain 0.25.
+
 <a id='changelog-0.8.1'></a>
 ## [0.8.1] - 2026-11-14
 
