@@ -23,6 +23,19 @@
     "kind": "class",
     "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Literal['left', 'right', 'mean']) -> None"
   },
+  "AssignScores": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "values: tuple[float, ...]"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, values) -> None"
+  },
   "Audience": {
     "bases": [
       "object"

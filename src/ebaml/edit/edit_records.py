@@ -23,6 +23,7 @@ EDIT_TYPES: dict[str, type[Edit]] = {
     for edit_class in (
         edits.Shift,
         edits.SetScores,
+        edits.AssignScores,
         edits.Align,
         edits.Monotonize,
         edits.Interpolate,

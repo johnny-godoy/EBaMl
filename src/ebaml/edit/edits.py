@@ -204,6 +204,31 @@ class SetScores(Edit):
 
 
 @attrs.frozen
+class AssignScores(Edit):
+    """Set each selected score to its own value. The values follow the order of the bins.
+
+    GAM Changer has no such tool. ``load_gamchanger`` uses it to carry the scores of one GAM Changer commit, such as a
+    monotone fit, into one edit.
+    """
+
+    feature: str
+    selection: Selection
+    values: tuple[float, ...] = attrs.field(converter=tuple)
+
+    @override
+    def run(self, ebm: ExplainableBoostingModel) -> EditOutcome:
+        target = _resolve(ebm, self.feature, self.selection)
+        if len(self.values) != len(target.positions):
+            msg = (
+                f"AssignScores needs one value for each selected bin: the selection holds {len(target.positions)}"
+                f" bins of {self.feature!r}, and the edit has {len(self.values)} values."
+            )
+            raise EditError(msg)
+        model_write.set_scores(ebm, target.view.term, target.positions, np.asarray(self.values, dtype=float))
+        return EditOutcome(self.feature, target.positions, f"Assign new scores to {target.describe()}")
+
+
+@attrs.frozen
 class Align(Edit):
     """Set each selected score to the score of the left bin, the score of the right bin, or the weighted mean.
 

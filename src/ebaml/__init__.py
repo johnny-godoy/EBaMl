@@ -51,6 +51,7 @@ from ebaml.edit.edit_report import BinChange, EditReport
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import (
     Align,
+    AssignScores,
     Clip,
     Edit,
     FitLine,
@@ -138,6 +139,7 @@ __version__: str = version("ebaml")
 __all__ = [
     "APIKeyRejectedError",
     "Align",
+    "AssignScores",
     "Audience",
     "BinChange",
     "BinaryClassifier",
