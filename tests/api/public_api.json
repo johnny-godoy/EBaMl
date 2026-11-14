@@ -522,6 +522,22 @@
     "kind": "class",
     "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float) -> None"
   },
+  "GamChangerCommit": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "commit_type: <class 'str'>",
+      "description: <class 'str'>",
+      "reviewed: <class 'bool'>",
+      "time: <class 'datetime.datetime'>",
+      "commit_hash: <class 'str'>",
+      "edits: tuple[ebaml.edit.edits.Edit, ...]"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, commit_type: str, description: str, reviewed: bool, time: datetime.datetime, commit_hash: str, edits: tuple[ebaml.edit.edits.Edit, ...]) -> None"
+  },
   "GraphOptions": {
     "bases": [
       "object"
@@ -1308,6 +1324,10 @@
     "kind": "str",
     "name": "__version__"
   },
+  "apply_gamchanger": {
+    "kind": "function",
+    "signature": "(session: ebaml.edit.edit_session.EditSession, commits: collections.abc.Sequence[ebaml.edit.gamchanger_files.GamChangerCommit]) -> list[ebaml.edit.edit_report.EditReport]"
+  },
   "check_constraints": {
     "kind": "function",
     "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, constraints: collections.abc.Iterable[ebaml.edit.constraints.Constraint], *, tolerance: float = 1e-09) -> list[ebaml.edit.constraints.Violation]"
@@ -1339,6 +1359,10 @@
   "likelihood_word": {
     "kind": "function",
     "signature": "(probability: float) -> str"
+  },
+  "load_gamchanger": {
+    "kind": "function",
+    "signature": "(path: str | os.PathLike[str], ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor) -> list[ebaml.edit.gamchanger_files.GamChangerCommit]"
   },
   "model_kind": {
     "kind": "function",
