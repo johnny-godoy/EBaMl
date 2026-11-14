@@ -6,10 +6,11 @@ import pytest
 from ebaml.core.custom_types import JSONMapping
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import EditError, HistoryError, SelectionError, StaleRevisionError, UnsupportedModelError
+from ebaml.edit.constraints import Bounded, FixedScore, Monotone, Unused
 from ebaml.edit.edit_session import RevisionInfo
 from ebaml.edit.edits import Monotonize, RemoveTerms, SetScores, Shift
 from ebaml.edit.model_view import term_view
-from ebaml.edit.selections import Bins, Categories, ValueInterval
+from ebaml.edit.selections import Bins, Categories, EveryBin, MissingBin, ValueInterval
 from ebaml.mcp import edit_tools
 from ebaml.mcp.model_store import ModelStore
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame
@@ -173,6 +174,8 @@ def test_the_help_lists_every_edit_and_every_selection_with_its_fields() -> None
     assert "kind Monotonize(feature: str, direction: Literal['increasing', 'decreasing', 'auto']," in text
     assert "selection: selection = whole graph)" in text
     assert "kind Bins(first: int, last: int)" in text
+    # bug: every default read "= whole graph", the None bounds of ValueInterval too
+    assert "kind ValueInterval(low: float | None = None, high: float | None = None)" in text
     assert "kind RemoveTerms(terms: tuple[str, ...])" in text
     assert 'Example: {"kind": "Shift"' in text
 
@@ -297,3 +300,85 @@ def test_list_edits_gives_the_commits_the_undone_edits_and_on_request_the_replay
     assert replay is not None
     assert orjson.loads(replay) == orjson.loads(store.editing().to_json())
     assert edit_tools.list_edits(ModelStore(ebm=store.original)).commits == []
+
+
+MISSING_SCORES_ONE: JSONMapping = {
+    "kind": "FixedScore",
+    "feature": "a",
+    "selection": {"kind": "MissingBin"},
+    "value": 1.0,
+}
+
+
+def test_parse_constraint_builds_the_constraint_and_its_selection_from_the_kind_fields() -> None:
+    assert edit_tools.parse_constraint({
+        "kind": "Monotone",
+        "feature": "a",
+        "direction": "increasing",
+        "selection": {"kind": "Bins", "first": 1.0, "last": 4.0},
+    }) == Monotone("a", "increasing", Bins(1, 4))
+    assert edit_tools.parse_constraint({"kind": "Bounded", "feature": "a", "low": -1, "high": 1}) == Bounded(
+        "a",
+        -1.0,
+        1.0,
+        EveryBin(),
+    )
+    assert edit_tools.parse_constraint(MISSING_SCORES_ONE) == FixedScore("a", MissingBin(), 1.0)
+    assert edit_tools.parse_constraint({"kind": "Unused", "feature": "b"}) == Unused("b")
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ({"feature": "a"}, r"constraint needs a field 'kind' with one of \[.*'Monotone'.*\], but it has None"),
+        (
+            {"kind": "FixedScore", "feature": "a", "selection": {"kind": "Everything"}, "value": 0},
+            r"selection needs a field 'kind' with one of \[.*'EveryBin'.*\], but it has 'Everything'",
+        ),
+        ({"kind": "Unused"}, "The record of the constraint 'Unused' does not fit its class"),
+    ],
+)
+def test_parse_constraint_names_what_is_known_when_the_object_does_not_fit(
+    arguments: JSONMapping,
+    message: str,
+) -> None:
+    with pytest.raises(EditError, match=message):
+        edit_tools.parse_constraint(arguments)
+
+
+def test_the_constraint_help_lists_every_constraint_and_every_selection_with_its_defaults() -> None:
+    text = edit_tools.constraint_kinds_help()
+    for name in ("Monotone", "MaxStep", "Bounded", "FixedScore", "Unused", "Bins", "EveryBin", "WholeGraph"):
+        assert f"kind {name}(" in text
+    assert "kind Bounded(feature: str, low: float, high: float, selection: selection = every bin)" in text
+    assert "direction: Literal['increasing', 'decreasing'], selection: selection = whole graph)" in text
+    assert 'Example: {"kind": "Monotone"' in text
+
+
+def test_check_constraints_gives_each_violation_with_a_repair_that_the_edit_tools_take(store: ModelStore) -> None:
+    check = edit_tools.check_model_constraints(store, [edit_tools.parse_constraint(MISSING_SCORES_ONE)])
+    assert check.revision == "current"
+    assert check.constraint_count == 1
+    assert check.session == RevisionInfo("original", "original", 0)
+    (violation,) = check.violations
+    assert violation.constraint == MISSING_SCORES_ONE
+    assert violation.bins == ["missing"]
+    assert violation.terms == []
+    assert violation.excess == pytest.approx(1.0 - term_view(store.editing().model, "a").scores[0])
+    assert violation.repair == {"kind": "SetScores", "feature": "a", "selection": {"kind": "MissingBin"}, "value": 1.0}
+    assert edit_tools.parse_edit(violation.repair) == SetScores("a", MissingBin(), 1.0)
+
+
+def test_check_constraints_changes_nothing_and_reads_the_revision_that_the_caller_names(store: ModelStore) -> None:
+    constraint = edit_tools.parse_constraint(MISSING_SCORES_ONE)
+    (violation,) = edit_tools.check_model_constraints(store, [constraint]).violations
+    edit_tools.apply_edit(store, edit_tools.parse_edit(violation.repair), "A missing value scores 1")
+    head = store.editing().revision
+    assert edit_tools.check_model_constraints(store, [constraint]).violations == []
+    assert len(edit_tools.check_model_constraints(store, [constraint], "original").violations) == 1
+    assert store.editing().revision == head
+
+
+def test_check_constraints_takes_a_tolerance(store: ModelStore) -> None:
+    constraint = edit_tools.parse_constraint(MISSING_SCORES_ONE)
+    assert edit_tools.check_model_constraints(store, [constraint], tolerance=10.0).violations == []
