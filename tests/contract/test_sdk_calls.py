@@ -18,16 +18,16 @@ SOURCES: list[Path] = sorted([*(ROOT / "src" / "ebaml").rglob("*.py"), *(ROOT / 
 # call of the sources needs a row here, so that a reviewer sees each new crossing of the boundary. The benchmark
 # passes answer_benchmark_question on as a value, so it is a reference and no call.
 CALLED = frozenset({
-    "chat_with_mcp",
-    "check_model",
-    "default_graph_options",
-    "describe_graph_cot",
-    "explain_local",
-    "sample_graph_tokens",
-    "summarize_ebm",
-    "supported_providers",
+    "chat_with_mcp_sync",
+    "check_model_sync",
+    "default_graph_options_sync",
+    "describe_graph_cot_sync",
+    "explain_local_sync",
+    "sample_graph_tokens_sync",
+    "summarize_ebm_sync",
+    "supported_providers_sync",
 })
-REFERENCED_ONLY = frozenset({"answer_benchmark_question"})
+REFERENCED_ONLY = frozenset({"answer_benchmark_question_sync"})
 
 
 class _Call(ast.NodeVisitor):

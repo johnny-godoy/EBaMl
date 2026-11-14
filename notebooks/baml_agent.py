@@ -49,7 +49,7 @@ def _(mo) -> None:
     the `baml` command, how to read what it did, and how it reports a setup problem.
 
     - You need no data download. The notebook fits a small EBM on made-up data.
-    - You need the BAML toolchain (`baml`, version 0.23 or later) and the `mcp` extra: `pip install "ebaml[mcp]"`.
+    - You need the BAML toolchain (`baml`, version 0.25 or later) and the `mcp` extra: `pip install "ebaml[mcp]"`.
     - Every step runs without a key, except the last button. It sends real requests to an LLM. The default model
       needs `OPENROUTER_API_KEY`.
     """)

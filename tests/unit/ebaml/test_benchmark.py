@@ -260,7 +260,7 @@ def test_run_task_without_questions_shows_no_bar(error_stream: io.StringIO) -> N
 
 
 def test_baml_function_satisfies_the_benchmark_protocols() -> None:
-    assert isinstance(baml_sdk.answer_benchmark_question, AskQuestion)
+    assert isinstance(baml_sdk.answer_benchmark_question_sync, AskQuestion)
     reply = baml_sdk.Counted(text="a", usage=baml_sdk.TokenUsage(input_tokens=1, output_tokens=2, samples=[]))
     assert isinstance(reply, Reply)
     assert isinstance(reply.usage, Usage)
@@ -268,8 +268,8 @@ def test_baml_function_satisfies_the_benchmark_protocols() -> None:
 
 
 def test_the_ask_question_protocol_matches_the_sdk_function() -> None:
-    assert call_mismatches(AskQuestion, "answer_benchmark_question") == []
-    assert sdk_signature("answer_benchmark_question").return_annotation is baml_sdk.Counted
+    assert call_mismatches(AskQuestion, "answer_benchmark_question_sync") == []
+    assert sdk_signature("answer_benchmark_question_sync").return_annotation is baml_sdk.Counted
 
 
 def test_the_reply_protocol_matches_the_sdk_class() -> None:
@@ -360,10 +360,10 @@ class WrongReply(Protocol):
 
 
 def test_call_mismatches_reports_each_difference() -> None:
-    assert call_mismatches(WrongAsk, "answer_benchmark_question") == [
-        "answer_benchmark_question has no parameter answer",
+    assert call_mismatches(WrongAsk, "answer_benchmark_question_sync") == [
+        "answer_benchmark_question_sync has no parameter answer",
         "the protocol lacks the parameter answer_format",
-        "answer_benchmark_question(question) is <class 'str'>, the protocol passes <class 'int'>",
+        "answer_benchmark_question_sync(question) is <class 'str'>, the protocol passes <class 'int'>",
     ]
 
 

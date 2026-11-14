@@ -16,9 +16,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BAML_CLIENTS: str = (ROOT / "baml_src" / "talk_to_ebm.baml").read_text(encoding="utf-8")
 # the default client of each call, with the function of model_spec.baml that holds its settings
 DEFAULTS: dict[str, Callable[[], baml_sdk.CallDefaults]] = {
-    "RouterBase": baml_sdk.short_defaults,
-    "RouterLongBase": baml_sdk.long_defaults,
-    "RouterBenchmarkBase": baml_sdk.benchmark_defaults,
+    "RouterBase": baml_sdk.short_defaults_sync,
+    "RouterLongBase": baml_sdk.long_defaults_sync,
+    "RouterBenchmarkBase": baml_sdk.benchmark_defaults_sync,
 }
 
 
@@ -45,19 +45,19 @@ def test_the_defaults_of_the_spec_equal_the_settings_of_the_default_client(clien
 def test_the_documented_defaults_are_the_defaults_of_the_code() -> None:
     doc = ModelOptions.__doc__ or ""
     assert "0.7" in doc
-    assert str(baml_sdk.short_defaults().max_output_tokens) in doc
-    assert str(baml_sdk.long_defaults().max_output_tokens) in doc
+    assert str(baml_sdk.short_defaults_sync().max_output_tokens) in doc
+    assert str(baml_sdk.long_defaults_sync().max_output_tokens) in doc
     assert "0.0" in doc
 
 
 def test_every_provider_of_baml_builds_a_client_and_a_name_that_it_lacks_does_not() -> None:
-    for provider in baml_sdk.supported_providers():
-        baml_sdk.check_model(spec=baml_sdk.ModelSpec(provider=provider, model="model"))
+    for provider in baml_sdk.supported_providers_sync():
+        baml_sdk.check_model_sync(spec=baml_sdk.ModelSpec(provider=provider, model="model"))
     with pytest.raises(BamlError) as error:
-        baml_sdk.check_model(spec=baml_sdk.ModelSpec(provider="no-such-provider", model="model"))
+        baml_sdk.check_model_sync(spec=baml_sdk.ModelSpec(provider="no-such-provider", model="model"))
     assert error.value.class_name == "baml.errors.InvalidArgument"
 
 
 def test_the_providers_that_the_docs_name_exist() -> None:
     documented = {"openai", "anthropic", "openrouter", "ollama", "openai-generic"}
-    assert documented <= set(baml_sdk.supported_providers())
+    assert documented <= set(baml_sdk.supported_providers_sync())

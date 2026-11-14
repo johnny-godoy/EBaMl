@@ -50,7 +50,7 @@ def _local_text(*_args: object, **_kwargs: object) -> baml_sdk.LocalExplanationT
 
 
 # the BAML functions that send a request to the LLM. The other functions of baml_sdk run locally, so they stay real.
-LLM_FAKES = {"describe_graph_cot": _counted, "summarize_ebm": _counted, "explain_local": _local_text}
+LLM_FAKES = {"describe_graph_cot_sync": _counted, "summarize_ebm_sync": _counted, "explain_local_sync": _local_text}
 
 
 def training_data() -> tuple[pd.DataFrame, pd.Series]:

@@ -131,7 +131,7 @@ def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
         The prompt options for the BAML LLM client.
 
     """
-    options = baml_sdk.default_graph_options()
+    options = baml_sdk.default_graph_options_sync()
     descriptions = {
         "expert_description": prompt.expert_description,
         "graph_description": prompt.graph_description,
@@ -178,11 +178,11 @@ def _model_spec(model: ModelOptions | str | None) -> baml_sdk.ModelSpec | None:
         headers=dict(options.headers) or None,
     )
     try:
-        baml_sdk.check_model(spec=spec)
+        baml_sdk.check_model_sync(spec=spec)
     except BamlError as error:
         if error.class_name != "baml.errors.InvalidArgument":
             raise
-        raise InvalidOptionError(options.provider, baml_sdk.supported_providers()) from error
+        raise InvalidOptionError(options.provider, baml_sdk.supported_providers_sync()) from error
     return spec
 
 
@@ -361,7 +361,7 @@ def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _
 
     def ask(text: str) -> baml_sdk.Counted:
         sent.append(text)
-        return baml_sdk.describe_graph_cot(
+        return baml_sdk.describe_graph_cot_sync(
             graph=text,
             num_sentences=job.num_sentences,
             opts=job.prompt_options,
@@ -465,7 +465,7 @@ def sample_graph_tokens(
     """
     model_spec = _model_spec(model)
     with provider_errors():
-        return baml_sdk.sample_graph_tokens(graph=graph, opts=_prompt_options(prompt), model=model_spec)
+        return baml_sdk.sample_graph_tokens_sync(graph=graph, opts=_prompt_options(prompt), model=model_spec)
 
 
 def chat_with_mcp(
@@ -500,7 +500,7 @@ def chat_with_mcp(
     """
     model_spec = _model_spec(model)
     with provider_errors():
-        return baml_sdk.chat_with_mcp(command=command, args=list(arguments), model=model_spec, max_steps=max_steps)
+        return baml_sdk.chat_with_mcp_sync(command=command, args=list(arguments), model=model_spec, max_steps=max_steps)
 
 
 def _describe_graphs(
@@ -631,7 +631,7 @@ def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
             )
         )
         with provider_errors():
-            summary = baml_sdk.summarize_ebm(
+            summary = baml_sdk.summarize_ebm_sync(
                 feature_importances=feature_importances,
                 graph_descriptions=graph_descriptions,
                 num_sentences=request.num_sentences,
@@ -689,7 +689,7 @@ def explain_instance(request: ExplainInstanceRequest) -> LocalExplanation:
     texts = facts_to_texts(facts, audience)
     model_spec = _model_spec(request.model)
     with provider_errors():
-        result = baml_sdk.explain_local(
+        result = baml_sdk.explain_local_sync(
             global_explanation=request.global_explanation,
             facts=baml_sdk.LocalFactTexts(**attrs.asdict(texts, recurse=False)),
             audience_guidance=audience.guidance(),

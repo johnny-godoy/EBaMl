@@ -48,7 +48,7 @@ def model_spec(_type: type, tokens: Sequence[cyclopts.Token]) -> baml_sdk.ModelS
     try:
         options = ModelOptions.parse(tokens[0].value)
         spec = baml_sdk.ModelSpec(provider=options.provider, model=options.model)
-        baml_sdk.check_model(spec=spec)
+        baml_sdk.check_model_sync(spec=spec)
     except (InvalidOptionError, BamlError) as error:
         raise ValueError(str(error)) from error
     return spec
@@ -92,7 +92,7 @@ def run(
         The exit code.
 
     """
-    ask = functools.partial(baml_sdk.answer_benchmark_question, model=model)
+    ask = functools.partial(baml_sdk.answer_benchmark_question_sync, model=model)
     results = [
         run_task(each, load_questions(each, DATA_DIR)[:limit], ask, progress=progress) for each in task or list(Task)
     ]
