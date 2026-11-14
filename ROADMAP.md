@@ -33,7 +33,8 @@ EBaMl will reach three goals:
 | 0.12.0 | Documentation for new users: what an EBM is, why it matters, a short README and the guides on the site. | [docs-for-new-users](docs/plans/docs-for-new-users.md) | 0.10.0 | Planned |
 | 0.13.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | [site-quality-checks](docs/plans/site-quality-checks.md) | 0.12.0 | Planned |
 | 0.14.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.10.0 | Planned |
-| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0 | Planned |
+| 0.15.0 | Actionable recourse: immutable features, allowed values, cost strategies and several plans for the counterfactual, with proofs. | [actionable-recourse](docs/plans/actionable-recourse.md) | 0.10.0 | Planned |
+| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0 | Planned |
 
 Until 0.11.0, pull requests run on Linux with Python 3.13 only. The plan of 0.11.0 adds the Python versions from 3.12,
 and the plan of 1.0.0 adds the other operating systems. Each plan makes the package claim only what the matrix passes.
