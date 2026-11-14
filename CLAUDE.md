@@ -18,7 +18,8 @@ baml generate                      # run after every .baml change; writes src/ba
 baml fmt && baml check             # format and compile-check .baml files
 OPENROUTER_API_KEY=unused baml test -x root::Live   # offline BAML tests on a scripted client; the variable must exist
 baml test -i root::Live            # live prompt tests (baml_src/tests/live/); send real requests, need a real key
-uv run pytest                      # unit tests in tests/unit; fails below 100% coverage
+uv run pytest                      # all suites; CI gates unit tests at 100% coverage (tests/unit)
+uv run pytest tests/integration tests/api tests/contract --no-cov   # integration (real BAML runtime, local LLM server), API and contract tests
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, marimo check, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, check-ignore-repeats, uv lock --check
@@ -87,6 +88,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Search before you add a shared `Protocol`, `ABC` or cross-module helper, and register a new shared contract in
   `architecture/abstractions.yml` (`.claude/rules/reuse.md`). Reuse a contract that the layers allow, because a second
   contract for one job drifts from the first.
+- Pick the test suite by the question it answers: unit, integration, API or contract (`.claude/rules/testing.md`). An
+  integration test runs the real `baml_sdk` against a local LLM server, and never reaches a real provider.
 - Ship each bug fix with a guard: a unit test or a semgrep rule that fails on the old code (`.claude/rules/bug-fixes.md`).
 - Commit in small steps, each with one purpose and a conventional commit message (`type(scope): description`).
   Write the PR title the same way, and fill the PR template (`.claude/rules/commits-and-prs.md`). Hooks and CI check it.

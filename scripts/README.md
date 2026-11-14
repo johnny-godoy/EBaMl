@@ -5,6 +5,7 @@ Repository maintenance scripts. Run them from the repo root with `uv run python 
 | Script | What it does |
 | --- | --- |
 | `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
+| `check_test_suites.py` | Fails when `tests/` holds an unknown suite, a suite has no test module, an integration test fakes `baml_sdk`, or `pyproject.toml` and the CI workflow leave a suite out. |
 | `check_size.py` | Fails when a source file has more than 800 lines (a test file has no limit), a function has more than 100 lines without its docstring, or a class has more than 15 public or 10 private methods. |
 | `check_ignore_repeats.py` | Fails when one ignore rule has more than 5 sites outside the files that hold the shared fix. |
 | `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
