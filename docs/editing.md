@@ -170,6 +170,11 @@ needs no lock, and a slow read does not block the writers. A call that changes t
 If the head differs, the call raises a `StaleRevisionError` and changes nothing. Read the session again, and decide if
 the call still fits. The session never retries for you.
 
+## Edit through an agent
+
+The [MCP server](mcp.md#edit-the-model) gives an agent the same edits as tools. The agent applies each edit with a
+reason, and the server asks a person to confirm the edits before it saves the model.
+
 ## Coming from GAM Changer
 
 | GAM Changer | EBaMl |
