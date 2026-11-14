@@ -21,10 +21,12 @@ def _():
     import polars as pl
     import skops.io
     from interpret.glassbox import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-    from mcp import Client, StdioServerParameters
+    from mcp import Client, StdioServerParameters, types
+    from mcp.client.session import ElicitationFnT
 
     return (
         Client,
+        ElicitationFnT,
         ExplainableBoostingClassifier,
         ExplainableBoostingRegressor,
         Path,
@@ -39,6 +41,7 @@ def _():
         socket,
         sys,
         tempfile,
+        types,
     )
 
 
@@ -119,12 +122,18 @@ def _(mo) -> None:
 
 
 @app.cell
-def _(Client, Path, StdioServerParameters, sys):
+def _(Client, ElicitationFnT, Path, StdioServerParameters, sys):
     # the ebaml-mcp script that `pip install "ebaml[mcp]"` puts next to the Python of this notebook
     command = str(Path(sys.executable).parent / "ebaml-mcp")
 
-    def open_session(*arguments: str, env: dict[str, str] | None = None) -> Client:
+    def open_session(
+        *arguments: str,
+        env: dict[str, str] | None = None,
+        person: ElicitationFnT | None = None,
+    ) -> Client:
         """Give a client of ebaml-mcp, started with the arguments. It stops the server when its block ends.
+
+        ``person`` answers the questions that the server asks, as the person at a client does.
 
         Returns
         -------
@@ -132,7 +141,10 @@ def _(Client, Path, StdioServerParameters, sys):
             The client. Use it in an ``async with`` block.
 
         """
-        return Client(StdioServerParameters(command=command, args=list(arguments), env=env))
+        return Client(
+            StdioServerParameters(command=command, args=list(arguments), env=env),
+            elicitation_callback=person,
+        )
 
     return command, open_session
 
@@ -165,7 +177,7 @@ async def _(data_file, model_file, open_session, orjson):
         summary_result = await read_session.call_tool("get_model_summary", {})
         features_result = await read_session.call_tool("list_features", {})
     summary = orjson.loads(summary_result.content[0].text)
-    features = orjson.loads(features_result.content[0].text)
+    features = orjson.loads(features_result.content[0].text)["features"]
     summary
     return features, summary
 
@@ -270,6 +282,251 @@ def _(explanation, mo):
             ),
         },
     )
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ## Edit the model
+
+    An agent can also **edit** the model so that it meets a business requirement, for example "the approval must not
+    fall when the age goes up". The edit tools call no LLM. The agent is the LLM, and the tools stay exact and free.
+    The server edits a copy and never changes the model file. Start it with `--output-dir` to turn on `save_model`.
+
+    The working order protects the model from a harmful edit:
+
+    1. Read the graph with `get_graph` and the bins with `list_bins`.
+    2. Call `preview_edit`. It shows the changed bins, the share of the training weight that they hold and, with
+       `--data`, how many rows change. It changes nothing.
+    3. Call `apply_edit` with a **reason**, the business requirement that the edit serves. The history keeps it.
+    4. Call `save_model` with a message. The server asks the person to confirm the edits and their reasons.
+
+    The cell below runs the steps in one session. The edit is one JSON object. Its field `kind` names the edit.
+    """)
+
+
+@app.cell
+async def _(ElicitationFnT, data_file, model_file, open_session, orjson, types, workdir):
+    edit_output = workdir / "edited"
+    questions_of_the_server: list[str] = []
+
+    async def person_confirms(  # ruff: ignore[unused-async] -- the SDK awaits the callback of a client
+        _context,
+        params: types.ElicitRequestParams,
+    ) -> types.ElicitResult:
+        """Answer yes, as a person who read the edits does.
+
+        Returns
+        -------
+        types.ElicitResult
+            The answer.
+
+        """
+        questions_of_the_server.append(params.message)
+        return types.ElicitResult(action="accept", content={"confirm": True})
+
+    monotone_age = {"kind": "Monotonize", "feature": "age", "direction": "increasing"}
+    neutral_north = {
+        "kind": "SetScores",
+        "feature": "city",
+        "selection": {"kind": "Categories", "names": ["north"]},
+        "value": 0.0,
+    }
+    edit_steps = {}
+    edit_confirm: ElicitationFnT = person_confirms
+    async with open_session(
+        "--model",
+        str(model_file),
+        "--data",
+        str(data_file),
+        "--output-dir",
+        str(edit_output),
+        person=edit_confirm,
+    ) as edit_session:
+
+        async def edit_call(name, arguments):
+            result = await edit_session.call_tool(name, arguments)
+            return result.is_error, result.content[0].text
+
+        edit_steps["tools"] = [
+            tool.name
+            for tool in (await edit_session.list_tools()).tools
+            if "edit" in tool.name or tool.name in {"list_bins", "save_model"}
+        ]
+        edit_steps["bins"] = orjson.loads((await edit_call("list_bins", {"feature": "age"}))[1])
+        edit_steps["preview"] = orjson.loads((await edit_call("preview_edit", {"edit": monotone_age}))[1])
+        edit_steps["apply"] = orjson.loads(
+            (
+                await edit_call(
+                    "apply_edit",
+                    {
+                        "edit": monotone_age,
+                        "reason": "The approval must not fall when the age goes up.",
+                        "expected_revision": "original",
+                    },
+                )
+            )[1],
+        )
+        edit_steps["apply_second"] = orjson.loads(
+            (
+                await edit_call(
+                    "apply_edit",
+                    {
+                        "edit": neutral_north,
+                        "reason": "The city must not decide the approval.",
+                        "expected_revision": edit_steps["apply"]["session"]["head"],
+                    },
+                )
+            )[1],
+        )
+        edit_steps["stale"] = await edit_call(
+            "apply_edit",
+            {"edit": neutral_north, "reason": "Too late.", "expected_revision": "original"},
+        )
+        edit_steps["unknown_kind"] = await edit_call(
+            "apply_edit",
+            {"edit": {"kind": "Explode"}, "reason": "A wrong call."},
+        )
+        edit_steps["graph_original"] = (await edit_call("get_graph", {"feature": "city", "revision": "original"}))[1]
+        edit_steps["graph_current"] = (await edit_call("get_graph", {"feature": "city"}))[1]
+        edit_steps["undo"] = orjson.loads((await edit_call("undo_edit", {}))[1])
+        edit_steps["redo"] = orjson.loads((await edit_call("redo_edit", {}))[1])
+        edit_steps["history"] = orjson.loads((await edit_call("list_edits", {}))[1])
+        edit_steps["save"] = orjson.loads(
+            (await edit_call("save_model", {"message": "Approval rules of the lending policy"}))[1],
+        )
+    return edit_output, edit_steps, questions_of_the_server
+
+
+@app.cell
+def _(edit_steps, mo):
+    mo.md(f"""
+    The server offered these edit tools: {", ".join(f"`{name}`" for name in edit_steps["tools"])}.
+
+    `list_bins` gave the bins of `age` with their number, edges, training weight and score.
+    The first bins are below. A bin number is what the selection `Bins` uses.
+    """)
+
+
+@app.cell
+def _(edit_steps, mo):
+    bins_view = [
+        {
+            "number": info["number"],
+            "label": info["label"],
+            "score": round(info["score"], 3),
+            "weight": info["weight"],
+        }
+        for info in edit_steps["bins"]["bins"][:8]
+    ]
+    mo.ui.table(bins_view, selection=None, label="list_bins: the first bins of age")
+
+
+@app.cell
+def _(edit_steps, mo):
+    preview = edit_steps["preview"]
+    effect = preview["effect_on_data"]
+    report = preview["report"]
+    mo.md(f"""
+    `preview_edit` changed nothing. The report says: *{preview["report_text"].splitlines()[0]}* It changes
+    **{len(report["changes"])}** bins, and they hold **{report["weight_share"]:.1%}** of the training weight.
+    The weighted mean of the graph moves by **{report["weighted_mean_shift"]:.3g}**.
+
+    With `--data`, the preview also counts the rows that the edit changes: **{effect["rows_with_changed_value"]}** of
+    **{effect["row_count"]}** rows, and **{effect["rows_with_changed_class"]}** of them change class. Without `--data`,
+    the field is empty and a note says that nobody checked the effect.
+    """)
+
+
+@app.cell
+def _(edit_steps, mo):
+    edit_errors = [
+        {"call": "apply_edit with a stale expected_revision", "message": edit_steps["stale"][1]},
+        {"call": "apply_edit with an unknown kind", "message": edit_steps["unknown_kind"][1]},
+    ]
+    mo.md("Two calls that the server refuses. Each message tells the agent how to repair the call:")
+    mo.ui.table(edit_errors, selection=None, label="Tool errors", wrapped_columns=["message"])
+
+
+@app.cell
+def _(edit_steps, mo):
+    undone_count = edit_steps["undo"]["session"]["edit_count"]
+    redone_count = edit_steps["redo"]["session"]["edit_count"]
+    mo.md(f"""
+    `get_graph` and the other read tools take `revision`: `original`, `current` or the id of a commit. A read of an
+    earlier revision never changes the model. The graph of `city` has **{len(edit_steps["graph_original"])}** characters
+    at the original revision and **{len(edit_steps["graph_current"])}** at the current one, and its first line says
+    which revision it shows.
+
+    After `undo_edit` the head holds **{undone_count}** edit, and after `redo_edit` it holds **{redone_count}** edits.
+    """)
+
+
+@app.cell
+def _(edit_steps, mo):
+    history_view = [
+        {
+            "id": commit["short_id"],
+            "kind": commit["kind"],
+            "feature": commit["feature"],
+            "type": commit["edit_type"],
+            "reason": commit["reason"],
+            "reviewed": commit["reviewed"],
+        }
+        for commit in edit_steps["history"]["commits"]
+    ]
+    mo.ui.table(history_view, selection=None, label="list_edits: the history before the save")
+
+
+@app.cell
+def _(edit_steps, edit_output, mo, questions_of_the_server):
+    saved = edit_steps["save"]
+    mo.md(f"""
+    `save_model` asked the person to confirm. The question that the client showed:
+
+    ```text
+    {questions_of_the_server[0]}
+    ```
+
+    The person answered yes, so the confirmation is `{saved["confirmation"]}`. The server wrote
+    `{saved["model_file"]}` and `{saved["history_file"]}` into `{edit_output.name}` and marked the edits as reviewed.
+    It never overwrites a file, and the model file of the server is unchanged. The next session continues the work
+    with `--edits`.
+    """)
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ### A client that cannot ask a person
+
+    A client without elicitation cannot show the question. Then `save_model` still saves, but the history marks each
+    edit as **not reviewed by a person**, so a reader of the history can see that nobody confirmed it. Tell the person
+    when this happens.
+    """)
+
+
+@app.cell
+async def _(data_file, model_file, open_session, orjson, workdir):
+    unasked_output = workdir / "unasked"
+    async with open_session(
+        "--model",
+        str(model_file),
+        "--data",
+        str(data_file),
+        "--output-dir",
+        str(unasked_output),
+    ) as unasked_session:
+        await unasked_session.call_tool(
+            "apply_edit",
+            {"edit": {"kind": "ZeroTerm", "feature": "income"}, "reason": "The model must not use the income."},
+        )
+        unasked_save = orjson.loads(
+            (await unasked_session.call_tool("save_model", {"message": "No income"})).content[0].text,
+        )
+    unasked_history = orjson.loads((unasked_output / unasked_save["history_file"]).read_bytes())
+    unasked_reviewed = [entry["reviewed"] for entry in unasked_history["entries"]]
+    unasked_save["confirmation"], unasked_reviewed
 
 
 @app.cell
@@ -387,7 +644,9 @@ async def _(mo, open_session, orjson, other_files, other_instances):
     for row_label, row_file in other_files.items():
         async with open_session("--model", str(row_file)) as kind_session:
             kind_summary = orjson.loads((await kind_session.call_tool("get_model_summary", {})).content[0].text)
-            kind_features = orjson.loads((await kind_session.call_tool("list_features", {})).content[0].text)
+            kind_features = orjson.loads((await kind_session.call_tool("list_features", {})).content[0].text)[
+                "features"
+            ]
             kind_explain = await kind_session.call_tool(
                 "explain_prediction",
                 {"instance": other_instances[row_label]},

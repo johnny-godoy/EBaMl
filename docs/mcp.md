@@ -1,8 +1,9 @@
 # MCP server
 
 `ebaml-mcp` gives an agent a fitted EBM through the [Model Context Protocol](https://modelcontextprotocol.io). The
-agent can read the model, read each graph and explain one prediction. The read and explain tools call no LLM. They are
-fast, free and exact, and they need no API key.
+agent can read the model, read each graph and explain one prediction. The agent can also edit the model so that it meets
+a business requirement, and save the edited model after a person confirms the edits. The read, explain and edit tools
+call no LLM. They are fast, free and exact, and they need no API key.
 
 A worked example, with its output, is in the [MCP server notebook](mcp-notebook.md).
 
@@ -57,6 +58,8 @@ ebaml-mcp --model model.skops --data train.parquet
 | `--model PATH` | The EBM in a skops file, or in a pickled or joblib file. This option is required. |
 | `--data PATH` | A Parquet or CSV file with the rows for the `row` argument of `explain_prediction`. |
 | `--llm PROVIDER/MODEL` | Turn on the LLM tools. See [Choosing the model](providers.md). Without it, the server has no LLM tools. |
+| `--output-dir DIR` | The directory where `save_model` writes the edited model and its history. The server creates it if it does not exist. Without this option, the server has no `save_model` tool. |
+| `--edits PATH` | The history file of an earlier session (`*.history.json`). The server replays it at start, so the work goes on. The server refuses a history that started from another model. |
 | `--transport` | `stdio` (the default) or `streamable-http`. |
 | `--host ADDRESS` | The address of the `streamable-http` transport. The default is `127.0.0.1`, which accepts this computer only. |
 | `--port NUMBER` | The port of the `streamable-http` transport. The default is `8000`. |
@@ -106,17 +109,30 @@ reaches the port can read the model and the rows of the data file.
 
 | Tool | Arguments | Result |
 | --- | --- | --- |
-| `get_model_summary` | none | The kind, the outputs or classes, the intercept, the number of features, and the interaction terms that the server skips. |
-| `list_features` | none | The name, the type and the importance of each feature, the most important first. |
-| `get_graph` | `feature`, optional `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
-| `explain_prediction` | `instance` or `row`, optional `confidence_level` | The `LocalFacts` and their texts, as JSON. |
+| `get_model_summary` | optional `revision` | The kind, the outputs or classes, the intercept, the number of features, and the interaction terms that the server skips. |
+| `list_features` | optional `revision` | The name, the type and the importance of each feature, the most important first. |
+| `get_graph` | `feature`, optional `revision`, `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
+| `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level` | The `LocalFacts` and their texts, as JSON. |
+| `list_bins` | `feature`, optional `revision` | The bins of a feature with the number, the edges, the training weight and the score of each bin, and the missing and the unseen bin. |
+| `preview_edit` | `edit`, optional `revision` | The report of one edit and its effect on the rows of `--data`. It changes nothing. |
+| `apply_edit` | `edit`, `reason`, optional `expected_revision` | Applies one edit to the session copy of the model, and returns the same result as `preview_edit`. |
+| `undo_edit`, `redo_edit` | optional `expected_revision` | Undoes the last edit, or applies it again. |
+| `checkout_edit` | `revision`, optional `expected_revision` | Sets the model to its state after one commit of the history. |
+| `list_edits` | optional `include_replay_json` | The history as a table of commits, and on request the JSON that `--edits` reads. |
+| `save_model` | `message`, optional `expected_revision` | Saves the edited model and its history after a person confirms. It needs `--output-dir`. |
 | `describe_feature` | `feature` | The words of `describe_graph`. It needs `--llm`. |
-| `describe_model` | none | The words of `describe_ebm`. The server keeps the text. It needs `--llm`. |
+| `describe_model` | none | The words of `describe_ebm` for the current model. The server keeps the text for the revision that it describes. It needs `--llm`. |
 
 The server also serves each graph as the resource `ebm://graphs/{feature}`.
 
 `explain_prediction` works for classifiers and regressors without interactions. For other models, it returns an error
 with the reason. A package error is a tool error with its message.
+
+Each JSON result has a `session` field. It names the revision that the call read, the head of the session, and the
+number of edits that the head holds. `get_graph` writes the same facts in its first line.
+
+The edit tools work for binary classifiers and regressors. For a multiclass classifier, they return an error, and the
+read tools still work.
 
 The examples below come from a real session over stdio. The model is an EBM with `interactions=0` that was fitted on
 500 synthetic rows with the features `age`, `income` and `city`. The server started with
@@ -138,7 +154,8 @@ The examples below come from a real session over stdio. The model is an EBM with
       "score_meaning": "A score is the change of the log-odds of the class 1.",
       "intercept": [0.611152714154934],
       "feature_count": 3,
-      "skipped_terms": []
+      "skipped_terms": [],
+      "session": {"revision": "original", "head": "original", "edit_count": 0}
     }
     ```
 
@@ -149,11 +166,14 @@ The examples below come from a real session over stdio. The model is an EBM with
     ```
 
     ```json
-    [
-      {"name": "income", "type": "continuous", "importance": 1.1480326430918357},
-      {"name": "age", "type": "continuous", "importance": 1.1147650229232495},
-      {"name": "city", "type": "nominal", "importance": 0.840511802142521}
-    ]
+    {
+      "session": {"revision": "original", "head": "original", "edit_count": 0},
+      "features": [
+        {"name": "income", "type": "continuous", "importance": 1.1480326430918357},
+        {"name": "age", "type": "continuous", "importance": 1.1147650229232495},
+        {"name": "city", "type": "nominal", "importance": 0.840511802142521}
+      ]
+    }
     ```
 
 3. The agent calls `get_graph` for one feature. The result is text, not JSON. The server merges the bins of a
@@ -165,6 +185,7 @@ The examples below come from a real session over stdio. The model is an EBM with
     ```
 
     ```text
+    Revision original. The head is original, and it holds 0 applied edits.
     This graph represents a continuous-valued feature. The keys are intervals that represent ranges where the function predicts the same value.
     Feature Name: age
     Feature Type: continuous
@@ -178,6 +199,169 @@ The examples below come from a real session over stdio. The model is an EBM with
 
 An agent that asks for a feature that the model lacks, or for an interaction term, gets a tool error that names the
 features of the model.
+
+## Edit the model
+
+An edit changes the scores of the bins of one graph. It changes real predictions. Apply only the edits that the person
+asked for, and check the effect of an edit before you apply it. A written reason and a confirmation by a person protect
+the model from a harmful edit, as in [GAM Changer](https://interpret.ml/gam-changer/) (Wang et al., KDD 2022). The edit
+tools call the edit API of Python ([EditSession](editing.md)) and call no LLM. The agent is the LLM.
+
+The server edits a copy of the model. It never changes the file of `--model`. A tool that reads the model, such as
+`get_graph` or `explain_prediction`, reads the edited copy.
+
+### The working order
+
+1. Read the graph with `get_graph` and the bins with `list_bins`. A selection must end on the edges of the bins.
+2. Call `preview_edit`. Read the changed bins, the share of the training weight that they hold, and the effect on the
+   data.
+3. Call `apply_edit` with a `reason`: the business requirement that the edit serves, in one or two sentences. The history
+   keeps it, and a person reads it later.
+4. Tell the person what changed. Call `save_model` with a `message` when the person wants the edited model.
+
+If several edits meet the requirement, propose the one that changes the fewest scores.
+
+### The edit argument
+
+The `edit` argument is one JSON object. Its field `kind` names the edit, and the other fields are the fields of that
+edit. The description of `preview_edit` and `apply_edit` lists every edit with its fields. A new edit of `ebaml.edit`
+appears in the list with no new tool. A selection is a JSON object with a `kind` too.
+
+| `kind` of the edit | Effect |
+| --- | --- |
+| `Shift` | Adds a value to the selected scores. |
+| `SetScores` | Sets the selected scores to one value. |
+| `Align` | Sets the selected scores to the score of the left bin, of the right bin, or to the weighted mean. |
+| `Monotonize` | Makes the selected scores monotone, weighted by the training weight of the bins. |
+| `Interpolate`, `FitLine` | Replaces the selected scores by a straight line, or by the weighted least-squares line. |
+| `Scale` | Multiplies the graph by a factor. |
+| `ZeroTerm`, `RemoveTerms`, `RemoveFeature` | Set a graph to 0, or remove terms. The model keeps its input columns. |
+| `Recenter` | Moves the weighted mean of a graph into the intercept. No prediction changes. |
+
+| `kind` of the selection | Bins |
+| --- | --- |
+| `Bins` | The bin numbers from `first` to `last`, both included. A bin number is the number that `list_bins` gives. |
+| `Categories` | The bins of some categories of a nominal feature. |
+| `ValueInterval` | Every bin that overlaps an interval of values. The report names the bins that it chose. |
+| `MissingBin`, `UnseenBin`, `WholeGraph` | The missing bin, the unseen bin, or every real bin. |
+
+An edit that sets scores does not re-centre the graph. The report shows the shift of the weighted mean of the graph
+(`weighted_mean_shift`). Call `Recenter` when the person wants the shift in the intercept. A score that a person sets
+has no fitted uncertainty, so its standard deviation is 0.
+
+### The result of an edit
+
+`preview_edit` and `apply_edit` return the report, its text, and the effect on the rows of `--data`. The report lists
+the changed bins with their score before and after, the largest change, the share of the training weight that the
+changed bins hold, the shift of the weighted mean, and the pair terms that still use the feature. The edit changes the
+main effect only, so a pair term can still use the feature.
+
+The effect on the data counts the rows whose prediction changes, and for a classifier the rows whose class changes. It
+needs no labels. It does not say whether the edit is good. Without `--data`, the field `effect_on_data` is empty, and
+`effect_on_data_note` says that nobody checked the effect. Tell the person when this happens.
+
+### Revisions and the history
+
+Each edit is a commit with an id. A read tool takes `revision`: `original`, `current` or the id of a commit. A read of a
+revision never changes the model. `list_edits` shows the history as a table of commits: the id, the time, the feature,
+the type, a description, the reason, and whether a person reviewed it. `undo_edit` and `redo_edit` move the head, and
+`checkout_edit` sets it to any commit. A new edit after an undo drops the edits that the undo moved to the redo stack.
+
+Several clients can edit at the same time. A tool that changes the model takes `expected_revision`, the head that the
+agent read. If the head is another one, the tool fails and changes nothing. The error names the current head, so the
+agent reads again and decides if its call still fits.
+
+### Save the edited model
+
+Start the server with `--output-dir DIR` to turn on `save_model`. The tool needs a `message`: the change that the saved
+model holds. It asks the person to confirm. The question shows the message, each edit and its reason. The tool then writes
+the model with `skops.io` and the history as JSON into the directory. Each save gets a new name, and a save never
+overwrites a file. No tool argument names a path.
+
+If the person does not confirm, the tool saves nothing. If the client cannot ask a person, the tool saves the model and
+the history marks each edit as not reviewed by a person. The result names the case in the field `confirmation`:
+`person_confirmed`, `no_edits_to_confirm` or `client_cannot_ask`. If the model changes while the person decides, the
+tool asks again or fails, so a confirmation of an older model never saves a newer one.
+
+Start the next session with `--edits PATH` and the first history file to continue the work. The server replays the edits
+on the model of `--model`, and it refuses a history that started from another model.
+
+### Example session: edit the model
+
+The model is the same as above. The requirement is: "The city must not decide the approval." The result of each call is
+shortened.
+
+1. The agent reads the bins of `city`.
+
+    ```json
+    {"name": "list_bins", "arguments": {"feature": "city"}}
+    ```
+
+    ```json
+    {
+      "session": {"revision": "original", "head": "original", "edit_count": 0},
+      "feature": "city",
+      "feature_type": "nominal",
+      "bins": [
+        {"number": 0, "label": "north", "score": 0.8576651042270622, "weight": 245.0, "weight_share": 0.49},
+        {"number": 1, "label": "south", "score": -0.824031178571099, "weight": 255.0, "weight_share": 0.51}
+      ],
+      "pair_terms_using_feature": []
+    }
+    ```
+
+2. The agent previews the edit that sets the score of `north` to 0. The preview changes nothing.
+
+    ```json
+    {"name": "preview_edit", "arguments": {"edit": {"kind": "SetScores", "feature": "city", "selection": {"kind": "Categories", "names": ["north"]}, "value": 0.0}}}
+    ```
+
+    ```json
+    {
+      "applied": false,
+      "report": {
+        "description": "Set 1 bin of city (north) to 0",
+        "changes": [{"position": 1, "label": "north", "before": 0.8576651042270622, "after": 0.0}],
+        "weight_share": 0.49,
+        "weighted_mean_shift": -0.4202559010712605,
+        "intercept_change": 0.0
+      },
+      "effect_on_data": {"row_count": 500, "rows_with_changed_value": 245, "rows_with_changed_class": 31, "largest_value_change": 0.2111567810873875},
+      "effect_on_data_note": null
+    }
+    ```
+
+    The edit reaches 245 of 500 rows, and the class changes for 31 of them. The agent tells the person these numbers
+    before it applies the edit.
+
+3. The agent applies the edit with the reason. It passes the head that it read.
+
+    ```json
+    {"name": "apply_edit", "arguments": {"edit": {"kind": "SetScores", "feature": "city", "selection": {"kind": "Categories", "names": ["north"]}, "value": 0.0}, "reason": "The city must not decide the approval.", "expected_revision": "original"}}
+    ```
+
+    The result has the same fields as the preview. Its `session` field names the new head:
+
+    ```json
+    {"session": {"revision": "01a1d776-fd39-7094-b038-7b55279be217", "head": "01a1d776-fd39-7094-b038-7b55279be217", "edit_count": 1}, "applied": true}
+    ```
+
+4. The agent saves the model with a message. The client asks the person, and the person answers yes.
+
+    ```json
+    {"name": "save_model", "arguments": {"message": "Approval rules of the lending policy"}}
+    ```
+
+    ```json
+    {
+      "model_file": "edited-model-001.skops",
+      "history_file": "edited-model-001.skops.history.json",
+      "confirmation": "person_confirmed",
+      "commit": {"kind": "save", "reason": "Approval rules of the lending policy", "reviewed": true}
+    }
+    ```
+
+The [MCP server notebook](mcp-notebook.md) runs this session with a real server.
 
 ## Chat with the agent
 
@@ -271,6 +455,7 @@ The agent gives the number of a row of the data file with `row`. It can also giv
     ],
     "confidence_level": 0.95
   },
+  "session": {"revision": "original", "head": "original", "edit_count": 0},
   "texts": {
     "prediction": "{\n  \"predicted_class\": 1,\n  \"contributions_largest_first\": [ ... ]",
     "counterfactual": "{\n  \"flip_possible\": true,\n  \"changes\": [ ... ]",
