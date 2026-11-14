@@ -119,7 +119,12 @@ def test_preview_gives_the_report_of_apply_and_changes_nothing(edit_ebm: Explain
     preview = session.preview(edit)
     assert session.history == ()
     assert session.model.term_scores_[1].tolist() == edit_ebm.term_scores_[1].tolist()
-    assert session.apply(edit, "Make the range monotone") == preview
+    applied = session.apply(edit, "Make the range monotone")
+    assert attrs.evolve(applied, revision=None) == preview
+    assert preview.revision is None
+    assert preview.base_revision == "original"
+    assert applied.base_revision == "original"
+    assert applied.revision == session.revision == str(session.history[0].id)
 
 
 def test_preview_starts_from_the_revision_that_the_caller_names(edit_ebm: ExplainableBoostingClassifier) -> None:
@@ -127,6 +132,8 @@ def test_preview_starts_from_the_revision_that_the_caller_names(edit_ebm: Explai
     session.apply(Shift("score", WholeGraph(), 1.0), "Raise the graph")
     from_original = session.preview(Shift("score", Bins(0, 0), 1.0), revision="original")
     from_current = session.preview(Shift("score", Bins(0, 0), 1.0))
+    assert from_original.base_revision == "original"
+    assert from_current.base_revision == session.revision
     assert from_original.changes[0].before == pytest.approx(float(term_view(edit_ebm, "score").scores[1]))
     assert from_current.changes[0].before == pytest.approx(float(term_view(edit_ebm, "score").scores[1]) + 1.0)
 

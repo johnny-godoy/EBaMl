@@ -37,6 +37,9 @@ class EditReport:
     ``weight_share`` is the share of the training weight that the changed bins hold: the number of training rows that
     the edit reaches, divided by the number of training rows. It needs no data. A ``bins_changed`` of 0 means that
     the edit set every selected score to the value that it had.
+
+    ``base_revision`` is the revision that the edit started from. ``revision`` is the revision that ``apply`` made, and
+    it is ``None`` for a ``preview``, which makes none.
     """
 
     feature: str | None
@@ -52,6 +55,8 @@ class EditReport:
     removed_terms: tuple[str, ...]
     graph_before: str | None
     graph_after: str | None
+    base_revision: str
+    revision: str | None = None
 
     @property
     def bins_changed(self) -> int:
@@ -111,6 +116,7 @@ def build_report(
     after: ExplainableBoostingModel,
     edit_type: str,
     outcome: EditOutcome,
+    base_revision: str,
 ) -> EditReport:
     """Compare a model before and after an edit.
 
@@ -124,6 +130,8 @@ def build_report(
         The name of the class of the edit.
     outcome : EditOutcome
         What the edit reported.
+    base_revision : str
+        The revision that ``before`` is, as ``EditSession.revision_info`` names it.
 
     Returns
     -------
@@ -146,6 +154,7 @@ def build_report(
             removed_terms=outcome.removed_terms,
             graph_before=None,
             graph_after=None,
+            base_revision=base_revision,
         )
     view_before = term_view(before, outcome.feature)
     view_after = term_view(after, outcome.feature)
@@ -178,4 +187,5 @@ def build_report(
         removed_terms=(),
         graph_before=_graph_text(before, outcome.feature),
         graph_after=_graph_text(after, outcome.feature),
+        base_revision=base_revision,
     )

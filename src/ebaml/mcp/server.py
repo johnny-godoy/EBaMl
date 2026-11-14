@@ -20,13 +20,24 @@ from mcp.server.mcpserver.exceptions import ToolError
 from ebaml.core.custom_types import FeatureValue, JSONValue
 from ebaml.core.exceptions import EBaMlError
 from ebaml.llm.options import ModelOptions
-from ebaml.mcp import explain_tools, llm_tools, read_tools
+from ebaml.mcp import edit_tools, explain_tools, llm_tools, read_tools
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 
 _INSTRUCTIONS = (
     "This server gives you a fitted Explainable Boosting Machine (EBM), a model that is a sum of one graph per feature."
     " Start with get_model_summary and list_features. Read a graph with get_graph. Explain one prediction with"
     " explain_prediction. Every result of these tools is exact and comes from the model, not from a language model."
+    " You can also edit the model so that it meets a business requirement of the person. An edit changes real"
+    " predictions, so apply only what the person asked for. Work in this order: read the graph with get_graph and"
+    " list_bins, call preview_edit, read the report and the effect on the data, call apply_edit with the reason, and"
+    " tell the person what changed. The server edits a copy and never changes the model file."
+)
+_EDIT_WORKFLOW = (
+    "Working order: read the graph (get_graph, list_bins), call preview_edit, read the report and the effect on the"
+    " data, call apply_edit with the reason, and tell the person what changed. An edit changes real predictions, so"
+    " apply only what the person asked for. If several edits meet the requirement, propose the one that changes the"
+    " fewest scores. A direct edit does not re-centre the graph: the report shows the shift of the weighted mean of"
+    " the graph, and the edit Recenter moves that mean into the intercept with no change of any prediction."
 )
 
 
@@ -80,6 +91,8 @@ def create_server(
     server = MCPServer("ebaml", instructions=_INSTRUCTIONS)
     _register_read_tools(server, store)
     _register_explain_tools(server, store)
+    _register_bin_tools(server, store)
+    _register_history_tools(server, store)
     if llm is not None:
         _register_llm_tools(server, store, llm)
     return server
@@ -221,6 +234,151 @@ def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
             )
             explanation = explain_tools.explain_prediction(store, request)
             return _json(attrs.asdict(explanation))
+
+
+def _register_bin_tools(server: MCPServer, store: ModelStore) -> None:
+    """Register the tools that list the bins and that preview or apply one edit.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add them to.
+    store: ModelStore
+        The session.
+
+    """
+    edit_help = edit_tools.edit_kinds_help()
+
+    @server.tool()
+    def list_bins(feature: str, revision: str = "current") -> str:
+        """List the bins of one feature with the training weight and the score of each bin.
+
+        An edit must name bins that exist, so read the bins first. A continuous bin has its edges. The missing bin and
+        the unseen bin have no number, and an edit addresses them by name. The result also names the pair terms that
+        use the feature, because an edit changes the graph of the feature only.
+
+        Returns
+        -------
+        str
+            JSON with the session, the bins (number, label, edges, score, weight, weight_share), the missing bin, the
+            unseen bin and the pair terms.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.list_bins(store, feature, revision)))
+
+    @server.tool(description=f"{_EDIT_WORKFLOW}\n\nCompute the report of one edit and change nothing.\n\n{edit_help}")
+    def preview_edit(edit: dict[str, JSONValue], revision: str = "current") -> str:
+        """Compute the report of one edit and change nothing.
+
+        Returns
+        -------
+        str
+            JSON with the report (the changed bins with their scores before and after, the share of the training
+            weight that they hold, the shift of the weighted mean, and the pair terms that still use the feature),
+            its text, and the effect on the rows of the data. The effect is empty, with a note, if the server has no
+            data.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.preview_edit(store, edit_tools.parse_edit(edit), revision)))
+
+    @server.tool(
+        description=(
+            f"{_EDIT_WORKFLOW}\n\nApply one edit to the session copy of the model, and return the same result as"
+            " preview_edit. The reason is the business requirement that the edit serves, in one or two sentences."
+            " The history keeps it, and a person reads it later. Pass expected_revision, the head that you read, so"
+            " that the call fails if another call changed the model meanwhile.\n\n"
+            f"{edit_help}"
+        ),
+    )
+    def apply_edit(edit: dict[str, JSONValue], reason: str, expected_revision: str | None = None) -> str:
+        """Apply one edit with the reason for it.
+
+        Returns
+        -------
+        str
+            JSON with the report, its text, the effect on the data and the session (the new head).
+
+        """
+        with _tool_errors():
+            result = edit_tools.apply_edit(store, edit_tools.parse_edit(edit), reason, expected_revision)
+            return _json(attrs.asdict(result))
+
+
+def _register_history_tools(server: MCPServer, store: ModelStore) -> None:
+    """Register the tools that move in the history and that list it.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add them to.
+    store: ModelStore
+        The session.
+
+    """
+
+    @server.tool()
+    def undo_edit(expected_revision: str | None = None) -> str:
+        """Undo the last applied edit. The edit stays in the redo stack until a new edit drops it.
+
+        Pass expected_revision, the head that you read, so that the call fails if another call changed the model.
+
+        Returns
+        -------
+        str
+            JSON with the session after the undo.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.undo(store, expected_revision)))
+
+    @server.tool()
+    def redo_edit(expected_revision: str | None = None) -> str:
+        """Apply the edit that the last undo moved to the redo stack.
+
+        Pass expected_revision, the head that you read, so that the call fails if another call changed the model.
+
+        Returns
+        -------
+        str
+            JSON with the session after the redo.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.redo(store, expected_revision)))
+
+    @server.tool()
+    def checkout_edit(revision: str, expected_revision: str | None = None) -> str:
+        """Set the model to its state after one commit of the history. The later edits stay in the redo stack.
+
+        Use list_edits for the ids. A read tool with the argument revision shows an earlier model without this call.
+
+        Returns
+        -------
+        str
+            JSON with the session after the checkout.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.checkout(store, revision, expected_revision)))
+
+    @server.tool()
+    def list_edits(*, include_replay_json: bool = False) -> str:
+        """List the history of the session as a table of commits.
+
+        Each commit has an id, a time, the feature, the type of the edit, a description, the reason and whether a
+        person reviewed it. Use it to tell the person what you changed. Set include_replay_json to get the JSON that
+        the option --edits of the server reads.
+
+        Returns
+        -------
+        str
+            JSON with the session, the commits, the ids of the undone edits and, on request, the replay JSON.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(edit_tools.list_edits(store, include_replay_json=include_replay_json)))
 
 
 def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:

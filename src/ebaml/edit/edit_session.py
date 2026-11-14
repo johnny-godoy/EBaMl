@@ -286,13 +286,14 @@ class EditSession:
         Returns
         -------
         EditReport
-            The report that ``apply`` gives for the same edit on the same revision.
+            The report that ``apply`` gives for the same edit on the same revision, except that its ``revision`` is
+            ``None``.
 
         """
         before = self.model_at(revision)
         after = before.copy()
         outcome = edit.run(after)
-        return build_report(before, after, type(edit).__name__, outcome)
+        return build_report(before, after, type(edit).__name__, outcome, self.revision_info(revision).revision)
 
     def apply(self, edit: Edit, message: str, *, expected_revision: str | uuid.UUID | None = None) -> EditReport:
         """Apply an edit as a new revision.
@@ -322,7 +323,7 @@ class EditSession:
             before = state.head_model
             after = before.copy()
             outcome = edit.run(after)
-            report = build_report(before, after, type(edit).__name__, outcome)
+            report = build_report(before, after, type(edit).__name__, outcome, state.head_revision)
             with self._lock:
                 if self._state is state:
                     entry = EditEntry(
@@ -341,7 +342,7 @@ class EditSession:
                         position=state.position + 1,
                         next_sequence=state.next_sequence + 1,
                     )
-                    return report
+                    return attrs.evolve(report, revision=str(entry.id))
             # another writer changed the state while this call computed, so compute again on the new head
 
     def _move(self, target: Callable[[_State], int], expected_revision: str | uuid.UUID | None) -> str:

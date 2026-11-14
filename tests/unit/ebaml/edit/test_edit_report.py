@@ -15,7 +15,7 @@ from ebaml.edit.selections import Bins, MissingBin, WholeGraph
 def _report(edit: Edit, ebm: ExplainableBoostingClassifier):  # ruff: ignore[missing-return-type-private-function] -- the helper only builds the report that the tests read
     after = copy.deepcopy(ebm)
     outcome = edit.run(after)
-    return build_report(ebm, after, type(edit).__name__, outcome)
+    return build_report(ebm, after, type(edit).__name__, outcome, "original")
 
 
 def test_the_report_lists_each_changed_bin_with_its_score_before_and_after(
