@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.1'></a>
+## [0.8.1] - 2026-11-14
+
+### Changed
+
+- The maintenance scripts live in the packages `scripts/architecture`, `ignores`, `release`, `ci`, `mutation`, `docs` and `llm`. Run them as `python -m scripts.<group>.<name>`, for example `python -m scripts.architecture.layout`.
+
 <a id='changelog-0.8.0'></a>
 ## [0.8.0] - 2026-11-14
 
