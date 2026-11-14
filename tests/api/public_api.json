@@ -66,6 +66,20 @@
     "kind": "class",
     "signature": "(first: int, last: int) -> None"
   },
+  "Bounded": {
+    "bases": [
+      "Constraint",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "low: <class 'float'>",
+      "high: <class 'float'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, low: float, high: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+  },
   "Categories": {
     "bases": [
       "Selection",
@@ -125,6 +139,13 @@
     ],
     "kind": "class",
     "signature": "(fixed: list[str], share: float) -> None"
+  },
+  "Constraint": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
   },
   "Contribution": {
     "bases": [
@@ -475,6 +496,19 @@
     "kind": "class",
     "signature": "(feature: str, selection: ebaml.edit.selections.Selection) -> None"
   },
+  "FixedScore": {
+    "bases": [
+      "Constraint",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "value: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float) -> None"
+  },
   "GraphOptions": {
     "bases": [
       "object"
@@ -698,6 +732,19 @@
     "kind": "class",
     "signature": "(iterations: int = 100, destroy_share: float = 0.1, seed: int | None = None, bound_backend: ebaml.local.covering_backend.MipBackend | None = NOTHING) -> None"
   },
+  "MaxStep": {
+    "bases": [
+      "Constraint",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "step: <class 'float'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+  },
   "MinimalityStatus": {
     "bases": [
       "str",
@@ -798,6 +845,19 @@
       "NO_SOLUTION"
     ],
     "signature": "(*values)"
+  },
+  "Monotone": {
+    "bases": [
+      "Constraint",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "direction: typing.Literal['increasing', 'decreasing']",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, direction: Literal['increasing', 'decreasing'], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
   },
   "Monotonize": {
     "bases": [
@@ -1173,6 +1233,17 @@
     "kind": "exception",
     "signature": null
   },
+  "Unused": {
+    "bases": [
+      "Constraint",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str) -> None"
+  },
   "ValueInterval": {
     "bases": [
       "Selection",
@@ -1184,6 +1255,21 @@
     ],
     "kind": "class",
     "signature": "(low: float | None = None, high: float | None = None) -> None"
+  },
+  "Violation": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "constraint: <class 'ebaml.edit.constraints.Constraint'>",
+      "description: <class 'str'>",
+      "bins: tuple[str, ...]",
+      "excess: <class 'float'>",
+      "repair: <class 'ebaml.edit.edits.Edit'>",
+      "terms: tuple[str, ...]"
+    ],
+    "kind": "class",
+    "signature": "(constraint: ebaml.edit.constraints.Constraint, description: str, bins: tuple[str, ...], excess: float, repair: ebaml.edit.edits.Edit, terms: tuple[str, ...] = ()) -> None"
   },
   "WholeGraph": {
     "bases": [
@@ -1208,6 +1294,10 @@
   "__version__": {
     "kind": "str",
     "name": "__version__"
+  },
+  "check_constraints": {
+    "kind": "function",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, constraints: collections.abc.Iterable[ebaml.edit.constraints.Constraint], *, tolerance: float = 1e-09) -> list[ebaml.edit.constraints.Violation]"
   },
   "check_token_budget": {
     "kind": "function",
