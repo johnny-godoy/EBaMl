@@ -12,7 +12,7 @@
    (`.claude/rules/testing.md`). An integration test uses the real `baml_sdk` and a local server in place of the LLM.
    A change to a public name changes `tests/api/public_api.json`.
 6. A workaround (`# noqa`, `# type: ignore`, `pytest.mark.skip`, ...) needs a written reason next to it. Check with
-   `uv run python -m scripts.check_ignores`.
+   `uv run python -m scripts.ignores.check`.
 7. For a user-visible change, run `uv run scriv create` and write the entries in the new file in `changelog.d/` (see
    `changelog.d/README.md`). Do not edit `CHANGELOG.md` or the version: the release workflow sets them after the merge.
    If the change is internal but touches `src/ebaml/`, `baml_src/` or `benchmark/`, add the label `no-changelog`.

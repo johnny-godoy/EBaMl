@@ -20,7 +20,7 @@ no period, at most 72 characters. A squash merge makes the title the commit on m
 other change. A reviewer judges the reasons. CI checks only the registry. -->
 
 - New shared abstraction? [ ] No [ ] Yes
-- Existing candidates inspected (`uv run python -m scripts.check_abstractions --search <words>`):
+- Existing candidates inspected (`uv run python -m scripts.architecture.abstractions --search <words>`):
 - Capability ID and owner in `architecture/abstractions.yml` (if new):
 - Why the existing abstractions cannot be reused:
 
@@ -29,7 +29,7 @@ other change. A reviewer judges the reasons. CI checks only the registry. -->
 <!-- Answer for a change that adds an ignore (`noqa`, `type: ignore`, `pyrefly: ignore`, a pragma, a skipped test or a
 config ignore). Write "None" for any other change. .claude/rules/prek-and-ignores.md has the rules. -->
 
-- Total from `uv run python -m scripts.compile_ignores` (before and after):
+- Total from `uv run python -m scripts.ignores.report` (before and after):
 - Why no shared fix applies (helper, import, fixture or one config entry):
 
 ## Changelog
@@ -73,6 +73,6 @@ notebook for the input. Mark each step that sends real requests and needs OPENRO
 - [ ] `uv run pytest` (100% coverage)
 - [ ] `uv run pytest README.md docs src --no-cov` (the documentation examples)
 - [ ] `OPENROUTER_API_KEY=unused baml test -x root::Live` (if `baml_src/` changed)
-- [ ] `uv run python scripts/mutation.py --base origin/main` (if `src/ebaml/` changed)
-- [ ] `uv run --group docs python -m scripts.build_docs` (if the docs changed)
+- [ ] `uv run python scripts/mutation/run.py --base origin/main` (if `src/ebaml/` changed)
+- [ ] `uv run --group docs python -m scripts.docs.build` (if the docs changed)
 - [ ] `cd proofs && lake build` (if `proofs/` or code that a proof covers changed)

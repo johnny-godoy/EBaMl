@@ -12,15 +12,15 @@ requests never conflict on the version or the changelog.
   steps.
 - Mark a breaking change with `**BREAKING:**` at the start of its entry, or put it under `Removed`.
 - Do not edit `CHANGELOG.md` or `version` in `pyproject.toml`. After the merge, `.github/workflows/release.yml` chooses
-  the version (`scripts/release.py`), runs `uv version`, moves the fragments into `CHANGELOG.md` with `scriv collect`,
+  the version (`scripts/release/version.py`), runs `uv version`, moves the fragments into `CHANGELOG.md` with `scriv collect`,
   and pushes the release commit and the tag `vX.Y.Z`. It then creates the GitHub release of the tag, with the
   `CHANGELOG.md` entry as notes (`scriv print`) and the built files. Do not push tags or create releases by hand.
 - The one exception: the PR that completes a milestone of `ROADMAP.md` also sets `version` in `pyproject.toml` to the
   milestone version (for example 0.1.0) and runs `uv lock`. The release workflow then uses that version.
 - A PR with no user-visible change (tests, CI, hooks, contributor docs, plans, an internal refactor) gets no fragment.
   If it changes `src/ebaml/`, `baml_src/` or `benchmark/`, add the label `no-changelog` to the PR.
-- Guards: the `check-changelog` hook (`scripts/check_changelog.py`) checks the fragments, the headings and the
-  version. `.github/workflows/changelog.yml` (`scripts/check_fragment.py`) fails a PR that changes those paths with no
+- Guards: the `check-changelog` hook (`scripts/release/changelog.py`) checks the fragments, the headings and the
+  version. `.github/workflows/changelog.yml` (`scripts/release/fragment.py`) fails a PR that changes those paths with no
   fragment and no `no-changelog` label.
 
 ## Semantic versioning
@@ -44,7 +44,7 @@ last one: the package has no users yet, so the API stays free to change until ev
   add `experimental` to the layers contract and to `architecture.md` with its first feature.
 - From 1.0.0, deprecate before you remove: keep the old name for at least one MINOR with a `DeprecationWarning`, and add
   a `Deprecated` entry. Remove it only in the next MAJOR.
-- Never invent a version. `scripts/release.py` derives it from the table above, and a milestone PR takes it from
+- Never invent a version. `scripts/release/version.py` derives it from the table above, and a milestone PR takes it from
   `ROADMAP.md`.
 
 ## Changelog

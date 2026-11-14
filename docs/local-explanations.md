@@ -9,14 +9,18 @@ from interpret.glassbox import ExplainableBoostingClassifier
 from ebaml import DescribeEBMRequest, ExplainInstanceRequest, PromptOptions, describe_ebm, explain_instance
 
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # a binary classifier, no interactions
-global_explanation = describe_ebm(DescribeEBMRequest(ebm, prompt=PromptOptions(dataset_description="..."))).text  # once per model
+global_explanation = describe_ebm(
+    DescribeEBMRequest(ebm, prompt=PromptOptions(dataset_description="..."))
+).text  # once per model
 
-explanation = explain_instance(ExplainInstanceRequest(
-    ebm,
-    X.iloc[0].to_dict(),      # the value of every feature, by name
-    global_explanation,
-    audience="layperson",     # or "data_scientist", or your own Audience
-))
+explanation = explain_instance(
+    ExplainInstanceRequest(
+        ebm,
+        X.iloc[0].to_dict(),  # the value of every feature, by name
+        global_explanation,
+        audience="layperson",  # or "data_scientist", or your own Audience
+    )
+)
 print(explanation.counterfactual)
 print(explanation.sufficient_reason)
 print(explanation.completions)
@@ -298,7 +302,9 @@ Pass any language name that the LLM knows. The facts, the numbers and the audien
 combine every audience with every language:
 
 ```python
-explanation = explain_instance(ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French"))
+explanation = explain_instance(
+    ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson", language="French")
+)
 ```
 
 The [languages notebook](languages-notebook.md) shows one passenger in several languages. The quality of the text depends on how well the LLM writes the language. To change the language and the rules of the

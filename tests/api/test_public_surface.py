@@ -1,7 +1,7 @@
 """The names that ``ebaml`` exports, and the signature of each, against a snapshot that the maintainer reviews.
 
 A change to the public API changes ``public_api.json``. The reviewer sees the change in the diff of that file, and
-``scripts/check_api_breaks.py`` asks for a ``**BREAKING:**`` entry in the changelog when the change breaks a user.
+``scripts/release/api_breaks.py`` asks for a ``**BREAKING:**`` entry in the changelog when the change breaks a user.
 Update the snapshot with ``EBAML_UPDATE_SNAPSHOTS=1 uv run pytest tests/api --no-cov``.
 """
 

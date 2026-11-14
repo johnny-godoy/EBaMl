@@ -18,14 +18,14 @@ The GitHub release has all four files. PyPI has the two distribution files and a
 
 1. **CI.** The workflow starts when the CI workflow of `main` ends. It stops unless CI passed on the head of `main`. A
    manual run checks the same. If `main` moved on while CI ran, the CI run of the newer commit releases it.
-2. **Version.** `scripts/release.py` chooses the version from the fragments. The workflow pushes the release commit and
+2. **Version.** `scripts/release/version.py` chooses the version from the fragments. The workflow pushes the release commit and
    the tag. The release commit changes only the version and `CHANGELOG.md`, so it has no CI run before the build.
 3. **Build.** The job builds from the tag and checks, in this order:
    - the tag matches the version,
    - the wheel holds `baml_sdk`,
    - `twine check --strict` accepts the metadata of both files,
    - `pydistcheck` finds no unexpected file,
-   - each file installs in a clean environment with no `baml` command, and `scripts/smoke_install.py` passes. The test
+   - each file installs in a clean environment with no `baml` command, and `scripts/release/smoke_install.py` passes. The test
      imports the package and the SDK, builds the graph text of a small EBM, and runs `ebaml-mcp --help`.
 4. **Upload.** The publish job checks `SHA256SUMS` against the downloaded files. It then runs `uv publish`, which uploads
    a PEP 740 attestation for each file. It runs only if the repository variable `PUBLISH_TO_PYPI` is `true`.
@@ -99,7 +99,7 @@ The documentation site shows the state of `main`. Each version has its entry in 
 
 Before 1.0.0, a release can break the public API. The changelog marks such a change with **BREAKING**, and a pull
 request that removes or changes an exported name fails a CI step unless a fragment has that mark
-(`scripts/check_api_breaks.py`). The changelog entry names the replacement. Deprecation warnings and a migration guide
+(`scripts/release/api_breaks.py`). The changelog entry names the replacement. Deprecation warnings and a migration guide
 start with 1.0.0. See `docs/plans/stable-api.md`.
 
 ## Saved files

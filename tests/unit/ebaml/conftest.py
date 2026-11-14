@@ -100,9 +100,10 @@ SDK_STUB: Path = Path(baml_sdk.__file__).with_suffix(".pyi")
 def fit_ebm() -> Callable[..., ExplainableBoostingClassifier | ExplainableBoostingRegressor]:
     """Return a function that fits an EBM, or reads the same fit from the cache directory.
 
-    ``scripts/mutation.py`` sets ``EBAML_FIT_CACHE`` to a directory. Every mutant runs the tests in a new process, and
-    a fit takes seconds, so the processes share the fitted models through that directory. Without the variable, the
-    function fits the model every time. A mutant changes ``ebaml`` only, so a fit does not depend on the mutant.
+    ``scripts/mutation/run.py`` sets ``EBAML_FIT_CACHE`` to a directory. Every mutant runs the tests in a new
+    process, and a fit takes seconds, so the processes share the fitted models through that
+    directory. Without the variable, the function fits the model every time. A mutant changes ``ebaml`` only, so a
+    fit does not depend on the mutant.
 
     Returns
     -------
@@ -413,7 +414,7 @@ def sdk_signature(name: str) -> inspect.Signature:
     # makes the call return a coroutine, and no fake notices, because a fake returns the value at once.
     assert name not in _sdk_async_functions(), (
         f"baml_sdk.{name} is async in the generated stub, but ebaml calls it as a plain function. "
-        "Generate the SDK with the toolchain that baml-bridge expects (python3 scripts/baml_toolchain.py)."
+        "Generate the SDK with the toolchain that baml-bridge expects (python3 scripts/release/baml_toolchain.py)."
     )
     node = _sdk_functions()[name]
     arguments = node.args

@@ -39,7 +39,7 @@ env:
 #
 # The progress comment and the report cover every workflow that runs on the pull request (docs, changelog, commits,
 # and the path-filtered prompt tests and proofs), not only the jobs of this file. They read the check runs of the
-# commit (`checks: read`). `scripts/check_report_gates.py` fails when a job has no place in the report.
+# commit (`checks: read`). `scripts/ci/report_gates.py` fails when a job has no place in the report.
 #
 # Every gate tees its output to $CI_LOGS. A failed gate then runs `ci_report.py snippet <gate>`, which turns the logs
 # into a short "what failed / how to fix" section and uploads it for the report job.
@@ -94,8 +94,7 @@ jobs:
               - "src/ebaml/**"
               - ".github/workflows/ci.yml"
               - ".github/actions/**"
-              - "scripts/mutation.py"
-              - "scripts/mutant_*.py"
+              - "scripts/mutation/*.py"
               - "cosmic-ray.toml"
 
   prek:
@@ -128,7 +127,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: uv run python -m scripts.check_api_breaks --base "origin/${BASE_REF}" 2>&1 | tee -a "$CI_LOGS/prek.log"
+        run: uv run python -m scripts.release.api_breaks --base "origin/${BASE_REF}" 2>&1 | tee -a "$CI_LOGS/prek.log"
       - uses: ./.github/actions/failure-report
         if: failure()
         with:
@@ -327,7 +326,7 @@ jobs:
         # shows the survivors and the number of mutants that did not run.
         run: |
           mkdir -p "$CI_LOGS"
-          uv run python scripts/mutation.py "$(nproc)" --base "$BASE" --part "$PART" --time-limit 3000 2>&1 | tee "$CI_LOGS/mutation.log"
+          uv run python scripts/mutation/run.py "$(nproc)" --base "$BASE" --part "$PART" --time-limit 3000 2>&1 | tee "$CI_LOGS/mutation.log"
       - name: List surviving mutants with diffs
         if: failure() || cancelled()
         run: |
