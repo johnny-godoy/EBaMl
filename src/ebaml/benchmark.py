@@ -59,7 +59,7 @@ class Reply(Protocol):
 class AskQuestion(Protocol):
     """A function that asks the LLM a question of the benchmark.
 
-    ``baml_sdk.answer_benchmark_question`` is such a function.
+    ``baml_sdk.answer_benchmark_question_sync`` is such a function.
     """
 
     def __call__(self, *, question: str, answer_format: str) -> Reply:
@@ -360,7 +360,7 @@ def run_task(task: Task, questions: Sequence[Question], ask: AskQuestion, *, pro
     questions: Sequence[Question]
         The questions to ask, for example from ``load_questions``.
     ask: AskQuestion
-        Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question``. It chooses the model.
+        Asks the LLM one question, for example ``baml_sdk.answer_benchmark_question_sync``. It chooses the model.
     progress: bool, default=False
         Whether to show a progress bar of the questions on the error stream. If that stream is not a terminal, the bar
         writes one line for each question.

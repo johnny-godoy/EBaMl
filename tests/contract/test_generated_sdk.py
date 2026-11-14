@@ -50,9 +50,15 @@ def test_the_installed_bridge_the_pin_of_the_project_and_the_toolchain_name_one_
 
 
 def test_every_sdk_function_that_ebaml_names_is_plain_and_not_async() -> None:
-    # ebaml calls each function as a plain function. A toolchain that writes `async def` makes a call return a
-    # coroutine, which no fake notices.
+    # ebaml calls the `_sync` twin of each function. The toolchain writes `name` as `async def` and `name_sync` as a
+    # plain function. A call of the async one returns a coroutine, which no fake notices.
     stub = (Path(baml_sdk.__file__).with_suffix(".pyi")).read_text(encoding="utf-8")
-    for name in ("describe_graph_cot", "summarize_ebm", "explain_local", "check_model", "supported_providers"):
+    for name in (
+        "describe_graph_cot_sync",
+        "summarize_ebm_sync",
+        "explain_local_sync",
+        "check_model_sync",
+        "supported_providers_sync",
+    ):
         assert f"def {name}(" in stub
         assert f"async def {name}(" not in stub

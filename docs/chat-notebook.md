@@ -9,7 +9,7 @@ data, and ask follow-up questions. Each answer shows the tools that the agent ca
 - Each message in the chat box sends real requests to the LLM, one for each round of tool calls. The default model
   needs `OPENROUTER_API_KEY`. You can type a key in the notebook. Without a key, a message shows the error of a missing
   key, and the chat goes on.
-- The notebook needs the BAML toolchain (`baml`, version 0.23 or later) and the `mcp` extra:
+- The notebook needs the BAML toolchain (`baml`, version 0.25 or later) and the `mcp` extra:
   `pip install "ebaml[mcp]"`.
 
 The page below is the notebook with the output of its cells, exported when the docs are built. The exported page has no

@@ -410,11 +410,11 @@ def sdk_signature(name: str) -> inspect.Signature:
         The parameters, with their types, and the return type.
 
     """
-    # ebaml calls each SDK function as a plain function. A toolchain that writes `async def name` (and `name_sync`)
-    # makes the call return a coroutine, and no fake notices, because a fake returns the value at once.
+    # ebaml calls the `name_sync` twin of each SDK function. A call of `async def name` returns a coroutine, and no fake
+    # notices, because a fake returns the value at once.
     assert name not in _sdk_async_functions(), (
         f"baml_sdk.{name} is async in the generated stub, but ebaml calls it as a plain function. "
-        "Generate the SDK with the toolchain that baml-bridge expects (python3 scripts/release/baml_toolchain.py)."
+        "Call the `_sync` twin of the function."
     )
     node = _sdk_functions()[name]
     arguments = node.args

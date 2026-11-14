@@ -127,7 +127,7 @@ def _steps(root: Path | None, *, with_install: bool, commands: Sequence[str] = (
             'Open a new shell, or run `. "$HOME/.baml/env"`, so that `baml` is on PATH.',
         ]
     steps += [
-        "Check that `baml --version` prints 0.23 or later. If it is older, put ~/.baml/bin first on PATH.",
+        "Check that `baml --version` prints 0.25 or later. If it is older, put ~/.baml/bin first on PATH.",
         *(f"Run `{command}` in {root}." for command in commands),
     ]
     return "\n".join(f"  {number}. {step}" for number, step in enumerate(steps, start=1))
