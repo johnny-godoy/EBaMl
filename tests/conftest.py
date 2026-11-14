@@ -107,6 +107,8 @@ class Reply:
         The input and the output tokens that the reply reports. ``None`` leaves the field out.
     error_message: str
         The message of the error, for another status.
+    headers: Mapping[str, str]
+        Headers to add to the reply, for example ``Retry-After``.
     extra_fields: Mapping[str, object]
         Fields to add to the top level of the body. A real provider adds fields that the protocol does not list.
 
@@ -117,6 +119,7 @@ class Reply:
     finish_reason: str = "stop"
     usage: tuple[int, int] | None = (3, 2)
     error_message: str = "fake error"
+    headers: Mapping[str, str] = attrs.field(factory=dict)
     extra_fields: Mapping[str, object] = attrs.field(factory=dict)
 
     def payload(self, model: object) -> bytes:
@@ -207,6 +210,8 @@ def _handler_class(state: FakeLLM) -> type[http.server.BaseHTTPRequestHandler]:
             self.send_response(reply.status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
+            for name, value in reply.headers.items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(payload)
 

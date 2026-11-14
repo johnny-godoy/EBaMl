@@ -103,3 +103,15 @@ async def test_a_server_without_an_llm_has_no_describe_tools_and_sends_nothing(
         names = {tool.name for tool in (await session.list_tools()).tools}
     assert not {"describe_feature", "describe_model"} & names
     assert fake_llm.requests == []
+
+
+async def test_describe_feature_describes_the_feature_that_the_agent_names_and_not_the_first_one(
+    served: tuple[ModelStore, ModelOptions],
+    fake_llm: FakeLLM,
+) -> None:
+    store, llm = served
+    is_error, _ = await _call(store, llm, "describe_feature", {"feature": "fare"})
+    assert not is_error
+    (first,) = (request for request in fake_llm.requests if request.turns == 1)
+    assert "Feature Name: fare" in first.prompt
+    assert "Feature Name: age" not in first.prompt
