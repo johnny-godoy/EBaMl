@@ -12,7 +12,7 @@ to review.
 </goal>
 
 <context>
-- 1.0.0 needs 0.10.0. By then every other milestone of `ROADMAP.md` is on `main`: the model providers, the model
+- 1.0.0 needs 0.15.0 and every milestone before it. By then every other milestone of `ROADMAP.md` is on `main`: the model providers, the model
   kinds, the custom audiences, the MCP server with its read, explain and edit tools, the local explanations of every
   model kind, and model editing with GAM Changer parity.
 - The public API is: the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
@@ -40,17 +40,15 @@ to review.
 7. **Update the rules.** Rewrite "Current state, not history" in `.claude/rules/writing-style.md`: the docs describe
    the current state, and deprecated items stay in the docs, marked as deprecated, until their removal. Update
    `CLAUDE.md` if it mentions the pre-1.0 policy.
-8. **Test every claimed platform and Python version.** Until 1.0.0, CI runs Linux with Python 3.13 only, so a pull request
-   does not pay for a platform that no user needs. Before 1.0.0, add the matrix and decide what the package claims:
-   - Add a matrix of operating systems (Linux, macOS, Windows) and Python versions (3.13 and each later release that
-     exists) to the pytest gate, or to a gate that runs the unit tests and `scripts/smoke_install.py`. A full matrix on
-     each pull request costs runner time. Prefer a schedule and the release workflow, and keep Linux with one Python
-     version on each pull request.
+8. **Test every claimed platform.** 0.11.0 added the matrix of Python versions on Linux
+   (`docs/plans/python-versions.md`). Add the operating systems and decide what the package claims:
+   - Add macOS and Windows to the matrix. A full matrix on each pull request costs runner time. Keep the pull request
+     jobs of 0.11.0, and run the other systems on the schedule and in the release workflow.
    - Run `scripts/smoke_install.py` on each matrix entry in the release workflow, so a release installs on every claimed
      platform. The script uses `bin/python`, so make it find `Scripts/python.exe` on Windows.
-   - Make the claim match the result. Set the classifiers `Operating System ::` and `Programming Language :: Python ::`
-     of `pyproject.toml` to what the matrix passes, and lower or raise `requires-python` the same way. Update the
-     "Requirements" list of the README and the table "Compatibility" of `docs/releasing.md`.
+   - Make the claim match the result. Set the classifiers `Operating System ::` of `pyproject.toml` to what the matrix
+     passes. Extend the contract test of 0.11.0 to the operating systems. Update the "Requirements" list of the README
+     and the table "Compatibility" of `docs/releasing.md`.
 9. **Version the documentation.** The site shows `main`. Publish a copy for each released version, with a selector, or
    write on the site which version it shows. Check that Zensical supports versions before you choose.
 10. **Write the migration guide.** Add `docs/migration.md` with one section for each MAJOR version, linked from the

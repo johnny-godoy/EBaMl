@@ -29,10 +29,15 @@ EBaMl will reach three goals:
 | 0.8.0 | EBM2MCP: edit tools. | [mcp-edit-tools](docs/plans/mcp-edit-tools.md) | 0.7.0 | Done |
 | 0.9.0 | GAM Changer parity: edits of the bins, the effect of an edit on data and on subgroups, business constraints, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 0.8.0 | Planned |
 | 0.10.0 | Editing of every model kind. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 0.6.0, 0.9.0 | Planned |
-| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.10.0 | Planned |
+| 0.11.0 | Python 3.11 and later: the package supports every CPython release from 3.11, and a CI matrix tests each one. | [python-versions](docs/plans/python-versions.md) | 0.10.0 | Planned |
+| 0.12.0 | Documentation for new users: what an EBM is, why it matters, a short README and the guides on the site. | [docs-for-new-users](docs/plans/docs-for-new-users.md) | 0.10.0 | Planned |
+| 0.13.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | [site-quality-checks](docs/plans/site-quality-checks.md) | 0.12.0 | Planned |
+| 0.14.0 | Performance benchmarks: profiles of the whole system, and fixes of the hotspots that do not change a fact. | [performance-profiling](docs/plans/performance-profiling.md) | 0.10.0 | Planned |
+| 0.15.0 | Adversarial mutants: plausible bugs written on purpose, and a guard for each one that no test finds. | [adversarial-mutants](docs/plans/adversarial-mutants.md) | 0.11.0, 0.14.0 | Planned |
+| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0 | Planned |
 
-Before 1.0.0, pull requests run on Linux with Python 3.13 only. The plan of 1.0.0 adds the other operating systems and
-Python versions, and it makes the package claim only what the matrix passes.
+Until 0.11.0, pull requests run on Linux with Python 3.13 only. The plan of 0.11.0 adds the Python versions from 3.11,
+and the plan of 1.0.0 adds the other operating systems. Each plan makes the package claim only what the matrix passes.
 
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
 model that has them. The README table "Supported models" shows the state of each feature. Full support needs a
