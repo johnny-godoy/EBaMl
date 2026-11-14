@@ -101,6 +101,20 @@
     "kind": "class",
     "signature": "(group: int, alternative: int) -> None"
   },
+  "Clip": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "low: <class 'float'>",
+      "high: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, low: float, high: float) -> None"
+  },
   "CompletionStep": {
     "bases": [
       "object"
@@ -393,6 +407,15 @@
     "kind": "class",
     "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, *, clock: collections.abc.Callable[[], datetime.datetime] = <function _utc_now>, new_id: collections.abc.Callable[[], uuid.UUID] = <function new_revision_id>) -> None"
   },
+  "EveryBin": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
   "ExplainInstanceRequest": {
     "bases": [
       "_EBMRequest",
@@ -601,6 +624,19 @@
     ],
     "kind": "class",
     "signature": "()"
+  },
+  "LimitSteps": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "step: <class 'float'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
   },
   "LocalExplanation": {
     "bases": [

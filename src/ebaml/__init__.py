@@ -41,9 +41,11 @@ from ebaml.edit.edit_report import BinChange, EditReport
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import (
     Align,
+    Clip,
     Edit,
     FitLine,
     Interpolate,
+    LimitSteps,
     Monotonize,
     Recenter,
     RemoveFeature,
@@ -57,6 +59,7 @@ from ebaml.edit.history import EditEntry, HistoryEntry, HistoryRow, SaveEntry
 from ebaml.edit.selections import (
     Bins,
     Categories,
+    EveryBin,
     MissingBin,
     Selection,
     UnseenBin,
@@ -132,6 +135,7 @@ __all__ = [
     "Categories",
     "Change",
     "Choice",
+    "Clip",
     "CompletionStep",
     "Contribution",
     "Counterfactual",
@@ -156,6 +160,7 @@ __all__ = [
     "EditError",
     "EditReport",
     "EditSession",
+    "EveryBin",
     "ExplainInstanceRequest",
     "FactTexts",
     "FeatureType",
@@ -172,6 +177,7 @@ __all__ = [
     "InvalidOptionError",
     "LLMRequestError",
     "Layperson",
+    "LimitSteps",
     "LocalExplanation",
     "LocalFacts",
     "LocalOptions",

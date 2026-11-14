@@ -15,6 +15,7 @@ from typing import Literal, override
 import attrs
 import numpy as np
 import numpy.typing as npt
+from scipy.optimize import lsq_linear
 from sklearn.isotonic import IsotonicRegression
 
 from ebaml.core.custom_types import ExplainableBoostingModel
@@ -325,6 +326,83 @@ class FitLine(Edit):
             target.positions,
             f"Replace {target.describe()} by a weighted least-squares line",
         )
+
+
+@attrs.frozen
+class Clip(Edit):
+    """Move each selected score that is below ``low`` or above ``high`` to the nearer bound.
+
+    GAM Changer has no such tool. The constraint ``Bounded`` names it as its repair. A score in the range does not
+    change, and its bin keeps its fitted uncertainty.
+    """
+
+    feature: str
+    selection: Selection
+    low: float
+    high: float
+
+    @override
+    def run(self, ebm: ExplainableBoostingModel) -> EditOutcome:
+        if not self.low <= self.high:
+            msg = f"Clip needs numbers with low not above high, but low is {self.low} and high is {self.high}."
+            raise EditError(msg)
+        target = _resolve(ebm, self.feature, self.selection)
+        scores = target.scores
+        outside = (scores < self.low) | (scores > self.high)
+        positions = tuple(np.asarray(target.positions)[outside].tolist())
+        if positions:
+            model_write.set_scores(ebm, target.view.term, positions, np.clip(scores[outside], self.low, self.high))
+        text = f"Clip {target.describe()} to the range {_number(self.low)} to {_number(self.high)}"
+        return EditOutcome(self.feature, positions, text)
+
+
+@attrs.frozen
+class LimitSteps(Edit):
+    """Replace the selected scores by a weighted least-squares fit with no step above ``step``.
+
+    GAM Changer has no such tool. The constraint ``MaxStep`` names it as its repair. A step is the difference between
+    the scores of two neighbour bins. The weights are the training weights of the bins, as in ``Monotonize``, and a bin
+    with no training weight counts with a tiny weight. The fit uses the bounded least-squares solver of SciPy
+    (``lsq_linear`` with ``bvls``), so it holds to the precision of that solver. The scores outside the selection stay.
+    """
+
+    feature: str
+    step: float
+    selection: Selection = attrs.field(factory=WholeGraph)
+
+    def _fit(self, scores: npt.NDArray[np.float64], weights: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+        if self.step == 0:
+            # the solver needs a low bound below the high bound, and a fit with no step is the weighted mean
+            return np.full_like(scores, np.average(scores, weights=weights))
+        root_weights = np.sqrt(weights)
+        bin_count = len(scores)
+        # the unknowns are the first score and each step, and the score of a bin is the first score plus the steps
+        # before it, so the score of every bin is a row of a lower triangle of ones times the unknowns
+        cumulative = np.tril(np.ones((bin_count, bin_count)))
+        lower_bounds = np.full(bin_count, -self.step)
+        upper_bounds = np.full(bin_count, self.step)
+        lower_bounds[0], upper_bounds[0] = -np.inf, np.inf
+        fit = lsq_linear(
+            cumulative * root_weights[:, None],
+            scores * root_weights,
+            bounds=(lower_bounds, upper_bounds),
+            method="bvls",
+        )
+        solution = np.asarray(fit.x, dtype=float)
+        steps = np.clip(solution[1:], -self.step, self.step)
+        offsets: npt.NDArray[np.float64] = np.concatenate(([0.0], np.cumsum(steps)))
+        return offsets + float(solution[0])
+
+    @override
+    def run(self, ebm: ExplainableBoostingModel) -> EditOutcome:
+        if not 0 <= self.step < np.inf:
+            msg = f"LimitSteps needs a step that is 0 or more and finite, but the step is {self.step}."
+            raise EditError(msg)
+        target = _resolve_line(ebm, self.feature, self.selection)
+        new_scores = self._fit(target.scores, _fit_weights(target.weights))
+        model_write.set_scores(ebm, target.view.term, target.positions, new_scores)
+        text = f"Limit each step of {target.describe()} to {_number(self.step)}"
+        return EditOutcome(self.feature, target.positions, text)
 
 
 @attrs.frozen
