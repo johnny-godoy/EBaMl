@@ -61,7 +61,7 @@ changes a fact is a bug.
 4. **Write the performance benchmark.** Use pytest-benchmark, or asv if you need a history across commits, and say
    why. `benchmark/run.py performance` runs it and writes a JSON file with the same shape for every run, so two runs
    compare. It never sends a real request. If its tests live under `tests/`, register the suite in `testing.md` and
-   `scripts/check_test_suites.py`, and keep it out of the default `testpaths`.
+   `scripts/architecture/suites.py`, and keep it out of the default `testpaths`.
 5. **Run it where it is reliable.** Run the performance benchmark on a weekly schedule and on demand. On a pull request,
    compare the base and the head in the same job on the same runner, and report the change in the CI comment. Gate only
    on a large change (for example 25 % slower on a median of several rounds), and calibrate the limit from the first ten
