@@ -344,6 +344,31 @@
       "title": "redo_editArguments",
       "type": "object"
     },
+    "save_model": {
+      "properties": {
+        "expected_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "title": "save_modelArguments",
+      "type": "object"
+    },
     "undo_edit": {
       "properties": {
         "expected_revision": {

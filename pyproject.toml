@@ -48,6 +48,8 @@ mcp = [
     "cyclopts>=5.3.2",
     "joblib>=1.6.0",
     "mcp>=2.3.0",
+    # ebaml.mcp builds the schema of the confirmation of a save with a pydantic model, which the MCP SDK needs
+    "pydantic>=2.13.0",
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.1.0",
 ]
@@ -188,6 +190,7 @@ dev = [
     "pandas-stubs>=3.1.0.261029",
     "polars>=2.1.0",
     "pyarrow>=26.0.0",
+    "pydantic>=2.13.0",
     "pyrefly>=1.4.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
