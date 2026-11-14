@@ -3,6 +3,94 @@
     "ebm://graphs/{feature}"
   ],
   "tools": {
+    "apply_edit": {
+      "$defs": {
+        "JSONValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "array"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "properties": {
+        "edit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JSONValue"
+          },
+          "title": "Edit",
+          "type": "object"
+        },
+        "expected_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edit",
+        "reason"
+      ],
+      "title": "apply_editArguments",
+      "type": "object"
+    },
+    "checkout_edit": {
+      "properties": {
+        "expected_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "title": "checkout_editArguments",
+      "type": "object"
+    },
     "describe_feature": {
       "properties": {
         "feature": {
@@ -147,6 +235,35 @@
       "title": "get_model_summaryArguments",
       "type": "object"
     },
+    "list_bins": {
+      "properties": {
+        "feature": {
+          "title": "Feature",
+          "type": "string"
+        },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature"
+      ],
+      "title": "list_binsArguments",
+      "type": "object"
+    },
+    "list_edits": {
+      "properties": {
+        "include_replay_json": {
+          "default": false,
+          "title": "Include Replay Json",
+          "type": "boolean"
+        }
+      },
+      "title": "list_editsArguments",
+      "type": "object"
+    },
     "list_features": {
       "properties": {
         "revision": {
@@ -156,6 +273,93 @@
         }
       },
       "title": "list_featuresArguments",
+      "type": "object"
+    },
+    "preview_edit": {
+      "$defs": {
+        "JSONValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "array"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "properties": {
+        "edit": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JSONValue"
+          },
+          "title": "Edit",
+          "type": "object"
+        },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edit"
+      ],
+      "title": "preview_editArguments",
+      "type": "object"
+    },
+    "redo_edit": {
+      "properties": {
+        "expected_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        }
+      },
+      "title": "redo_editArguments",
+      "type": "object"
+    },
+    "undo_edit": {
+      "properties": {
+        "expected_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Revision"
+        }
+      },
+      "title": "undo_editArguments",
       "type": "object"
     }
   }

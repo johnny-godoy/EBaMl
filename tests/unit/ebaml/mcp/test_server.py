@@ -38,6 +38,21 @@ from tests.unit.ebaml.conftest import (
 pytestmark = pytest.mark.anyio
 
 SNAPSHOT = Path(__file__).parent / "tool_schemas.json"
+EDIT_TOOL_NAMES = {
+    "list_bins",
+    "preview_edit",
+    "apply_edit",
+    "undo_edit",
+    "redo_edit",
+    "checkout_edit",
+    "list_edits",
+}
+LOW_BINS: dict[str, object] = {
+    "kind": "Shift",
+    "feature": "a",
+    "selection": {"kind": "Bins", "first": 0, "last": 1},
+    "delta": 0.5,
+}
 
 
 async def _call(server: MCPServer, name: str, arguments: dict[str, object] | None = None) -> tuple[bool, str]:
@@ -423,7 +438,7 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
         graph = await session.call_tool("get_graph", {"feature": "a"})
         explanation = await session.call_tool("explain_prediction", {"row": 0})
     texts = [result.content[0].text for result in (summary, features, graph, explanation)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
-    assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction"}
+    assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction", *EDIT_TOOL_NAMES}
     assert not any(result.is_error for result in (summary, features, graph, explanation))
     assert orjson.loads(texts[0])["kind"] == "BinaryClassifier"
     assert orjson.loads(texts[1])["features"][0]["name"] == "a"
@@ -487,3 +502,142 @@ async def test_the_tools_name_or_reject_a_model_that_they_cover_in_part(
     is_error, message = await _call(server, "explain_prediction", {"instance": instance_of(data, 0)})
     assert is_error
     assert ("without interactions" if case == "interaction" else "main-effect term for every feature") in message
+
+
+async def test_an_agent_edits_the_model_from_the_bins_to_the_history(binary_server: MCPServer) -> None:
+    bins = orjson.loads((await _call(binary_server, "list_bins", {"feature": "a"}))[1])
+    assert bins["bins"][0]["number"] == 0
+    assert bins["session"] == {"revision": "original", "head": "original", "edit_count": 0}
+    before = await _call(binary_server, "get_graph", {"feature": "a"})
+    preview = orjson.loads((await _call(binary_server, "preview_edit", {"edit": LOW_BINS}))[1])
+    assert not preview["applied"]
+    assert preview["effect_on_data"]["row_count"] == 600
+    assert await _call(binary_server, "get_graph", {"feature": "a"}) == before
+    applied_error, applied_text = await _call(
+        binary_server,
+        "apply_edit",
+        {"edit": LOW_BINS, "reason": "Low values are rare", "expected_revision": "original"},
+    )
+    applied = orjson.loads(applied_text)
+    head = applied["session"]["head"]
+    assert not applied_error
+    assert applied["applied"]
+    assert applied["report"]["revision"] == head
+    assert applied["session"]["edit_count"] == 1
+    assert await _call(binary_server, "get_graph", {"feature": "a"}) != before
+    assert (await _call(binary_server, "get_graph", {"feature": "a", "revision": "original"}))[1].split("\n", 1)[1] == (
+        before[1].split("\n", 1)[1]
+    )
+    listing = orjson.loads((await _call(binary_server, "list_edits", {"include_replay_json": True}))[1])
+    assert [commit["reason"] for commit in listing["commits"]] == ["Low values are rare"]
+    assert orjson.loads(listing["replay_json"])["head"] == head
+    undone = orjson.loads((await _call(binary_server, "undo_edit", {"expected_revision": head}))[1])
+    assert undone["session"] == {"revision": "original", "head": "original", "edit_count": 0}
+    assert orjson.loads((await _call(binary_server, "list_edits"))[1])["undone"] == [head]
+    redone = orjson.loads((await _call(binary_server, "redo_edit"))[1])
+    assert redone["session"]["head"] == head
+    moved = orjson.loads((await _call(binary_server, "checkout_edit", {"revision": "original"}))[1])
+    assert moved["action"] == "checkout"
+    assert moved["session"]["edit_count"] == 0
+
+
+async def test_the_edit_tools_report_a_bad_call_as_a_tool_error_that_says_how_to_repair_it(
+    binary_server: MCPServer,
+) -> None:
+    unknown_kind = await _call(binary_server, "apply_edit", {"edit": {"kind": "Explode"}, "reason": "Test"})
+    no_reason = await _call(binary_server, "apply_edit", {"edit": LOW_BINS, "reason": " "})
+    bad_bins = await _call(
+        binary_server,
+        "preview_edit",
+        {"edit": {**LOW_BINS, "selection": {"kind": "Bins", "first": 0, "last": 999}}},
+    )
+    unknown_feature = await _call(binary_server, "list_bins", {"feature": "zzz"})
+    unknown_revision = await _call(binary_server, "get_graph", {"feature": "a", "revision": "abc"})
+    nothing_to_undo = await _call(binary_server, "undo_edit")
+    assert all(is_error for is_error, _ in (unknown_kind, no_reason, bad_bins, unknown_feature, unknown_revision))
+    assert nothing_to_undo[0]
+    assert "one of ['Align'" in unknown_kind[1]
+    assert "A message is needed" in no_reason[1]
+    assert "bin numbers go from 0 to" in bad_bins[1]
+    assert "The features are ['a', 'b', 'c']" in unknown_feature[1]
+    assert "The revisions are ['original', 'current']" in unknown_revision[1]
+    assert "no edit to undo" in nothing_to_undo[1]
+    assert orjson.loads((await _call(binary_server, "list_edits"))[1])["commits"] == []
+
+
+async def test_a_stale_expected_revision_fails_and_tells_the_agent_the_current_head(binary_server: MCPServer) -> None:
+    head = orjson.loads((await _call(binary_server, "apply_edit", {"edit": LOW_BINS, "reason": "First"}))[1])[
+        "session"
+    ]["head"]
+    stale_calls: tuple[tuple[str, dict[str, object]], ...] = (
+        ("apply_edit", {"edit": LOW_BINS, "reason": "Second", "expected_revision": "original"}),
+        ("undo_edit", {"expected_revision": "original"}),
+        ("redo_edit", {"expected_revision": "original"}),
+        ("checkout_edit", {"revision": "original", "expected_revision": "original"}),
+    )
+    for name, arguments in stale_calls:
+        is_error, text = await _call(binary_server, name, arguments)
+        assert is_error
+        assert f"The head of the session is {head!r}, and the call expected 'original'" in text
+    assert orjson.loads((await _call(binary_server, "list_edits"))[1])["session"]["edit_count"] == 1
+
+
+async def test_two_clients_that_edit_at_once_lose_no_edit(binary_server: MCPServer) -> None:
+    async def edit_five_times(client_number: int) -> None:
+        async with Client(binary_server) as session:
+            for step in range(5):
+                result = await session.call_tool(
+                    "apply_edit",
+                    {"edit": LOW_BINS, "reason": f"client {client_number}, step {step}"},
+                )
+                assert not result.is_error
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(edit_five_times, 1)
+        group.start_soon(edit_five_times, 2)
+    listing = orjson.loads((await _call(binary_server, "list_edits"))[1])
+    reasons = {commit["reason"] for commit in listing["commits"]}
+    assert listing["session"]["edit_count"] == 10
+    assert reasons == {f"client {number}, step {step}" for number in (1, 2) for step in range(5)}
+    assert [commit["sequence"] for commit in listing["commits"]] == list(range(10))
+
+
+async def test_the_edit_tools_refuse_a_multiclass_model_and_the_read_tools_still_work(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    server = create_server(ModelStore(ebm=multiclass_ebm))
+    calls: tuple[tuple[str, dict[str, object]], ...] = (
+        ("list_bins", {"feature": "a"}),
+        ("preview_edit", {"edit": LOW_BINS}),
+        ("apply_edit", {"edit": LOW_BINS, "reason": "Test"}),
+        ("undo_edit", {}),
+        ("list_edits", {}),
+    )
+    for name, arguments in calls:
+        is_error, text = await _call(server, name, arguments)
+        assert is_error
+        assert "binary classifiers and regressors" in text
+    assert not (await _call(server, "get_model_summary"))[0]
+
+
+async def test_every_read_tool_and_the_explain_tool_use_the_edited_copy_after_an_edit(
+    continuous_ebm: FittedClassifier,
+) -> None:
+    ebm, data = continuous_ebm
+    server = create_server(ModelStore(ebm=ebm, data=as_frame(data)))
+    zero_a = {"kind": "SetScores", "feature": "a", "selection": {"kind": "WholeGraph"}, "value": 0.0}
+    explain: dict[str, object] = {"row": 0}
+    before_explain = orjson.loads((await _call(server, "explain_prediction", explain))[1])
+    before_features = orjson.loads((await _call(server, "list_features"))[1])
+    await _call(server, "apply_edit", {"edit": zero_a, "reason": "The model must not use a"})
+    after_explain = orjson.loads((await _call(server, "explain_prediction", explain))[1])
+    after_features = orjson.loads((await _call(server, "list_features"))[1])
+    original_features = orjson.loads((await _call(server, "list_features", {"revision": "original"}))[1])
+    assert after_explain["facts"] != before_explain["facts"]
+    assert after_features["features"][0]["name"] != "a"
+    assert before_features["features"][0]["name"] == "a"
+    assert original_features["features"] == before_features["features"]
+    assert after_features["session"]["edit_count"] == 1
+    assert orjson.loads((await _call(server, "get_model_summary"))[1])["session"]["edit_count"] == 1
+    earlier = orjson.loads((await _call(server, "explain_prediction", {**explain, "revision": "original"}))[1])
+    assert earlier["facts"] == before_explain["facts"]
