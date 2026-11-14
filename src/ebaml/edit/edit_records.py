@@ -1,7 +1,8 @@
-"""Write an edit and its selection as a record of JSON values, and read it back.
+"""Write an edit, a constraint and a selection as a record of JSON values, and read it back.
 
-The history of a session stores each edit as a record, so that a replay builds the same edit. A record holds the name
-of the class under ``type`` and the fields of the class. A selection inside an edit is a record too.
+The history of a session stores each edit as a record, so that a replay builds the same edit. A tool reads a constraint
+from a record. A record holds the name of the class under ``type`` and the fields of the class. A selection inside an
+edit or a constraint is a record too.
 """
 
 from collections.abc import Mapping
@@ -12,7 +13,8 @@ from beartype.roar import BeartypeCallHintViolation
 
 from ebaml.core.custom_types import JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
-from ebaml.edit import edits, selections
+from ebaml.edit import constraints, edits, selections
+from ebaml.edit.constraints import Constraint
 from ebaml.edit.edits import Edit
 from ebaml.edit.selections import Selection
 
@@ -34,7 +36,17 @@ EDIT_TYPES: dict[str, type[Edit]] = {
         edits.RemoveFeature,
     )
 }
-# the name of the field of an edit that holds a selection
+CONSTRAINT_TYPES: dict[str, type[Constraint]] = {
+    constraint_class.__name__: constraint_class
+    for constraint_class in (
+        constraints.Monotone,
+        constraints.MaxStep,
+        constraints.Bounded,
+        constraints.FixedScore,
+        constraints.Unused,
+    )
+}
+# the name of the field of an edit or a constraint that holds a selection
 SELECTION_FIELD = "selection"
 SELECTION_TYPES: dict[str, type[Selection]] = {
     selection_class.__name__: selection_class
@@ -51,14 +63,13 @@ SELECTION_TYPES: dict[str, type[Selection]] = {
 
 
 # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
-def to_record(item: Edit | Selection) -> JSONObject:
-    """Write an edit or a selection as a record.
+def to_record(item: Edit | Constraint | Selection) -> JSONObject:
+    """Write an edit, a constraint or a selection as a record.
 
     Parameters
     ----------
-    item : Edit | Selection
-        An attrs class of ``ebaml.edit``. The field ``selection`` of an edit holds a selection, and it becomes a nested
-        record.
+    item : Edit | Constraint | Selection
+        An attrs class of ``ebaml.edit``. The field ``selection`` holds a selection, and it becomes a nested record.
 
     Returns
     -------
@@ -111,7 +122,7 @@ def _decode(
             raise HistoryError(msg)
     if name not in registry:
         msg = (
-            f"The history names the {kind} {name!r}, which this version does not know."
+            f"The record names the {kind} {name!r}, which this version does not know."
             f" The known ones are {sorted(registry)}."
         )
         raise HistoryError(msg)
@@ -137,3 +148,21 @@ def edit_from_record(record: JSONValue) -> Edit:
 
     """
     return cast(Edit, _decode(record, EDIT_TYPES, "edit"))  # the registry holds the classes of edits only
+
+
+def constraint_from_record(record: JSONValue) -> Constraint:
+    """Build a constraint from its record.
+
+    Parameters
+    ----------
+    record : JSONValue
+        A record that ``to_record`` wrote, or a record of the same form.
+
+    Returns
+    -------
+    Constraint
+        The constraint. A record that names an unknown class, or has fields that do not fit it, raises a
+        ``HistoryError``.
+
+    """
+    return cast(Constraint, _decode(record, CONSTRAINT_TYPES, "constraint"))  # the registry holds constraints only
