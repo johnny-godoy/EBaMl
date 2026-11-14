@@ -20,6 +20,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from ebaml.core.custom_types import FeatureValue, JSONValue
 from ebaml.core.exceptions import EBaMlError
+from ebaml.edit.constraints import DEFAULT_TOLERANCE
 from ebaml.edit.edit_session import EditSession
 from ebaml.llm.options import ModelOptions
 from ebaml.mcp import edit_tools, explain_tools, llm_tools, read_tools, save_tools
@@ -32,8 +33,9 @@ _INSTRUCTIONS = (
     " You can also edit the model so that it meets a business requirement of the person. An edit changes real"
     " predictions, so apply only what the person asked for. Work in this order: read the graph with get_graph and"
     " list_bins, call preview_edit, read the report and the effect on the data, call apply_edit with the reason, and"
-    " tell the person what changed. The server edits a copy and never changes the model file. If the server has"
-    " save_model, call it only when the person wants the edited model saved."
+    " tell the person what changed. If the person states business constraints, call check_constraints first: each"
+    " violation comes with an edit that repairs it. The server edits a copy and never changes the model file. If the"
+    " server has save_model, call it only when the person wants the edited model saved."
 )
 _EDIT_WORKFLOW = (
     "Working order: read the graph (get_graph, list_bins), call preview_edit, read the report and the effect on the"
@@ -41,6 +43,16 @@ _EDIT_WORKFLOW = (
     " apply only what the person asked for. If several edits meet the requirement, propose the one that changes the"
     " fewest scores. A direct edit does not re-centre the graph: the report shows the shift of the weighted mean of"
     " the graph, and the edit Recenter moves that mean into the intercept with no change of any prediction."
+)
+
+_CONSTRAINT_WORKFLOW = (
+    "Find the business constraints that the model breaks. The check reads the model and changes nothing. Each"
+    " violation names the bins that break the constraint, the largest excess, and the repair: an edit object that"
+    " preview_edit and apply_edit take as it is. Preview a repair and read its effect on the data before you apply"
+    " it, because a repair changes real predictions. A repair of one constraint can break another one, so call"
+    " check_constraints again after each repair. A constraint other than Unused reads the main effect of the feature"
+    " only, and a pair term can still change the effect of the feature. A difference at or below the tolerance is not"
+    " a violation."
 )
 
 
@@ -95,6 +107,7 @@ def create_server(
     _register_read_tools(server, store)
     _register_explain_tools(server, store)
     _register_bin_tools(server, store)
+    _register_constraint_tool(server, store)
     _register_history_tools(server, store)
     if store.output_directory is not None:
         _register_save_tool(server, store)
@@ -309,6 +322,39 @@ def _register_bin_tools(server: MCPServer, store: ModelStore) -> None:
         with _tool_errors():
             result = edit_tools.apply_edit(store, edit_tools.parse_edit(edit), reason, expected_revision)
             return _json(attrs.asdict(result))
+
+
+def _register_constraint_tool(server: MCPServer, store: ModelStore) -> None:
+    """Register the tool that checks the business constraints.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add it to.
+    store: ModelStore
+        The session.
+
+    """
+
+    @server.tool(description=f"{_CONSTRAINT_WORKFLOW}\n\n{edit_tools.constraint_kinds_help()}")
+    def check_constraints(
+        constraints: list[dict[str, JSONValue]],
+        revision: str = "current",
+        tolerance: float = DEFAULT_TOLERANCE,
+    ) -> str:
+        """Find the business constraints that the model breaks, and the edit that repairs each one.
+
+        Returns
+        -------
+        str
+            JSON with the session, the revision that the check read, the number of constraints, and one violation
+            (the constraint, a description, the bins, the terms, the excess and the repair edit) for each constraint
+            that the model breaks.
+
+        """
+        with _tool_errors():
+            parsed = [edit_tools.parse_constraint(constraint) for constraint in constraints]
+            return _json(attrs.asdict(edit_tools.check_model_constraints(store, parsed, revision, tolerance)))
 
 
 def _register_history_tools(server: MCPServer, store: ModelStore) -> None:

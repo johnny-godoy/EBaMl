@@ -1,19 +1,29 @@
-"""The tools that edit the model: list the bins, preview and apply an edit, move in the history and list the edits.
+"""The tools that edit the model: list the bins, check the constraints, preview and apply an edit, and use the history.
 
 Each function calls the edit API of ``ebaml.edit`` and returns an attrs class. No function calls an LLM. The agent is
 the LLM, so the tools stay exact and free. The server turns each class into JSON.
 """
 
 import inspect
-from collections.abc import Mapping
-from typing import cast
+import re
+from collections.abc import Callable, Mapping, Sequence
+from typing import Protocol, cast, runtime_checkable
 
 import attrs
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import EditError, InvalidInstanceError
+from ebaml.edit.constraints import DEFAULT_TOLERANCE, Constraint, Violation, check_constraints
 from ebaml.edit.data_effect import RowChanges, row_changes
-from ebaml.edit.edit_records import EDIT_TYPES, SELECTION_FIELD, SELECTION_TYPES, edit_from_record
+from ebaml.edit.edit_records import (
+    CONSTRAINT_TYPES,
+    EDIT_TYPES,
+    SELECTION_FIELD,
+    SELECTION_TYPES,
+    constraint_from_record,
+    edit_from_record,
+    to_record,
+)
 from ebaml.edit.edit_report import EditReport
 from ebaml.edit.edit_session import CURRENT, RevisionInfo
 from ebaml.edit.edits import Edit
@@ -115,6 +125,55 @@ class EditList:
     replay_json: str | None
 
 
+@attrs.frozen
+class ViolationInfo:
+    """One violation of a constraint, as the tools give it.
+
+    ``constraint`` and ``repair`` are JSON objects with a ``kind``, in the form that the tools read. Pass ``repair`` to
+    ``preview_edit`` or ``apply_edit`` as it is.
+    """
+
+    constraint: JSONObject
+    description: str
+    bins: list[str]
+    terms: list[str]
+    excess: float
+    repair: JSONObject
+
+    @classmethod
+    def of(cls, violation: Violation) -> "ViolationInfo":
+        """Write a violation for a tool.
+
+        Returns
+        -------
+        ViolationInfo
+            The violation, with the constraint and the repair as tool records.
+
+        """
+        return cls(
+            constraint=_tool_record(to_record(violation.constraint)),
+            description=violation.description,
+            bins=list(violation.bins),
+            terms=list(violation.terms),
+            excess=violation.excess,
+            repair=_tool_record(to_record(violation.repair)),
+        )
+
+
+@attrs.frozen
+class ConstraintCheck:
+    """The constraints that the model of one revision breaks.
+
+    ``revision`` is the revision that the check read. An empty ``violations`` means that the model meets every
+    constraint, within the tolerance.
+    """
+
+    session: RevisionInfo
+    revision: str
+    constraint_count: int
+    violations: list[ViolationInfo]
+
+
 def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinList:
     """List the bins of a feature with their training weight and their score.
 
@@ -170,6 +229,31 @@ def _hint_text(hint: object) -> str:  # nosemgrep: ebaml-no-object-type -- the t
     return str(hint).replace("typing.", "")
 
 
+@runtime_checkable
+class _SelectionFactory(Protocol):
+    """The default of a field that holds a selection: an ``attrs.Factory``, which the stubs of attrs type as a call."""
+
+    factory: Callable[[], Selection]
+
+
+def _default_text(default: JSONValue | _SelectionFactory | attrs.NothingType) -> str:
+    """Name the default of a field: `` = whole graph`` for a selection, `` = None`` for a value.
+
+    Returns
+    -------
+    str
+        The text, or an empty text for a field with no default.
+
+    """
+    if default is attrs.NOTHING:
+        return ""
+    # a default of an edit or a constraint is a factory of a selection or a plain value
+    if isinstance(default, _SelectionFactory):
+        words: list[str] = re.findall(r"[A-Z][a-z]*", type(default.factory()).__name__)
+        return " = " + " ".join(words).lower()
+    return f" = {default!r}"
+
+
 def _signature(item: type) -> str:
     """Write a class as ``Name(field: type, field: type = default)`` with the first sentence of its docstring.
 
@@ -180,11 +264,35 @@ def _signature(item: type) -> str:
 
     """
     fields = ", ".join(
-        f"{field.name}: {_hint_text(field.type)}" + (" = whole graph" if field.default is not attrs.NOTHING else "")
-        for field in attrs.fields(item)
+        f"{field.name}: {_hint_text(field.type)}{_default_text(field.default)}" for field in attrs.fields(item)
     )
     first_paragraph = " ".join((inspect.getdoc(item) or "").split("\n\n")[0].split())
     return f"- {_KIND} {item.__name__}({fields}): {first_paragraph.split('. ')[0].rstrip('.')}."
+
+
+def _selection_lines() -> str:
+    return "\n".join(_signature(item) for item in SELECTION_TYPES.values())
+
+
+def constraint_kinds_help() -> str:
+    """List every constraint and every selection with its fields, for the description of a tool.
+
+    A new class in ``CONSTRAINT_TYPES`` or ``SELECTION_TYPES`` appears here with no other change.
+
+    Returns
+    -------
+    str
+        The text.
+
+    """
+    constraint_lines = "\n".join(_signature(item) for item in CONSTRAINT_TYPES.values())
+    return (
+        f"Each constraint is a JSON object. Its field {_KIND!r} names the constraint, and the other fields are the"
+        f" fields of that constraint. The field {SELECTION_FIELD!r} is a JSON object with a {_KIND!r} too."
+        f"\n\nThe constraints:\n{constraint_lines}\n\nThe selections:\n{_selection_lines()}"
+        f'\n\nExample: {{"{_KIND}": "Monotone", "feature": "age", "direction": "increasing",'
+        f' "{SELECTION_FIELD}": {{"{_KIND}": "Bins", "first": 3, "last": 9}}}}'
+    )
 
 
 def edit_kinds_help() -> str:
@@ -199,11 +307,10 @@ def edit_kinds_help() -> str:
 
     """
     edit_lines = "\n".join(_signature(item) for item in EDIT_TYPES.values())
-    selection_lines = "\n".join(_signature(item) for item in SELECTION_TYPES.values())
     return (
         f"The edit is a JSON object. Its field {_KIND!r} names the edit, and the other fields are the fields of that"
         f" edit. The field {SELECTION_FIELD!r} is a JSON object with a {_KIND!r} too.\n\nThe edits:\n{edit_lines}"
-        f'\n\nThe selections:\n{selection_lines}\n\nExample: {{"{_KIND}": "Shift", "feature": "age",'
+        f'\n\nThe selections:\n{_selection_lines()}\n\nExample: {{"{_KIND}": "Shift", "feature": "age",'
         f' "{SELECTION_FIELD}": {{"{_KIND}": "Bins", "first": 3, "last": 5}}, "delta": -0.2}}'
     )
 
@@ -226,6 +333,21 @@ def _record(value: JSONValue) -> JSONValue:
     if isinstance(value, float) and value.is_integer():
         return int(value)
     return value
+
+
+def _tool_record(record: JSONMapping) -> JSONObject:
+    """Rename the key ``type`` to ``kind`` in a record and in its selection, the inverse of ``_record``.
+
+    Returns
+    -------
+    JSONObject
+        The record in the form that the tools read.
+
+    """
+    return {
+        (_KIND if key == _RECORD_TYPE else key): (_tool_record(value) if isinstance(value, Mapping) else value)
+        for key, value in record.items()
+    }
 
 
 def _check_kind(record: JSONMapping, registry: Mapping[str, type], what: str) -> None:
@@ -255,6 +377,63 @@ def parse_edit(arguments: JSONMapping) -> Edit:
     if isinstance(selection, Mapping):
         _check_kind(selection, SELECTION_TYPES, "selection")
     return edit_from_record(_record(arguments))
+
+
+def parse_constraint(arguments: JSONMapping) -> Constraint:
+    """Build a constraint from the JSON object that a tool takes.
+
+    Parameters
+    ----------
+    arguments: JSONMapping
+        The object. The field ``kind`` names the constraint, and the field ``selection`` is an object with a ``kind``.
+
+    Returns
+    -------
+    Constraint
+        The constraint. An object with no known ``kind``, or with fields that do not fit the constraint, raises an
+        ``EditError`` that lists what is known.
+
+    """
+    _check_kind(arguments, CONSTRAINT_TYPES, "constraint")
+    selection = arguments.get(SELECTION_FIELD)
+    if isinstance(selection, Mapping):
+        _check_kind(selection, SELECTION_TYPES, "selection")
+    return constraint_from_record(_record(arguments))
+
+
+def check_model_constraints(
+    store: ModelStore,
+    constraints: Sequence[Constraint],
+    revision: str = CURRENT,
+    tolerance: float = DEFAULT_TOLERANCE,
+) -> ConstraintCheck:
+    """Find the constraints that the model of a revision breaks. The check changes nothing.
+
+    Parameters
+    ----------
+    store: ModelStore
+        The session.
+    constraints: Sequence[Constraint]
+        The business requirements.
+    revision: str, default="current"
+        The revision to check.
+    tolerance: float, default=1e-9
+        The largest difference that does not count as a violation.
+
+    Returns
+    -------
+    ConstraintCheck
+        One violation for each constraint that the model breaks, each with the edit that repairs it.
+
+    """
+    session = store.editing()
+    violations = check_constraints(session.model_at(revision), constraints, tolerance=tolerance)
+    return ConstraintCheck(
+        session=session.revision_info(),
+        revision=revision,
+        constraint_count=len(constraints),
+        violations=[ViolationInfo.of(violation) for violation in violations],
+    )
 
 
 @attrs.frozen

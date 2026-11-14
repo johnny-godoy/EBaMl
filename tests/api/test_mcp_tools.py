@@ -31,6 +31,7 @@ BASE_TOOLS = {
     "redo_edit",
     "checkout_edit",
     "list_edits",
+    "check_constraints",
 }
 LLM_TOOLS = {"describe_feature", "describe_model"}
 SAVE_TOOLS = {"save_model"}
@@ -43,6 +44,7 @@ READ_ONLY: dict[str, dict[str, object]] = {
     "list_bins": {"feature": "age"},
     "preview_edit": {"edit": {"kind": "Shift", "feature": "age", "selection": {"kind": "WholeGraph"}, "delta": 1.0}},
     "list_edits": {},
+    "check_constraints": {"constraints": [{"kind": "Unused", "feature": "age"}]},
 }
 
 
@@ -84,7 +86,7 @@ async def test_each_tool_has_a_description_and_an_object_schema(store: ModelStor
 
 
 def test_each_tool_name_is_snake_case_and_starts_with_a_verb_of_the_set() -> None:
-    verbs = {"get", "list", "explain", "preview", "apply", "undo", "redo", "checkout", "save", "describe"}
+    verbs = {"get", "list", "check", "explain", "preview", "apply", "undo", "redo", "checkout", "save", "describe"}
     for name in BASE_TOOLS | SAVE_TOOLS | LLM_TOOLS:
         assert name == name.lower()
         assert name.split("_")[0] in verbs, f"{name} does not start with an approved verb"

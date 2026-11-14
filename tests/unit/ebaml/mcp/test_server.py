@@ -47,6 +47,7 @@ EDIT_TOOL_NAMES = {
     "redo_edit",
     "checkout_edit",
     "list_edits",
+    "check_constraints",
 }
 LOW_BINS: dict[str, object] = {
     "kind": "Shift",
@@ -544,6 +545,26 @@ async def test_an_agent_edits_the_model_from_the_bins_to_the_history(binary_serv
     moved = orjson.loads((await _call(binary_server, "checkout_edit", {"revision": "original"}))[1])
     assert moved["action"] == "checkout"
     assert moved["session"]["edit_count"] == 0
+
+
+async def test_an_agent_checks_a_constraint_and_applies_its_repair(binary_server: MCPServer) -> None:
+    constraint = {"kind": "FixedScore", "feature": "a", "selection": {"kind": "MissingBin"}, "value": 1.0}
+    error, text = await _call(binary_server, "check_constraints", {"constraints": [constraint]})
+    check = orjson.loads(text)
+    assert not error
+    assert check["constraint_count"] == 1
+    (violation,) = check["violations"]
+    assert violation["bins"] == ["missing"]
+    applied_error, _ = await _call(binary_server, "apply_edit", {"edit": violation["repair"], "reason": "Test"})
+    assert not applied_error
+    after = orjson.loads((await _call(binary_server, "check_constraints", {"constraints": [constraint]}))[1])
+    assert after["violations"] == []
+
+
+async def test_check_constraints_reports_an_unknown_kind_as_a_tool_error(binary_server: MCPServer) -> None:
+    error, text = await _call(binary_server, "check_constraints", {"constraints": [{"kind": "Pretty"}]})
+    assert error
+    assert "The constraint needs a field 'kind' with one of" in text
 
 
 async def test_the_edit_tools_report_a_bad_call_as_a_tool_error_that_says_how_to_repair_it(

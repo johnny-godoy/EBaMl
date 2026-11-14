@@ -66,6 +66,65 @@
       "title": "apply_editArguments",
       "type": "object"
     },
+    "check_constraints": {
+      "type": "object",
+      "$defs": {
+        "JSONValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "array"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JSONValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "properties": {
+        "constraints": {
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "type": "object"
+          },
+          "title": "Constraints",
+          "type": "array"
+        },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        },
+        "tolerance": {
+          "default": 1e-9,
+          "title": "Tolerance",
+          "type": "number"
+        }
+      },
+      "required": [
+        "constraints"
+      ],
+      "title": "check_constraintsArguments"
+    },
     "checkout_edit": {
       "properties": {
         "expected_revision": {

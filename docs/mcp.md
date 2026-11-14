@@ -114,6 +114,7 @@ reaches the port can read the model and the rows of the data file.
 | `get_graph` | `feature`, optional `revision`, `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
 | `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level` | The `LocalFacts` and their texts, as JSON. |
 | `list_bins` | `feature`, optional `revision` | The bins of a feature with the number, the edges, the training weight and the score of each bin, and the missing and the unseen bin. |
+| `check_constraints` | `constraints`, optional `revision`, `tolerance` | One violation for each business constraint that the model breaks, with the bins, the excess and the edit that repairs it. It changes nothing. |
 | `preview_edit` | `edit`, optional `revision` | The report of one edit and its effect on the rows of `--data`. It changes nothing. |
 | `apply_edit` | `edit`, `reason`, optional `expected_revision` | Applies one edit to the session copy of the model, and returns the same result as `preview_edit`. |
 | `undo_edit`, `redo_edit` | optional `expected_revision` | Undoes the last edit, or applies it again. |
@@ -234,6 +235,8 @@ appears in the list with no new tool. A selection is a JSON object with a `kind`
 | `Align` | Sets the selected scores to the score of the left bin, of the right bin, or to the weighted mean. |
 | `Monotonize` | Makes the selected scores monotone, weighted by the training weight of the bins. |
 | `Interpolate`, `FitLine` | Replaces the selected scores by a straight line, or by the weighted least-squares line. |
+| `Clip` | Moves each selected score outside a range to the nearer bound. |
+| `LimitSteps` | Replaces the selected scores by a weighted least-squares fit with no step between neighbour bins above `step`. |
 | `Scale` | Multiplies the graph by a factor. |
 | `ZeroTerm`, `RemoveTerms`, `RemoveFeature` | Set a graph to 0, or remove terms. The model keeps its input columns. |
 | `Recenter` | Moves the weighted mean of a graph into the intercept. No prediction changes. |
@@ -244,10 +247,37 @@ appears in the list with no new tool. A selection is a JSON object with a `kind`
 | `Categories` | The bins of some categories of a nominal feature. |
 | `ValueInterval` | Every bin that overlaps an interval of values. The report names the bins that it chose. |
 | `MissingBin`, `UnseenBin`, `WholeGraph` | The missing bin, the unseen bin, or every real bin. |
+| `EveryBin` | The missing bin, every real bin and the unseen bin. |
 
 An edit that sets scores does not re-centre the graph. The report shows the shift of the weighted mean of the graph
 (`weighted_mean_shift`). Call `Recenter` when the person wants the shift in the intercept. A score that a person sets
 has no fitted uncertainty, so its standard deviation is 0.
+
+### Business constraints
+
+A person can state a business requirement as a constraint, for example "the risk must not fall when the age goes up".
+`check_constraints` takes a list of constraints and returns one violation for each constraint that the model breaks. It
+changes nothing. A constraint is a JSON object with a `kind`, as an edit is. The description of the tool lists every
+constraint with its fields.
+
+| `kind` of the constraint | Requirement | Repair |
+| --- | --- | --- |
+| `Monotone` | The selected scores do not fall (`increasing`) or do not rise (`decreasing`). | `Monotonize` |
+| `MaxStep` | No step between neighbour bins is larger than `step`. | `LimitSteps` |
+| `Bounded` | Each selected score is between `low` and `high`. The default selection is `EveryBin`. | `Clip` |
+| `FixedScore` | Each selected score equals `value`. | `SetScores` |
+| `Unused` | No term uses the feature with a score other than 0, the pair terms included. | `RemoveFeature` |
+
+Each violation names the bins that break the constraint, the largest excess, and the `repair`: an edit object that
+`preview_edit` and `apply_edit` take as it is. Preview the repair and read its effect on the data before you apply it.
+A repair of one constraint can break another one, so call `check_constraints` again after each repair.
+
+```json
+{"constraints": [
+  {"kind": "Monotone", "feature": "age", "direction": "increasing", "selection": {"kind": "Bins", "first": 3, "last": 9}},
+  {"kind": "FixedScore", "feature": "income", "selection": {"kind": "MissingBin"}, "value": 0}
+]}
+```
 
 ### The result of an edit
 
