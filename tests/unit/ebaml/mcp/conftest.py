@@ -1,11 +1,29 @@
 """Fixtures of the MCP tests."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import pandas as pd  # ruff: ignore[banned-api] -- the fixture builds the pandas frame that interpret fits on
 import pytest
+import structlog
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+
+
+@pytest.fixture
+def reset_structlog() -> Iterator[None]:
+    """Undo the logging setup of ``serve`` after a test that asks for this fixture.
+
+    ``serve`` points structlog at ``sys.stderr``. Under pytest that is a capture stream that closes after the test, so
+    a later test that logs would write to a closed file.
+
+    Yields
+    ------
+    None
+        Nothing. The test runs.
+
+    """
+    yield
+    structlog.reset_defaults()
 
 
 @pytest.fixture

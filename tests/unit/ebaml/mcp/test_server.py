@@ -17,6 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import TextContent, TextResourceContents
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
+from ebaml.core.exceptions import HistoryError
 from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
@@ -35,7 +36,7 @@ from tests.unit.ebaml.conftest import (
     save_model,
 )
 
-pytestmark = pytest.mark.anyio
+pytestmark = [pytest.mark.anyio, pytest.mark.usefixtures("reset_structlog")]
 
 SNAPSHOT = Path(__file__).parent / "tool_schemas.json"
 EDIT_TOOL_NAMES = {
@@ -264,10 +265,14 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
 
 async def test_tool_schemas_match_the_snapshot(
     continuous_ebm: FittedClassifier,
+    tmp_path: Path,
 ) -> None:
     """The names and argument schemas of the tools are public API from 1.0.0. Regenerate the snapshot on purpose."""
     ebm, _ = continuous_ebm
-    server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
+    server = create_server(
+        ModelStore(ebm=ebm, output_directory=tmp_path),
+        ModelOptions(provider="ollama", model="llama3"),
+    )
     async with Client(server) as session:
         tools = (await session.list_tools()).tools
         templates = (await session.list_resource_templates()).resource_templates
@@ -641,3 +646,92 @@ async def test_every_read_tool_and_the_explain_tool_use_the_edited_copy_after_an
     assert orjson.loads((await _call(server, "get_model_summary"))[1])["session"]["edit_count"] == 1
     earlier = orjson.loads((await _call(server, "explain_prediction", {**explain, "revision": "original"}))[1])
     assert earlier["facts"] == before_explain["facts"]
+
+
+def _capture_server(monkeypatch: pytest.MonkeyPatch) -> list[MCPServer]:
+    """Replace ``MCPServer.run`` so that ``main`` builds the server and puts it in a list.
+
+    Returns
+    -------
+    list[MCPServer]
+        The list. Each call of ``main`` adds the server that it built.
+
+    """
+    started: list[MCPServer] = []
+
+    def fake_run(self: MCPServer, **_options: str | int) -> None:
+        started.append(self)
+
+    monkeypatch.setattr(MCPServer, "run", fake_run)
+    return started
+
+
+async def test_a_session_of_edits_and_saves_leaves_the_model_file_as_it_was_and_a_later_session_continues(
+    saved_files: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model, data = saved_files
+    before = model.read_bytes()
+    output = tmp_path / "out" / "nested"
+    started = _capture_server(monkeypatch)
+    main(["--model", str(model), "--data", str(data), "--output-dir", str(output)])
+    (server,) = started
+    assert output.is_dir()
+    for reason in ("Low values are rare", "The effect of a is capped"):
+        assert not (await _call(server, "apply_edit", {"edit": LOW_BINS, "reason": reason}))[0]
+    saved = orjson.loads((await _call(server, "save_model", {"message": "Cap a"}))[1])
+    assert model.read_bytes() == before
+    history = output / saved["history_file"]
+    assert history.exists()
+    started.clear()
+    main(["--model", str(model), "--output-dir", str(output), "--edits", str(history)])
+    (continued,) = started
+    listing = orjson.loads((await _call(continued, "list_edits"))[1])
+    assert [commit["reason"] for commit in listing["commits"]] == [
+        "Low values are rare",
+        "The effect of a is capped",
+        "Cap a",
+    ]
+    assert listing["session"]["edit_count"] == 2
+    more = orjson.loads((await _call(continued, "apply_edit", {"edit": LOW_BINS, "reason": "A third edit"}))[1])
+    assert more["session"]["edit_count"] == 3
+    assert model.read_bytes() == before
+
+
+def test_a_history_of_another_model_stops_the_server_at_start(
+    saved_files: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    regression_ebm: ExplainableBoostingRegressor,
+) -> None:
+    model, _ = saved_files
+    other = tmp_path / "other.skops"
+    skops.io.dump(regression_ebm, other)
+    started = _capture_server(monkeypatch)
+    main(["--model", str(model), "--output-dir", str(tmp_path / "out")])
+    session = started[0]
+    asyncio.run(_call(session, "apply_edit", {"edit": LOW_BINS, "reason": "Low values are rare"}))
+    saved = orjson.loads(asyncio.run(_call(session, "save_model", {"message": "Cap a"}))[1])
+    history = tmp_path / "out" / saved["history_file"]
+    with pytest.raises(HistoryError, match="not the model that the history started from"):
+        main(["--model", str(other), "--edits", str(history)])
+    assert len(started) == 1
+
+
+async def test_the_server_without_output_dir_has_no_save_tool_and_the_command_names_both_options(
+    saved_files: tuple[Path, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    model, _ = saved_files
+    started = _capture_server(monkeypatch)
+    main(["--model", str(model)])
+    async with Client(started[0]) as session:
+        names = {tool.name for tool in (await session.list_tools()).tools}
+    assert "save_model" not in names
+    assert names >= EDIT_TOOL_NAMES
+    main(["--help"])
+    help_text = capsys.readouterr().out
+    assert "--output-dir" in help_text
+    assert "--edits" in help_text

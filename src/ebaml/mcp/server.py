@@ -4,23 +4,25 @@ Each tool is a thin adapter. It calls a function of a lower layer and turns the 
 (``EBaMlError``) becomes a tool error with its message.
 """
 
+import asyncio
 import contextlib
 import sys
 from collections.abc import Generator, Mapping, Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import attrs
 import cyclopts
 import orjson
 import structlog
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
 from mcp.server.mcpserver.exceptions import ToolError
 
 from ebaml.core.custom_types import FeatureValue, JSONValue
 from ebaml.core.exceptions import EBaMlError
+from ebaml.edit.edit_session import EditSession
 from ebaml.llm.options import ModelOptions
-from ebaml.mcp import edit_tools, explain_tools, llm_tools, read_tools
+from ebaml.mcp import edit_tools, explain_tools, llm_tools, read_tools, save_tools
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 
 _INSTRUCTIONS = (
@@ -30,7 +32,8 @@ _INSTRUCTIONS = (
     " You can also edit the model so that it meets a business requirement of the person. An edit changes real"
     " predictions, so apply only what the person asked for. Work in this order: read the graph with get_graph and"
     " list_bins, call preview_edit, read the report and the effect on the data, call apply_edit with the reason, and"
-    " tell the person what changed. The server edits a copy and never changes the model file."
+    " tell the person what changed. The server edits a copy and never changes the model file. If the server has"
+    " save_model, call it only when the person wants the edited model saved."
 )
 _EDIT_WORKFLOW = (
     "Working order: read the graph (get_graph, list_bins), call preview_edit, read the report and the effect on the"
@@ -93,6 +96,8 @@ def create_server(
     _register_explain_tools(server, store)
     _register_bin_tools(server, store)
     _register_history_tools(server, store)
+    if store.output_directory is not None:
+        _register_save_tool(server, store)
     if llm is not None:
         _register_llm_tools(server, store, llm)
     return server
@@ -381,6 +386,72 @@ def _register_history_tools(server: MCPServer, store: ModelStore) -> None:
             return _json(attrs.asdict(edit_tools.list_edits(store, include_replay_json=include_replay_json)))
 
 
+def _register_save_tool(server: MCPServer, store: ModelStore) -> None:
+    """Register the tool that saves the edited model. The user turns it on with ``--output-dir``.
+
+    The head and the question are resolvers, so the SDK asks the person in the way that the protocol version needs.
+    The head comes first and is fixed for the whole call, so the question and the save describe the same revision.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add it to.
+    store: ModelStore
+        The session.
+
+    """
+
+    def head() -> str:
+        with _tool_errors():
+            return save_tools.current_head(store)
+
+    def ask_person(
+        message: str,
+        expected_revision: str | None,
+        revision: Annotated[str, Resolve(head)],
+        ctx: Context,
+    ) -> Elicit[save_tools.Confirmation] | None:
+        with _tool_errors():
+            text = save_tools.question(store, message, revision, expected_revision)
+        # a client with no form elicitation cannot ask, and a bare `elicitation` capability counts as form support
+        capability = ctx.client_capabilities.elicitation if ctx.client_capabilities is not None else None
+        cannot_ask = capability is None or (capability.form is None and capability.url is not None)
+        # nobody is asked if no edit needs a review, or if the client cannot ask
+        return None if text is None or cannot_ask else Elicit(text, save_tools.Confirmation)
+
+    @server.tool(
+        description=(
+            "Save the edited model and its history into the output directory that the user gave at start. Tell the"
+            " person what changed before you call it. The message is the change that the saved model holds, for"
+            " example the business requirement that the edits serve. The server asks the person to confirm the edits"
+            " and their reasons. If the person refuses, nothing is saved, so ask the person before you try again. If"
+            " the client cannot ask, the server saves the model and marks each edit in the history as not reviewed by"
+            " a person, and you tell the person that. A save never overwrites a file, and it never changes the model"
+            " file of the server. Pass expected_revision, the head that you read, so that the call fails if the model"
+            " changed meanwhile."
+        ),
+    )
+    async def save_model(
+        message: str,
+        answer: Annotated[save_tools.Confirmation | None, Resolve(ask_person)],
+        revision: Annotated[str, Resolve(head)],
+        expected_revision: str | None = None,  # ruff: ignore[unused-function-argument] -- the resolver ask_person reads it by name
+    ) -> str:
+        """Save the edited model with the message of the change.
+
+        Returns
+        -------
+        str
+            JSON with the file names, who confirmed the save (``confirmation``), the commit of the save and the edits
+            that it holds.
+
+        """
+        confirmed = None if answer is None else answer.confirm
+        with _tool_errors():
+            result = await asyncio.to_thread(save_tools.save_model, store, message, revision, confirmed=confirmed)
+            return _json(attrs.asdict(result))
+
+
 def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:
     @server.tool()
     def describe_feature(feature: str) -> str:
@@ -427,6 +498,8 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     transport: Literal["stdio", "streamable-http"] = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
+    output_dir: Path | None = None,
+    edits: Path | None = None,
 ) -> None:
     """Load the EBM and run the MCP server.
 
@@ -444,11 +517,21 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
         The address that the ``streamable-http`` transport listens on. Use ``0.0.0.0`` to accept other computers.
     port: int
         The port that the ``streamable-http`` transport listens on.
+    output_dir: Path, optional
+        The directory where the tool ``save_model`` writes the edited model and its history. The server creates it if it
+        does not exist. Without it, the server has no ``save_model`` tool.
+    edits: Path, optional
+        The history file of an earlier session (``*.history.json``). The server replays it, so the work goes on. The
+        server refuses a history that started from another model.
 
     """
     # structlog prints to stdout by default, and a stdio server speaks JSON-RPC there, so a log line would corrupt it
     structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
-    store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None)
+    store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None, output_directory=output_dir)
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    if edits is not None:
+        store.session = EditSession.replay(store.original, edits.read_bytes())
     server = create_server(store, ModelOptions.parse(llm) if llm else None)
     # The stdio transport takes no address, and the streamable-http transport takes it when it runs.
     if transport == "streamable-http":

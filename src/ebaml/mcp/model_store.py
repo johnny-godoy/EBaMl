@@ -79,6 +79,8 @@ class ModelStore:
         The edits of the session. The default is a new session on ``original``, or ``None`` for a model that the
         edits do not support (a multiclass classifier). Pass a replayed session to continue the work of an earlier
         session.
+    output_directory: Path | None
+        The directory where ``save_model`` writes. The user gives it at start. Without it, the server saves nothing.
 
     """
 
@@ -87,6 +89,7 @@ class ModelStore:
     session: EditSession | None = attrs.field(
         default=attrs.Factory(lambda self: _start_session(self.original), takes_self=True),
     )
+    output_directory: Path | None = None
     _described: _Described | None = attrs.field(default=None, init=False)
 
     def read(self, revision: str = CURRENT) -> RevisionRead:
