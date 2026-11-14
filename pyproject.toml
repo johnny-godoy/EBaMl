@@ -232,14 +232,21 @@ dist = [
 # @server.tool and @server.resource register are called by the MCP SDK by name, and cyclopts calls the functions that
 # @app.default and @app.command register from the command line. Vulture cannot see any of them.
 ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*"]
-# reason: recurring patterns: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, and Python calls
-# the module hooks __getattr__ and __dir__ (PEP 562) by name. Code never references them, so vulture reports them as
-# unused.
-ignore_names = ["pytestmark", "pytest_*", "__getattr__", "__dir__"]
+# reason: recurring patterns: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, Python calls the
+# module hooks __getattr__ and __dir__ (PEP 562) by name, and http.server calls the do_* and log_message methods of a
+# request handler by name. Code never references them, so vulture reports them as unused.
+ignore_names = ["pytestmark", "pytest_*", "__getattr__", "__dir__", "do_POST", "log_message"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
-addopts = "--cov=ebaml --cov-report=term-missing"
+testpaths = ["tests/unit", "tests/integration", "tests/api", "tests/contract"]
+addopts = "--cov=ebaml --cov-report=term-missing --strict-markers"
+# reason: the suites are named by directory, and the hook of tests/conftest.py adds the marker of each test.
+markers = [
+    "unit: one module of ebaml, with its neighbours faked (tests/unit)",
+    "integration: the real EBM, baml_sdk and BAML runtime, with a local LLM server (tests/integration)",
+    "api: the promises that ebaml makes to its users: names, signatures, errors, tools (tests/api)",
+    "contract: the agreements with what ebaml does not own: baml_sdk, the provider wire format, packaging (tests/contract)",
+]
 # reason: beartype skips a function it cannot decorate and only warns, so the warning must fail the tests.
 filterwarnings = ["error::beartype.roar.BeartypeClawDecorWarning"]
 

@@ -257,10 +257,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - name: Run tests
-        # pyproject addopts adds --cov; branch coverage with fail_under = 100 fails the run below 100%
+        # pyproject addopts adds --cov; branch coverage with fail_under = 100 fails the run below 100%, for the unit tests
         run: |
           mkdir -p "$CI_LOGS"
-          uv run pytest --color=no 2>&1 | tee "$CI_LOGS/pytest.log"
+          uv run pytest --color=no tests/unit 2>&1 | tee "$CI_LOGS/pytest.log"
+      - name: Run the integration, API and contract tests
+        # They run without coverage: the gate above measures the unit tests only, so that a slow end-to-end test cannot
+        # stand in for a missing unit test. They need the generated baml_sdk, which the setup action makes.
+        run: |
+          uv run pytest --color=no --no-cov tests/integration tests/api tests/contract 2>&1 | tee -a "$CI_LOGS/pytest.log"
       - name: Run the documentation examples
         # the code blocks of the Markdown files and the doctests of the docstrings (tests/docs/conftest.py). They run
         # without coverage, so the coverage gate above measures the unit tests only.

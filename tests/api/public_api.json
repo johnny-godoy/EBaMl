@@ -1,0 +1,1228 @@
+{
+  "APIKeyRejectedError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Align": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "to: typing.Literal['left', 'right', 'mean']"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Literal['left', 'right', 'mean']) -> None"
+  },
+  "Audience": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "BinChange": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "position: <class 'int'>",
+      "label: <class 'str'>",
+      "before: <class 'float'>",
+      "after: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(position: int, label: str, before: float, after: float) -> None"
+  },
+  "BinaryClassifier": {
+    "bases": [
+      "ModelKind",
+      "object"
+    ],
+    "fields": [
+      "classes: tuple[ClassLabel, ClassLabel]"
+    ],
+    "kind": "class",
+    "signature": "(classes: tuple[ClassLabel, ClassLabel]) -> None"
+  },
+  "Bins": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [
+      "first: <class 'int'>",
+      "last: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(first: int, last: int) -> None"
+  },
+  "Categories": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [
+      "names: tuple[str, ...]"
+    ],
+    "kind": "class",
+    "signature": "(names: collections.abc.Collection[str]) -> None"
+  },
+  "Change": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "from_value: <class 'str'>",
+      "to_value: <class 'str'>",
+      "score_change: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, from_value: str, to_value: str, score_change: float) -> None"
+  },
+  "Choice": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "group: <class 'int'>",
+      "alternative: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(group: int, alternative: int) -> None"
+  },
+  "CompletionStep": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "fixed: list[str]",
+      "share: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(fixed: list[str], share: float) -> None"
+  },
+  "Contribution": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "value: <class 'str'>",
+      "score: <class 'float'>",
+      "std: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, value: str, score: float, std: float) -> None"
+  },
+  "Counterfactual": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "changes: list[ebaml.local.fact_types.Change]",
+      "new_decision: ClassLabel",
+      "new_output: <class 'float'>",
+      "minimality: <enum 'MinimalityStatus'>",
+      "lower_bound: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(changes: list[ebaml.local.fact_types.Change], new_decision: ClassLabel, new_output: float, minimality: ebaml.local.minimality.MinimalityStatus, lower_bound: int) -> None"
+  },
+  "Cover": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "choices: list[ebaml.local.covering_problem.Choice]",
+      "guaranteed_margin: <class 'float'>",
+      "lower_bound: <class 'int'>",
+      "minimality: <enum 'MinimalityStatus'>"
+    ],
+    "kind": "class",
+    "signature": "(choices: list[ebaml.local.covering_problem.Choice], guaranteed_margin: float, lower_bound: int, minimality: ebaml.local.minimality.MinimalityStatus) -> None"
+  },
+  "CoveringModel": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "choices: list[ebaml.local.covering_problem.Choice]",
+      "margin_rows: list[list[float]]",
+      "margin_needs: list[float]",
+      "group_members: list[list[int]]",
+      "max_picks: int | None",
+      "integer: <class 'bool'>"
+    ],
+    "kind": "class",
+    "signature": "(choices: list[ebaml.local.covering_problem.Choice], margin_rows: list[list[float]], margin_needs: list[float], group_members: list[list[int]], max_picks: int | None, integer: bool) -> None"
+  },
+  "CoveringProblem": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "worst: collections.abc.Sequence[float]",
+      "groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]]"
+    ],
+    "kind": "class",
+    "signature": "(worst: collections.abc.Sequence[float], groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]]) -> None"
+  },
+  "CoveringSolver": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "(*args, **kwargs)"
+  },
+  "DataFileError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "DataScientist": {
+    "bases": [
+      "Audience",
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "Decision": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "DescribeEBMRequest": {
+    "bases": [
+      "_GraphRequest",
+      "_EBMRequest",
+      "object"
+    ],
+    "fields": [
+      "ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor",
+      "prompt: <class 'ebaml.llm.options.PromptOptions'>",
+      "model: ebaml.llm.options.ModelOptions | str | None",
+      "graph: <class 'ebaml.llm.options.GraphOptions'>",
+      "num_sentences: <class 'int'>",
+      "max_concurrency: <class 'int'>",
+      "progress_bar: <class 'bool'>"
+    ],
+    "kind": "class",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, num_sentences: int = 30, max_concurrency: int = 8, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, graph: ebaml.llm.options.GraphOptions = NOTHING, progress_bar: bool = False) -> None"
+  },
+  "DescribeGraphRequest": {
+    "bases": [
+      "_GraphRequest",
+      "_EBMRequest",
+      "object"
+    ],
+    "fields": [
+      "ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor",
+      "prompt: <class 'ebaml.llm.options.PromptOptions'>",
+      "model: ebaml.llm.options.ModelOptions | str | None",
+      "graph: <class 'ebaml.llm.options.GraphOptions'>",
+      "feature_index: <class 'int'>",
+      "num_sentences: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, feature_index: int, num_sentences: int = 7, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, graph: ebaml.llm.options.GraphOptions = NOTHING) -> None"
+  },
+  "EBMDescription": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "text: <class 'str'>",
+      "skipped_terms: list[str]",
+      "skipped_features: list[str]"
+    ],
+    "kind": "class",
+    "signature": "(text: str, skipped_terms: list[str], skipped_features: list[str]) -> None"
+  },
+  "EBMGraph": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature_name: <class 'str'>",
+      "feature_type: <class 'str'>",
+      "x_vals: collections.abc.Sequence[tuple[float, float]] | collections.abc.Sequence[str]",
+      "scores: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating]",
+      "stds: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating]",
+      "classes: collections.abc.Sequence[str]"
+    ],
+    "kind": "class",
+    "signature": "(feature_name: str, feature_type: str, x_vals: collections.abc.Sequence[tuple[float, float]] | collections.abc.Sequence[str], scores: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], stds: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], classes: collections.abc.Sequence[str] = ()) -> None"
+  },
+  "EBMGraphError": {
+    "bases": [
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "EBMGraphShapeError": {
+    "bases": [
+      "EBMGraphError",
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "EBMGraphSimplificationError": {
+    "bases": [
+      "EBMGraphError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "EBMGraphTokenLimitError": {
+    "bases": [
+      "EBMGraphError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "EBaMlError": {
+    "bases": [
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Edit": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "EditEntry": {
+    "bases": [
+      "HistoryEntry",
+      "object"
+    ],
+    "fields": [
+      "id: <class 'uuid.UUID'>",
+      "sequence: <class 'int'>",
+      "time: <class 'datetime.datetime'>",
+      "message: <class 'str'>",
+      "edit: <class 'ebaml.edit.edits.Edit'>",
+      "description: <class 'str'>",
+      "feature: str | None",
+      "reviewed: <class 'bool'>"
+    ],
+    "kind": "class",
+    "signature": "(id: uuid.UUID, sequence: int, time: datetime.datetime, message: str, edit: ebaml.edit.edits.Edit, description: str, feature: str | None, reviewed: bool = False) -> None"
+  },
+  "EditError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "EditReport": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: str | None",
+      "edit_type: <class 'str'>",
+      "description: <class 'str'>",
+      "changes: tuple[ebaml.edit.edit_report.BinChange, ...]",
+      "largest_change: <class 'float'>",
+      "covered_range: str | None",
+      "weight_share: <class 'float'>",
+      "weighted_mean_shift: <class 'float'>",
+      "intercept_change: <class 'float'>",
+      "interactions_still_using: tuple[str, ...]",
+      "removed_terms: tuple[str, ...]",
+      "graph_before: str | None",
+      "graph_after: str | None",
+      "base_revision: <class 'str'>",
+      "revision: str | None"
+    ],
+    "kind": "class",
+    "signature": "(feature: str | None, edit_type: str, description: str, changes: tuple[ebaml.edit.edit_report.BinChange, ...], largest_change: float, covered_range: str | None, weight_share: float, weighted_mean_shift: float, intercept_change: float, interactions_still_using: tuple[str, ...], removed_terms: tuple[str, ...], graph_before: str | None, graph_after: str | None, base_revision: str, revision: str | None = None) -> None"
+  },
+  "EditSession": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, *, clock: collections.abc.Callable[[], datetime.datetime] = <function _utc_now>, new_id: collections.abc.Callable[[], uuid.UUID] = <function new_revision_id>) -> None"
+  },
+  "ExplainInstanceRequest": {
+    "bases": [
+      "_EBMRequest",
+      "object"
+    ],
+    "fields": [
+      "ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor",
+      "prompt: <class 'ebaml.llm.options.PromptOptions'>",
+      "model: ebaml.llm.options.ModelOptions | str | None",
+      "instance: collections.abc.Mapping[str, FeatureValue]",
+      "global_explanation: <class 'str'>",
+      "audience: ebaml.local.audience.Audience | str",
+      "num_sentences: <class 'int'>",
+      "language: <class 'str'>",
+      "local: <class 'ebaml.local.fact_types.LocalOptions'>"
+    ],
+    "kind": "class",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, instance: collections.abc.Mapping[str, FeatureValue], global_explanation: str, audience: ebaml.local.audience.Audience | str = 'layperson', num_sentences: int = 5, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, language: str = 'English', local: ebaml.local.fact_types.LocalOptions = NOTHING) -> None"
+  },
+  "FactTexts": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "prediction: <class 'str'>",
+      "counterfactual: <class 'str'>",
+      "sufficient_reason: <class 'str'>",
+      "completions: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(prediction: str, counterfactual: str, sufficient_reason: str, completions: str) -> None"
+  },
+  "FeatureType": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "CONTINUOUS",
+      "CATEGORICAL",
+      "ORDINAL",
+      "NOMINAL",
+      "BOOLEAN"
+    ],
+    "signature": "(*values)"
+  },
+  "FitLine": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection) -> None"
+  },
+  "GraphOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "normalization: ebaml.core.custom_types.Normalization | str",
+      "use_feature_bounds: <class 'bool'>",
+      "classes: collections.abc.Sequence[str] | None",
+      "include_description: <class 'bool'>",
+      "feature_format: ebaml.core.custom_types.FeatureType | str | None",
+      "x_axis_precision: int | None",
+      "y_axis_precision: typing.Union[int, typing.Literal['auto'], NoneType]",
+      "confidence_bounds: <class 'bool'>",
+      "confidence_level: <class 'float'>",
+      "max_tokens: <class 'int'>",
+      "overbudget_percent: <class 'int'>",
+      "token_learner: ebaml.llm.token_learning.TokenLearner | None"
+    ],
+    "kind": "class",
+    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: Union[int, Literal['auto'], NoneType] = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None) -> None"
+  },
+  "GraphTextError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "GreedyCover": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "bound_backend: ebaml.local.covering_backend.MipBackend | None"
+    ],
+    "kind": "class",
+    "signature": "(bound_backend: ebaml.local.covering_backend.MipBackend | None = NOTHING) -> None"
+  },
+  "HistoryEntry": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "id: <class 'uuid.UUID'>",
+      "sequence: <class 'int'>",
+      "time: <class 'datetime.datetime'>",
+      "message: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(id: uuid.UUID, sequence: int, time: datetime.datetime, message: str) -> None"
+  },
+  "HistoryError": {
+    "bases": [
+      "EditError",
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "HistoryRow": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "id: <class 'str'>",
+      "short_id: <class 'str'>",
+      "sequence: <class 'int'>",
+      "time: <class 'datetime.datetime'>",
+      "kind: <class 'str'>",
+      "feature: str | None",
+      "edit_type: str | None",
+      "description: <class 'str'>",
+      "reason: <class 'str'>",
+      "reviewed: <class 'bool'>"
+    ],
+    "kind": "class",
+    "signature": "(id: str, short_id: str, sequence: int, time: datetime.datetime, kind: str, feature: str | None, edit_type: str | None, description: str, reason: str, reviewed: bool) -> None"
+  },
+  "Interpolate": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection) -> None"
+  },
+  "Interval": {
+    "bases": [
+      "Decision",
+      "object"
+    ],
+    "fields": [
+      "low: <class 'float'>",
+      "high: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(low: float, high: float) -> None"
+  },
+  "InvalidInstanceError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "InvalidOptionError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": "(option: str, valid_options: collections.abc.Collection[str]) -> None"
+  },
+  "LLMRequestError": {
+    "bases": [
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Layperson": {
+    "bases": [
+      "Audience",
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "LocalExplanation": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "counterfactual: <class 'str'>",
+      "sufficient_reason: <class 'str'>",
+      "completions: <class 'str'>",
+      "facts: <class 'ebaml.local.fact_types.LocalFacts'>"
+    ],
+    "kind": "class",
+    "signature": "(counterfactual: str, sufficient_reason: str, completions: str, facts: ebaml.local.fact_types.LocalFacts) -> None"
+  },
+  "LocalFacts": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "prediction: <class 'ebaml.local.fact_types.Prediction'>",
+      "contributions: list[ebaml.local.fact_types.Contribution]",
+      "counterfactual: ebaml.local.fact_types.Counterfactual | None",
+      "sufficient_reason: ebaml.local.fact_types.SufficientReason | None",
+      "completions: list[ebaml.local.fact_types.CompletionStep]",
+      "confidence_level: <class 'float'>",
+      "min_support: <class 'float'>",
+      "n_samples: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(prediction: ebaml.local.fact_types.Prediction, contributions: list[ebaml.local.fact_types.Contribution], counterfactual: ebaml.local.fact_types.Counterfactual | None, sufficient_reason: ebaml.local.fact_types.SufficientReason | None, completions: list[ebaml.local.fact_types.CompletionStep], confidence_level: float, min_support: float, n_samples: int) -> None"
+  },
+  "LocalOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "confidence_level: <class 'float'>",
+      "max_steps: <class 'int'>",
+      "n_samples: <class 'int'>",
+      "seed: <class 'int'>",
+      "min_support: <class 'float'>",
+      "decision: ebaml.local.decisions.Decision | None",
+      "search: <class 'ebaml.local.covering_solvers.CoveringSolver'>",
+      "target_class: ClassLabel | None"
+    ],
+    "kind": "class",
+    "signature": "(confidence_level: float = 0.95, max_steps: int = 5, n_samples: int = 10000, seed: int = 0, min_support: float = 0.01, decision: ebaml.local.decisions.Decision | None = None, search: ebaml.local.covering_solvers.CoveringSolver = NOTHING, target_class: ClassLabel | None = None) -> None"
+  },
+  "LocalSearchCover": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "iterations: <class 'int'>",
+      "destroy_share: <class 'float'>",
+      "seed: int | None",
+      "bound_backend: ebaml.local.covering_backend.MipBackend | None"
+    ],
+    "kind": "class",
+    "signature": "(iterations: int = 100, destroy_share: float = 0.1, seed: int | None = None, bound_backend: ebaml.local.covering_backend.MipBackend | None = NOTHING) -> None"
+  },
+  "MinimalityStatus": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "SORTING_PROOF",
+      "SOLVER_PROOF",
+      "AT_LOWER_BOUND",
+      "UNPROVED"
+    ],
+    "signature": "(*values)"
+  },
+  "MipBackend": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "(*args, **kwargs)"
+  },
+  "MipCover": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "backend: <class 'ebaml.local.covering_backend.MipBackend'>",
+      "stop: <enum 'Stop'>",
+      "time_limit: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(backend: ebaml.local.covering_backend.MipBackend = NOTHING, stop: ebaml.local.covering_backend.Stop = <Stop.OPTIMAL: 'optimal'>, time_limit: float = 10.0) -> None"
+  },
+  "MissingAPIKeyError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "MissingBin": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
+  "ModelKind": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "ModelOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "provider: <class 'str'>",
+      "model: <class 'str'>",
+      "api_key_env: str | None",
+      "base_url: str | None",
+      "temperature: float | None",
+      "max_output_tokens: int | None",
+      "headers: collections.abc.Mapping[str, str]"
+    ],
+    "kind": "class",
+    "signature": "(provider: str, model: str, api_key_env: str | None = None, base_url: str | None = None, temperature: float | None = None, max_output_tokens: int | None = None, headers: collections.abc.Mapping[str, str] = NOTHING) -> None"
+  },
+  "ModelResult": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "status: <enum 'ModelStatus'>",
+      "picks: list[ebaml.local.covering_problem.Choice]",
+      "objective: float | None"
+    ],
+    "kind": "class",
+    "signature": "(status: ebaml.local.covering_backend.ModelStatus, picks: list[ebaml.local.covering_problem.Choice] = NOTHING, objective: float | None = None) -> None"
+  },
+  "ModelStatus": {
+    "bases": [
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "OPTIMAL",
+      "FEASIBLE",
+      "INFEASIBLE",
+      "NO_SOLUTION"
+    ],
+    "signature": "(*values)"
+  },
+  "Monotonize": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "direction: typing.Literal['increasing', 'decreasing', 'auto']",
+      "selection: <class 'ebaml.edit.selections.Selection'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, direction: Literal['increasing', 'decreasing', 'auto'], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+  },
+  "MulticlassClassifier": {
+    "bases": [
+      "ModelKind",
+      "object"
+    ],
+    "fields": [
+      "classes: tuple[ClassLabel, ...]"
+    ],
+    "kind": "class",
+    "signature": "(classes: tuple[ClassLabel, ...]) -> None"
+  },
+  "Normalization": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "NONE",
+      "MIN_MAX",
+      "Z_SCORE"
+    ],
+    "signature": "(*values)"
+  },
+  "OptionRangeError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "OrToolsBackend": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "solver: <enum 'OrToolsSolver'>",
+      "solve_function: MathOptSolve"
+    ],
+    "kind": "class",
+    "signature": "(solver: ebaml.local.ortools_backend.OrToolsSolver = <OrToolsSolver.HIGHS: 'highs'>, *, solve_function: MathOptSolve = <function solve>) -> None"
+  },
+  "OrToolsSolver": {
+    "bases": [
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "HIGHS",
+      "SCIP",
+      "CP_SAT"
+    ],
+    "signature": "(*values)"
+  },
+  "OutputKind": {
+    "bases": [
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "PROBABILITY",
+      "CLASS_PROBABILITY",
+      "VALUE"
+    ],
+    "signature": "(*values)"
+  },
+  "Prediction": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "decision: ClassLabel",
+      "output: <class 'float'>",
+      "lower: <class 'float'>",
+      "upper: <class 'float'>",
+      "score: <class 'float'>",
+      "score_std: <class 'float'>",
+      "margin: <class 'float'>",
+      "threshold: <class 'float'>",
+      "output_kind: <enum 'OutputKind'>"
+    ],
+    "kind": "class",
+    "signature": "(decision: ClassLabel, output: float, lower: float, upper: float, score: float, score_std: float, margin: float, threshold: float = 0.0, output_kind: ebaml.local.local_kinds.OutputKind = <OutputKind.PROBABILITY: 'probability'>) -> None"
+  },
+  "PromptOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "expert_description: str | None",
+      "graph_description: str | None",
+      "dataset_description: str | None",
+      "task_description: str | None"
+    ],
+    "kind": "class",
+    "signature": "(expert_description: str | None = None, graph_description: str | None = None, dataset_description: str | None = None, task_description: str | None = None) -> None"
+  },
+  "ProviderUnreachableError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "RateLimitedError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Recenter": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str) -> None"
+  },
+  "Regressor": {
+    "bases": [
+      "ModelKind",
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
+  "RemoveFeature": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str) -> None"
+  },
+  "RemoveTerms": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "terms: tuple[str, ...]"
+    ],
+    "kind": "class",
+    "signature": "(terms) -> None"
+  },
+  "SDKUnavailableError": {
+    "bases": [
+      "EBaMlError",
+      "ImportError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "SaveEntry": {
+    "bases": [
+      "HistoryEntry",
+      "object"
+    ],
+    "fields": [
+      "id: <class 'uuid.UUID'>",
+      "sequence: <class 'int'>",
+      "time: <class 'datetime.datetime'>",
+      "message: <class 'str'>",
+      "author: str | None",
+      "edit_ids: tuple[uuid.UUID, ...]",
+      "reviewed: <class 'bool'>",
+      "revision: <class 'str'>",
+      "file: <class 'str'>",
+      "model_hash: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(id: uuid.UUID, sequence: int, time: datetime.datetime, message: str, author: str | None, edit_ids: tuple[uuid.UUID, ...], reviewed: bool, revision: str, file: str, model_hash: str) -> None"
+  },
+  "Scale": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "factor: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, factor: float) -> None"
+  },
+  "SearchLimitError": {
+    "bases": [
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Selection": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "()"
+  },
+  "SelectionError": {
+    "bases": [
+      "EditError",
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "SetScores": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "value: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float) -> None"
+  },
+  "Shift": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "delta: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, delta: float) -> None"
+  },
+  "SolveSettings": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "seed: <class 'int'>",
+      "time_limit: float | None",
+      "stop: <enum 'Stop'>"
+    ],
+    "kind": "class",
+    "signature": "(seed: int, time_limit: float | None = None, stop: ebaml.local.covering_backend.Stop = <Stop.OPTIMAL: 'optimal'>) -> None"
+  },
+  "StaleRevisionError": {
+    "bases": [
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "Stop": {
+    "bases": [
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "OPTIMAL",
+      "FIRST"
+    ],
+    "signature": "(*values)"
+  },
+  "SufficientReason": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "features: list[str]",
+      "guaranteed_margin: <class 'float'>",
+      "minimality: <enum 'MinimalityStatus'>",
+      "lower_bound: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(features: list[str], guaranteed_margin: float, minimality: ebaml.local.minimality.MinimalityStatus, lower_bound: int) -> None"
+  },
+  "Threshold": {
+    "bases": [
+      "Decision",
+      "object"
+    ],
+    "fields": [
+      "value: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(value: float) -> None"
+  },
+  "TokenFitError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "UnreviewedEditError": {
+    "bases": [
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "UnseenBin": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
+  "UnsupportedModelError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "ValueInterval": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [
+      "low: float | None",
+      "high: float | None"
+    ],
+    "kind": "class",
+    "signature": "(low: float | None = None, high: float | None = None) -> None"
+  },
+  "WholeGraph": {
+    "bases": [
+      "Selection",
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
+  "ZeroTerm": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str) -> None"
+  },
+  "__version__": {
+    "kind": "str",
+    "name": "__version__"
+  },
+  "check_token_budget": {
+    "kind": "function",
+    "signature": "(*, text: str, max_tokens: int, overbudget_percent: int) -> ebaml.graphs.token_budget.BudgetStatus"
+  },
+  "compute_local_facts": {
+    "kind": "function",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, instance: collections.abc.Mapping[str, FeatureValue], options: ebaml.local.fact_types.LocalOptions | None = None) -> ebaml.local.fact_types.LocalFacts"
+  },
+  "describe_ebm": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.descriptors.EBMDescription"
+  },
+  "describe_graph": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.DescribeGraphRequest) -> str"
+  },
+  "explain_instance": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.ExplainInstanceRequest) -> ebaml.llm.descriptors.LocalExplanation"
+  },
+  "facts_to_texts": {
+    "kind": "function",
+    "signature": "(facts: ebaml.local.fact_types.LocalFacts, audience: ebaml.local.audience.Audience = <ebaml.local.audience.Layperson object>) -> ebaml.local.fact_text.FactTexts"
+  },
+  "likelihood_word": {
+    "kind": "function",
+    "signature": "(probability: float) -> str"
+  },
+  "model_kind": {
+    "kind": "function",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor) -> ebaml.graphs.model_kinds.ModelKind"
+  },
+  "points_towards": {
+    "kind": "function",
+    "signature": "(contribution: ebaml.local.fact_types.Contribution, prediction: ebaml.local.fact_types.Prediction) -> bool"
+  },
+  "resolve_audience": {
+    "kind": "function",
+    "signature": "(audience: ebaml.local.audience.Audience | str) -> ebaml.local.audience.Audience"
+  },
+  "round_value": {
+    "kind": "function",
+    "signature": "(value: float) -> float"
+  },
+  "sample_size_word": {
+    "kind": "function",
+    "signature": "(n_samples: int) -> str"
+  },
+  "strength_word": {
+    "kind": "function",
+    "signature": "(score: float) -> str"
+  }
+}
