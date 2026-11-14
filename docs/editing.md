@@ -232,7 +232,7 @@ reason, and the server asks a person to confirm the edits before it saves the mo
 | `align` | `Align`, or `SetScores` for a typed value |
 | `delete` | `SetScores` with value 0, or `ZeroTerm` |
 | `equal-interpolate`, `equal-regression` | Not supported yet: they change the bin edges. |
-| `.gamchanger` files | Not supported yet. |
+| `.gamchanger` files | `load_gamchanger` and `apply_gamchanger`. |
 
 EBaMl differs from GAM Changer in these points:
 
@@ -242,5 +242,59 @@ EBaMl differs from GAM Changer in these points:
 - EBaMl does not round the scores. GAM Changer rounds every score to 4 decimals, also the bins that you did not edit.
 - EBaMl supports binary classifiers and regressors. A multiclass classifier raises `UnsupportedModelError`.
 - A feature with a pair term has its main effect edited only. The report names the pair terms.
+
+### Load a `.gamchanger` file
+
+`load_gamchanger` reads the file that GAM Changer saves, and builds the edits of the newest commit of each feature, as
+`get_edited_model` of GAM Changer does. It changes no model. `apply_gamchanger` applies the edits to a session. The
+reason of each edit names the GAM Changer commit and holds its description. An edit of a commit that a person
+confirmed in GAM Changer is marked as reviewed.
+
+<!-- invisible-code-block: python
+import orjson
+from pathlib import Path
+from tempfile import mkdtemp
+
+session = EditSession(ebm)
+model_data = {"features": [], "labelEncoder": {}}
+for name, feature_type in zip(ebm.feature_names_in_, ebm.feature_types_in_):
+    term = list(ebm.term_features_).index((list(ebm.feature_names_in_).index(name),))
+    index = list(ebm.feature_names_in_).index(name)
+    scores = [round(float(score), 4) for score in ebm.term_scores_[term][1:-1]]
+    edges = [float(ebm.feature_bounds_[index][0]), *map(float, ebm.bins_[index][0]), float(ebm.feature_bounds_[index][1])]
+    model_data["features"].append({"name": name, "type": "continuous", "additive": scores, "binEdge": edges})
+age = model_data["features"][0]
+places, scores = age["binEdge"][:-1], [0.25, *age["additive"][1:]]
+points = {
+    str(point): {"x": place, "y": score, "rightPointID": point + 1 if point + 1 < len(places) else None}
+    for point, (place, score) in enumerate(zip(places, scores))
+}
+commit = {
+    "featureName": "age", "type": "align", "description": "Set 1 bins to 0.25.", "time": 1794676628395,
+    "hash": "2677726ef90cba7e", "reviewed": True, "state": {"pointData": points},
+}
+document = {"modelData": model_data, "sampleData": None, "historyList": [commit]}
+path = Path(mkdtemp()) / "edit-11-14-2026.gamchanger"
+path.write_bytes(orjson.dumps(document))
+-->
+
+```python
+from ebaml import apply_gamchanger, load_gamchanger
+
+commits = load_gamchanger(path, ebm)  # the model that you edited in GAM Changer, before the edits
+for commit in commits:
+    print(commit.feature, commit.commit_type, commit.description)  # age align Set 1 bins to 0.25.
+reports = apply_gamchanger(session, commits)
+assert [row.reason for row in session.history_table()][-1] == "GAM Changer commit 2677726: Set 1 bins to 0.25."
+```
+
+The result differs from `get_edited_model` in these points:
+
+- An edit sets only the bins whose score differs from the score of the model rounded to 4 decimals. The other bins keep
+  their full precision, so they differ from `get_edited_model` by up to 0.00005.
+- `load_gamchanger` refuses a file that GAM Changer made from another model: other features, bin edges or scores.
+- `load_gamchanger` refuses a commit of `equal-interpolate` or `equal-regression`, because these change the bin edges,
+  and EBaMl has no edit that changes the bins yet.
+- The missing bin and the unseen bin keep their scores, because GAM Changer cannot edit them.
 
 The [notebook](editing-notebook.md) shows the edits of this page with the report after each edit.

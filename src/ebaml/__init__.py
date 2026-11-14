@@ -66,6 +66,7 @@ from ebaml.edit.edits import (
     Shift,
     ZeroTerm,
 )
+from ebaml.edit.gamchanger_files import GamChangerCommit, apply_gamchanger, load_gamchanger
 from ebaml.edit.history import EditEntry, HistoryEntry, HistoryRow, SaveEntry
 from ebaml.edit.selections import (
     Bins,
@@ -180,6 +181,7 @@ __all__ = [
     "FeatureType",
     "FitLine",
     "FixedScore",
+    "GamChangerCommit",
     "GraphOptions",
     "GraphTextError",
     "GreedyCover",
@@ -246,6 +248,7 @@ __all__ = [
     "WholeGraph",
     "ZeroTerm",
     "__version__",
+    "apply_gamchanger",
     "check_constraints",
     "check_token_budget",
     "compute_local_facts",
@@ -254,6 +257,7 @@ __all__ = [
     "explain_instance",
     "facts_to_texts",
     "likelihood_word",
+    "load_gamchanger",
     "model_kind",
     "points_towards",
     "resolve_audience",
