@@ -14,6 +14,29 @@ no period, at most 72 characters. A squash merge makes the title the commit on m
 
 -
 
+## Tests and guards
+
+<!-- Tick each kind of test or guard that this PR adds or changes, and name the tests after the colon. Write "None" for
+a change with no code. .claude/rules/testing.md tells which suite answers which question, and
+.claude/rules/bug-fixes.md tells which guard a bug fix needs. -->
+
+- [ ] Unit tests in the mirrored path of `tests/unit/ebaml/`:
+- [ ] Property-based tests (Hypothesis):
+- [ ] Differential test against a reference oracle. An oracle changes only with the approval of the user:
+- [ ] Integration tests in `tests/integration/` (the real `baml_sdk` and a local LLM server):
+- [ ] API tests and snapshots (`public_api.json`, `tool_schemas.json`, `test_mcp_tools.py`, `test_command_lines.py`,
+      `test_exceptions.py`):
+- [ ] Contract tests in `tests/contract/`. A new call into `baml_sdk` needs a row in `CALLED`:
+- [ ] Examples in the docs (`README.md`, `docs/*.md`, the docstring `Examples`):
+- [ ] Offline BAML tests in `baml_src/tests/`, or live prompt tests in `baml_src/tests/live/`:
+- [ ] Tests of a progress bar (one line for each step, no output by default, no bar for an empty loop):
+- [ ] A guard of a bug fix that fails on the old code (a unit test, or a semgrep rule with `ruleid` and `ok` lines in
+      `semgrep/ebaml.py`):
+- [ ] A new semgrep rule or import-linter contract:
+- [ ] A semantic contract of `.claude/rules/semantic-contracts.md` that the change touches, and the test that guards it:
+- [ ] A Lean proof or a paper in `proofs/`:
+- Guarantees that no test or proof shows:
+
 ## Abstraction reuse
 
 <!-- Answer for a change that adds a shared Protocol, ABC, service, adapter or cross-module helper. Write "None" for any
