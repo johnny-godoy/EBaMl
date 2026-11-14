@@ -8,14 +8,17 @@
    example as a separate regression test.
 4. To fake a `baml_sdk` function in a test, wrap the fake in `fake_sdk` from `tests/unit/ebaml/conftest.py`. The
    wrapper checks each call against the stub that `baml generate` writes, so a changed signature fails the test.
-5. A workaround (`# noqa`, `# type: ignore`, `pytest.mark.skip`, ...) needs a written reason next to it. Check with
+5. Choose the test suite by its question: `tests/unit`, `tests/integration`, `tests/api` or `tests/contract`
+   (`.claude/rules/testing.md`). An integration test uses the real `baml_sdk` and a local server in place of the LLM.
+   A change to a public name changes `tests/api/public_api.json`.
+6. A workaround (`# noqa`, `# type: ignore`, `pytest.mark.skip`, ...) needs a written reason next to it. Check with
    `uv run python -m scripts.check_ignores`.
-6. For a user-visible change, run `uv run scriv create` and write the entries in the new file in `changelog.d/` (see
+7. For a user-visible change, run `uv run scriv create` and write the entries in the new file in `changelog.d/` (see
    `changelog.d/README.md`). Do not edit `CHANGELOG.md` or the version: the release workflow sets them after the merge.
    If the change is internal but touches `src/ebaml/`, `baml_src/` or `benchmark/`, add the label `no-changelog`.
-7. Commit in small steps. Give each commit one purpose and a conventional commit message, for example
+8. Commit in small steps. Give each commit one purpose and a conventional commit message, for example
    `fix(graphs): keep the decimals of the confidence level`. `.claude/rules/commits-and-prs.md` has the rules.
-8. Open a pull request with a conventional commit title, and fill the template. CI must pass.
+9. Open a pull request with a conventional commit title, and fill the template. CI must pass.
 
 ## Change the default model
 
