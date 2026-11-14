@@ -123,6 +123,43 @@ session.apply(ZeroTerm("siblings"), "The business must not score on the number o
 print(session.model.predict_proba(X)[:2])  # the edited model works as a fitted model works
 ```
 
+## Check business constraints
+
+A constraint states a business requirement on a graph, for example "the risk must not fall when the fare goes up".
+`check_constraints` reads a model and changes nothing. It returns one `Violation` for each constraint that the model
+breaks. A violation names the bins that break the constraint, the largest excess, and the edit that repairs it.
+
+| Constraint | Requirement | Repair |
+| --- | --- | --- |
+| `Monotone(feature, direction, selection)` | The selected scores do not fall (`"increasing"`) or do not rise (`"decreasing"`) from bin to bin. | `Monotonize` |
+| `MaxStep(feature, step, selection)` | No step between the scores of two neighbour bins is larger than `step`. | `LimitSteps` |
+| `Bounded(feature, low, high, selection)` | Each selected score is between `low` and `high`. The default selection is `EveryBin()`. | `Clip` |
+| `FixedScore(feature, selection, value)` | Each selected score equals `value`. | `SetScores` |
+| `Unused(feature)` | No term uses the feature with a score other than 0, the pair terms included. | `RemoveFeature` |
+
+A constraint other than `Unused` reads the main effect of the feature only. A pair term that uses the feature can still
+change the effect of the feature on a prediction. A difference at or below `tolerance` (default `1e-9`) is not a
+violation.
+
+A repair changes the predictions of the model. Preview each repair before you apply it. A repair of one constraint can
+break another constraint, so check all the constraints again after the repairs.
+
+```python
+from ebaml import Bounded, FixedScore, MaxStep, Monotone, Unused, check_constraints
+
+constraints = [
+    Monotone("fare", "increasing", Bins(0, 5)),
+    MaxStep("fare", 0.5),
+    Bounded("age", -1.0, 1.0),
+    FixedScore("age", MissingBin(), 0.0),
+    Unused("siblings"),
+]
+for violation in check_constraints(session.model, constraints):
+    print(violation.description, violation.bins)
+    session.apply(violation.repair, f"Meet the business constraint: {violation.description}")
+remaining = check_constraints(session.model, constraints)
+```
+
 ## Uncertainty of an edited bin
 
 A score that a person sets has no fitted uncertainty. So the standard deviation of each edited bin is 0, and
