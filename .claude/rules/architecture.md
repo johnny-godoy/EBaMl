@@ -25,7 +25,7 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
   `architecture/abstractions.yml`.
 - Add a new feature as a new module in the layer that fits. Add a new layer only with a new entry in the import-linter
   layers contract and a new row in this table.
-- Give each module a name that no other module in `src/ebaml` has. `scripts/mutation.py` finds the tests of a module by
+- Give each module a name that no other module in `src/ebaml` has. `scripts/mutation/run.py` finds the tests of a module by
   its name.
 - Mirror the source tree in the test tree. Put the test of `src/ebaml/<pkg>/<name>.py` in
   `tests/unit/ebaml/<pkg>/test_<name>.py`. A test file or directory with no source at the mirrored path is an error.
@@ -37,10 +37,10 @@ Each guard checks one kind of rule. Run all of them with `prek run --all-files`.
 | Guard | Config | What it checks |
 | --- | --- | --- |
 | import-linter | `[tool.importlinter]` in `pyproject.toml` | Layer order and the limits on `baml_sdk`. Run it alone with `uv run lint-imports`. |
-| Layout check | `scripts/check_layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree, and the banned files. |
+| Layout check | `scripts/architecture/layout.py` | Where files live: layers only, a docstring in each `__init__.py`, unique module names, a mirrored test tree, and the banned files. |
 | semgrep | `semgrep/ebaml.yml` | Code patterns that mean a SOLID problem: `**kwargs` bags, `elif` chains on one value, `NotImplementedError` stubs, I/O in domain code, an `isinstance` check of a frame type, a bare `raise ValueError`, an `object` type hint, an `isinstance` check of a concrete container, branches on the type of one value, `range(len(x))` loops and unexplained loops over numpy arrays (`loops.md`), an SDK fake without `fake_sdk` in the tests, a `while True` loop with a sleep, a bare `asyncio.gather` or `create_task`, `skops.io.load` with `trusted=True`. |
-| Abstraction registry | `architecture/abstractions.yml`, `scripts/check_abstractions.py` | One owner and one canonical symbol for each shared capability: unique IDs, symbols that exist, no second claim on a symbol or a responsibility. `reuse.md` has the process. |
-| Contract overlap | `scripts/check_contract_overlap.py` | Public `Protocol` and `ABC` classes with identical signatures in one context. |
+| Abstraction registry | `architecture/abstractions.yml`, `scripts/architecture/abstractions.py` | One owner and one canonical symbol for each shared capability: unique IDs, symbols that exist, no second claim on a symbol or a responsibility. `reuse.md` has the process. |
+| Contract overlap | `scripts/architecture/contract_overlap.py` | Public `Protocol` and `ABC` classes with identical signatures in one context. |
 | Clones | `jscpd` hook in `prek.toml` | Any copy-paste clone in `src` (50 tokens, 5 lines). Needs Node.js. |
 | Claude rules | `.claude/rules/` | The design judgment that no tool can check: one job per unit, small interfaces. |
 

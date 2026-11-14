@@ -1,6 +1,6 @@
 name: Changelog
 
-# A pull request that changes what users get must add a changelog fragment (scripts/check_fragment.py). The label
+# A pull request that changes what users get must add a changelog fragment (scripts/release/fragment.py). The label
 # no-changelog marks a change that users do not see. This workflow is apart from CI because it must run again when a
 # label changes, and the CI gates must not.
 on:
@@ -28,4 +28,4 @@ jobs:
       - name: Check for a changelog fragment
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
-        run: uv run --frozen --only-group release python -m scripts.check_fragment "$BASE"
+        run: uv run --frozen --only-group release python -m scripts.release.fragment "$BASE"

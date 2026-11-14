@@ -28,10 +28,10 @@ pushes the release commit to `main` without a pull request. Give the workflow a 
 
 ## Apply a change
 
-The `check-ruleset` hook (`scripts/check_ruleset.py`) checks that each required check is the name of a job that runs
+The `check-ruleset` hook (`scripts/ci/ruleset.py`) checks that each required check is the name of a job that runs
 on every pull request. A required check that never reports blocks every pull request, so run the hook first.
 
-1. Run `uv run python -m scripts.check_ruleset`.
+1. Run `uv run python -m scripts.ci.ruleset`.
 2. If the repository has no ruleset with the name `main`, create it:
 
    ```bash

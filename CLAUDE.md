@@ -9,7 +9,7 @@ OpenRouter's `openrouter/free`, which needs `OPENROUTER_API_KEY`.
 </project>
 
 <commands>
-Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.23 or later. `baml.toml` pins the toolchain to the `baml-bridge` version that `pyproject.toml` requires, because the wheel ships a generated `baml_sdk` (`scripts/check_toolchain_pin.py`). Put `~/.baml/bin` first on `PATH`,
+Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.23 or later. `baml.toml` pins the toolchain to the `baml-bridge` version that `pyproject.toml` requires, because the wheel ships a generated `baml_sdk` (`scripts/release/toolchain_pin.py`). Put `~/.baml/bin` first on `PATH`,
 because older `baml` versions lack `describe`.
 
 ```bash
@@ -23,18 +23,18 @@ uv run pytest tests/integration tests/api tests/contract --no-cov   # integratio
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
 prek run --all-files               # all hooks: ruff, marimo check, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, check-ignore-repeats, uv lock --check
-uv run python -m scripts.check_abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
-uv run --only-group dist python -m scripts.smoke_install dist/ebaml-X.Y.Z-py3-none-any.whl X.Y.Z --extras mcp   # install a built file in a clean environment; the release workflow runs it
-uv run python -m scripts.check_api_breaks --base origin/main   # a break of ebaml.__all__ needs a **BREAKING:** fragment
-uv run python scripts/mutation.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
+uv run python -m scripts.architecture.abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
+uv run --only-group dist python -m scripts.release.smoke_install dist/ebaml-X.Y.Z-py3-none-any.whl X.Y.Z --extras mcp   # install a built file in a clean environment; the release workflow runs it
+uv run python -m scripts.release.api_breaks --base origin/main   # a break of ebaml.__all__ needs a **BREAKING:** fragment
+uv run python scripts/mutation/run.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
-uv run python scripts/live_openrouter.py   # optional live test; sends real requests
+uv run python scripts/llm/openrouter.py   # optional live test; sends real requests
 uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
-uv run --group docs python -m scripts.build_docs         # build the docs like CI: strict, and fails on a griffe warning
-uv run --group docs python -m scripts.build_docs serve   # preview the docs; the first run exports the notebooks and is slow
+uv run --group docs python -m scripts.docs.build         # build the docs like CI: strict, and fails on a griffe warning
+uv run --group docs python -m scripts.docs.build serve   # preview the docs; the first run exports the notebooks and is slow
 ```
 
-CI installs the BAML toolchain of the `baml-bridge` version in `uv.lock` (`scripts/baml_toolchain.py`), because a newer toolchain writes a `baml_sdk` that the locked `baml-bridge` cannot read. `ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
+CI installs the BAML toolchain of the `baml-bridge` version in `uv.lock` (`scripts/release/baml_toolchain.py`), because a newer toolchain writes a `baml_sdk` that the locked `baml-bridge` cannot read. `ebaml.llm.sdk_setup.ensure_sdk` runs `baml generate` when `baml_sdk` is missing, repairs a toolchain version skew, and raises `SDKUnavailableError` with the fix steps if it cannot. `ebaml.llm.provider_errors` turns the provider errors that a user can fix (missing or rejected key, rate limit, no connection) into `LLMRequestError` subclasses with fix steps. CI runs prek and the secret scans first, then
 `baml` and pytest, then, in pull requests, mutation testing of the changed lines. A weekly workflow runs all modules, one job each, when code changed that week. A second weekly workflow runs trivy on the lockfile and opens an issue for a fixable HIGH or CRITICAL CVE.
 </commands>
 
@@ -69,7 +69,7 @@ The boundary between the two languages is the generated `baml_sdk` package.
 <layout>
 `src/ebaml/` has four layers: `core`, `graphs`, `local` and `llm`, with `benchmark.py` alone. A layer imports only the
 layers below it, and only `llm/descriptors.py` imports `baml_sdk`. Read `.claude/rules/architecture.md` before you add a
-module. import-linter, `scripts/check_layout.py` and the semgrep rules in `semgrep/` enforce it. Each fails
+module. import-linter, `scripts/architecture/layout.py` and the semgrep rules in `semgrep/` enforce it. Each fails
 `prek run --all-files`.
 </layout>
 
@@ -96,8 +96,8 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
 - Add a changelog fragment (`uv run scriv create`) for each user-visible change. Leave `CHANGELOG.md` and the version
   alone: the release workflow sets them after the merge (`.claude/rules/changelog-and-versioning.md`).
 - Write a reason next to each `noqa`, `type: ignore`, pragma, skipped test and config ignore (` -- reason`, or a
-  `# reason:` block in TOML). Check with `uv run python -m scripts.check_ignores`. Fix the code or ask the user when a
-  hook fails. Leave `scripts/check_ignores.py`, `scripts/ignore_sites.py` and the hook unchanged.
+  `# reason:` block in TOML). Check with `uv run python -m scripts.ignores.check`. Fix the code or ask the user when a
+  hook fails. Leave `scripts/ignores/check.py`, `scripts/ignores/sites.py` and the hook unchanged.
 - Describe the code as it is now. Do not compare with an earlier version or promise backward compatibility: the package
   has no users yet (`.claude/rules/writing-style.md`).
 - Give every variable, parameter and coefficient a descriptive name (`word_weight`, not `alpha`; `bin_index`, not `i`). See

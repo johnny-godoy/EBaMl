@@ -1,7 +1,7 @@
 # Size of files, functions and classes
 
 A reader keeps about seven things in mind. A unit that holds more makes the reader lose the overview. The limits below
-follow the logical structure of the code, and `scripts/check_size.py` enforces them in `prek run --all-files`.
+follow the logical structure of the code, and `scripts/architecture/size.py` enforces them in `prek run --all-files`.
 
 | Unit | Limit | How to split |
 | --- | --- | --- |

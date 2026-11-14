@@ -1570,7 +1570,7 @@ def test_an_async_sdk_function_fails_the_fake_with_the_way_to_fix_it(monkeypatch
     monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_stub", lambda: stub)
     monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_functions", lambda: {"describe_sync": stub.body[1]})
     monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_functions", lambda: frozenset({"describe"}))
-    with pytest.raises(AssertionError, match=r"baml_sdk\.describe is async.*scripts/baml_toolchain\.py"):
+    with pytest.raises(AssertionError, match=r"baml_sdk\.describe is async.*scripts/release/baml_toolchain\.py"):
         sdk_signature("describe")
 
 

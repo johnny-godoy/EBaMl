@@ -48,7 +48,7 @@ One Lake project serves all topics. Add a topic. Do not add a project.
 5. Point the docstring of the covered code to the paper in one sentence. Add a docs page `docs/<topic>-proof.md` with
    the same parts as `docs/local-explanations-proof.md`: the link to `proofs/<topic>.pdf`, what is proved, what is not
    proved, how the proof is checked (links to the Lean files and the Typst source), and an `<iframe>` of the PDF at the
-   end, so the reader sees the paper on the page. `scripts/build_docs.py` compiles each
+   end, so the reader sees the paper on the page. `scripts/docs/build.py` compiles each
    `proofs/papers/<topic>/paper.typ` into `docs/proofs/<topic>.pdf`, and `test_every_proof_page_embeds_its_paper` fails
    when a page has no iframe. Add the page to the nav in `zensical.toml`.
 6. Run `prek run --all-files`, then `cd proofs && lake build`, then compile the paper

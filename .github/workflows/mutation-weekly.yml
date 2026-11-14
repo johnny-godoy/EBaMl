@@ -78,7 +78,7 @@ jobs:
           PART: ${{ matrix.part }}
         run: | # the job limit is 60 minutes; the script stops at 50, so that the steps below still have time to run
           mkdir -p /tmp/ci-logs
-          uv run python scripts/mutation.py "$(nproc)" --module "$MODULE" --part "$PART" --time-limit 3000 2>&1 | tee /tmp/ci-logs/mutation.log
+          uv run python scripts/mutation/run.py "$(nproc)" --module "$MODULE" --part "$PART" --time-limit 3000 2>&1 | tee /tmp/ci-logs/mutation.log
       - name: Collect the session and list surviving mutants with diffs
         if: always()
         env:

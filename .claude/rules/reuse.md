@@ -10,7 +10,7 @@ reasons.
 A shared abstraction is a new public `Protocol`, `ABC`, service, adapter interface, or helper that more than one module
 uses.
 
-1. Search the registry and the public symbols: `uv run python -m scripts.check_abstractions --search <words>`. Try
+1. Search the registry and the public symbols: `uv run python -m scripts.architecture.abstractions --search <words>`. Try
    two or three words for the job (`graph text render`). The search is lexical. A search with no hit does not prove that
    no equivalent exists, so read the modules of the owner layer too.
 2. Read each candidate. Prefer an existing contract that your layer may import (`architecture.md`, "Layers"). The output of
@@ -20,7 +20,7 @@ uses.
 4. Put the new contract in the lowest existing layer that all its users may import. Do not add a `common`, `shared` or
    `utils` package.
 5. Add the contract to `architecture/abstractions.yml` in the same change, with a new ID, one owner and the canonical
-   symbol. Run `uv run python -m scripts.check_abstractions --check`.
+   symbol. Run `uv run python -m scripts.architecture.abstractions --check`.
 
 Parallel agents: if another branch or agent may add the same contract, ask the user which one owns it. Do not add
 sibling contracts. CI checks the merged result, so a second claim on the same ID, symbol or responsibility fails there.
@@ -38,8 +38,8 @@ sibling contracts. CI checks the merged result, so a second claim on the same ID
 
 | Check | Command | Fails when |
 | --- | --- | --- |
-| Registry | `uv run python -m scripts.check_abstractions --check` | An ID is not unique, a symbol or owner is missing, two active entries claim the same symbol or responsibility, or an exception has no reason. |
-| Contract overlap | `uv run python -m scripts.check_contract_overlap` | Two registered contracts of one context have identical signatures, or an approved overlap no longer exists. Other overlaps are warnings. |
+| Registry | `uv run python -m scripts.architecture.abstractions --check` | An ID is not unique, a symbol or owner is missing, two active entries claim the same symbol or responsibility, or an exception has no reason. |
+| Contract overlap | `uv run python -m scripts.architecture.contract_overlap` | Two registered contracts of one context have identical signatures, or an approved overlap no longer exists. Other overlaps are warnings. |
 | Clones | `jscpd` hook of `prek run --all-files` | `src` holds a copy-paste clone (50 tokens, 5 lines). |
 
 - All three run in `prek run --all-files`. The third needs Node.js.
@@ -47,5 +47,5 @@ sibling contracts. CI checks the merged result, so a second claim on the same ID
   users may import. An `exceptions` entry needs a reason of at least four words and names one pair of contracts.
 - An entry of the registry has a status. Mark an old entry `deprecated` with `replaced_by`, and do not keep two active
   entries for one job.
-- `scripts/check_abstractions.py` and `scripts/check_contract_overlap.py` read the source with `ast`. They never import
+- `scripts/architecture/abstractions.py` and `scripts/architecture/contract_overlap.py` read the source with `ast`. They never import
   it, so they work before `baml generate`.

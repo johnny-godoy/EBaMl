@@ -134,7 +134,7 @@ Makes real requests to your provider (9 on the OpenRouter free router, so it can
 nothing without `OPENROUTER_API_KEY`, so with another provider run the example under "Usage" instead.
 
 ```bash
-OPENROUTER_API_KEY=sk-or-... uv run python scripts/live_openrouter.py
+OPENROUTER_API_KEY=sk-or-... uv run python scripts/llm/openrouter.py
 ```
 
 It fits a small EBM, runs the three-turn chain directly and checks that the provider reports token usage, then runs
@@ -206,10 +206,12 @@ from ebaml import DescribeEBMRequest, ExplainInstanceRequest, describe_ebm, expl
 ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
 global_explanation = describe_ebm(DescribeEBMRequest(ebm)).text  # computed once, prepended to every local prompt
 
-explanation = explain_instance(ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson"))
-print(explanation.counterfactual)      # what would have to change to flip the prediction
-print(explanation.sufficient_reason)   # which inputs settle the prediction on their own
-print(explanation.completions)         # how certain the outcome is as inputs become known
+explanation = explain_instance(
+    ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson")
+)
+print(explanation.counterfactual)  # what would have to change to flip the prediction
+print(explanation.sufficient_reason)  # which inputs settle the prediction on their own
+print(explanation.completions)  # how certain the outcome is as inputs become known
 ```
 
 The facts are computed exactly from the scores and confidence intervals of the EBM (`ebaml.local`); the LLM only puts
@@ -265,7 +267,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
 | `notebooks/` | Example notebooks, written with marimo. |
 | `docs/`, `zensical.toml` | The documentation, built with Zensical (see [Development](#development)). |
-| `tests/unit/` | Python unit tests (100% coverage required). `scripts/live_openrouter.py` is the optional live test. |
+| `tests/unit/` | Python unit tests (100% coverage required). `scripts/llm/openrouter.py` is the optional live test. |
 | `scripts/` | Maintenance scripts, see [scripts/README.md](scripts/README.md). |
 | `.github/` | CI workflow and the scripts that turn failures into reports. |
 | `src/baml_sdk/` | Generated. Do not edit. |
@@ -293,7 +295,7 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
   `GraphOptions(token_learner=TokenLearner(learning=True))`. The learner starts each model at the weights of a table
   that ships with the package. Then it moves them toward the tokens of the graphs in your real calls. The weights
   persist in `~/.cache/ebaml/token_weights.json`. Learning is off by default, because learned weights change the graph
-  text from one call to the next. `scripts/fit_token_weights.py` adds the weights of a new model to the table.
+  text from one call to the next. `scripts/llm/token_weights.py` adds the weights of a new model to the table.
 
 <!-- --8<-- [end:behaviour] -->
 ## Notebook
@@ -540,13 +542,13 @@ baml generate     # regenerate src/baml_sdk/
 uv run pytest     # Python unit tests, fails under 100% coverage
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings
 prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
-uv run python scripts/mutation.py          # mutation testing of all modules, fails if any mutant survives
-uv run python scripts/mutation.py --base origin/main   # the same, but only for the lines changed since main
-uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # the same, but only for one module
-uv run python -m scripts.check_ignores     # every lint/type/test workaround needs a reason written next to it
-uv run python -m scripts.compile_ignores   # all workarounds and their reasons as one Markdown report to audit
-uv run --group docs python -m scripts.build_docs         # build the docs; fails on a broken link or a docstring warning
-uv run --group docs python -m scripts.build_docs serve   # preview the docs (exports the notebooks, so the first run is slow)
+uv run python scripts/mutation/run.py          # mutation testing of all modules, fails if any mutant survives
+uv run python scripts/mutation/run.py --base origin/main   # the same, but only for the lines changed since main
+uv run python scripts/mutation/run.py --module src/ebaml/local/facts.py   # the same, but only for one module
+uv run python -m scripts.ignores.check     # every lint/type/test workaround needs a reason written next to it
+uv run python -m scripts.ignores.report   # all workarounds and their reasons as one Markdown report to audit
+uv run --group docs python -m scripts.docs.build         # build the docs; fails on a broken link or a docstring warning
+uv run --group docs python -m scripts.docs.build serve   # preview the docs (exports the notebooks, so the first run is slow)
 ```
 
 CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and

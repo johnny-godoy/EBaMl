@@ -1,7 +1,7 @@
 name: Release
 
 # After a green CI run on main, release the pending changelog fragments:
-#   version: check that CI passed on the head of main, choose the version (scripts/release.py), raise it with `uv version`, move the fragments into CHANGELOG.md
+#   version: check that CI passed on the head of main, choose the version (scripts/release/version.py), raise it with `uv version`, move the fragments into CHANGELOG.md
 #            with `scriv collect`, then push one release commit and the tag v<version>. With no fragment, it only tags
 #            the current version if that version has no tag yet. With nothing to release, the run stops here.
 #   build:   build the wheel and the sdist from the tag, check their metadata and contents, install each in a clean
@@ -69,7 +69,7 @@ jobs:
         id: next
         if: steps.ci.outputs.ok == 'true'
         run: |
-          version="$(uv run --frozen --only-group release python -m scripts.release)"
+          version="$(uv run --frozen --only-group release python -m scripts.release.version)"
           collect=true
           if [ -z "$version" ]; then
             collect=false
@@ -129,8 +129,8 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          uv run --frozen --only-group dist python -m scripts.smoke_install dist/*.whl "$VERSION" --extras mcp
-          uv run --frozen --only-group dist python -m scripts.smoke_install dist/*.tar.gz "$VERSION" --extras mcp
+          uv run --frozen --only-group dist python -m scripts.release.smoke_install dist/*.whl "$VERSION" --extras mcp
+          uv run --frozen --only-group dist python -m scripts.release.smoke_install dist/*.tar.gz "$VERSION" --extras mcp
       - name: Write the checksums and the SBOM
         # The files go to their own directory, because `uv publish` uploads everything in dist/. The SBOM lists the
         # packages of uv.lock, the set that the release was tested with.
@@ -219,7 +219,7 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           for attempt in 1 2 3 4 5 6 7 8; do
-            if uv run --frozen --only-group dist python -m scripts.smoke_install "ebaml==$VERSION" "$VERSION" --extras mcp; then
+            if uv run --frozen --only-group dist python -m scripts.release.smoke_install "ebaml==$VERSION" "$VERSION" --extras mcp; then
               exit 0
             fi
             echo "Attempt $attempt failed. Waiting before the next attempt."

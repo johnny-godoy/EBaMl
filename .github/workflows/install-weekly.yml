@@ -3,7 +3,7 @@ name: Install check (weekly)
 # A user installs the newest release of each dependency that the requirements allow, and the lockfile hides what that
 # release does. This run builds the wheel from main every week and installs it in a clean environment two ways, as a
 # user gets it (the newest releases) and with the oldest release that each direct requirement allows (the lower bounds).
-# Each install runs the smoke test of scripts/smoke_install.py. It opens an issue when one fails, and it adds a comment
+# Each install runs the smoke test of scripts/release/smoke_install.py. It opens an issue when one fails, and it adds a comment
 # to that issue on later runs while the issue stays open, so one open problem gives one issue.
 on:
   schedule:
@@ -33,7 +33,7 @@ jobs:
       - name: Install the wheel in a clean environment and run the smoke test
         run: |
           version="$(uv version --short --frozen)"
-          uv run --frozen --only-group dist python -m scripts.smoke_install dist/*.whl "$version" \
+          uv run --frozen --only-group dist python -m scripts.release.smoke_install dist/*.whl "$version" \
             --extras mcp --resolution "${{ matrix.resolution }}"
 
   report:

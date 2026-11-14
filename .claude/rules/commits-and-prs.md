@@ -62,15 +62,15 @@ BREAKING CHANGE: what breaks, and what users must change.
 ## Guards
 
 - `prek install` installs a `commit-msg` hook: `cz check` (commitizen) checks the conventional commit form, and
-  `scripts/check_commits.py --message-file` checks the style of the description and the size of the staged changes. The `SessionStart` hook in
+  `scripts/ci/commits.py --message-file` checks the style of the description and the size of the staged changes. The `SessionStart` hook in
   `.claude/settings.json` runs `prek install` in each Claude Code session.
 - `.github/workflows/commits.yml` checks the title and each commit of a pull request, with the same tools and the size
-  limit (`scripts/check_commits.py --base`).
+  limit (`scripts/ci/commits.py --base`).
 - Dependabot writes `build(deps): ...` and `ci(deps): ...` messages (`.github/dependabot.yml`).
 - `.github/rulesets/main.json` makes the CI gates, the docs build and the `Changelog` and `Commits` checks required on
-  `main`. The `check-ruleset` hook (`scripts/check_ruleset.py`) fails if a required check is not the name of a job that
+  `main`. The `check-ruleset` hook (`scripts/ci/ruleset.py`) fails if a required check is not the name of a job that
   runs on every pull request. If you rename such a job, change the ruleset in the same pull request.
 - The CI report (`.github/scripts/ci_report.py`, `GATES`) covers every job of every workflow that runs on a pull
-  request. The `check-report-gates` hook (`scripts/check_report_gates.py`) fails if a job is neither a gate nor in
+  request. The `check-report-gates` hook (`scripts/ci/report_gates.py`) fails if a job is neither a gate nor in
   `NOT_GATES` with its reason. Add the gate in the same pull request as a new job or workflow.
 - Do not bypass a hook with `--no-verify`.

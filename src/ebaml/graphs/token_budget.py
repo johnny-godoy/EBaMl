@@ -23,7 +23,7 @@ import numpy.typing as npt
 from ebaml.graphs.token_weights import TextFeatures, TokenSample, TokenWeights
 
 # The weights fitted on 100 graph texts of one current model (graph text only, tokens counted by the provider, with the
-# tokens of the prompt template taken away). ``scripts/fit_token_weights.py`` refits them.
+# tokens of the prompt template taken away). ``scripts/llm/token_weights.py`` refits them.
 DEFAULT_WEIGHTS: TokenWeights = TokenWeights(words=4.1323705, bytes=0.0, digits=0.2713857)
 # The root mean square of the relative error of the default weights on the samples that fitted them.
 DEFAULT_RELATIVE_SPREAD: float = 0.0901

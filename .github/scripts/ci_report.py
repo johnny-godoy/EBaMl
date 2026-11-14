@@ -17,7 +17,7 @@ Four subcommands, all stdlib only:
     fails, the comment shows the failure report of that gate at once. The report is the artifact that the failed job
     uploads. A gate of another workflow has no such artifact, so the comment links to its job log.
 
-The gates cover every workflow that runs on a pull request (``GATES``). ``scripts/check_report_gates.py`` fails when a
+The gates cover every workflow that runs on a pull request (``GATES``). ``scripts/ci/report_gates.py`` fails when a
 job of such a workflow is neither a gate nor on its list of jobs that are no gate.
 
 ``post <file>``
@@ -457,7 +457,7 @@ def mutation() -> str:
         "the `+` line the mutant. Add a test that fails when the code is changed that way "
         "(assert on the exact value or boundary). "
         "Equivalent mutant (no test can tell the difference)? Simplify the code so it does not exist. "
-        "Reproduce locally: `uv run python scripts/mutation.py`."
+        "Reproduce locally: `uv run python scripts/mutation/run.py`."
     )
 
 

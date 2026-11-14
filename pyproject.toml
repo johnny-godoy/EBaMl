@@ -21,7 +21,7 @@ requires-python = ">=3.13"
 dependencies = [
     "attrs>=26.1.0",
     # The wheel ships a baml_sdk that names its toolchain, and baml-bridge refuses another one. baml.toml pins the same
-    # version. scripts/check_toolchain_pin.py checks both and uv.lock.
+    # version. scripts/release/toolchain_pin.py checks both and uv.lock.
     "baml-bridge==0.23.0",
     "beartype>=0.23.1",
     "interpret>=0.7.8",
@@ -220,7 +220,7 @@ release = [
     "scriv>=1.8.0",
 ]
 # the release workflow installs only this group to check the built files before the upload, and the published version
-# after it (scripts/smoke_install.py needs cyclopts)
+# after it (scripts/release/smoke_install.py needs cyclopts)
 dist = [
     "cyclopts>=5.3.2",
     "pydistcheck>=0.11.3",
@@ -372,10 +372,10 @@ untyped-import = "error"
 # reason: raised to an error because an ignore that silences nothing must go, so that no stale ignore stays.
 unused-ignore = "error"
 
-# reason: CLAUDE.md freezes scripts/ignore_sites.py, so its code cannot change, and an inline ignore is an edit too.
+# reason: CLAUDE.md freezes scripts/ignores/sites.py, so its code cannot change, and an inline ignore is an edit too.
 # Its walk of the untyped ast and tomllib trees gives these three errors. All other checks still apply to the file.
 [[tool.pyrefly.sub-config]]
-matches = "scripts/ignore_sites.py"
+matches = "scripts/ignores/sites.py"
 errors = { missing-attribute = false, unknown-argument-type = false, unknown-variable-type = false }
 
 [tool.scriv]
@@ -386,7 +386,7 @@ md_header_level = "2"
 version = "literal: pyproject.toml: project.version"
 entry_title_template = "[{{ version }}] - {{ date.strftime('%Y-%m-%d') }}"
 
-# commitizen only checks commit messages and PR titles here. scriv and scripts/release.py manage the changelog and the
+# commitizen only checks commit messages and PR titles here. scriv and scripts/release/version.py manage the changelog and the
 # version, so `cz bump` and `cz changelog` are not used.
 [tool.commitizen]
 name = "cz_conventional_commits"

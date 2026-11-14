@@ -444,7 +444,7 @@ def sample_graph_tokens(
 
     The request is the first turn of ``describe_graph``. Each sample has the body of the request and the input tokens
     that the provider counted. Set ``max_output_tokens`` in the model options to a small number, such as 16, to keep the
-    cost low: a reply that the limit cuts off is not an error here. ``scripts/fit_token_weights.py`` uses the function
+    cost low: a reply that the limit cuts off is not an error here. ``scripts/llm/token_weights.py`` uses the function
     to fit the token weights of a model.
 
     Parameters

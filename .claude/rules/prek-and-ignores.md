@@ -26,11 +26,11 @@ settings in `pyproject.toml` or `cosmic-ray.toml`. Fix the root cause first; a w
 A copied ignore hides its cause, and the copies grow with each feature. An audit found about 60 sites that were copies
 of four causes. So search first, and fix a cause that repeats once.
 
-- Before you add a workaround, run `rg` for its rule, or `uv run python -m scripts.compile_ignores`, and look for the
+- Before you add a workaround, run `rg` for its rule, or `uv run python -m scripts.ignores.report`, and look for the
   same rule with the same reason.
 - If three or more sites share one cause, fix the cause: a shared helper, a shared import, a fixture, or one config
   entry with a `reason:` block that names the pattern. Do not add a third copy.
-- `scripts/check_ignore_repeats.py` (the `check-ignore-repeats` hook) fails when one rule has more than 5 sites outside
+- `scripts/ignores/repeats.py` (the `check-ignore-repeats` hook) fails when one rule has more than 5 sites outside
   the shared homes. Fix the cause. Do not add a file to `SHARED_HOMES` or a tool to `UNLIMITED_TOOLS` to pass it, unless
   that file holds the shared fix of the cause.
 - A workaround for one tool must not appease another tool with a trick, such as a call that exists only so that vulture
@@ -50,7 +50,7 @@ of four causes. So search first, and fix a cause that repeats once.
 | A vulture report of a hook that Python or pytest calls by name | `ignore_names` of `[tool.vulture]` in `pyproject.toml`. |
 
 `src/ebaml/llm/sdk_setup.py` keeps its own `subprocess` ignore, because `src/ebaml` must not import from `scripts/`.
-`scripts/mutation.py` keeps its own, because CI runs it by path, and then `scripts` is not importable. A
+`scripts/mutation/run.py` keeps its own, because CI runs it by path, and then `scripts` is not importable. A
 need that the table does not cover is a new shared fix: build it once, then add a row.
 
 ### Scope: inline for a one-off, shared fix for a repeat
@@ -81,10 +81,10 @@ The reason lives with the workaround, so it moves with the code and cannot go st
 The reason must say why it cannot be fixed, not restate what the ignore does (at least 4 words and 20 characters). Never
 invent a reason; ask the user if unsure. Remove a workaround whenever the tool passes without it.
 
-Verify with `uv run python -m scripts.check_ignores` (also runs as the `check-ignores` hook). To audit all of them in one
-place, run `uv run python -m scripts.compile_ignores` (Markdown to stdout, or `-o FILE`).
+Verify with `uv run python -m scripts.ignores.check` (also runs as the `check-ignores` hook). To audit all of them in one
+place, run `uv run python -m scripts.ignores.report` (Markdown to stdout, or `-o FILE`).
 
-Do not edit `scripts/ignore_sites.py`, `scripts/check_ignores.py` or the `check-ignores` hook to make a violation pass.
-The same holds for `scripts/check_ignore_repeats.py` and its hook.
+Do not edit `scripts/ignores/sites.py`, `scripts/ignores/check.py` or the `check-ignores` hook to make a violation pass.
+The same holds for `scripts/ignores/repeats.py` and its hook.
 
 Exempt: generated code in `src/baml_sdk/`, `.pyi` files and `baml_src/`.

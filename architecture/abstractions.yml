@@ -1,8 +1,8 @@
 # Registry of the shared abstractions of src/ebaml. Read .claude/rules/reuse.md before you edit it.
 #
 # Register a contract or an entry point that more than one module uses. Do not register a private helper or a class
-# that only one module uses. Search first: `uv run python -m scripts.check_abstractions --search <words>`.
-# `uv run python -m scripts.check_abstractions --check` validates this file against the source.
+# that only one module uses. Search first: `uv run python -m scripts.architecture.abstractions --search <words>`.
+# `uv run python -m scripts.architecture.abstractions --check` validates this file against the source.
 #
 # Fields: id (kebab-case, stable), responsibility (one sentence), owner (module or package that owns the symbol),
 # symbol (module:Name), consumers (descriptive, grants no import right), keywords (for the search), status (active or
@@ -221,6 +221,6 @@ capabilities:
     status: active
     context: benchmark
 
-# Approved overlaps of two contracts. Add an entry only for a pair that scripts.check_contract_overlap reports, and
+# Approved overlaps of two contracts. Add an entry only for a pair that scripts.architecture.contract_overlap reports, and
 # write why the two contracts stay apart (for example, a consumer defines its own Protocol to keep the import direction).
 exceptions: []

@@ -1,34 +1,46 @@
 # scripts
 
-Repository maintenance scripts. Run them from the repo root with `uv run python scripts/<name>.py`.
+Repository maintenance scripts. Run them from the repo root with `uv run python -m scripts.<group>.<name>`. Each group is a package:
+
+| Group | Job |
+| --- | --- |
+| `architecture/` | The layout, the size limits, the registry of shared abstractions and the test suites. |
+| `ignores/` | The workarounds that silence a tool, and the reason next to each. |
+| `release/` | The changelog, the version, the public API, the BAML toolchain pin and the installed package. |
+| `ci/` | The ruleset, the report gates, the cooldown exemptions and the commits. |
+| `mutation/` | Mutation testing with cosmic-ray. |
+| `docs/` | The build of the documentation site. |
+| `llm/` | The scripts that send real requests to a model. |
+
+`fixed_command.py` stays at the top, because scripts of several groups call it.
 
 | Script | What it does |
 | --- | --- |
-| `check_ignores.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
-| `check_test_suites.py` | Fails when `tests/` holds an unknown suite, a suite has no test module, an integration test fakes `baml_sdk`, or `pyproject.toml` and the CI workflow leave a suite out. |
-| `check_size.py` | Fails when a source file has more than 800 lines (a test file has no limit), a function has more than 100 lines without its docstring, or a class has more than 15 public or 10 private methods. |
-| `check_ignore_repeats.py` | Fails when one ignore rule has more than 5 sites outside the files that hold the shared fix. |
-| `compile_ignores.py` | Compiles every workaround and its reason into one Markdown report to audit. |
-| `mutation.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
-| `mutant_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation.py`, so that they run first. |
-| `abstractions_registry.py` | Parses `architecture/abstractions.yml` into typed classes. `check_abstractions.py` and `check_contract_overlap.py` use it. |
-| `abstractions_index.py` | Indexes the classes and functions of `src/ebaml` with `ast`, without importing them. |
-| `check_abstractions.py` | Checks `architecture/abstractions.yml` against the source, and searches the registry and the public symbols (`--check`, `--list`, `--search WORD...`). |
-| `check_contract_overlap.py` | Fails when two registered `Protocol` or `ABC` classes of one context have identical signatures. Other overlaps are warnings. |
-| `check_api_breaks.py` | Fails when a change breaks the public API (`ebaml.__all__`) against a base revision and no changelog fragment has a `**BREAKING:**` entry. |
-| `check_changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
-| `check_fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
-| `check_commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
-| `check_toolchain_pin.py` | Fails unless `baml.toml`, the `baml-bridge` requirement of `pyproject.toml` and `uv.lock` name one BAML toolchain version. |
-| `check_ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
-| `baml_toolchain.py` | Prints the version of `baml-bridge` in `uv.lock`. The setup action of CI installs the BAML toolchain of that version, because a newer toolchain writes a `baml_sdk` that `baml-bridge` cannot read. |
-| `smoke_install.py` | Installs a wheel, an sdist or a published version in a clean environment, with no `baml` command, and runs a smoke test of the installed package. |
-| `release.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
-| `build_docs.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
-| `fit_token_weights.py` | Collects the token counts of real requests to a model, and fits the weights of its token estimate. `collect` costs money. `fit` sends nothing. |
-| `live_openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
+| `architecture/abstractions.py` | Checks `architecture/abstractions.yml` against the source, and searches the registry and the public symbols (`--check`, `--list`, `--search WORD...`). |
+| `architecture/abstractions_index.py` | Indexes the classes and functions of `src/ebaml` with `ast`, without importing them. |
+| `architecture/abstractions_registry.py` | Parses `architecture/abstractions.yml` into typed classes. `architecture/abstractions.py` and `architecture/contract_overlap.py` use it. |
+| `architecture/contract_overlap.py` | Fails when two registered `Protocol` or `ABC` classes of one context have identical signatures. Other overlaps are warnings. |
+| `architecture/size.py` | Fails when a source file has more than 800 lines (a test file has no limit), a function has more than 100 lines without its docstring, or a class has more than 15 public or 10 private methods. |
+| `architecture/suites.py` | Fails when `tests/` holds an unknown suite, a suite has no test module, an integration test fakes `baml_sdk`, or `pyproject.toml` and the CI workflow leave a suite out. |
+| `ci/commits.py` | Checks the description style and the size of a commit message or of each commit of a branch. |
+| `ci/ruleset.py` | Fails if a required check of `.github/rulesets/main.json` is not a job that runs on every pull request. |
+| `docs/build.py` | Exports the marimo notebooks and compiles the proof papers, builds or serves the docs with Zensical (`zensical.toml`), and fails on a docstring warning. |
+| `ignores/check.py` | Fails unless every lint/type/coverage/test workaround has a written reason next to it. |
+| `ignores/repeats.py` | Fails when one ignore rule has more than 5 sites outside the files that hold the shared fix. |
+| `ignores/report.py` | Compiles every workaround and its reason into one Markdown report to audit. |
+| `llm/openrouter.py` | Optional live test: real OpenRouter calls through the BAML pipelines (needs `OPENROUTER_API_KEY`). |
+| `llm/token_weights.py` | Collects the token counts of real requests to a model, and fits the weights of its token estimate. `collect` costs money. `fit` sends nothing. |
+| `mutation/covering_tests.py` | Finds the tests that execute the lines of a mutant in the coverage map of `mutation/run.py`, so that they run first. |
+| `mutation/run.py` | Runs cosmic-ray mutation testing in parallel shards, for all modules, some modules or only the changed lines, and fails if any mutant survives. |
+| `release/api_breaks.py` | Fails when a change breaks the public API (`ebaml.__all__`) against a base revision and no changelog fragment has a `**BREAKING:**` entry. |
+| `release/baml_toolchain.py` | Prints the version of `baml-bridge` in `uv.lock`. The setup action of CI installs the BAML toolchain of that version, because a newer toolchain writes a `baml_sdk` that `baml-bridge` cannot read. |
+| `release/changelog.py` | Fails unless `CHANGELOG.md`, the fragments in `changelog.d/` and the version in `pyproject.toml` agree. |
+| `release/fragment.py` | Fails a pull request that changes the package, its prompts or the benchmark but adds no changelog fragment. |
+| `release/smoke_install.py` | Installs a wheel, an sdist or a published version in a clean environment, with no `baml` command, and runs a smoke test of the installed package. |
+| `release/toolchain_pin.py` | Fails unless `baml.toml`, the `baml-bridge` requirement of `pyproject.toml` and `uv.lock` name one BAML toolchain version. |
+| `release/version.py` | Prints the version that the release workflow gives to the pending changelog fragments. |
 
-## `check_ignores.py` and `compile_ignores.py`
+## `ignores/check.py` and `ignores/report.py`
 
 A *workaround* silences a tool instead of fixing the code:
 
@@ -51,85 +63,85 @@ run(argv)  # noqa: S603 -- fixed argv from sys.executable, never untrusted input
 - TOML settings get a comment block directly above the key, whose first line starts with `reason:`.
 - The reason must say why the code cannot be fixed, not restate what the ignore does.
 
-`check_ignores` fails on any workaround without a reason (or with a one-word one). `compile_ignores` gathers every
+`check` fails on any workaround without a reason (or with a one-word one). `report` gathers every
 workaround and its reason into one Markdown report, grouped by tool, so they can be audited in one place. The report is
 generated: do not commit or edit it.
 
 ```bash
-uv run python -m scripts.check_ignores                          # fails if a reason is missing
-uv run python -m scripts.compile_ignores                        # report to stdout
-uv run python -m scripts.compile_ignores -o ignores-report.md   # report to a file
+uv run python -m scripts.ignores.check                          # fails if a reason is missing
+uv run python -m scripts.ignores.report                        # report to stdout
+uv run python -m scripts.ignores.report -o ignores-report.md   # report to a file
 ```
 
-`check_ignores` also runs as the `check-ignores` hook in `prek.toml`. Do not edit the scripts or the hook to make a
-violation pass. The finder shared by both is `ignore_sites.py`.
+`check` also runs as the `check-ignores` hook in `prek.toml`. Do not edit the scripts or the hook to make a
+violation pass. The finder shared by both is `ignores/sites.py`.
 
-`check_ignore_repeats` groups the workarounds by tool and rule. It fails when a rule has more than 5 sites, so that a
+`repeats` groups the workarounds by tool and rule. It fails when a rule has more than 5 sites, so that a
 repeated cause gets one shared fix. The sites in `SHARED_HOMES` do not count, and a tool in `UNLIMITED_TOOLS` has no
 limit. Both lists are in the script, with the reason for each. It runs as the `check-ignore-repeats` hook.
 
 ```bash
-uv run python -m scripts.check_ignore_repeats                   # fails if a rule repeats too often
+uv run python -m scripts.ignores.repeats                   # fails if a rule repeats too often
 ```
 
-## `check_abstractions.py` and `check_contract_overlap.py`
+## `architecture/abstractions.py` and `architecture/contract_overlap.py`
 
 These two scripts keep the code from growing a second copy of an abstraction. `.claude/rules/reuse.md` has the
 process.
 
 ```bash
-uv run python -m scripts.check_abstractions --search graph text   # find capabilities and symbols by word
-uv run python -m scripts.check_abstractions --check               # validate architecture/abstractions.yml
-uv run python -m scripts.check_contract_overlap                    # compare the public Protocol and ABC classes
+uv run python -m scripts.architecture.abstractions --search graph text   # find capabilities and symbols by word
+uv run python -m scripts.architecture.abstractions --check               # validate architecture/abstractions.yml
+uv run python -m scripts.architecture.contract_overlap                    # compare the public Protocol and ABC classes
 ```
 
 - Both read the source with `ast` and need no network. `--format json` prints stable diagnostics with the
   fields `rule_id`, `path`, `line`, `capability_id`, `candidate`, `suggestion` and `severity`.
 
-## `check_exclusions.py`
+## `ci/exclusions.py`
 
 `exclude-newer-package` in `pyproject.toml` lets one package skip the 7-day cutoff of uv, for example to take a security
-fix at once. Such an entry is temporary. `check_exclusions` reads `uv.lock` and fails when the locked version of an
+fix at once. Such an entry is temporary. `exclusions` reads `uv.lock` and fails when the locked version of an
 exempt package is older than the cutoff, or when the package is not locked. If it fails, delete the entry and run
 `uv lock`.
 
 ```bash
-uv run python -m scripts.check_exclusions   # fails if an exemption is no longer needed
+uv run python -m scripts.ci.exclusions   # fails if an exemption is no longer needed
 ```
 
 It also runs as the `check-exclusions` hook in `prek.toml`.
 
-## `check_changelog.py`, `check_fragment.py` and `release.py`
+## `release/changelog.py`, `release/fragment.py` and `release/version.py`
 
 Each pull request with a user-visible change adds a fragment to `changelog.d/` with `uv run scriv create`. After the
 merge, `.github/workflows/release.yml` releases the fragments. `.claude/rules/changelog-and-versioning.md` has the rule.
 
-`check_changelog` fails when:
+`changelog` fails when:
 
 - `CHANGELOG.md` has an `[Unreleased]` heading, or lacks the line `<!-- scriv-insert-here -->`,
 - a heading is not `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD`, or the versions do not decrease from top to bottom,
 - a fragment has no category, or a category that `[tool.scriv]` in `pyproject.toml` does not list,
 - the version in `pyproject.toml` is lower than the newest heading, or higher with no fragment to release.
 
-`check_fragment` compares a pull request with its base. It fails when the pull request changes `src/ebaml/`,
+`fragment` compares a pull request with its base. It fails when the pull request changes `src/ebaml/`,
 `baml_src/` (except the test files) or `benchmark/`, and adds no fragment. `.github/workflows/changelog.yml` runs it,
 unless the pull request has the label `no-changelog`.
 
-`release` prints the next version, or nothing if no fragment waits. A version in `pyproject.toml` above the newest
+`version` prints the next version, or nothing if no fragment waits. A version in `pyproject.toml` above the newest
 heading is a milestone version, and it is used as it is. Else, before 1.0.0, each release raises the PATCH number. From
 1.0.0, the categories and the `**BREAKING:**` marks of the fragments choose the MAJOR, MINOR or PATCH number.
 
 ```bash
-uv run python -m scripts.check_changelog           # fails if the changelog, the fragments and the version disagree
-uv run python -m scripts.check_fragment origin/main   # fails if the branch needs a fragment
-uv run python -m scripts.release                   # prints the next version
+uv run python -m scripts.release.changelog           # fails if the changelog, the fragments and the version disagree
+uv run python -m scripts.release.fragment origin/main   # fails if the branch needs a fragment
+uv run python -m scripts.release.version                   # prints the next version
 ```
 
-`check_changelog` also runs as the `check-changelog` hook in `prek.toml`.
+`changelog` also runs as the `check-changelog` hook in `prek.toml`.
 
-## `check_commits.py`
+## `ci/commits.py`
 
-`cz check` (commitizen) checks that a commit message is a conventional commit. `check_commits` checks the rest of
+`cz check` (commitizen) checks that a commit message is a conventional commit. `commits` checks the rest of
 `.claude/rules/commits-and-prs.md`:
 
 - the description starts with a lower-case word and has no period at the end,
@@ -139,40 +151,40 @@ uv run python -m scripts.release                   # prints the next version
 Merge commits and `fixup!` or `squash!` commits are skipped.
 
 ```bash
-uv run python -m scripts.check_commits --message-file .git/COMMIT_EDITMSG   # one message, as the commit-msg hook does
-uv run python -m scripts.check_commits --base origin/main                   # each commit of the branch, as CI does
+uv run python -m scripts.ci.commits --message-file .git/COMMIT_EDITMSG   # one message, as the commit-msg hook does
+uv run python -m scripts.ci.commits --base origin/main                   # each commit of the branch, as CI does
 ```
 
 The `commit-style` hook in `prek.toml` runs it at the `commit-msg` stage, next to the `commitizen` hook.
 `.github/workflows/commits.yml` runs both on the title and the commits of each pull request.
 
-## `check_ruleset.py`
+## `ci/ruleset.py`
 
 `.github/rulesets/main.json` lists the checks that a pull request must pass. GitHub matches each one by the name of a
 job. If no job of that name runs on every pull request, the check never reports, and every pull request waits for it.
-`check_ruleset` fails when a required check:
+`ruleset` fails when a required check:
 
 - is not the name of a job in a workflow that runs on `pull_request`,
 - belongs to a workflow with a `paths` or `paths-ignore` filter on `pull_request`,
 - is the name of more than one job that runs on `pull_request`.
 
 ```bash
-uv run python -m scripts.check_ruleset   # fails if a required check cannot report
+uv run python -m scripts.ci.ruleset   # fails if a required check cannot report
 ```
 
 It also runs as the `check-ruleset` hook in `prek.toml`. `.github/rulesets/README.md` says how to apply the ruleset.
 
-## `build_docs.py`
+## `docs/build.py`
 
 `build` is the default command. It exports the notebooks into `docs/notebooks/` and runs `zensical build --strict`.
 It fails if the output has a `griffe:` warning. CI runs the same command. `serve` exports the notebooks and starts the
 preview server. The module docstring explains why the export goes into `docs/`.
 
 ```bash
-uv run --group docs python -m scripts.build_docs [build|serve]
+uv run --group docs python -m scripts.docs.build [build|serve]
 ```
 
-## `mutation.py`
+## `mutation/run.py`
 
 cosmic-ray mutates the source tree in place, so each shard works on its own copy of `src`, `tests`, `pyproject.toml`
 and `cosmic-ray.toml`. The script:
@@ -187,8 +199,8 @@ and `cosmic-ray.toml`. The script:
 6. merges the results back and prints the number of surviving mutants and of mutants that did not run.
 
 Four measures keep each mutant fast. The baseline writes a coverage map: the tests that execute each line of the
-mutated modules (`mutant_tests.py`). Under a mutant, each shard first runs only the tests that execute the mutated
-statements (`mutant_run.py`, the test command of the shards). Pytest then collects only their files, not the whole
+mutated modules (`mutation/covering_tests.py`). Under a mutant, each shard first runs only the tests that execute the mutated
+statements (`mutation/command.py`, the test command of the shards). Pytest then collects only their files, not the whole
 suite, which takes about as long as the run of a killed mutant. If these tests pass, the script runs the full command:
 the tests that execute the mutated statements first, then the other tests of the mutated module, then the rest
 (`tests/unit/conftest.py` reads `MUTATION_FIRST`, `MUTATION_MODULE`, `MUTATION_ORIGINAL` and `MUTATION_COVERAGE`). The
@@ -197,12 +209,12 @@ baseline fills (`tests/unit/ebaml/conftest.py` reads `EBAML_FIT_CACHE`). Without
 normal order and fit every model.
 
 ```bash
-uv run python scripts/mutation.py      # one shard per CPU
-uv run python scripts/mutation.py 4    # four shards
-uv run python scripts/mutation.py --base origin/main   # only the lines changed since main
-uv run python scripts/mutation.py --module src/ebaml/local/facts.py   # only one module
-uv run python scripts/mutation.py --module src/ebaml/local/facts.py --part 2/3   # the second of three parts of it
-uv run python scripts/mutation.py --base origin/main --time-limit 3000   # stop after 50 minutes
+uv run python scripts/mutation/run.py      # one shard per CPU
+uv run python scripts/mutation/run.py 4    # four shards
+uv run python scripts/mutation/run.py --base origin/main   # only the lines changed since main
+uv run python scripts/mutation/run.py --module src/ebaml/local/facts.py   # only one module
+uv run python scripts/mutation/run.py --module src/ebaml/local/facts.py --part 2/3   # the second of three parts of it
+uv run python scripts/mutation/run.py --base origin/main --time-limit 3000   # stop after 50 minutes
 ```
 
 Each mutant costs a start of Python and an import of `ebaml`, about 4 seconds, so the run time grows with the number of
@@ -225,7 +237,7 @@ that name. Make a large pull request smaller if it needs more than 8 parts.
 Exits non-zero if any mutant survives or if the time limit stops the run. CI requires a 100% mutation score. Settings (module path, timeout, test command)
 are in `cosmic-ray.toml`.
 
-## `fit_token_weights.py`
+## `llm/token_weights.py`
 
 The token estimate of a graph text is `words * word_weight + bytes * byte_weight + digits * digit_weight`. Each model
 has its own weights, because each model has its own tokenizer. Run the script when a new model comes out, or to refit
@@ -239,8 +251,8 @@ the default weights. There are two steps.
    `src/ebaml/llm/token_weights.json`. It sends no request.
 
 ```bash
-OPENROUTER_API_KEY=... uv run python scripts/fit_token_weights.py collect openrouter/openai/gpt-6-luna --count 100 --yes
-uv run python scripts/fit_token_weights.py fit openrouter/openai/gpt-6-luna
+OPENROUTER_API_KEY=... uv run python scripts/llm/token_weights.py collect openrouter/openai/gpt-6-luna --count 100 --yes
+uv run python scripts/llm/token_weights.py fit openrouter/openai/gpt-6-luna
 ```
 
 - `collect` shows a progress bar of the records on the error stream. Use `--no-progress` to turn it off.

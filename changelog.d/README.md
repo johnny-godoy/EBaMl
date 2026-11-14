@@ -13,5 +13,5 @@ gives the fragments a version and moves them into `CHANGELOG.md`.
 Do not edit `CHANGELOG.md` or the version in `pyproject.toml`. The release workflow changes them. A pull request that
 completes a milestone of `ROADMAP.md` is the only exception: it sets the version of the milestone in `pyproject.toml`.
 
-`uv run python -m scripts.check_changelog` checks the fragments. `.claude/rules/changelog-and-versioning.md` has the
+`uv run python -m scripts.release.changelog` checks the fragments. `.claude/rules/changelog-and-versioning.md` has the
 full rule.

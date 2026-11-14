@@ -49,6 +49,6 @@ suites without coverage, so that a slow end-to-end test cannot stand in for a mi
 
 ## Check
 
-- `uv run python -m scripts.check_test_suites` checks the suites, the markers, `testpaths` and the CI step.
+- `uv run python -m scripts.architecture.suites` checks the suites, the markers, `testpaths` and the CI step.
 - Prove each new guard: break the code that it guards, watch the test fail, and restore the code (`bug-fixes.md`).
 - Run the suites: `uv run pytest tests/integration tests/api tests/contract --no-cov`.
