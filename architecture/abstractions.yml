@@ -194,6 +194,14 @@ capabilities:
     keywords: [session, history, undo, redo, save, revision]
     status: active
 
+  - id: business-constraint
+    responsibility: State a business requirement on the graph of one feature, find its violation and name its repair
+    owner: ebaml.edit
+    symbol: ebaml.edit.constraints:Constraint
+    consumers: [ebaml.mcp]
+    keywords: [constraint, requirement, violation, repair, monotone, bounded]
+    status: active
+
   - id: benchmark-usage
     responsibility: Describe the tokens that a provider reports for a benchmark reply, as a contract
     owner: ebaml.benchmark
