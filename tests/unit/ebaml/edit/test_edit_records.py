@@ -5,7 +5,15 @@ import pytest
 
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.exceptions import HistoryError
-from ebaml.edit.edit_records import EDIT_TYPES, SELECTION_TYPES, edit_from_record, to_record
+from ebaml.edit.constraints import Bounded, Constraint, FixedScore, MaxStep, Monotone, Unused
+from ebaml.edit.edit_records import (
+    CONSTRAINT_TYPES,
+    EDIT_TYPES,
+    SELECTION_TYPES,
+    constraint_from_record,
+    edit_from_record,
+    to_record,
+)
 from ebaml.edit.edits import (
     Align,
     Clip,
@@ -49,6 +57,37 @@ def test_every_edit_class_and_every_selection_class_is_in_the_registry() -> None
         SELECTION_TYPES,
     )
     assert WholeGraph().__class__ is SELECTION_TYPES["WholeGraph"]
+
+
+CONSTRAINT_EXAMPLES: list[Constraint] = [
+    Monotone("score", "decreasing", Bins(2, 5)),
+    MaxStep("score", 0.3),
+    Bounded("age", -1.0, 1.0),
+    FixedScore("group", Categories(["x"]), 0.0),
+    Unused("grade"),
+]
+
+
+def test_every_constraint_class_is_in_the_registry() -> None:
+    assert {type(constraint).__name__ for constraint in CONSTRAINT_EXAMPLES} == set(CONSTRAINT_TYPES)
+
+
+@pytest.mark.parametrize("constraint", CONSTRAINT_EXAMPLES, ids=lambda constraint: type(constraint).__name__)
+def test_a_constraint_survives_a_round_trip_through_json_text(constraint: Constraint) -> None:
+    text = orjson.dumps(to_record(constraint))
+    assert constraint_from_record(orjson.loads(text)) == constraint
+
+
+def test_a_constraint_record_holds_its_selection_as_a_record_and_an_unknown_name_fails() -> None:
+    assert to_record(Bounded("age", -1.0, 1.0)) == {
+        "type": "Bounded",
+        "feature": "age",
+        "low": -1.0,
+        "high": 1.0,
+        "selection": {"type": "EveryBin"},
+    }
+    with pytest.raises(HistoryError, match="The record names the constraint 'Shift'"):
+        constraint_from_record({"type": "Shift", "feature": "age"})
 
 
 @pytest.mark.parametrize("edit", EXAMPLES, ids=lambda edit: type(edit).__name__)
