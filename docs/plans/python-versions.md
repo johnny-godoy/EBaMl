@@ -51,9 +51,9 @@ These facts were true when the plan was written. Check each one again before you
    Matrix jobs get names from their version, so update `.github/rulesets/main.json` and the `GATES` of
    `.github/scripts/ci_report.py`, and keep `check-ruleset` and `check-report-gates` green. A required check must exist on
    every pull request.
-5. **Test the install, not only the source.** Run `scripts/smoke_install.py` on the built wheel on every matrix version
+5. **Test the install, not only the source.** Run `scripts/release/smoke_install.py` on the built wheel on every matrix version
    in `install-weekly.yml` and in `release.yml`. A source checkout can hide a missing file that only the wheel shows.
-6. **Keep the toolchain pin true.** `scripts/check_toolchain_pin.py` and `scripts/baml_toolchain.py` must give the same
+6. **Keep the toolchain pin true.** `scripts/release/toolchain_pin.py` and `scripts/release/baml_toolchain.py` must give the same
    `baml generate` on every version.
 7. **Make the claim match the result.** Set one `Programming Language :: Python :: 3.X` classifier for each version that
    the matrix passes. Update the README "Requirements", `docs/setup.md`, the "Requirements" of `CLAUDE.md` and the table
@@ -70,7 +70,7 @@ fragment says under `Added` which Python versions the package supports. Mark the
 
 <done>
 - `uv run pytest` passes on every version from 3.12 to the newest stable CPython, in CI.
-- The wheel installs and imports on every claimed version (`scripts/smoke_install.py`).
+- The wheel installs and imports on every claimed version (`scripts/release/smoke_install.py`).
 - `requires-python`, the classifiers, the README and the CI matrix name the same versions, and a contract test checks
   it.
 - `tests/api/public_api.json` is unchanged.

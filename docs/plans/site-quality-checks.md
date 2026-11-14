@@ -13,7 +13,7 @@ screen reader, a keyboard, a phone or the dark theme can use the site, or that a
 </goal>
 
 <context>
-- `uv run --group docs python -m scripts.build_docs` builds the site strictly. It exports each marimo notebook to HTML
+- `uv run --group docs python -m scripts.docs.build` builds the site strictly. It exports each marimo notebook to HTML
   and compiles each proof paper to a PDF. `.github/workflows/docs.yml` runs the build.
 - The site has a light theme, a dark theme and a theme that follows the system (`zensical.toml`, `[[project.theme.palette]]`).
 - The notebook pages and the proof pages embed an `<iframe>`. The content of a marimo export and of a PDF is not ours,
@@ -22,13 +22,13 @@ screen reader, a keyboard, a phone or the dark theme can use the site, or that a
 - Chromium and Playwright for Python are in the cloud environment. CI must install them. Node.js is in CI already,
   because the `jscpd` hook needs it.
 - `testing.md` gives each test suite one question. A check of the built site answers a new question, so it is a new
-  suite with its own marker, and `scripts/check_test_suites.py` must know it.
+  suite with its own marker, and `scripts/architecture/suites.py` must know it.
 </context>
 
 <steps>
 1. **Add the suite.** Add `tests/site/` with the marker `site`. Its tests take the built site from one session fixture:
    build once, serve the directory on a local port, and give each test the base address. Register the suite in
-   `testing.md`, `tests/conftest.py` and `scripts/check_test_suites.py`. Run it in `docs.yml` after the build, as a
+   `testing.md`, `tests/conftest.py` and `scripts/architecture/suites.py`. Run it in `docs.yml` after the build, as a
    required check. Update `.github/rulesets/main.json` and the `GATES` of `.github/scripts/ci_report.py`.
 2. **Check accessibility with axe.** Load each page of the site, found from the sitemap or the nav and not from a hand
    list, in Playwright. Inject axe-core and fail on each violation of the WCAG 2.2 A and AA rules. Run each page in the
