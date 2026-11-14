@@ -25,6 +25,8 @@ EDIT_TYPES: dict[str, type[Edit]] = {
         edits.Monotonize,
         edits.Interpolate,
         edits.FitLine,
+        edits.Clip,
+        edits.LimitSteps,
         edits.Scale,
         edits.ZeroTerm,
         edits.Recenter,
@@ -42,6 +44,7 @@ SELECTION_TYPES: dict[str, type[Selection]] = {
         selections.MissingBin,
         selections.UnseenBin,
         selections.WholeGraph,
+        selections.EveryBin,
         selections.ValueInterval,
     )
 }

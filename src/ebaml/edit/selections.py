@@ -123,6 +123,18 @@ class WholeGraph(Selection):
 
 
 @attrs.frozen
+class EveryBin(Selection):
+    """Every row of the term: the missing bin, every real bin and the unseen bin.
+
+    Use it when a rule must hold for every value that the model can score, a missing value and an unseen value included.
+    """
+
+    @override
+    def resolve(self, view: TermView) -> tuple[int, ...]:
+        return tuple(range(view.unseen_position + 1))
+
+
+@attrs.frozen
 class ValueInterval(Selection):
     """Every bin of a continuous feature that overlaps the interval from ``low`` to ``high``.
 

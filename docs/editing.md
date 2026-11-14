@@ -60,6 +60,7 @@ is off by one and moves when the bins change.
 | `WholeGraph()` | Every real bin. |
 | `MissingBin()` | The bin of the missing values. The graph does not show it. |
 | `UnseenBin()` | The bin of the values that the model did not see in training. |
+| `EveryBin()` | The missing bin, every real bin and the unseen bin. |
 
 A selection that does not fit the feature raises a `SelectionError` that lists the bins, categories or values that
 exist. The report of an edit names the bins that a `ValueInterval` resolved to, so nobody edits a bin unseen.
@@ -76,13 +77,15 @@ Each edit is a frozen class. The table shows the edit of each tool of GAM Change
 | `Monotonize(feature, direction, selection)` | Makes the selected scores monotone with a weighted isotonic regression. | Monotone |
 | `Interpolate(feature, selection)` | Draws a straight line from the first to the last selected score. | Interpolate |
 | `FitLine(feature, selection)` | Replaces the selected scores by the weighted least-squares line. | Regression |
+| `Clip(feature, selection, low, high)` | Moves each selected score outside the range from `low` to `high` to the nearer bound. | none |
+| `LimitSteps(feature, step, selection)` | Replaces the selected scores by a weighted least-squares fit with no step between neighbour bins above `step`. | none |
 | `Scale(feature, factor)` | Multiplies the graph by a factor. | none |
 | `ZeroTerm(feature)` | Sets every score of the graph to 0. The term stays in the model. | Delete on all bins |
 | `RemoveTerms(terms)`, `RemoveFeature(feature)` | Remove terms from the model. | none |
 | `Recenter(feature)` | Moves the weighted mean of the graph into the intercept. | none |
 
 ```python
-from ebaml import Align, FitLine, Interpolate, MissingBin, SetScores, Shift, ZeroTerm
+from ebaml import Align, Clip, EveryBin, FitLine, Interpolate, LimitSteps, MissingBin, SetScores, Shift, ZeroTerm
 
 # "a missing value scores 0"
 session.apply(SetScores("age", MissingBin(), 0.0), "A passenger with no age scores like the average")
@@ -98,6 +101,12 @@ session.apply(Align("fare", Bins(3, 5), "left"), "The dip has too few passengers
 
 # "replace a range by a trend"
 session.apply(FitLine("fare", Bins(7, 9)), "Fit the trend of the expensive tickets")
+
+# "keep each score in a range", the missing bin and the unseen bin included
+session.apply(Clip("fare", EveryBin(), -1.0, 1.0), "No fare may move the log-odds by more than 1")
+
+# "no sudden jump"
+session.apply(LimitSteps("fare", 0.3), "A small change of the fare must not change the score much")
 ```
 
 A direct edit never re-centres the graph, so a person who sets a score to 0.38 reads 0.38. `Monotonize` keeps the

@@ -5,7 +5,7 @@ import pytest
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import SelectionError
 from ebaml.edit.model_view import term_view
-from ebaml.edit.selections import Bins, Categories, MissingBin, UnseenBin, ValueInterval, WholeGraph
+from ebaml.edit.selections import Bins, Categories, EveryBin, MissingBin, UnseenBin, ValueInterval, WholeGraph
 
 
 def test_bins_count_from_the_first_real_bin_and_include_the_last(edit_ebm: ExplainableBoostingClassifier) -> None:
@@ -69,6 +69,13 @@ def test_the_missing_bin_and_the_unseen_bin_are_the_first_and_the_last_row(
 def test_the_whole_graph_holds_the_real_bins_only(edit_ebm: ExplainableBoostingClassifier) -> None:
     view = term_view(edit_ebm, "group")
     assert WholeGraph().resolve(view) == (1, 2, 3)
+
+
+def test_every_bin_holds_the_missing_bin_the_real_bins_and_the_unseen_bin(
+    edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    view = term_view(edit_ebm, "group")
+    assert EveryBin().resolve(view) == (0, 1, 2, 3, 4)
 
 
 def test_an_interval_selects_every_bin_that_overlaps_it(edit_ebm: ExplainableBoostingClassifier) -> None:

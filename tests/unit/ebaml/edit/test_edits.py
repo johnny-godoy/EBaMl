@@ -14,10 +14,12 @@ from ebaml.edit import edits
 from ebaml.edit.edits import (
     Align,
     AlignTarget,
+    Clip,
     Direction,
     Edit,
     FitLine,
     Interpolate,
+    LimitSteps,
     Monotonize,
     Recenter,
     RemoveFeature,
@@ -28,7 +30,16 @@ from ebaml.edit.edits import (
     ZeroTerm,
 )
 from ebaml.edit.model_view import term_view
-from ebaml.edit.selections import Bins, Categories, MissingBin, Selection, UnseenBin, ValueInterval, WholeGraph
+from ebaml.edit.selections import (
+    Bins,
+    Categories,
+    EveryBin,
+    MissingBin,
+    Selection,
+    UnseenBin,
+    ValueInterval,
+    WholeGraph,
+)
 from tests.unit.ebaml.conftest import PandasFrame
 from tests.unit.ebaml.edit.conftest import (
     assert_consistent,
@@ -336,6 +347,98 @@ def test_fit_line_with_no_weight_in_the_selection_counts_each_bin_once(edit_ebm:
     assert term_view(edited, "score").scores[3:9].tolist() == pytest.approx(expected)
 
 
+def test_clip_moves_the_scores_outside_the_range_to_the_nearer_bound_and_leaves_the_others(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    before = np.array(reference_term_scores(edit_ebm, "age"))
+    low = float(np.quantile(before, 0.25))
+    high = float(np.quantile(before, 0.75))
+    edited, outcome = _run(Clip("age", EveryBin(), low, high), edit_ebm)
+    after = np.array(reference_term_scores(edited, "age"))
+    outside = np.flatnonzero((before < low) | (before > high)).tolist()
+    assert list(outcome.positions) == outside
+    assert _changed(edit_ebm, edited, "age") == outside
+    assert after.tolist() == np.clip(before, low, high).tolist()
+    assert outcome.description.startswith("Clip ")
+    assert_consistent(edited, edit_data)
+
+
+def test_clip_of_scores_inside_the_range_changes_nothing(edit_ebm: ExplainableBoostingClassifier) -> None:
+    edited, outcome = _run(Clip("score", WholeGraph(), -100.0, 100.0), edit_ebm)
+    assert outcome.positions == ()
+    assert _changed(edit_ebm, edited, "score") == []
+
+
+@pytest.mark.parametrize(("low", "high"), [(1.0, -1.0), (float("nan"), 1.0)])
+def test_clip_refuses_a_low_bound_above_the_high_bound_and_a_bound_that_is_not_a_number(
+    edit_ebm: ExplainableBoostingClassifier,
+    low: float,
+    high: float,
+) -> None:
+    with pytest.raises(EditError, match="low not above high"):
+        Clip("score", WholeGraph(), low, high).run(copy.deepcopy(edit_ebm))
+
+
+def _largest_step(ebm: Model, name: str, first: int, last: int) -> float:
+    return float(np.abs(np.diff(reference_term_scores(ebm, name)[first : last + 1])).max())
+
+
+def test_limit_steps_leaves_no_step_above_the_limit_and_leaves_the_rest(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    step = _largest_step(edit_ebm, "score", 1, 12) / 3
+    edited, outcome = _run(LimitSteps("score", step, Bins(0, 11)), edit_ebm)
+    assert outcome.positions == tuple(range(1, 13))
+    assert _largest_step(edited, "score", 1, 12) <= step + 1e-12
+    assert set(_changed(edit_ebm, edited, "score")) <= set(range(1, 13))
+    assert outcome.description.startswith("Limit each step of 12 bins of score (")
+    assert_consistent(edited, edit_data)
+
+
+def test_limit_steps_fits_the_scores_closer_than_a_flat_line_and_keeps_the_weighted_mean(
+    edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    view = term_view(edit_ebm, "score")
+    weights = view.weights[1:-1]
+    before = view.scores[1:-1]
+    step = _largest_step(edit_ebm, "score", 1, view.real_bin_count) / 2
+    edited, _ = _run(LimitSteps("score", step), edit_ebm)
+    after = term_view(edited, "score").scores[1:-1]
+    mean = np.average(before, weights=weights)
+    assert np.average(after, weights=weights) == pytest.approx(mean)
+    assert np.sum(weights * (after - before) ** 2) < np.sum(weights * (mean - before) ** 2)
+
+
+def test_limit_steps_with_a_step_of_zero_gives_the_weighted_mean(edit_ebm: ExplainableBoostingClassifier) -> None:
+    view = term_view(edit_ebm, "score")
+    edited, _ = _run(LimitSteps("score", 0.0, Bins(2, 6)), edit_ebm)
+    expected = np.average(view.scores[3:8], weights=view.weights[3:8])
+    assert term_view(edited, "score").scores[3:8] == pytest.approx([expected] * 5)
+
+
+def test_limit_steps_of_steps_under_the_limit_changes_no_score_by_more_than_rounding(
+    edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    edited, _ = _run(LimitSteps("score", 100.0), edit_ebm)
+    assert reference_term_scores(edited, "score") == pytest.approx(reference_term_scores(edit_ebm, "score"))
+
+
+@pytest.mark.parametrize("step", [-0.1, float("inf"), float("nan")])
+def test_limit_steps_refuses_a_step_that_is_negative_or_not_finite(
+    edit_ebm: ExplainableBoostingClassifier,
+    step: float,
+) -> None:
+    with pytest.raises(EditError, match="0 or more and finite"):
+        LimitSteps("score", step).run(copy.deepcopy(edit_ebm))
+
+
+def test_limit_steps_needs_an_order(edit_ebm: ExplainableBoostingClassifier) -> None:
+    with pytest.raises(EditError, match="needs an order"):
+        LimitSteps("group", 0.1).run(copy.deepcopy(edit_ebm))
+
+
 def test_scale_multiplies_the_graph_and_keeps_the_intercept(
     edit_ebm: ExplainableBoostingClassifier,
     edit_data: PandasFrame,
@@ -476,6 +579,13 @@ def _edit_strategy() -> st.SearchStrategy[Edit]:
         st.builds(Align, st.just("grade"), st.just(WholeGraph()), st.just("mean")),
         st.builds(Recenter, st.sampled_from(["age", "score", "group"])),
         st.builds(ZeroTerm, st.just("grade")),
+        st.builds(Clip, st.just("age"), st.just(EveryBin()), st.just(-0.5), st.just(0.5)),
+        st.builds(
+            LimitSteps,
+            st.just("score"),
+            st.floats(0, 1),
+            bin_range.filter(lambda selection: selection.first < selection.last),
+        ),
     )
 
 

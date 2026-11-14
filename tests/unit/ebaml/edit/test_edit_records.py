@@ -8,9 +8,11 @@ from ebaml.core.exceptions import HistoryError
 from ebaml.edit.edit_records import EDIT_TYPES, SELECTION_TYPES, edit_from_record, to_record
 from ebaml.edit.edits import (
     Align,
+    Clip,
     Edit,
     FitLine,
     Interpolate,
+    LimitSteps,
     Monotonize,
     Recenter,
     RemoveFeature,
@@ -20,7 +22,7 @@ from ebaml.edit.edits import (
     Shift,
     ZeroTerm,
 )
-from ebaml.edit.selections import Bins, Categories, MissingBin, UnseenBin, ValueInterval, WholeGraph
+from ebaml.edit.selections import Bins, Categories, EveryBin, MissingBin, UnseenBin, ValueInterval, WholeGraph
 
 EXAMPLES: list[Edit] = [
     Shift("age", Bins(1, 3), 0.5),
@@ -31,6 +33,8 @@ EXAMPLES: list[Edit] = [
     Monotonize("score", "increasing"),
     Interpolate("score", Bins(2, 9)),
     FitLine("score", ValueInterval()),
+    Clip("age", EveryBin(), -1.0, 1.0),
+    LimitSteps("score", 0.2, Bins(0, 5)),
     Scale("score", -2.0),
     ZeroTerm("grade"),
     Recenter("grade"),
@@ -41,7 +45,9 @@ EXAMPLES: list[Edit] = [
 
 def test_every_edit_class_and_every_selection_class_is_in_the_registry() -> None:
     assert {type(edit).__name__ for edit in EXAMPLES} == set(EDIT_TYPES)
-    assert {"Bins", "Categories", "MissingBin", "UnseenBin", "WholeGraph", "ValueInterval"} == set(SELECTION_TYPES)
+    assert {"Bins", "Categories", "MissingBin", "UnseenBin", "WholeGraph", "EveryBin", "ValueInterval"} == set(
+        SELECTION_TYPES,
+    )
     assert WholeGraph().__class__ is SELECTION_TYPES["WholeGraph"]
 
 
