@@ -342,8 +342,8 @@ uv run marimo edit notebooks/model_kinds.py
 ```
 
 [`notebooks/mcp_server.py`](notebooks/mcp_server.py) starts the real `ebaml-mcp` server and connects to it as a client does.
-It lists the tools, reads a graph with a token budget, explains a row, serves each kind of model, and shows the errors
-that a user can fix. One button calls the LLM tool.
+It lists the tools, reads a graph with a token budget, explains a row, edits the model and saves it after a confirmation,
+serves each kind of model, and shows the errors that a user can fix. One button calls the LLM tool.
 
 ```bash
 uv run marimo edit notebooks/mcp_server.py
@@ -367,7 +367,9 @@ uv run marimo edit notebooks/chat.py
 ## MCP server
 
 `ebaml-mcp` serves a fitted EBM to an agent, for example Claude Code. The agent reads the features and the graphs, and
-explains one prediction with the exact local facts. These tools call no LLM, so they need no key. See the
+explains one prediction with the exact local facts. The agent can also edit the model so that it meets a business
+requirement: it lists the bins, previews and applies an edit with a reason, undoes it, and saves the model after a
+person confirms. These tools call no LLM, so they need no key. See the
 [MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/).
 
 ### Chat with the agent

@@ -2,8 +2,8 @@
 
 A [marimo](https://marimo.io) notebook that starts the real `ebaml-mcp` server and connects to it as a client does.
 It is the best place to learn the server by using it: list the tools, read a graph with a token budget of your
-choice, explain a row of the data, serve a model over HTTP, serve each kind of model, and see the message of each
-problem that a user can fix.
+choice, explain a row of the data, edit the model and save it after a confirmation, serve a model over HTTP, serve each
+kind of model, and see the message of each problem that a user can fix.
 
 - Everything up to the last button runs without an API key. The notebook fits a small EBM on made-up data, and the
   server calls no LLM.
