@@ -14,6 +14,7 @@ from ebaml.edit import edits
 from ebaml.edit.edits import (
     Align,
     AlignTarget,
+    AssignScores,
     Clip,
     Direction,
     Edit,
@@ -345,6 +346,27 @@ def test_fit_line_with_no_weight_in_the_selection_counts_each_bin_once(edit_ebm:
     expected = reference_regression(view.left_edges()[2:8].tolist(), view.scores[3:9].tolist(), [1.0] * 6)
     edited, _ = _run(FitLine("score", Bins(2, 7)), ebm)
     assert term_view(edited, "score").scores[3:9].tolist() == pytest.approx(expected)
+
+
+def test_assign_scores_sets_each_selected_score_to_its_own_value(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, outcome = _run(AssignScores("score", Bins(1, 3), [0.1, -0.2, 0.3]), edit_ebm)
+    assert outcome.positions == (2, 3, 4)
+    assert reference_term_scores(edited, "score")[2:5] == [0.1, -0.2, 0.3]
+    assert _changed(edit_ebm, edited, "score") == [2, 3, 4]
+    assert outcome.description.startswith("Assign new scores to 3 bins of score (")
+    grouped, _ = _run(AssignScores("group", Categories(["z", "x"]), (1.0, 2.0)), edit_ebm)
+    view = term_view(grouped, "group")
+    categories = view.categories()
+    assert [view.scores[categories.index(name) + 1] for name in ("x", "z")] == [1.0, 2.0]
+    assert_consistent(edited, edit_data)
+
+
+def test_assign_scores_needs_one_value_for_each_selected_bin(edit_ebm: ExplainableBoostingClassifier) -> None:
+    with pytest.raises(EditError, match="the selection holds 3 bins of 'score', and the edit has 2 values"):
+        AssignScores("score", Bins(1, 3), (0.1, 0.2)).run(copy.deepcopy(edit_ebm))
 
 
 def test_clip_moves_the_scores_outside_the_range_to_the_nearer_bound_and_leaves_the_others(

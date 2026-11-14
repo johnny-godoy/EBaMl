@@ -16,6 +16,7 @@ from ebaml.edit.edit_records import (
 )
 from ebaml.edit.edits import (
     Align,
+    AssignScores,
     Clip,
     Edit,
     FitLine,
@@ -36,6 +37,7 @@ EXAMPLES: list[Edit] = [
     Shift("age", Bins(1, 3), 0.5),
     SetScores("age", MissingBin(), 0.0),
     SetScores("group", Categories(["x", "y"]), -1.0),
+    AssignScores("score", Bins(0, 1), (0.25, -0.5)),
     Align("age", UnseenBin(), "mean"),
     Monotonize("score", "auto", ValueInterval(-1.0, None)),
     Monotonize("score", "increasing"),
