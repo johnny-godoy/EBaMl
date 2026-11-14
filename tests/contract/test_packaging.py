@@ -1,7 +1,6 @@
 """What the package promises to an installer: the files it ships, its extras and the imports that it avoids."""
 
 import importlib.metadata
-import importlib.resources
 import sys
 import tomllib
 from pathlib import Path
@@ -26,12 +25,12 @@ def test_the_version_of_the_installed_metadata_is_the_version_of_the_project_fil
 
 
 def test_the_package_is_typed() -> None:
-    assert (importlib.resources.files("ebaml") / "py.typed").is_file()
+    assert (Path(ebaml.__file__).parent / "py.typed").is_file()
 
 
 def test_the_wheel_ships_the_generated_sdk_and_the_bundled_token_weights() -> None:
     assert PYPROJECT["tool"]["uv"]["build-backend"]["module-name"] == ["ebaml", "baml_sdk"]
-    assert (importlib.resources.files("ebaml.llm") / "token_weights.json").is_file()
+    assert (Path(ebaml.__file__).parent / "llm" / "token_weights.json").is_file()
 
 
 def test_the_extra_for_the_server_names_the_packages_that_only_the_server_imports() -> None:
