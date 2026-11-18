@@ -286,7 +286,8 @@ def encode_history(model_fingerprint: Fingerprint, head: str, entries: Sequence[
         "head": head,
         "entries": [entry.to_record() for entry in entries],
     }
-    return orjson.dumps(document, option=orjson.OPT_INDENT_2)
+    # an edit built from a model attribute can hold a numpy number, which orjson writes only with this option
+    return orjson.dumps(document, option=orjson.OPT_INDENT_2 | orjson.OPT_SERIALIZE_NUMPY)
 
 
 def _object(value: JSONValue, what: str) -> JSONMapping:
