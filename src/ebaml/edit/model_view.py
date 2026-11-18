@@ -34,6 +34,18 @@ def _format_number(value: float) -> str:
     return format(value, ".6g")
 
 
+def interval_label(left: float, right: float) -> str:
+    """Name a range of values, as the report names a continuous bin.
+
+    Returns
+    -------
+    str
+        For example ``95.5 to 105``.
+
+    """
+    return f"{_format_number(left)} to {_format_number(right)}"
+
+
 @attrs.frozen(eq=False)
 class TermView:
     """The main-effect term of one feature in one EBM.
@@ -159,8 +171,7 @@ class TermView:
         if position == self.unseen_position:
             return "unseen"
         if self.feature_type == "continuous":
-            left, right = self.bin_edges()[position - 1]
-            return f"{_format_number(left)} to {_format_number(right)}"
+            return interval_label(*self.bin_edges()[position - 1])
         return self.categories()[position - 1]
 
     def describe_positions(self, positions: Sequence[int]) -> str:
@@ -201,7 +212,7 @@ class TermView:
             edges = self.bin_edges()
             first_left = edges[positions[0] - 1][0]
             last_right = edges[positions[-1] - 1][1]
-            return f"{_format_number(first_left)} to {_format_number(last_right)}"
+            return interval_label(first_left, last_right)
         labels = [self.label(position) for position in positions]
         if len(labels) > _LABEL_LIMIT:
             return f"{labels[0]} to {labels[-1]}"

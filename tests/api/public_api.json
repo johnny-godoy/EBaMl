@@ -469,6 +469,19 @@
     "kind": "class",
     "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, instance: collections.abc.Mapping[str, FeatureValue], global_explanation: str, audience: ebaml.local.audience.Audience | str = 'layperson', num_sentences: int = 5, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, language: str = 'English', local: ebaml.local.fact_types.LocalOptions = NOTHING) -> None"
   },
+  "ExtendRange": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "low: float | None",
+      "high: float | None"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, low: float | None = None, high: float | None = None) -> None"
+  },
   "FactTexts": {
     "bases": [
       "object"
@@ -1024,6 +1037,19 @@
     "kind": "exception",
     "signature": null
   },
+  "Rebin": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "bin_count: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, bin_count: int) -> None"
+  },
   "Recenter": {
     "bases": [
       "Edit",
@@ -1175,6 +1201,18 @@
     ],
     "kind": "class",
     "signature": "(seed: int, time_limit: float | None = None, stop: ebaml.local.covering_backend.Stop = <Stop.OPTIMAL: 'optimal'>) -> None"
+  },
+  "SplitBin": {
+    "bases": [
+      "Edit",
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "at: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, at: float) -> None"
   },
   "StaleRevisionError": {
     "bases": [

@@ -157,3 +157,19 @@ def test_remove_terms_keeps_the_input_columns_and_repairs_the_model(
     assert list(ebm.feature_names_in_) == list(edit_ebm.feature_names_in_)
     assert ebm.predict_proba(edit_data).shape == (len(edit_data), 2)
     assert_consistent(ebm, edit_data)
+
+
+def test_replace_bins_refuses_new_bins_whose_attributes_do_not_fit_their_number(
+    edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    replacement = model_write.BinReplacement(
+        first=2,
+        last=2,
+        inner_cuts=[0.1],
+        scores=[0.0, 0.0],
+        weights=[1.0],
+        deviations=[0.0, 0.0],
+        bags=np.zeros((4, 2)),
+    )
+    with pytest.raises(EditError, match="must give 2 values for each attribute of the new bins"):
+        model_write.replace_bins(copy.deepcopy(edit_ebm), 1, 1, replacement)

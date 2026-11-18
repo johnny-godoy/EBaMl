@@ -13,7 +13,7 @@ from beartype.roar import BeartypeCallHintViolation
 
 from ebaml.core.custom_types import JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import HistoryError
-from ebaml.edit import constraints, edits, selections
+from ebaml.edit import bin_edits, constraints, edits, selections
 from ebaml.edit.constraints import Constraint
 from ebaml.edit.edits import Edit
 from ebaml.edit.selections import Selection
@@ -28,6 +28,9 @@ EDIT_TYPES: dict[str, type[Edit]] = {
         edits.Monotonize,
         edits.Interpolate,
         edits.FitLine,
+        bin_edits.SplitBin,
+        bin_edits.Rebin,
+        bin_edits.ExtendRange,
         edits.Clip,
         edits.LimitSteps,
         edits.Scale,

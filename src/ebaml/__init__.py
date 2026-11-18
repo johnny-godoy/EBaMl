@@ -37,6 +37,7 @@ from ebaml.core.exceptions import (
     UnreviewedEditError,
     UnsupportedModelError,
 )
+from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.constraints import (
     Bounded,
     Constraint,
@@ -177,6 +178,7 @@ __all__ = [
     "EditSession",
     "EveryBin",
     "ExplainInstanceRequest",
+    "ExtendRange",
     "FactTexts",
     "FeatureType",
     "FitLine",
@@ -221,6 +223,7 @@ __all__ = [
     "PromptOptions",
     "ProviderUnreachableError",
     "RateLimitedError",
+    "Rebin",
     "Recenter",
     "Regressor",
     "RemoveFeature",
@@ -234,6 +237,7 @@ __all__ = [
     "SetScores",
     "Shift",
     "SolveSettings",
+    "SplitBin",
     "StaleRevisionError",
     "Stop",
     "SufficientReason",

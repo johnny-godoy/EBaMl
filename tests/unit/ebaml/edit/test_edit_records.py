@@ -5,6 +5,7 @@ import pytest
 
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.exceptions import HistoryError
+from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.constraints import Bounded, Constraint, FixedScore, MaxStep, Monotone, Unused
 from ebaml.edit.edit_records import (
     CONSTRAINT_TYPES,
@@ -44,6 +45,9 @@ EXAMPLES: list[Edit] = [
     Interpolate("score", Bins(2, 9)),
     FitLine("score", ValueInterval()),
     Clip("age", EveryBin(), -1.0, 1.0),
+    SplitBin("age", 0.25),
+    Rebin("score", Bins(1, 4), 2),
+    ExtendRange("age", None, 9.5),
     LimitSteps("score", 0.2, Bins(0, 5)),
     Scale("score", -2.0),
     ZeroTerm("grade"),
