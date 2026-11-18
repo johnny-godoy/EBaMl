@@ -17,7 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import TextContent, TextResourceContents
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import HistoryError
+from ebaml.core.exceptions import DataFileError, HistoryError
 from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
@@ -48,6 +48,8 @@ EDIT_TOOL_NAMES = {
     "checkout_edit",
     "list_edits",
     "check_constraints",
+    "get_edit_effect",
+    "get_affected_profile",
 }
 LOW_BINS: dict[str, object] = {
     "kind": "Shift",
@@ -302,6 +304,28 @@ def test_main_loads_the_model_and_runs_the_server(
     main(["--model", str(tmp_path / "model.joblib"), "--data", str(tmp_path / "data.csv"), "--llm", "ollama/llama3"])
     main(["--model", str(tmp_path / "model.joblib"), "--transport", "streamable-http"])
     assert [transport for _, transport in started] == ["stdio", "streamable-http"]
+
+
+def test_main_reads_the_label_column_and_refuses_one_that_the_data_lacks(
+    continuous_ebm: FittedClassifier,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ebm, data = continuous_ebm
+    save_model(ebm, tmp_path / "model.joblib")
+    data.assign(outcome=ebm.predict(data)).to_csv(tmp_path / "data.csv", index=False)
+    started: list[str] = []
+
+    def fake_run(_self: MCPServer, transport: str, **_address: str | int) -> None:
+        started.append(transport)
+
+    monkeypatch.setattr(MCPServer, "run", fake_run)
+    arguments = ["--model", str(tmp_path / "model.joblib"), "--data", str(tmp_path / "data.csv")]
+    main([*arguments, "--labels", "outcome"])
+    assert len(started) == 1
+    with pytest.raises(DataFileError, match="The label column 'income' is not in the data"):
+        main([*arguments, "--labels", "income"])
+    assert len(started) == 1
 
 
 @pytest.mark.parametrize("transport", ["stdio", "streamable-http"])
@@ -565,6 +589,20 @@ async def test_check_constraints_reports_an_unknown_kind_as_a_tool_error(binary_
     error, text = await _call(binary_server, "check_constraints", {"constraints": [{"kind": "Pretty"}]})
     assert error
     assert "The constraint needs a field 'kind' with one of" in text
+
+
+async def test_an_agent_reads_the_effect_of_an_edit_and_the_subgroups_that_it_reaches(binary_server: MCPServer) -> None:
+    await _call(binary_server, "apply_edit", {"edit": LOW_BINS, "reason": "Low values are rare"})
+    error, text = await _call(binary_server, "get_edit_effect", {"subgroup_feature": "c", "subgroup_value": "x"})
+    effect = orjson.loads(text)
+    assert not error
+    assert [scope["scope"] for scope in effect["effect"]["scopes"]] == ["all rows", "affected rows", "subgroup"]
+    assert "no label column" in effect["note"]
+    profile = orjson.loads((await _call(binary_server, "get_affected_profile"))[1])
+    assert profile["profile"]["edited_feature"] == "a"
+    half_error, half_text = await _call(binary_server, "get_edit_effect", {"subgroup_feature": "c"})
+    assert half_error
+    assert "A subgroup needs both" in half_text
 
 
 async def test_the_edit_tools_report_a_bad_call_as_a_tool_error_that_says_how_to_repair_it(
