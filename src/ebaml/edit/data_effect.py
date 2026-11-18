@@ -20,7 +20,8 @@ class RowChanges:
     """How an edit changes the predictions for a set of rows.
 
     ``value`` is the probability of the positive class for a classifier, and the predicted value for a regressor.
-    ``rows_with_changed_class`` is ``None`` for a regressor, which has no class.
+    The three counts of classes are ``None`` for a regressor, which has no class. The positive class is the second
+    class of ``classes_``.
 
     Attributes
     ----------
@@ -34,6 +35,10 @@ class RowChanges:
         The largest absolute change of the value in one row.
     mean_value_change: float
         The mean change of the value over all rows. A positive number means that the edit raises the value on average.
+    rows_to_positive_class: int | None
+        The number of rows whose predicted class becomes the positive class.
+    rows_to_negative_class: int | None
+        The number of rows whose predicted class stops being the positive class.
 
     """
 
@@ -42,6 +47,8 @@ class RowChanges:
     rows_with_changed_class: int | None
     largest_value_change: float
     mean_value_change: float
+    rows_to_positive_class: int | None = None
+    rows_to_negative_class: int | None = None
 
 
 def row_changes(before: ExplainableBoostingModel, after: ExplainableBoostingModel, data: Frame) -> RowChanges:
@@ -82,15 +89,22 @@ def row_changes(before: ExplainableBoostingModel, after: ExplainableBoostingMode
         return np.asarray(model.predict(rows), dtype=float)
 
     value_change = values(after) - values(before)
-    class_change = (
-        int(np.count_nonzero(np.asarray(after.predict(rows)) != np.asarray(before.predict(rows))))
-        if isinstance(before, ExplainableBoostingClassifier)
-        else None
-    )
+    class_counts: dict[str, int | None] = dict.fromkeys(("changed", "to_positive", "to_negative"))
+    if isinstance(before, ExplainableBoostingClassifier):
+        positive = before.classes_[1]
+        was_positive: npt.NDArray[np.bool_] = np.asarray(before.predict(rows)) == positive
+        is_positive: npt.NDArray[np.bool_] = np.asarray(after.predict(rows)) == positive
+        class_counts = {
+            "changed": int(np.count_nonzero(was_positive != is_positive)),
+            "to_positive": int(np.count_nonzero(is_positive & ~was_positive)),
+            "to_negative": int(np.count_nonzero(was_positive & ~is_positive)),
+        }
     return RowChanges(
         row_count=len(value_change),
         rows_with_changed_value=int(np.count_nonzero(value_change)),
-        rows_with_changed_class=class_change,
+        rows_with_changed_class=class_counts["changed"],
         largest_value_change=float(np.abs(value_change).max(initial=0.0)),
         mean_value_change=float(value_change.mean()) if len(value_change) else 0.0,
+        rows_to_positive_class=class_counts["to_positive"],
+        rows_to_negative_class=class_counts["to_negative"],
     )

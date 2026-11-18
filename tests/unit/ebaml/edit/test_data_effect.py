@@ -1,5 +1,7 @@
 """Tests for the effect of an edit on rows of data."""
 
+import copy
+
 import narwhals as nw
 import numpy as np
 import polars as pl
@@ -56,7 +58,7 @@ def test_an_edit_that_changes_no_score_reaches_no_row(
     edit_data: PandasFrame,
 ) -> None:
     changes = _changes(edit_ebm, Shift("score", WholeGraph(), 0.0), _frame(edit_data))
-    assert changes == RowChanges(len(edit_data), 0, 0, 0.0, 0.0)
+    assert changes == RowChanges(len(edit_data), 0, 0, 0.0, 0.0, 0, 0)
 
 
 def test_a_polars_frame_with_more_columns_and_another_order_gives_the_same_count(
@@ -84,7 +86,7 @@ def test_data_with_no_row_gives_a_count_of_zero(
     edit_data: PandasFrame,
 ) -> None:
     changes = _changes(edit_ebm, Shift("score", Bins(2, 4), -0.5), _frame(edit_data.head(0)))
-    assert changes == RowChanges(0, 0, 0, 0.0, 0.0)
+    assert changes == RowChanges(0, 0, 0, 0.0, 0.0, 0, 0)
 
 
 def test_data_without_a_column_of_the_model_is_an_error(
@@ -93,3 +95,17 @@ def test_data_without_a_column_of_the_model_is_an_error(
 ) -> None:
     with pytest.raises(InvalidInstanceError, match=r"no column for these features: \['grade'\]"):
         _changes(edit_ebm, Shift("score", Bins(2, 4), -0.5), _frame(edit_data.drop(columns="grade")))
+
+
+def test_the_class_changes_are_counted_in_each_direction(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    raised = copy.deepcopy(edit_ebm)
+    Shift("age", WholeGraph(), 3.0).run(raised)
+    up = row_changes(edit_ebm, raised, _frame(edit_data))
+    down = row_changes(raised, edit_ebm, _frame(edit_data))
+    assert up.rows_to_positive_class == up.rows_with_changed_class == down.rows_to_negative_class
+    assert up.rows_to_negative_class == down.rows_to_positive_class == 0
+    assert up.rows_to_positive_class is not None
+    assert up.rows_to_positive_class > 0
