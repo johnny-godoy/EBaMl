@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.3'></a>
+## [0.8.3] - 2026-11-18
+
+### Added
+
+- The edits `Clip` and `LimitSteps` keep the scores of a graph in a range and limit the step between neighbour bins.
+- The selection `EveryBin` selects the missing bin, every real bin and the unseen bin of a feature.
+
+- Business constraints `Monotone`, `MaxStep`, `Bounded`, `FixedScore` and `Unused`. `check_constraints` finds the
+  constraints that a model breaks, names the bins that break each one, and gives the edit that repairs it.
+
+- The MCP tool `check_constraints` finds the business constraints that the model breaks. Each violation holds the edit
+  that repairs it, in the form that `preview_edit` and `apply_edit` take.
+
+- The edit `AssignScores` sets each selected score to its own value.
+
+- `load_gamchanger` reads a `.gamchanger` file of GAM Changer and builds the edits of the newest commit of each
+  feature. `apply_gamchanger` applies them to an `EditSession`, with the GAM Changer description as the reason. The
+  loader refuses a file of another model, and a commit that changes the bin edges.
+
+### Fixed
+
+- The descriptions of the MCP edit tools give the real default of each field. They showed "whole graph" as the
+  default of the bounds of `ValueInterval`.
+
 <a id='changelog-0.8.2'></a>
 ## [0.8.2] - 2026-11-14
 
