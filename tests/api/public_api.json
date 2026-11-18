@@ -621,6 +621,20 @@
     "kind": "class",
     "signature": "(feature: str, commit_type: str, description: str, reviewed: bool, time: datetime.datetime, commit_hash: str, edits: tuple[ebaml.edit.edits.Edit, ...]) -> None"
   },
+  "GamChangerExport": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "path: <class 'pathlib._local.Path'>",
+      "commit_count: <class 'int'>",
+      "sample_count: <class 'int'>",
+      "synthetic_samples: <class 'bool'>",
+      "left_out: tuple[str, ...]"
+    ],
+    "kind": "class",
+    "signature": "(path: pathlib._local.Path, commit_count: int, sample_count: int, synthetic_samples: bool, left_out: tuple[str, ...]) -> None"
+  },
   "GraphOptions": {
     "bases": [
       "object"
@@ -1536,6 +1550,10 @@
   "sample_size_word": {
     "kind": "function",
     "signature": "(n_samples: int) -> str"
+  },
+  "save_gamchanger": {
+    "kind": "function",
+    "signature": "(session: ebaml.edit.edit_session.EditSession, path: str | os.PathLike[str], data: Frame | None = None, labels: collections.abc.Sequence[FeatureValue] | NDArray[numpy.generic] | None = None) -> ebaml.edit.gamchanger_export.GamChangerExport"
   },
   "strength_word": {
     "kind": "function",

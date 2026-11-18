@@ -79,6 +79,7 @@ from ebaml.edit.edits import (
     Shift,
     ZeroTerm,
 )
+from ebaml.edit.gamchanger_export import GamChangerExport, save_gamchanger
 from ebaml.edit.gamchanger_files import GamChangerCommit, apply_gamchanger, load_gamchanger
 from ebaml.edit.history import EditEntry, HistoryEntry, HistoryRow, SaveEntry
 from ebaml.edit.selections import (
@@ -201,6 +202,7 @@ __all__ = [
     "FitLine",
     "FixedScore",
     "GamChangerCommit",
+    "GamChangerExport",
     "GraphOptions",
     "GraphTextError",
     "GreedyCover",
@@ -289,6 +291,7 @@ __all__ = [
     "resolve_audience",
     "round_value",
     "sample_size_word",
+    "save_gamchanger",
     "strength_word",
 ]
 
