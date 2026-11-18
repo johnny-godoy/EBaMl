@@ -300,7 +300,7 @@ reason, and the server asks a person to confirm the edits before it saves the mo
 | `align` | `Align`, or `SetScores` for a typed value |
 | `delete` | `SetScores` with value 0, or `ZeroTerm` |
 | `equal-interpolate`, `equal-regression` | `Rebin`, then `Interpolate` or `FitLine` on the new bins |
-| `.gamchanger` files | `load_gamchanger` and `apply_gamchanger`. |
+| `.gamchanger` files | `load_gamchanger` and `apply_gamchanger` read them, and `save_gamchanger` writes them. |
 
 EBaMl differs from GAM Changer in these points:
 
@@ -364,5 +364,34 @@ The result differs from `get_edited_model` in these points:
 - A commit of `equal-interpolate` or `equal-regression` changes the bin edges. `load_gamchanger` loads it as a
   `Rebin` of the range that the commit replaced, followed by the scores of the commit.
 - The missing bin and the unseen bin keep their scores, because GAM Changer cannot edit them.
+
+### Save a `.gamchanger` file
+
+`save_gamchanger` writes the original model and the applied edits of a session as a file that the GAM Changer widget
+opens. A person can then check the edits in the widget, and `load_gamchanger` reads the file back.
+
+If you pass `data`, the file holds those rows in plain text. A `.gamchanger` file of personal data is personal data, so
+share it as you share the data. Without `data`, the file holds one synthetic row for each bin number, made from the
+bins of the model and labelled with the predictions of the original model, because the widget needs rows to start.
+
+The file cannot hold everything that EBaMl edits. The result lists each part that the file leaves out, in `left_out`:
+
+- the edited scores of the missing bin and the unseen bin, which GAM Changer cannot show;
+- the pair terms, so the metrics of the widget leave out their effect;
+- the edits that remove terms and name no feature;
+- the rows of the data with a missing value, which the widget cannot read.
+
+GAM Changer cannot remove a term, so a removed feature becomes a graph of zeros. `load_gamchanger` cannot read back a
+commit whose new bins are not of equal width, after `SplitBin` or `ExtendRange`.
+
+```python
+from pathlib import Path
+from tempfile import mkdtemp
+
+from ebaml import save_gamchanger
+
+export = save_gamchanger(session, Path(mkdtemp()) / "edits.gamchanger")
+print(export.commit_count, export.sample_count, export.left_out)
+```
 
 The [notebook](editing-notebook.md) shows the edits of this page with the report after each edit.
