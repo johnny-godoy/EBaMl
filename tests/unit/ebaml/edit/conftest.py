@@ -87,6 +87,26 @@ def edit_regressor(edit_data: PandasFrame) -> ExplainableBoostingRegressor:
 
 
 @pytest.fixture(scope="module")
+def gamchanger_ebm(edit_data: PandasFrame) -> ExplainableBoostingClassifier:
+    """Give a model that GAM Changer can open: continuous and nominal features, a missing value and a pair term.
+
+    Returns
+    -------
+    ExplainableBoostingClassifier
+        The fitted model.
+
+    """
+    data = edit_data[["age", "score", "group"]]
+    random_generator = np.random.default_rng(5)
+    signal = np.nan_to_num(data["age"].to_numpy()) + (data["group"] == "x").to_numpy()
+    target = ((signal + random_generator.normal(size=len(data))) > 0).astype(int)
+    model = ExplainableBoostingClassifier(interactions=1, random_state=0, outer_bags=2, feature_types=None)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return model.fit(data, target)
+
+
+@pytest.fixture(scope="module")
 def interpret_monotonized(edit_ebm: ExplainableBoostingClassifier) -> ExplainableBoostingClassifier:
     """Give a model that ``interpret`` monotonized, so its uncertainty attributes are ``None``.
 

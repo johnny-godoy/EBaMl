@@ -6,7 +6,6 @@ that a file saved by GAM Changer 0.1.13 holds. The builder shares no code with `
 """
 
 import copy
-import warnings
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,31 +22,10 @@ from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores
 from ebaml.edit.gamchanger_files import GamChangerCommit, apply_gamchanger, load_gamchanger
 from ebaml.edit.selections import Bins, Categories
-from tests.unit.ebaml.conftest import PandasFrame
 from tests.unit.ebaml.edit.conftest import fixed_clock
 
 type Document = dict[str, JSONValue]
 TIME_MS = 1794676628395
-
-
-@pytest.fixture(scope="module")
-def gamchanger_ebm(edit_data: PandasFrame) -> ExplainableBoostingClassifier:
-    """Give a model that GAM Changer can open: continuous and nominal features, a missing value and a pair term.
-
-    Returns
-    -------
-    ExplainableBoostingClassifier
-        The fitted model.
-
-    """
-    data = edit_data[["age", "score", "group"]]
-    random_generator = np.random.default_rng(5)
-    signal = np.nan_to_num(data["age"].to_numpy()) + (data["group"] == "x").to_numpy()
-    target = ((signal + random_generator.normal(size=len(data))) > 0).astype(int)
-    model = ExplainableBoostingClassifier(interactions=1, random_state=0, outer_bags=2, feature_types=None)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        return model.fit(data, target)
 
 
 def _main_term(ebm: ExplainableBoostingClassifier | ExplainableBoostingRegressor, feature_index: int) -> int:
