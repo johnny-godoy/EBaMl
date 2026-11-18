@@ -18,6 +18,7 @@ import pytest
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import HistoryError
+from ebaml.edit.bin_edits import Rebin
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores
 from ebaml.edit.gamchanger_files import GamChangerCommit, apply_gamchanger, load_gamchanger
@@ -268,14 +269,74 @@ def test_apply_sets_the_scores_of_the_file_and_keeps_the_full_precision_of_the_o
     assert np.abs(after[1:-1] - np.round(after[1:-1], 4)).max() <= 0.00005
 
 
-def test_a_commit_that_changes_the_bin_edges_is_refused_until_ebaml_can_change_bins(
+def _equal_bins(
+    ebm: ExplainableBoostingClassifier,
+    first: int,
+    stop: int,
+    new_scores: Sequence[float],
+) -> tuple[list[float], list[float]]:
+    """Make the points of an equal-interpolate commit: bins ``first`` to ``stop - 1`` become equal bins.
+
+    Returns
+    -------
+    tuple[list[float], list[float]]
+        The left edges and the scores of the commit, as GAM Changer writes them.
+
+    """
+    places, scores = _left_edges(ebm, "age"), _rounded(ebm, "age")
+    right = places[stop] if stop < len(places) else float(ebm.feature_bounds_[0][1])
+    new_places = np.linspace(places[first], right, len(new_scores) + 1)[:-1].tolist()
+    return places[:first] + new_places + places[stop:], scores[:first] + list(new_scores) + scores[stop:]
+
+
+@pytest.mark.parametrize(("first", "stop"), [(2, 8), (4, None)], ids=["middle", "to the last bin"])
+def test_an_equal_bins_commit_becomes_a_rebin_and_the_scores_of_the_commit(
+    gamchanger_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+    first: int,
+    stop: int | None,
+) -> None:
+    bin_count = len(_left_edges(gamchanger_ebm, "age"))
+    end = bin_count if stop is None else stop
+    places, scores = _equal_bins(gamchanger_ebm, first, end, [0.1, 0.2, 0.3])
+    entry = _entry("age", "equal-interpolate", _continuous_points(places, scores))
+    (commit,) = load_gamchanger(_write(tmp_path, _document(gamchanger_ebm, entry)), gamchanger_ebm)
+    assert commit.edits == (
+        Rebin("age", Bins(first, end - 1), 3),
+        AssignScores("age", Bins(first, first + 2), (0.1, 0.2, 0.3)),
+    )
+    session = EditSession(gamchanger_ebm, clock=fixed_clock())
+    apply_gamchanger(session, [commit])
+    edited = session.model
+    assert np.asarray(edited.bins_[0][0], dtype=float) == pytest.approx(places[1:])
+    assert np.round(edited.term_scores_[0][1:-1], 4).tolist() == pytest.approx(scores)
+
+
+def test_new_bins_that_are_not_of_equal_width_are_refused(
+    gamchanger_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    places, scores = _equal_bins(gamchanger_ebm, 2, 8, [0.1, 0.2, 0.3])
+    places[3] += (places[4] - places[3]) / 3
+    path = _write(
+        tmp_path,
+        _document(gamchanger_ebm, _entry("age", "equal-interpolate", _continuous_points(places, scores))),
+    )
+    with pytest.raises(HistoryError, match=r"The commit 0123456 \(equal-interpolate\) changes the bin edges of 'age'"):
+        load_gamchanger(path, gamchanger_ebm)
+
+
+def test_a_commit_that_moves_the_low_bound_is_refused(
     gamchanger_ebm: ExplainableBoostingClassifier,
     tmp_path: Path,
 ) -> None:
     places, scores = _left_edges(gamchanger_ebm, "age"), _rounded(gamchanger_ebm, "age")
-    entry = _entry("age", "equal-interpolate", _continuous_points(places[:3] + places[5:], scores[:3] + scores[5:]))
-    path = _write(tmp_path, _document(gamchanger_ebm, entry))
-    with pytest.raises(HistoryError, match=r"The commit 0123456 \(equal-interpolate\) changes the bin edges of 'age'"):
+    places[0] -= 1.0
+    path = _write(
+        tmp_path,
+        _document(gamchanger_ebm, _entry("age", "equal-interpolate", _continuous_points(places, scores))),
+    )
+    with pytest.raises(HistoryError, match="in a way that no Rebin repeats"):
         load_gamchanger(path, gamchanger_ebm)
 
 

@@ -9,13 +9,15 @@ commit that the person checked out. It differs from ``get_edited_model`` in thre
   Changer writes rounded scores. The other bins keep their full precision, so the result differs from
   ``get_edited_model`` by up to 0.00005 on those bins.
 - It refuses a file that GAM Changer made from another model: other features, other bin edges, or other scores.
-- It refuses a commit that changes the bin edges (``equal-interpolate`` and ``equal-regression``), because EBaMl has no
-  edit that changes the bins yet.
+- It loads a commit that changes the bin edges (``equal-interpolate`` and ``equal-regression``) as a ``Rebin`` of the
+  range that the commit replaced, followed by the scores of the commit. It refuses new edges that are not of equal
+  width, because no GAM Changer tool makes them and no ``Rebin`` repeats them.
 
 GAM Changer cannot edit the missing bin or the unseen bin, so the edits leave both as they are.
 """
 
 import abc
+import copy
 import os
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
@@ -29,6 +31,7 @@ import orjson
 
 from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONValue
 from ebaml.core.exceptions import HistoryError
+from ebaml.edit.bin_edits import Rebin
 from ebaml.edit.edit_report import EditReport
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores, Edit
@@ -185,6 +188,56 @@ class _FeatureFormat(abc.ABC):
         """
 
 
+def _shared_count(first: npt.NDArray[np.float64], second: npt.NDArray[np.float64]) -> int:
+    """Count the leading values that two lists of edges share.
+
+    Returns
+    -------
+    int
+        The number of leading positions where the edges are equal, within the tolerance.
+
+    """
+    length = min(len(first), len(second))
+    equal = np.isclose(first[:length], second[:length], rtol=_EDGE_TOLERANCE, atol=0.0)
+    return int(np.argmin(equal)) if not equal.all() else length
+
+
+def _rebin_of(view: TermView, places: npt.NDArray[np.float64], commit: str) -> Rebin:
+    """Find the ``Rebin`` that turns the bins of the model into the bins of a commit.
+
+    GAM Changer keeps the left edge of the first selected bin and the bins after the selection, and replaces the bins
+    between by bins of equal width. So the edges that both lists share at the start and at the end stay, and the bins
+    between them are the ones that the commit replaced.
+
+    Returns
+    -------
+    Rebin
+        The edit.
+
+    Raises
+    ------
+    HistoryError
+        If the new bins between the shared edges are not of equal width.
+
+    """
+    old_edges = view.left_edges()
+    prefix = _shared_count(old_edges, places)
+    suffix = _shared_count(old_edges[prefix:][::-1], places[prefix:][::-1])
+    first, old_last, new_last = prefix - 1, len(old_edges) - suffix - 1, len(places) - suffix - 1
+    right = old_edges[old_last + 1] if suffix else view.bin_edges()[-1][1]
+    new_count = new_last - first + 1
+    if first >= 0 and new_count >= 1:
+        expected = np.linspace(old_edges[first], right, new_count + 1)[:-1]
+        if np.allclose(places[first : new_last + 1], expected, rtol=_EDGE_TOLERANCE, atol=_EDGE_TOLERANCE * abs(right)):
+            return Rebin(view.feature_name, Bins(first, old_last), new_count)
+    msg = (
+        f"The commit {commit} changes the bin edges of {view.feature_name!r} ({len(old_edges)} bins become"
+        f" {len(places)}) in a way that no Rebin repeats: the new bins are not of equal width. GAM Changer makes such"
+        " bins with no tool, so the file may be damaged."
+    )
+    raise HistoryError(msg)
+
+
 class _ContinuousFormat(_FeatureFormat):
     """A continuous feature: ``binEdge`` in the model data, and a linked list of points that starts at key ``0``."""
 
@@ -216,17 +269,17 @@ class _ContinuousFormat(_FeatureFormat):
     def edits(self, view: TermView, points: _Points, commit: str) -> tuple[Edit, ...]:
         left_edges = view.left_edges()
         places = np.asarray(points.places, dtype=float)
+        bin_edits: tuple[Edit, ...] = ()
         if len(places) != len(left_edges) or not np.allclose(places, left_edges, rtol=_EDGE_TOLERANCE, atol=0.0):
-            msg = (
-                f"The commit {commit} changes the bin edges of {view.feature_name!r} ({len(left_edges)} bins become"
-                f" {len(places)}). EBaMl has no edit that changes the bins yet, so it cannot load this commit."
-                " Remove the commit in GAM Changer, or apply the other commits by hand."
-            )
-            raise HistoryError(msg)
+            rebin = _rebin_of(view, places, commit)
+            rebinned = copy.deepcopy(view.ebm)
+            rebin.run(rebinned)
+            view = term_view(rebinned, view.feature_name)
+            bin_edits = (rebin,)
         changed = np.flatnonzero(_changed(_rounded_scores(view), points.scores))
         # one edit for each range of neighbour bins, so that no unchanged bin loses its precision
         runs = np.split(changed, np.flatnonzero(np.diff(changed) > 1) + 1) if len(changed) else []
-        return tuple(
+        return bin_edits + tuple(
             AssignScores(
                 view.feature_name,
                 Bins(int(run[0]), int(run[-1])),
@@ -363,7 +416,8 @@ def load_gamchanger(path: str | os.PathLike[str], ebm: ExplainableBoostingModel)
     Raises
     ------
     HistoryError
-        If the file is not a GAM Changer document, if it does not fit the model, or if a commit changes the bin edges.
+        If the file is not a GAM Changer document, if it does not fit the model, or if a commit changes the bin edges
+        in a way that no ``Rebin`` repeats.
 
     """
     try:
