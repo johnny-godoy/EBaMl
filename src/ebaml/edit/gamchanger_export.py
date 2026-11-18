@@ -9,8 +9,7 @@ widget does. The format follows a file that GAM Changer 0.1.13 saved.
 The file cannot hold everything that EBaMl edits. The result names each part that it leaves out, so nothing is lost in
 silence: the missing bin and the unseen bin, which GAM Changer cannot show; the pair terms, which this file leaves out,
 so the metrics of the widget leave out their effect; the edits that name terms and no feature; and the rows of the data
-with a missing value, which the widget cannot read. ``load_gamchanger`` reads the file back, except a commit whose new
-bins are not of equal width (after ``SplitBin`` or ``ExtendRange``).
+with a missing value, which the widget cannot read. ``load_gamchanger`` reads the file back.
 """
 
 import hashlib

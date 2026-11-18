@@ -381,8 +381,7 @@ The file cannot hold everything that EBaMl edits. The result lists each part tha
 - the edits that remove terms and name no feature;
 - the rows of the data with a missing value, which the widget cannot read.
 
-GAM Changer cannot remove a term, so a removed feature becomes a graph of zeros. `load_gamchanger` cannot read back a
-commit whose new bins are not of equal width, after `SplitBin` or `ExtendRange`.
+GAM Changer cannot remove a term, so a removed feature becomes a graph of zeros.
 
 ```python
 from pathlib import Path

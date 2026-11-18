@@ -14,7 +14,7 @@ import pytest
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
-from ebaml.edit.bin_edits import Rebin
+from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import Monotonize, RemoveFeature, RemoveTerms, SetScores, Shift
 from ebaml.edit.gamchanger_export import save_gamchanger
@@ -198,6 +198,31 @@ def test_the_file_reads_back_as_the_edits_of_the_session(
             term_view(session.model, feature).scores[1:-1],
             abs=5e-5,
         )
+
+
+def test_the_bins_of_a_split_and_an_extension_read_back(
+    gamchanger_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    session = EditSession(gamchanger_ebm, clock=fixed_clock())
+    view = term_view(gamchanger_ebm, "age")
+    left, right = view.bin_edges()[4]
+    high = view.bin_edges()[-1][1]
+    session.apply(SplitBin("age", (left + right) / 2), "Split a bin")
+    session.apply(ExtendRange("age", high=high + 5.0), "Ages above the data")
+    last = len(session.model.bins_[0][0])
+    session.apply(SetScores("age", Bins(last, last), 1.5), "Ages above the data score 1.5")
+    save_gamchanger(session, tmp_path / "edit.gamchanger")
+    reloaded = EditSession(gamchanger_ebm, clock=fixed_clock())
+    apply_gamchanger(reloaded, load_gamchanger(tmp_path / "edit.gamchanger", gamchanger_ebm))
+    assert np.asarray(reloaded.model.bins_[0][0]).tolist() == pytest.approx(
+        np.asarray(session.model.bins_[0][0]).tolist(),
+    )
+    assert np.asarray(reloaded.model.feature_bounds_[0]).tolist() == pytest.approx([view.bin_edges()[0][0], high + 5.0])
+    assert term_view(reloaded.model, "age").scores[1:-1] == pytest.approx(
+        term_view(session.model, "age").scores[1:-1],
+        abs=5e-5,
+    )
 
 
 def test_without_data_the_file_holds_one_synthetic_row_for_each_bin_number_with_the_predicted_class(
