@@ -230,8 +230,9 @@ dist = [
 [tool.vulture]
 # reason: recurring patterns: fixtures are used through pytest's name-based injection, and the functions that
 # @server.tool and @server.resource register are called by the MCP SDK by name, and cyclopts calls the functions that
-# @app.default and @app.command register from the command line. Vulture cannot see any of them.
-ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*"]
+# @app.default and @app.command register from the command line, and functools.singledispatch calls the functions that
+# @<function>.register adds for a class (local_kinds, edit_effect). Vulture cannot see any of them.
+ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*", "@*.register*"]
 # reason: recurring patterns: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, Python calls the
 # module hooks __getattr__ and __dir__ (PEP 562) by name, and http.server calls the do_* and log_message methods of a
 # request handler by name. Code never references them, so vulture reports them as unused.

@@ -10,6 +10,20 @@
     "kind": "exception",
     "signature": null
   },
+  "AffectedProfile": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "revision: <class 'str'>",
+      "edited_feature: str | None",
+      "affected_rows: <class 'int'>",
+      "total_rows: <class 'int'>",
+      "features: tuple[ebaml.edit.edit_effect.FeatureProfile, ...]"
+    ],
+    "kind": "class",
+    "signature": "(revision: str, edited_feature: str | None, affected_rows: int, total_rows: int, features: tuple[ebaml.edit.edit_effect.FeatureProfile, ...]) -> None"
+  },
   "Align": {
     "bases": [
       "Edit",
@@ -128,6 +142,19 @@
     "kind": "class",
     "signature": "(group: int, alternative: int) -> None"
   },
+  "ClassifierMetrics": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "accuracy: <class 'float'>",
+      "balanced_accuracy: <class 'float'>",
+      "roc_auc: float | None",
+      "confusion_matrix: <class 'ebaml.edit.edit_effect.ConfusionMatrix'>"
+    ],
+    "kind": "class",
+    "signature": "(accuracy: float, balanced_accuracy: float, roc_auc: float | None, confusion_matrix: ebaml.edit.edit_effect.ConfusionMatrix) -> None"
+  },
   "Clip": {
     "bases": [
       "Edit",
@@ -152,6 +179,19 @@
     ],
     "kind": "class",
     "signature": "(fixed: list[str], share: float) -> None"
+  },
+  "ConfusionMatrix": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "true_negative: <class 'int'>",
+      "false_positive: <class 'int'>",
+      "false_negative: <class 'int'>",
+      "true_positive: <class 'int'>"
+    ],
+    "kind": "class",
+    "signature": "(true_negative: int, false_positive: int, false_negative: int, true_positive: int) -> None"
   },
   "Constraint": {
     "bases": [
@@ -381,6 +421,22 @@
     "kind": "class",
     "signature": "()"
   },
+  "EditEffect": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "revision: <class 'str'>",
+      "last_revision: str | None",
+      "edited_feature: str | None",
+      "changes_since_original: <class 'ebaml.edit.data_effect.RowChanges'>",
+      "changes_since_last: ebaml.edit.data_effect.RowChanges | None",
+      "scopes: tuple[ebaml.edit.edit_effect.ScopeMetrics, ...]",
+      "subgroup: ebaml.edit.edit_effect.Subgroup | None"
+    ],
+    "kind": "class",
+    "signature": "(revision: str, last_revision: str | None, edited_feature: str | None, changes_since_original: ebaml.edit.data_effect.RowChanges, changes_since_last: ebaml.edit.data_effect.RowChanges | None, scopes: tuple[ebaml.edit.edit_effect.ScopeMetrics, ...], subgroup: ebaml.edit.edit_effect.Subgroup | None) -> None"
+  },
   "EditEntry": {
     "bases": [
       "HistoryEntry",
@@ -494,6 +550,20 @@
     ],
     "kind": "class",
     "signature": "(prediction: str, counterfactual: str, sufficient_reason: str, completions: str) -> None"
+  },
+  "FeatureProfile": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "bins: tuple[str, ...]",
+      "affected_shares: tuple[float, ...]",
+      "all_shares: tuple[float, ...]",
+      "distance: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, bins: tuple[str, ...], affected_shares: tuple[float, ...], all_shares: tuple[float, ...], distance: float) -> None"
   },
   "FeatureType": {
     "bases": [
@@ -1070,6 +1140,18 @@
     "kind": "class",
     "signature": "() -> None"
   },
+  "RegressorMetrics": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "rmse: <class 'float'>",
+      "mae: <class 'float'>",
+      "mape: float | None"
+    ],
+    "kind": "class",
+    "signature": "(rmse: float, mae: float, mape: float | None) -> None"
+  },
   "RemoveFeature": {
     "bases": [
       "Edit",
@@ -1134,6 +1216,20 @@
     ],
     "kind": "class",
     "signature": "(feature: str, factor: float) -> None"
+  },
+  "ScopeMetrics": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "scope: <class 'str'>",
+      "row_count: <class 'int'>",
+      "original: Metrics | None",
+      "last: Metrics | None",
+      "current: Metrics | None"
+    ],
+    "kind": "class",
+    "signature": "(scope: str, row_count: int, original: Metrics | None, last: Metrics | None, current: Metrics | None) -> None"
   },
   "SearchLimitError": {
     "bases": [
@@ -1234,6 +1330,17 @@
       "FIRST"
     ],
     "signature": "(*values)"
+  },
+  "Subgroup": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "value: str | float"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, value: str | float) -> None"
   },
   "SufficientReason": {
     "bases": [
@@ -1362,6 +1469,10 @@
     "kind": "str",
     "name": "__version__"
   },
+  "affected_profile": {
+    "kind": "function",
+    "signature": "(session: ebaml.edit.edit_session.EditSession, data: Frame, *, revision: str = 'current') -> ebaml.edit.edit_effect.AffectedProfile"
+  },
   "apply_gamchanger": {
     "kind": "function",
     "signature": "(session: ebaml.edit.edit_session.EditSession, commits: collections.abc.Sequence[ebaml.edit.gamchanger_files.GamChangerCommit]) -> list[ebaml.edit.edit_report.EditReport]"
@@ -1385,6 +1496,10 @@
   "describe_graph": {
     "kind": "function",
     "signature": "(request: ebaml.llm.requests.DescribeGraphRequest) -> str"
+  },
+  "edit_effect": {
+    "kind": "function",
+    "signature": "(session: ebaml.edit.edit_session.EditSession, data: Frame, labels: collections.abc.Sequence[FeatureValue] | ArrayLike | None = None, subgroup: ebaml.edit.edit_effect.Subgroup | None = None, *, revision: str = 'current') -> ebaml.edit.edit_effect.EditEffect"
   },
   "explain_instance": {
     "kind": "function",
