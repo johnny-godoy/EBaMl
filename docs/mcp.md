@@ -59,6 +59,7 @@ ebaml-mcp --model model.skops --data train.parquet
 | `--data PATH` | A Parquet or CSV file with the rows for the `row` argument of `explain_prediction`. |
 | `--llm PROVIDER/MODEL` | Turn on the LLM tools. See [Choosing the model](providers.md). Without it, the server has no LLM tools. |
 | `--output-dir DIR` | The directory where `save_model` writes the edited model and its history. The server creates it if it does not exist. Without this option, the server has no `save_model` tool. |
+| `--labels COLUMN` | The column of `--data` that holds the true outcome of each row. The effect tools compute the metrics from it. |
 | `--edits PATH` | The history file of an earlier session (`*.history.json`). The server replays it at start, so the work goes on. The server refuses a history that started from another model. |
 | `--transport` | `stdio` (the default) or `streamable-http`. |
 | `--host ADDRESS` | The address of the `streamable-http` transport. The default is `127.0.0.1`, which accepts this computer only. |
@@ -114,6 +115,8 @@ reaches the port can read the model and the rows of the data file.
 | `get_graph` | `feature`, optional `revision`, `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
 | `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level` | The `LocalFacts` and their texts, as JSON. |
 | `list_bins` | `feature`, optional `revision` | The bins of a feature with the number, the edges, the training weight and the score of each bin, and the missing and the unseen bin. |
+| `get_edit_effect` | optional `subgroup_feature`, `subgroup_value`, `revision` | The counts of the rows that the edits change, and with `--labels` the metrics of the original model, the model before the last edit and the current model, in three scopes. It needs `--data`. |
+| `get_affected_profile` | optional `revision` | For each other feature, the mix of its bins among the rows that the last edit changes and among all rows, with the l1 distance. It needs `--data`. |
 | `check_constraints` | `constraints`, optional `revision`, `tolerance` | One violation for each business constraint that the model breaks, with the bins, the excess and the edit that repairs it. It changes nothing. |
 | `preview_edit` | `edit`, optional `revision` | The report of one edit and its effect on the rows of `--data`. It changes nothing. |
 | `apply_edit` | `edit`, `reason`, optional `expected_revision` | Applies one edit to the session copy of the model, and returns the same result as `preview_edit`. |
@@ -289,6 +292,15 @@ main effect only, so a pair term can still use the feature.
 The effect on the data counts the rows whose prediction changes, and for a classifier the rows whose class changes. It
 needs no labels. It does not say whether the edit is good. Without `--data`, the field `effect_on_data` is empty, and
 `effect_on_data_note` says that nobody checked the effect. Tell the person when this happens.
+
+### The effect on the data and on subgroups
+
+`preview_edit` and `apply_edit` count the rows that one edit changes. After an edit, `get_edit_effect` gives the full
+Metric Panel of GAM Changer: the metrics of the original model, the model before the last edit and the current model,
+for all rows, for the rows that the last edit changes, and for a subgroup (`subgroup_feature` and `subgroup_value`).
+Start the server with `--labels` to get the metrics. Without it, the tool counts rows and says that nobody checked the
+accuracy. `get_affected_profile` shows which subgroups the last edit reaches. Tell the person when one feature has a
+large distance, because the edit then reaches one subgroup more than others.
 
 ### Revisions and the history
 

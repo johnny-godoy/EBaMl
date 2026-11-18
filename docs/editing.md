@@ -193,6 +193,41 @@ for violation in check_constraints(session.model, constraints):
 remaining = check_constraints(session.model, constraints)
 ```
 
+## Check the effect on data
+
+A global metric hardly moves when a few bins change, so the harm of an edit shows only in the rows that it reaches or
+in a subgroup. `edit_effect` gives the numbers of the Metric Panel of GAM Changer. It compares three models: the
+original model, the model before the last edit, and the current model. It gives each metric in three scopes: all
+rows, the rows that the last edit changes, and a subgroup that you choose.
+
+| Model | Metrics |
+| --- | --- |
+| Binary classifier | Accuracy, balanced accuracy, ROC AUC and the confusion matrix. |
+| Regressor | RMSE, MAE and MAPE (a share: 0.1 means 10 %). |
+
+Without labels, the result counts the rows whose prediction changes, and for a classifier the rows whose class changes
+in each direction. A row with a missing value stays in every count, because an edit of the missing bin reaches only
+such rows.
+
+`affected_profile` gives the numbers of the Feature Panel. For each other feature, it compares the bins of the rows
+that the last edit changes with the bins of all rows, by the l1 distance of their shares. A large distance means that
+the edit reaches one subgroup more than the others.
+
+```python
+import narwhals as nw
+
+from ebaml import Subgroup, affected_profile, edit_effect
+
+session = EditSession(ebm)
+session.apply(Shift("age", Bins(0, 2), 0.3), "Young passengers were under-estimated")
+rows = nw.from_native(X)
+effect = edit_effect(session, rows, y, Subgroup("siblings", 0))
+for scope in effect.scopes:
+    print(scope.scope, scope.row_count, scope.original.accuracy, scope.current.accuracy)
+profile = affected_profile(session, rows)
+print(profile.features[0].feature, profile.features[0].distance)  # the feature whose mix moves most
+```
+
 ## Uncertainty of an edited bin
 
 A score that a person sets has no fitted uncertainty. So the standard deviation of each edited bin is 0, and
