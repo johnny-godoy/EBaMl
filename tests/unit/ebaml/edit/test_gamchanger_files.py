@@ -17,7 +17,7 @@ import pytest
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import HistoryError
-from ebaml.edit.bin_edits import Rebin
+from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores
 from ebaml.edit.gamchanger_files import GamChangerCommit, apply_gamchanger, load_gamchanger
@@ -290,31 +290,61 @@ def test_an_equal_bins_commit_becomes_a_rebin_and_the_scores_of_the_commit(
     assert np.round(edited.term_scores_[0][1:-1], 4).tolist() == pytest.approx(scores)
 
 
-def test_new_bins_that_are_not_of_equal_width_are_refused(
-    gamchanger_ebm: ExplainableBoostingClassifier,
+def _load_and_apply(
+    ebm: ExplainableBoostingClassifier,
     tmp_path: Path,
-) -> None:
-    places, scores = _equal_bins(gamchanger_ebm, 2, 8, [0.1, 0.2, 0.3])
-    places[3] += (places[4] - places[3]) / 3
-    path = _write(
-        tmp_path,
-        _document(gamchanger_ebm, _entry("age", "equal-interpolate", _continuous_points(places, scores))),
-    )
-    with pytest.raises(HistoryError, match=r"The commit 0123456 \(equal-interpolate\) changes the bin edges of 'age'"):
-        load_gamchanger(path, gamchanger_ebm)
+    entry: Document,
+) -> tuple[GamChangerCommit, ExplainableBoostingClassifier | ExplainableBoostingRegressor]:
+    (commit,) = load_gamchanger(_write(tmp_path, _document(ebm, entry)), ebm)
+    session = EditSession(ebm, clock=fixed_clock())
+    apply_gamchanger(session, [commit])
+    return commit, session.model
 
 
-def test_a_commit_that_moves_the_low_bound_is_refused(
+def test_new_bins_of_unequal_width_become_merges_and_splits(
     gamchanger_ebm: ExplainableBoostingClassifier,
     tmp_path: Path,
 ) -> None:
     places, scores = _left_edges(gamchanger_ebm, "age"), _rounded(gamchanger_ebm, "age")
-    places[0] -= 1.0
-    path = _write(
+    split_at = (places[5] + places[6]) / 3 + places[5] / 3
+    new_places = [*places[:2], *places[4:6], split_at, *places[6:]]
+    new_scores = [*scores[:2], scores[2], scores[4], scores[5], scores[5], *scores[6:]]
+    new_scores = new_scores[: len(new_places)]
+    new_scores[2] = 0.75
+    commit, edited = _load_and_apply(
+        gamchanger_ebm,
         tmp_path,
-        _document(gamchanger_ebm, _entry("age", "equal-interpolate", _continuous_points(places, scores))),
+        _entry("age", "SplitBin", _continuous_points(new_places, new_scores)),
     )
-    with pytest.raises(HistoryError, match="in a way that no Rebin repeats"):
+    assert commit.edits[:2] == (Rebin("age", Bins(1, 3), 1), SplitBin("age", split_at))
+    assert np.asarray(edited.bins_[0][0], dtype=float) == pytest.approx(new_places[1:])
+    assert np.round(edited.term_scores_[0][1:-1], 4).tolist() == pytest.approx(new_scores)
+
+
+def test_a_wider_range_becomes_an_extension(gamchanger_ebm: ExplainableBoostingClassifier, tmp_path: Path) -> None:
+    places, scores = _left_edges(gamchanger_ebm, "age"), _rounded(gamchanger_ebm, "age")
+    old_high = float(gamchanger_ebm.feature_bounds_[0][1])
+    points = _continuous_points([places[0] - 1.0, *places, old_high], [scores[0], *scores, 2.0])
+    _dict_of(points[str(len(places) + 1)])["maxX"] = old_high + 3.0
+    commit, edited = _load_and_apply(gamchanger_ebm, tmp_path, _entry("age", "ExtendRange", points))
+    assert commit.edits[0] == ExtendRange("age", places[0] - 1.0, old_high + 3.0)
+    assert np.asarray(edited.feature_bounds_[0]).tolist() == [places[0] - 1.0, old_high + 3.0]
+    assert float(edited.term_scores_[0][-2]) == pytest.approx(2.0)
+
+
+def _dict_of(value: JSONValue) -> dict[str, JSONValue]:
+    assert isinstance(value, dict)
+    return value
+
+
+def test_a_commit_that_narrows_the_range_is_refused(
+    gamchanger_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    places, scores = _left_edges(gamchanger_ebm, "age"), _rounded(gamchanger_ebm, "age")
+    places[0] += (places[1] - places[0]) / 2
+    path = _write(tmp_path, _document(gamchanger_ebm, _entry("age", "move", _continuous_points(places, scores))))
+    with pytest.raises(HistoryError, match=r"The commit 0123456 \(move\) narrows the range of 'age'"):
         load_gamchanger(path, gamchanger_ebm)
 
 
