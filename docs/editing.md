@@ -83,6 +83,9 @@ Each edit is a frozen class. The table shows the edit of each tool of GAM Change
 | `ZeroTerm(feature)` | Sets every score of the graph to 0. The term stays in the model. | Delete on all bins |
 | `RemoveTerms(terms)`, `RemoveFeature(feature)` | Remove terms from the model. | none |
 | `Recenter(feature)` | Moves the weighted mean of the graph into the intercept. | none |
+| `SplitBin(feature, at)` | Splits the bin that holds a value into two bins with the same score. | none |
+| `Rebin(feature, selection, bin_count)` | Replaces the selected bins by bins of equal width. | Equal bins, with Interpolate or Regression |
+| `ExtendRange(feature, low, high)` | Adds an empty bin below the lowest or above the highest value that the model saw. | none |
 
 ```python
 from ebaml import Align, Clip, EveryBin, FitLine, Interpolate, LimitSteps, MissingBin, SetScores, Shift, ZeroTerm
@@ -121,6 +124,36 @@ keeps its input columns, so the pipeline around it does not change.
 ```python
 session.apply(ZeroTerm("siblings"), "The business must not score on the number of siblings")
 print(session.model.predict_proba(X)[:2])  # the edited model works as a fitted model works
+```
+
+## Change the bins
+
+The edits above keep the bins of the model. Three edits change the bins of a continuous feature. Each one changes the
+cuts, the scores, the bags, the standard deviations and the training weights together. If a pair term reads the same
+cuts as the main effect, the main effect gets its own cuts first, so the pair term does not change.
+
+- `SplitBin` cuts one bin in two. Both parts keep the old score, so the split changes no prediction. A later edit can
+  then give each part its own score.
+- `Rebin` replaces a range of bins by bins of equal width. The score of a new bin is the weighted mean of the old
+  scores that it covers. Follow it with `Interpolate` or `FitLine` to do what the equal-bins tools of GAM Changer do.
+- `ExtendRange` adds a bin beyond the lowest or the highest value that the model saw. The new bin has the score of the
+  outer bin and no training weight, so the edit changes no prediction. Set the score of the new bin with a later edit.
+
+The model keeps the training weight of each bin, not the values of the rows. So an edit that cuts a bin shares the
+weight of the bin by width, as if the values were spread evenly over the bin. This weight is an estimate.
+
+```python
+from ebaml import ExtendRange, Rebin, SplitBin
+
+session = EditSession(ebm)
+cuts = session.model.bins_[1][0]  # the cuts between the bins of fare
+session.apply(SplitBin("fare", (cuts[-2] + cuts[-1]) / 2), "The most expensive tickets have their own price class")
+session.apply(Rebin("fare", Bins(0, 5), 3), "Smooth the cheapest tickets")
+session.apply(Interpolate("fare", Bins(0, 3)), "Draw a straight line over the cheap tickets")
+high = session.model.feature_bounds_[1][1]
+session.apply(ExtendRange("fare", high=high + 100.0), "A fare above every ticket in the data must score too")
+last_bin = len(session.model.bins_[1][0])  # the new bin is the last one
+session.apply(SetScores("fare", Bins(last_bin, last_bin), 0.5), "The highest fares score like first class")
 ```
 
 ## Check business constraints
@@ -231,7 +264,7 @@ reason, and the server asks a person to confirm the edits before it saves the mo
 | `inplace-regression` | `FitLine` |
 | `align` | `Align`, or `SetScores` for a typed value |
 | `delete` | `SetScores` with value 0, or `ZeroTerm` |
-| `equal-interpolate`, `equal-regression` | Not supported yet: they change the bin edges. |
+| `equal-interpolate`, `equal-regression` | `Rebin`, then `Interpolate` or `FitLine` on the new bins |
 | `.gamchanger` files | `load_gamchanger` and `apply_gamchanger`. |
 
 EBaMl differs from GAM Changer in these points:
@@ -293,8 +326,8 @@ The result differs from `get_edited_model` in these points:
 - An edit sets only the bins whose score differs from the score of the model rounded to 4 decimals. The other bins keep
   their full precision, so they differ from `get_edited_model` by up to 0.00005.
 - `load_gamchanger` refuses a file that GAM Changer made from another model: other features, bin edges or scores.
-- `load_gamchanger` refuses a commit of `equal-interpolate` or `equal-regression`, because these change the bin edges,
-  and EBaMl has no edit that changes the bins yet.
+- A commit of `equal-interpolate` or `equal-regression` changes the bin edges. `load_gamchanger` loads it as a
+  `Rebin` of the range that the commit replaced, followed by the scores of the commit.
 - The missing bin and the unseen bin keep their scores, because GAM Changer cannot edit them.
 
 The [notebook](editing-notebook.md) shows the edits of this page with the report after each edit.
