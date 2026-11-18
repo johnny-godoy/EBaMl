@@ -1,12 +1,16 @@
 """Tests for the view of the main-effect term of a feature."""
 
 import itertools
+import warnings
 
+import numpy as np
 import pytest
 
+from ebaml.core.custom_types import PANDAS_NA_TYPE, FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import SelectionError, UnsupportedModelError
 from ebaml.edit.model_view import interaction_names, term_view
+from tests.unit.ebaml.conftest import frame_of_columns
 
 
 def test_the_view_of_a_continuous_feature_counts_the_real_bins_without_the_missing_and_unseen_bin(
@@ -105,3 +109,24 @@ def test_interaction_names_lists_the_pair_terms_of_a_feature(edit_ebm: Explainab
         for feature in name.split(" & "):
             assert name in interaction_names(edit_ebm, feature)
     assert interaction_names(edit_ebm, "age") == tuple(name for name in pair_names if "age" in name.split(" & "))
+
+
+def test_positions_of_bins_each_value_as_interpret_does(edit_ebm: ExplainableBoostingClassifier) -> None:
+    cuts = np.asarray(edit_ebm.bins_[0][0], dtype=float)
+    rows = frame_of_columns({
+        "age": [*cuts[:3].tolist(), np.nan, 99.0, -99.0],
+        "score": [0.0] * 6,
+        "group": np.array(["x", "w", None, np.nan, PANDAS_NA_TYPE(), "z"], dtype=object),
+        "grade": ["low", "mid", "high", "low", "mid", "high"],
+    })
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        contributions = edit_ebm.eval_terms(rows)
+    for feature in ("age", "group"):
+        view = term_view(edit_ebm, feature)
+        positions = view.positions_of(rows[feature].to_numpy())
+        assert view.scores[positions] == pytest.approx(contributions[:, view.term])
+    group = term_view(edit_ebm, "group")
+    missing_values: list[FeatureValue] = ["w", None, float("nan"), PANDAS_NA_TYPE()]
+    assert group.positions_of(missing_values).tolist() == [group.unseen_position, 0, 0, 0]
+    assert term_view(edit_ebm, "age").positions_of(cuts[:2]).tolist() == [2, 3]

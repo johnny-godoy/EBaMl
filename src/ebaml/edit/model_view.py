@@ -5,6 +5,7 @@ bin in ``term_scores_`` is one more than its position in the graph. A *position*
 ``term_scores_``. A *bin number* is an index among the real bins, counted from 0, as in the graph text.
 """
 
+import math
 import operator
 from collections.abc import Sequence
 from typing import cast
@@ -13,7 +14,7 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import PANDAS_NA_TYPE, ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import SelectionError
 from ebaml.graphs.terms import main_term
 
@@ -32,6 +33,11 @@ def _format_number(value: float) -> str:
 
     """
     return format(value, ".6g")
+
+
+def _is_missing(value: FeatureValue) -> bool:
+    # a missing category arrives as None, as NaN from pandas, or as pd.NA from a nullable column
+    return value is None or isinstance(value, PANDAS_NA_TYPE) or (isinstance(value, float) and math.isnan(value))
 
 
 def interval_label(left: float, right: float) -> str:
@@ -151,6 +157,37 @@ class TermView:
             return np.arange(self.real_bin_count, dtype=float)
         msg = f"The feature {self.feature_name!r} is {self.feature_type}, so its bins have no order."
         raise SelectionError(msg)
+
+    def positions_of(self, values: Sequence[FeatureValue] | npt.NDArray[np.generic]) -> npt.NDArray[np.int64]:
+        """Find the bin of each value, as ``interpret`` bins it.
+
+        A value equal to a cut falls in the bin above the cut. A missing value falls in the missing bin, and a category
+        that the model did not see falls in the unseen bin.
+
+        Parameters
+        ----------
+        values : Sequence[FeatureValue] | npt.NDArray[np.generic]
+            The values of the feature, one for each row.
+
+        Returns
+        -------
+        npt.NDArray[np.int64]
+            The position in ``term_scores_`` of the bin of each value.
+
+        """
+        if self.feature_type == "continuous":
+            numbers = np.asarray(values, dtype=float)
+            missing = np.isnan(numbers)
+            positions = np.searchsorted(np.asarray(self._cuts()), np.where(missing, 0.0, numbers), side="right") + 1
+            return np.where(missing, MISSING_POSITION, positions).astype(np.int64)
+        known = {name: position + 1 for position, name in enumerate(self.categories())}
+        return np.array(
+            [
+                MISSING_POSITION if _is_missing(value) else known.get(str(value), self.unseen_position)
+                for value in np.asarray(values, dtype=object).tolist()
+            ],
+            dtype=np.int64,
+        )
 
     def label(self, position: int) -> str:
         """Name the bin at a position, as the report shows it.
