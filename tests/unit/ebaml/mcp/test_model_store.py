@@ -262,3 +262,18 @@ def test_only_load_model_reads_a_pickle_and_only_model_store_reads_files() -> No
             ("pl.read_csv", "load_data"),
         ],
     }
+
+
+def test_labels_read_the_label_column_of_the_data_and_name_the_columns_when_it_is_missing(
+    continuous_ebm: FittedClassifier,
+) -> None:
+    ebm, data = continuous_ebm
+    assert ModelStore(ebm=ebm, data=as_frame(data)).labels() is None
+    labelled = ModelStore(ebm=ebm, data=as_frame(data.assign(outcome=1)), label_column="outcome")
+    labels = labelled.labels()
+    assert labels is not None
+    assert labels.tolist() == [1] * len(data)
+    with pytest.raises(DataFileError, match=r"The label column 'outcome' is not in the data.*\['a', 'b', 'c'\]"):
+        ModelStore(ebm=ebm, data=as_frame(data), label_column="outcome").labels()
+    with pytest.raises(DataFileError, match=r"The columns are \[\]"):
+        ModelStore(ebm=ebm, label_column="outcome").labels()

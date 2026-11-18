@@ -23,7 +23,7 @@ from ebaml.core.exceptions import EBaMlError
 from ebaml.edit.constraints import DEFAULT_TOLERANCE
 from ebaml.edit.edit_session import EditSession
 from ebaml.llm.options import ModelOptions
-from ebaml.mcp import edit_tools, explain_tools, llm_tools, read_tools, save_tools
+from ebaml.mcp import edit_tools, effect_tools, explain_tools, llm_tools, read_tools, save_tools
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 
 _INSTRUCTIONS = (
@@ -108,6 +108,7 @@ def create_server(
     _register_explain_tools(server, store)
     _register_bin_tools(server, store)
     _register_constraint_tool(server, store)
+    _register_effect_tools(server, store)
     _register_history_tools(server, store)
     if store.output_directory is not None:
         _register_save_tool(server, store)
@@ -357,6 +358,62 @@ def _register_constraint_tool(server: MCPServer, store: ModelStore) -> None:
             return _json(attrs.asdict(edit_tools.check_model_constraints(store, parsed, revision, tolerance)))
 
 
+def _register_effect_tools(server: MCPServer, store: ModelStore) -> None:
+    """Register the tools that show the effect of the edits on the data.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add them to.
+    store: ModelStore
+        The session.
+
+    """
+
+    @server.tool()
+    def get_edit_effect(
+        subgroup_feature: str | None = None,
+        subgroup_value: str | float | None = None,
+        revision: str = "current",
+    ) -> str:
+        """Measure the effect of the edits on the rows of --data, as the Metric Panel of GAM Changer does.
+
+        The result compares three models: the original model, the model before the last edit, and the current model.
+        It gives each metric in three scopes: all rows, the rows that the last edit changes, and the rows whose value
+        of subgroup_feature is subgroup_value. A global metric hardly moves when a few bins change, so read the affected
+        rows and a subgroup before you call an edit harmless. The metrics need --labels; without it, the result counts
+        the rows whose prediction or class changes.
+
+        Returns
+        -------
+        str
+            JSON with the session, the counts of changed rows since the original and since the last edit, and for each
+            scope the number of rows and the metrics of the three models (accuracy, balanced accuracy, ROC AUC and the
+            confusion matrix of a classifier, or RMSE, MAE and MAPE of a regressor).
+
+        """
+        with _tool_errors():
+            subgroup = effect_tools.subgroup_of(subgroup_feature, subgroup_value)
+            return _json(attrs.asdict(effect_tools.get_edit_effect(store, subgroup, revision)))
+
+    @server.tool()
+    def get_affected_profile(revision: str = "current") -> str:
+        """Show which subgroups the last edit reaches, as the Feature Panel of GAM Changer does.
+
+        For each other feature, the result gives the share of each bin among the rows that the last edit changes and
+        among all rows, and the l1 distance between the two, sorted by distance. A large distance means that the edit
+        reaches one subgroup more than others: tell the person, because an edit can then add bias.
+
+        Returns
+        -------
+        str
+            JSON with the session, the number of affected rows and of all rows, and one profile for each feature.
+
+        """
+        with _tool_errors():
+            return _json(attrs.asdict(effect_tools.get_affected_profile(store, revision)))
+
+
 def _register_history_tools(server: MCPServer, store: ModelStore) -> None:
     """Register the tools that move in the history and that list it.
 
@@ -546,6 +603,7 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     port: int = 8000,
     output_dir: Path | None = None,
     edits: Path | None = None,
+    labels: str | None = None,
 ) -> None:
     """Load the EBM and run the MCP server.
 
@@ -569,11 +627,19 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     edits: Path, optional
         The history file of an earlier session (``*.history.json``). The server replays it, so the work goes on. The
         server refuses a history that started from another model.
+    labels: str, optional
+        The column of the data that holds the true outcome of each row. The effect tools compute the metrics from it.
 
     """
     # structlog prints to stdout by default, and a stdio server speaks JSON-RPC there, so a log line would corrupt it
     structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
-    store = ModelStore(ebm=load_model(model), data=load_data(data) if data else None, output_directory=output_dir)
+    store = ModelStore(
+        ebm=load_model(model),
+        data=load_data(data) if data else None,
+        output_directory=output_dir,
+        label_column=labels,
+    )
+    store.labels()  # a label column that the data lacks fails at start, not at the first tool call
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
     if edits is not None:

@@ -32,6 +32,8 @@ BASE_TOOLS = {
     "checkout_edit",
     "list_edits",
     "check_constraints",
+    "get_edit_effect",
+    "get_affected_profile",
 }
 LLM_TOOLS = {"describe_feature", "describe_model"}
 SAVE_TOOLS = {"save_model"}
@@ -45,6 +47,8 @@ READ_ONLY: dict[str, dict[str, object]] = {
     "preview_edit": {"edit": {"kind": "Shift", "feature": "age", "selection": {"kind": "WholeGraph"}, "delta": 1.0}},
     "list_edits": {},
     "check_constraints": {"constraints": [{"kind": "Unused", "feature": "age"}]},
+    "get_edit_effect": {},
+    "get_affected_profile": {},
 }
 
 

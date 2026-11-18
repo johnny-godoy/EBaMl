@@ -11,6 +11,8 @@ from pathlib import Path
 import attrs
 import joblib  # ruff: ignore[banned-api] -- ebaml-mcp also loads the joblib files that users saved, and the user trusts the file by naming its path
 import narwhals as nw
+import numpy as np
+import numpy.typing as npt
 import polars as pl
 import skops.io
 import skops.io.exceptions
@@ -81,6 +83,9 @@ class ModelStore:
         session.
     output_directory: Path | None
         The directory where ``save_model`` writes. The user gives it at start. Without it, the server saves nothing.
+    label_column: str | None
+        The column of ``data`` that holds the true outcome of each row. The effect tools compute the metrics from it.
+        Without it, they count the rows whose prediction changes.
 
     """
 
@@ -90,6 +95,7 @@ class ModelStore:
         default=attrs.Factory(lambda self: _start_session(self.original), takes_self=True),
     )
     output_directory: Path | None = None
+    label_column: str | None = None
     _described: _Described | None = attrs.field(default=None, init=False)
 
     def read(self, revision: str = CURRENT) -> RevisionRead:
@@ -121,6 +127,31 @@ class ModelStore:
             return RevisionRead(self.original, RevisionInfo(ORIGINAL, ORIGINAL, 0))
         info = self.session.revision_info(revision)
         return RevisionRead(self.session.model_at(info.revision), info)
+
+    def labels(self) -> npt.NDArray[np.generic] | None:
+        """Read the true outcome of each row of the data.
+
+        Returns
+        -------
+        npt.NDArray[np.generic] | None
+            The values of the label column, or ``None`` if the server has no label column.
+
+        Raises
+        ------
+        DataFileError
+            If the server has a label column but no data, or the data has no such column.
+
+        """
+        if self.label_column is None:
+            return None
+        if self.data is None or self.label_column not in self.data.columns:
+            columns = [] if self.data is None else list(self.data.columns)
+            msg = (
+                f"The label column {self.label_column!r} is not in the data. Start the server with --data and a"
+                f" --labels column of that file. The columns are {columns}."
+            )
+            raise DataFileError(msg)
+        return self.data.get_column(self.label_column).to_numpy()
 
     def editing(self) -> EditSession:
         """Give the edit session.

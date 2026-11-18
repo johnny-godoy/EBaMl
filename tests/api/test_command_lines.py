@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 COMMANDS: dict[str, tuple[str, set[str]]] = {
     "ebaml-mcp": (
         "ebaml.mcp.server",
-        {"--model", "--data", "--llm", "--transport", "--host", "--port", "--output-dir", "--edits"},
+        {"--model", "--data", "--llm", "--transport", "--host", "--port", "--output-dir", "--edits", "--labels"},
     ),
     "ebaml-chat": ("ebaml.mcp.chat", {"--model", "--data", "--llm", "--max-steps"}),
 }

@@ -226,6 +226,55 @@
       "title": "explain_predictionArguments",
       "type": "object"
     },
+    "get_affected_profile": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "title": "get_affected_profileArguments"
+    },
+    "get_edit_effect": {
+      "type": "object",
+      "properties": {
+        "subgroup_feature": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subgroup Feature"
+        },
+        "subgroup_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subgroup Value"
+        },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "title": "get_edit_effectArguments"
+    },
     "get_graph": {
       "properties": {
         "feature": {
