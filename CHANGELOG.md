@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.4'></a>
+## [0.8.4] - 2026-11-18
+
+### Added
+
+- The edits `SplitBin`, `Rebin` and `ExtendRange` change the bins of a continuous feature. A split and an extension
+  change no prediction, so a later edit can give the new bins their own scores.
+
+- `load_gamchanger` loads the `equal-interpolate` and `equal-regression` commits of GAM Changer as a `Rebin`
+  followed by the scores of the commit.
+
+### Fixed
+
+- An edit built from a numpy number, such as a bound of `feature_bounds_`, joins the history. The history JSON
+  refused such a number.
+
 <a id='changelog-0.8.3'></a>
 ## [0.8.3] - 2026-11-18
 
