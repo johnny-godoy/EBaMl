@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import attrs
+import numpy as np
 import orjson
 import pytest
 
@@ -101,6 +102,14 @@ def test_a_history_survives_a_round_trip_through_json(edit_ebm: ExplainableBoost
     assert decoded.saves == (entries[1],)
     empty = decode_history(encode_history(original, "original", []).decode())
     assert (empty.edits, empty.saves) == ((), ())
+
+
+def test_an_edit_with_a_numpy_number_survives_a_round_trip(edit_ebm: ExplainableBoostingClassifier) -> None:
+    """Bug: orjson refuses a numpy number, so an edit built from a model attribute could not join the history."""
+    entry = attrs.evolve(_edit_entry(), edit=Shift("age", Bins(1, 3), np.float64(0.5)))
+    decoded = decode_history(encode_history(fingerprint(edit_ebm), str(EDIT_ID), [entry]))
+    (edit_entry,) = decoded.edits
+    assert edit_entry.edit == Shift("age", Bins(1, 3), 0.5)
 
 
 def test_a_save_entry_without_an_author_survives_a_round_trip(edit_ebm: ExplainableBoostingClassifier) -> None:
