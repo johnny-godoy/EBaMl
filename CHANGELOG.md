@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.5'></a>
+## [0.8.5] - 2026-11-19
+
+### Added
+
+- The effect of an edit on rows counts the rows whose class changes in each direction (`rows_to_positive_class` and
+  `rows_to_negative_class`), in the edit report of the MCP tools too.
+
+- `edit_effect` measures the effect of the edits on data, as the Metric Panel of GAM Changer does: the metrics of the
+  original model, the model before the last edit and the current model, for all rows, the rows that the last edit
+  changes, and a `Subgroup`.
+- `affected_profile` shows which subgroups the last edit reaches: for each other feature, the mix of its bins among the
+  affected rows and among all rows, with the l1 distance.
+
+- The MCP tools `get_edit_effect` and `get_affected_profile` show the effect of the edits on the rows of `--data`. The
+  server flag `--labels` names the column with the true outcome, from which the tools compute the metrics.
+
 <a id='changelog-0.8.4'></a>
 ## [0.8.4] - 2026-11-18
 
