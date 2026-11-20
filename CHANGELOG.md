@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.8.6'></a>
+## [0.8.6] - 2026-11-20
+
+### Added
+
+- `save_gamchanger` writes the original model and the applied edits of a session as a `.gamchanger` file that the GAM
+  Changer widget opens. The result names each part of the session that the file cannot hold.
+
+- `load_gamchanger` reads any new bins of a commit, so it reads back the files that `save_gamchanger` writes after
+  `SplitBin` and `ExtendRange`. It refuses only a commit that narrows the range of a feature.
+
 <a id='changelog-0.8.5'></a>
 ## [0.8.5] - 2026-11-19
 
