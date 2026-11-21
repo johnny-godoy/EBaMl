@@ -7,7 +7,7 @@ import attrs
 import orjson
 import scipy
 
-from ebaml.core.custom_types import FeatureType, normalize_feature_type
+from ebaml.core.custom_types import FeatureType, Interval, normalize_feature_type
 from ebaml.core.exceptions import GraphTextError, InvalidOptionError
 
 # the lines of the textual representation of a graph, as written by ``EBMGraph.to_text``
@@ -48,7 +48,7 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
 
 
 # nosemgrep: ebaml-return-attrs-not-container -- an interval is a homogeneous pair, like EBMGraph.x_vals
-def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
+def parse_str_tuple_to_float_tuple(str_tuple: str) -> Interval:
     """Parse a string tuple to a float tuple.
 
     Parameters
@@ -58,7 +58,7 @@ def parse_str_tuple_to_float_tuple(str_tuple: str) -> tuple[float, float]:
 
     Returns
     -------
-    tuple[float, float]
+    Interval
         The parsed float tuple.
 
     Raises
@@ -193,8 +193,8 @@ class ParsedGraph:
     """The fields of a graph that ``parse_graph_text`` reads from a text. They are the fields of ``EBMGraph``."""
 
     feature_name: str
-    feature_type: str
-    x_vals: list[tuple[float, float]]
+    feature_type: FeatureType
+    x_vals: list[Interval]
     # one score per bin, or one row per bin with one score per class
     scores: list[float] | list[list[float]]
     stds: list[float] | list[list[float]]
@@ -232,12 +232,9 @@ def parse_graph_text(text: str) -> ParsedGraph:
 
     """
     feature_name = _search_line(_NAME_LINE, text, "Feature Name").group(1).strip()
-    feature_type = _search_line(_TYPE_LINE, text, "Feature Type").group(1).strip()
-    match normalize_feature_type(feature_type):
-        case FeatureType.CONTINUOUS:
-            pass
-        case _:
-            raise InvalidOptionError(feature_type, ["continuous"])
+    feature_type = normalize_feature_type(_search_line(_TYPE_LINE, text, "Feature Type").group(1).strip())
+    if feature_type is not FeatureType.CONTINUOUS:
+        raise InvalidOptionError(feature_type, [FeatureType.CONTINUOUS])
     class_lines = list(_CLASS_LINE.finditer(text))
     if not class_lines:
         series = _parse_series(text)

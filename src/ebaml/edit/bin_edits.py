@@ -16,7 +16,7 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType
 from ebaml.core.exceptions import EditError
 from ebaml.edit import model_write
 from ebaml.edit.edits import Edit, EditOutcome
@@ -31,7 +31,7 @@ def _number(value: float) -> str:
 def _continuous_view(ebm: ExplainableBoostingModel, feature: str, edit_name: str) -> TermView:
     model_write.check_editable(ebm)
     view = term_view(ebm, feature)
-    if view.feature_type != "continuous":
+    if view.feature_type is not FeatureType.CONTINUOUS:
         msg = (
             f"{edit_name} needs a continuous feature, because only its bins have edges, but {feature!r} is"
             f" {view.feature_type}."

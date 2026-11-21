@@ -6,7 +6,7 @@ Each function calls code of a lower layer and returns an attrs class. The server
 import attrs
 import numpy as np
 
-from ebaml.core.custom_types import ClassLabel, Normalization
+from ebaml.core.custom_types import ClassLabel, FeatureType, Normalization, normalize_feature_type
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.edit.edit_session import CURRENT, RevisionInfo
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -56,7 +56,7 @@ class FeatureInfo:
     """One feature of the model."""
 
     name: str
-    type: str
+    type: FeatureType
     importance: float
 
 
@@ -128,7 +128,7 @@ def list_features(store: ModelStore, revision: str = CURRENT) -> FeatureList:
     features = [
         FeatureInfo(
             name=ebm.feature_names_in_[index],
-            type=ebm.feature_types_in_[index],
+            type=normalize_feature_type(ebm.feature_types_in_[index]),
             importance=float(importances[main_term(ebm, index)]),
         )
         for index in main_effect_features(ebm)

@@ -11,15 +11,17 @@ recursive least squares with a prior at the starting weights. Learning is off by
 the estimate, and so the graph text, from one call to the next.
 """
 
+import functools
 import itertools
 import math
 import threading
-from typing import Literal, Self
+from typing import Self
 
 import attrs
 import numpy as np
 import numpy.typing as npt
 
+from ebaml.core.custom_types import BudgetLevel, coerce_enum
 from ebaml.graphs.token_weights import TextFeatures, TokenSample, TokenWeights
 
 # The weights fitted on 100 graph texts of one current model (graph text only, tokens counted by the provider, with the
@@ -91,13 +93,13 @@ class BudgetStatus:
     ----------
     estimated_tokens: int
         The estimated number of tokens of the text, with the margin.
-    status: Literal["ok", "warn", "over"]
+    status: BudgetLevel
         ``"ok"`` within ``max_tokens``, ``"warn"`` above it, and ``"over"`` beyond ``overbudget_percent`` above it.
 
     """
 
     estimated_tokens: int
-    status: Literal["ok", "warn", "over"]
+    status: BudgetLevel = attrs.field(converter=functools.partial(coerce_enum, BudgetLevel))
 
 
 @attrs.frozen
@@ -221,10 +223,10 @@ class TokenEstimator:
         """
         estimated = self.estimate(text)
         if estimated > max_tokens * (100 + overbudget_percent) // 100:
-            return BudgetStatus(estimated, "over")
+            return BudgetStatus(estimated, BudgetLevel.OVER)
         if estimated > max_tokens:
-            return BudgetStatus(estimated, "warn")
-        return BudgetStatus(estimated, "ok")
+            return BudgetStatus(estimated, BudgetLevel.WARN)
+        return BudgetStatus(estimated, BudgetLevel.OK)
 
     def observe(self, sample: TokenSample) -> bool:
         """Move the weights toward the token count of one real request, if learning is on.

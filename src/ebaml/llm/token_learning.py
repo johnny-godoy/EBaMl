@@ -26,6 +26,7 @@ import attrs
 import orjson
 import structlog
 
+from ebaml.core.custom_types import PathLike
 from ebaml.core.exceptions import TokenFitError
 from ebaml.graphs.request_text import message_text
 from ebaml.graphs.token_budget import EstimatorState, TokenEstimator
@@ -171,7 +172,7 @@ class TokenLearner:
         Whether the estimators change their weights. It is off by default.
     persist: bool
         Whether learned weights persist in ``path``. It has an effect only when learning is on.
-    path: str | os.PathLike[str] | None
+    path: PathLike | None
         The file of the learned weights. ``None`` selects ``default_weights_path()``.
     table: WeightsTable
         The weights that each estimator starts from. The default is the table that ships with the package.
@@ -184,7 +185,7 @@ class TokenLearner:
 
     learning: bool = False
     persist: bool = True
-    path: str | os.PathLike[str] | None = None
+    path: PathLike | None = None
     table: WeightsTable = attrs.field(factory=default_table)
     prior_samples: float = 10.0
     margin: float = 1.0

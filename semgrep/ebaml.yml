@@ -413,3 +413,54 @@ rules:
           for $ITEM in range($ARRAY.size):
               ...
       - pattern: "[... for $ITEM in np.$FUNCTION(...)]"
+
+  - id: ebaml-enum-not-string-compare
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Compare with a member of a `StrEnum`, not with a string. A string compare accepts a typo without an error, and a
+      type checker cannot find the value when a member is renamed. Use `FeatureType`, `Direction`, `HistoryKind`,
+      `BudgetLevel`, `Transport` or `AlignTarget`, and write `is Member` or `case Enum.MEMBER`. See .claude/rules/types.md.
+    paths:
+      include: ["/src/ebaml/"]
+    patterns:
+      - pattern-either:
+          - pattern: $OBJ.$ATTR == "..."
+          - pattern: $OBJ.$ATTR != "..."
+          - pattern: $OBJ.$ATTR in ("...", ...)
+          - pattern: $OBJ.$ATTR in ["...", ...]
+          - pattern: |
+              match $OBJ.$ATTR:
+                  case "...":
+                      ...
+      - metavariable-regex:
+          metavariable: $ATTR
+          regex: ^(feature_type|feature_format|kind|direction|status|transport|normalization|to)$
+
+  - id: ebaml-no-literal-string-type
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Do not list the allowed strings in a `Literal`. Make a `StrEnum`, give the attrs field the converter
+      `functools.partial(coerce_enum, TheEnum)`, and accept `TheEnum | str` where a caller may pass the text. A
+      `Literal` of strings hides the one list of values that the code, the errors and the docs need. A hint that mixes
+      a number with one text (`AxisPrecision`) may keep it: add `# nosemgrep: ebaml-no-literal-string-type -- <reason>`.
+      See .claude/rules/types.md.
+    paths:
+      include: ["/src/ebaml/"]
+    pattern-either:
+      - pattern: Literal["..."]
+      - pattern: Literal["...", ...]
+
+  - id: ebaml-use-pathlike-alias
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Write `PathLike` from `ebaml.core.custom_types`, not `str | os.PathLike[str]`. One alias keeps the hint of a path
+      the same in every module. `ebaml.benchmark` stands alone and keeps the long form. See .claude/rules/types.md.
+    paths:
+      include: ["/src/ebaml/"]
+      exclude: ["/src/ebaml/core/custom_types.py", "/src/ebaml/benchmark.py"]
+    pattern-either:
+      - pattern: str | os.PathLike[str]
+      - pattern: os.PathLike[str] | str

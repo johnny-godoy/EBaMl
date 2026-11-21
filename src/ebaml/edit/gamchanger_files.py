@@ -31,7 +31,7 @@ import numpy as np
 import numpy.typing as npt
 import orjson
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONValue, PathLike
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_report import EditReport
@@ -454,14 +454,14 @@ def _commit(ebm: ExplainableBoostingModel, entry: JSONMapping) -> GamChangerComm
     )
 
 
-def load_gamchanger(path: str | os.PathLike[str], ebm: ExplainableBoostingModel) -> list[GamChangerCommit]:
+def load_gamchanger(path: PathLike, ebm: ExplainableBoostingModel) -> list[GamChangerCommit]:
     """Read a ``.gamchanger`` file, and build the edits of the newest commit of each feature.
 
     The function reads the file and changes no model. Apply the result with ``apply_gamchanger``.
 
     Parameters
     ----------
-    path : str | os.PathLike[str]
+    path : PathLike
         The file that GAM Changer saved.
     ebm : ExplainableBoostingModel
         The model that the person edited in GAM Changer, before the edits.

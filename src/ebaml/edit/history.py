@@ -6,6 +6,8 @@ number gives the order, and the id only names the entry.
 """
 
 import abc
+import enum
+import functools
 import hashlib
 import uuid
 from collections.abc import Mapping, Sequence
@@ -16,7 +18,7 @@ import attrs
 import numpy as np
 import orjson
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONObject, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONObject, JSONValue, coerce_enum
 from ebaml.core.exceptions import HistoryError
 from ebaml.edit.edit_records import edit_from_record, to_record
 from ebaml.edit.edits import Edit
@@ -27,6 +29,13 @@ _MINIMUM_SHORT_ID = 4
 _TAIL_START = 13
 
 
+class HistoryKind(enum.StrEnum):
+    """The kind of an entry of the history."""
+
+    EDIT = "edit"
+    SAVE = "save"
+
+
 @attrs.frozen
 class HistoryRow:
     """One row of the table of the history."""
@@ -35,7 +44,7 @@ class HistoryRow:
     short_id: str
     sequence: int
     time: datetime
-    kind: str
+    kind: HistoryKind = attrs.field(converter=functools.partial(coerce_enum, HistoryKind))
     feature: str | None
     edit_type: str | None
     description: str
@@ -90,7 +99,7 @@ class EditEntry(HistoryEntry):
             short_id=short_id,
             sequence=self.sequence,
             time=self.time,
-            kind="edit",
+            kind=HistoryKind.EDIT,
             feature=self.feature,
             edit_type=type(self.edit).__name__,
             description=self.description,
@@ -102,7 +111,7 @@ class EditEntry(HistoryEntry):
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
     def to_record(self) -> JSONObject:
         return {
-            "kind": "edit",
+            "kind": HistoryKind.EDIT,
             "id": str(self.id),
             "sequence": self.sequence,
             "time": self.time.isoformat(),
@@ -132,7 +141,7 @@ class SaveEntry(HistoryEntry):
             short_id=short_id,
             sequence=self.sequence,
             time=self.time,
-            kind="save",
+            kind=HistoryKind.SAVE,
             feature=None,
             edit_type=None,
             description=f"Save the revision {self.revision} as {self.file}",
@@ -144,7 +153,7 @@ class SaveEntry(HistoryEntry):
     # nosemgrep: ebaml-return-attrs-not-container -- the record is a JSON fragment that the history merges and writes
     def to_record(self) -> JSONObject:
         return {
-            "kind": "save",
+            "kind": HistoryKind.SAVE,
             "id": str(self.id),
             "sequence": self.sequence,
             "time": self.time.isoformat(),
@@ -428,14 +437,14 @@ def decode_history(history: bytes | str) -> DecodedHistory:
         _text(saved, "scores"),
     )
     records = [_object(record, "A history entry") for record in _list(document, "entries")]
-    kinds = {kind: [record for record in records if _text(record, "kind") == kind] for kind in ("edit", "save")}
-    if len(kinds["edit"]) + len(kinds["save"]) != len(records):
+    kinds = {kind: [record for record in records if _text(record, "kind") == kind] for kind in HistoryKind}
+    if sum(len(entries) for entries in kinds.values()) != len(records):
         known = [_text(record, "kind") for record in records if _text(record, "kind") not in kinds]
-        msg = f"A history entry has the kind {known[0]!r}, and the kinds are 'edit' and 'save'."
+        msg = f"A history entry has the kind {known[0]!r}, and the kinds are {[kind.value for kind in HistoryKind]}."
         raise HistoryError(msg)
     return DecodedHistory(
         model_fingerprint,
         _text(document, "head"),
-        tuple(_edit_entry(record) for record in kinds["edit"]),
-        tuple(_save_entry(record) for record in kinds["save"]),
+        tuple(_edit_entry(record) for record in kinds[HistoryKind.EDIT]),
+        tuple(_save_entry(record) for record in kinds[HistoryKind.SAVE]),
     )

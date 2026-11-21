@@ -4,6 +4,7 @@ Each function calls the edit API of ``ebaml.edit`` and returns an attrs class. N
 the LLM, so the tools stay exact and free. The server turns each class into JSON.
 """
 
+import enum
 import inspect
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -11,7 +12,7 @@ from typing import Protocol, cast, runtime_checkable
 
 import attrs
 
-from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONObject, JSONValue
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType, JSONMapping, JSONObject, JSONValue
 from ebaml.core.exceptions import EditError, InvalidInstanceError
 from ebaml.edit.constraints import DEFAULT_TOLERANCE, Constraint, Violation, check_constraints
 from ebaml.edit.data_effect import RowChanges, row_changes
@@ -27,7 +28,7 @@ from ebaml.edit.edit_records import (
 from ebaml.edit.edit_report import EditReport
 from ebaml.edit.edit_session import CURRENT, RevisionInfo
 from ebaml.edit.edits import Edit
-from ebaml.edit.history import HistoryRow
+from ebaml.edit.history import HistoryKind, HistoryRow
 from ebaml.edit.model_view import interaction_names, term_view
 from ebaml.edit.selections import Selection
 from ebaml.mcp.model_store import ModelStore
@@ -60,7 +61,7 @@ class BinList:
 
     session: RevisionInfo
     feature: str
-    feature_type: str
+    feature_type: FeatureType
     bins: list[BinInfo]
     missing: BinInfo
     unseen: BinInfo
@@ -197,7 +198,7 @@ def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinLi
     view = term_view(read.model, feature)
     scores, weights = view.scores, view.weights
     total = float(weights.sum())
-    edges = view.bin_edges() if view.feature_type == "continuous" else []
+    edges = view.bin_edges() if view.feature_type is FeatureType.CONTINUOUS else []
 
     def info(position: int) -> BinInfo:
         real = view.is_real([position])
@@ -224,6 +225,10 @@ def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinLi
 
 
 def _hint_text(hint: object) -> str:  # nosemgrep: ebaml-no-object-type -- the type hint of any field of an edit class
+    # nosemgrep: ebaml-polymorphism-not-type-branches -- the hint is a type of an attrs field, with no method to ask
+    if isinstance(hint, type) and issubclass(hint, enum.StrEnum):
+        # the allowed values are the part of the help that tells a client what to send
+        return " | ".join(repr(member.value) for member in hint)
     if isinstance(hint, type):
         return "selection" if issubclass(hint, Selection) else hint.__name__
     return str(hint).replace("typing.", "")
@@ -604,7 +609,7 @@ def list_edits(store: ModelStore, *, include_replay_json: bool = False) -> EditL
     session = store.editing()
     info = session.revision_info()
     rows = session.history_table()
-    edit_ids = [row.id for row in rows if row.kind == "edit"]
+    edit_ids = [row.id for row in rows if row.kind is HistoryKind.EDIT]
     return EditList(
         session=info,
         commits=rows,

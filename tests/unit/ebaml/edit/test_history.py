@@ -12,11 +12,12 @@ import orjson
 import pytest
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
-from ebaml.core.exceptions import HistoryError
+from ebaml.core.exceptions import HistoryError, InvalidOptionError
 from ebaml.edit.edits import Shift
 from ebaml.edit.history import (
     FORMAT_VERSION,
     EditEntry,
+    HistoryKind,
     SaveEntry,
     decode_history,
     encode_history,
@@ -247,3 +248,11 @@ def test_an_edit_that_this_version_does_not_know_raises_a_history_error(
     document["entries"][0]["edit"]["type"] = "Explode"
     with pytest.raises(HistoryError, match="Explode"):
         decode_history(orjson.dumps(document))
+
+
+def test_the_kind_of_a_row_is_a_member_of_the_enum_and_a_wrong_kind_is_refused() -> None:
+    assert _edit_entry().row("abcd").kind is HistoryKind.EDIT
+    assert _save_entry().row("ef01").kind is HistoryKind.SAVE
+    row = _edit_entry().row("abcd")
+    with pytest.raises(InvalidOptionError, match="Invalid option: comment"):
+        attrs.evolve(row, kind="comment")

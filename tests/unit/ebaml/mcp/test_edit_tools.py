@@ -171,7 +171,7 @@ def test_the_help_lists_every_edit_and_every_selection_with_its_fields() -> None
     for name in ("RemoveTerms", "RemoveFeature", "Bins", "Categories", "MissingBin", "UnseenBin", "WholeGraph"):
         assert f"kind {name}(" in text
     assert "kind Shift(feature: str, selection: selection, delta: float): Add one value to each selected score" in text
-    assert "kind Monotonize(feature: str, direction: Literal['increasing', 'decreasing', 'auto']," in text
+    assert "kind Monotonize(feature: str, direction: 'increasing' | 'decreasing' | 'auto'," in text
     assert "selection: selection = whole graph)" in text
     assert "kind Bins(first: int, last: int)" in text
     # bug: every default read "= whole graph", the None bounds of ValueInterval too
@@ -351,7 +351,7 @@ def test_the_constraint_help_lists_every_constraint_and_every_selection_with_its
     for name in ("Monotone", "MaxStep", "Bounded", "FixedScore", "Unused", "Bins", "EveryBin", "WholeGraph"):
         assert f"kind {name}(" in text
     assert "kind Bounded(feature: str, low: float, high: float, selection: selection = every bin)" in text
-    assert "direction: Literal['increasing', 'decreasing'], selection: selection = whole graph)" in text
+    assert "direction: 'increasing' | 'decreasing', selection: selection = whole graph)" in text
     assert 'Example: {"kind": "Monotone"' in text
 
 

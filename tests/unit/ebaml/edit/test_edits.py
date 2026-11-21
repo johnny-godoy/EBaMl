@@ -4,19 +4,18 @@ import copy
 
 import numpy as np
 import pytest
-from beartype.roar import BeartypeCallHintViolation
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from ebaml.core.custom_types import Direction
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import EditError, SelectionError, UnsupportedModelError
+from ebaml.core.exceptions import EditError, InvalidOptionError, SelectionError, UnsupportedModelError
 from ebaml.edit import edits
 from ebaml.edit.edits import (
     Align,
     AlignTarget,
     AssignScores,
     Clip,
-    Direction,
     Edit,
     FitLine,
     Interpolate,
@@ -179,8 +178,8 @@ def test_align_to_a_neighbour_needs_real_bins_of_a_feature_with_an_order(
 
 
 def test_align_refuses_a_target_that_is_not_listed() -> None:
-    with pytest.raises(BeartypeCallHintViolation, match=r"parameter to=.middle."):
-        Align("score", WholeGraph(), "middle")  # pyrefly: ignore[bad-argument-type] -- the call passes a wrong literal on purpose
+    with pytest.raises(InvalidOptionError, match=r"Invalid option: middle"):
+        Align("score", WholeGraph(), "middle")
 
 
 def test_monotonize_a_range_matches_the_reference_loop_and_leaves_the_rest(
@@ -265,8 +264,8 @@ def test_monotonize_a_selection_of_one_bin_changes_nothing(edit_ebm: Explainable
 
 
 def test_monotonize_refuses_a_direction_that_is_not_listed() -> None:
-    with pytest.raises(BeartypeCallHintViolation, match=r"parameter direction=.sideways."):
-        Monotonize("score", "sideways")  # pyrefly: ignore[bad-argument-type] -- the call passes a wrong literal on purpose
+    with pytest.raises(InvalidOptionError, match=r"Invalid option: sideways"):
+        Monotonize("score", "sideways")
 
 
 @pytest.mark.parametrize(
@@ -585,7 +584,7 @@ def test_an_edit_leaves_the_model_that_it_started_from_to_the_caller(edit_ebm: E
     assert edit_ebm.term_scores_[1].tolist() == before.term_scores_[1].tolist()
 
 
-DIRECTIONS: tuple[Direction, ...] = ("increasing", "decreasing", "auto")
+DIRECTIONS: tuple[Direction, ...] = tuple(Direction)
 
 
 def _edit_strategy() -> st.SearchStrategy[Edit]:
@@ -622,3 +621,8 @@ def test_after_any_sequence_of_edits_the_model_stays_consistent(
     for edit in sequence:
         edit.run(model)
         assert_consistent(model, edit_data)
+
+
+def test_the_options_of_an_edit_become_members_of_their_enums() -> None:
+    assert Monotonize("score", "auto").direction is Direction.AUTO
+    assert Align("score", WholeGraph(), "left").to is AlignTarget.LEFT

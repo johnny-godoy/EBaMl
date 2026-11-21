@@ -9,7 +9,7 @@ import contextlib
 import sys
 from collections.abc import Generator, Mapping, Sequence
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import attrs
 import cyclopts
@@ -18,7 +18,7 @@ import structlog
 from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
 from mcp.server.mcpserver.exceptions import ToolError
 
-from ebaml.core.custom_types import FeatureValue, JSONValue
+from ebaml.core.custom_types import FeatureValue, JSONValue, Normalization, Transport
 from ebaml.core.exceptions import EBaMlError
 from ebaml.edit.constraints import DEFAULT_TOLERANCE
 from ebaml.edit.edit_session import EditSession
@@ -167,7 +167,7 @@ def _register_read_tools(server: MCPServer, store: ModelStore) -> None:
     def get_graph(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- one parameter for each option of the tool
         feature: str,
         revision: str = "current",
-        normalization: Literal["none", "min_max", "z_score"] = "none",
+        normalization: Normalization = Normalization.NONE,
         x_axis_precision: int | None = None,
         y_axis_precision: int | None = None,
         max_tokens: int = 3000,
@@ -598,7 +598,7 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
     model: Path,
     data: Path | None = None,
     llm: str | None = None,
-    transport: Literal["stdio", "streamable-http"] = "stdio",
+    transport: Transport = Transport.STDIO,
     host: str = "127.0.0.1",
     port: int = 8000,
     output_dir: Path | None = None,
@@ -615,7 +615,7 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
         Parquet or CSV file with the rows for the row argument.
     llm: str, optional
         PROVIDER/MODEL of the LLM tools. Without it the server has none.
-    transport: Literal["stdio", "streamable-http"]
+    transport: Transport
         How the server talks to the client.
     host: str
         The address that the ``streamable-http`` transport listens on. Use ``0.0.0.0`` to accept other computers.
@@ -646,10 +646,10 @@ def serve(  # ruff: ignore[too-many-arguments] -- one parameter for each option 
         store.session = EditSession.replay(store.original, edits.read_bytes())
     server = create_server(store, ModelOptions.parse(llm) if llm else None)
     # The stdio transport takes no address, and the streamable-http transport takes it when it runs.
-    if transport == "streamable-http":
-        server.run(transport="streamable-http", host=host, port=port)
+    if transport is Transport.STREAMABLE_HTTP:
+        server.run(transport=transport.value, host=host, port=port)
     else:
-        server.run(transport="stdio")
+        server.run(transport=transport.value)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

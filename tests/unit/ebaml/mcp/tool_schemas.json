@@ -276,6 +276,18 @@
       "title": "get_edit_effectArguments"
     },
     "get_graph": {
+      "$defs": {
+        "Normalization": {
+          "description": "Normalization options for EBM graphs.",
+          "enum": [
+            "none",
+            "min_max",
+            "z_score"
+          ],
+          "title": "Normalization",
+          "type": "string"
+        }
+      },
       "properties": {
         "feature": {
           "title": "Feature",
@@ -287,14 +299,8 @@
           "type": "integer"
         },
         "normalization": {
-          "default": "none",
-          "enum": [
-            "none",
-            "min_max",
-            "z_score"
-          ],
-          "title": "Normalization",
-          "type": "string"
+          "$ref": "#/$defs/Normalization",
+          "default": "none"
         },
         "revision": {
           "default": "current",

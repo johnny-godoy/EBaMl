@@ -7,8 +7,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from ebaml.core.custom_types import MonotoneDirection
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import EditError, OptionRangeError, SelectionError, UnsupportedModelError
+from ebaml.core.exceptions import EditError, InvalidOptionError, OptionRangeError, SelectionError, UnsupportedModelError
 from ebaml.edit.constraints import (
     Bounded,
     Constraint,
@@ -225,3 +226,12 @@ def test_the_check_refuses_a_tolerance_that_is_negative_or_not_finite(
 def test_the_check_refuses_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
     with pytest.raises(UnsupportedModelError):
         check_constraints(multiclass_ebm, [Unused("a")])
+
+
+def test_monotone_refuses_auto_because_a_constraint_needs_a_direction() -> None:
+    with pytest.raises(InvalidOptionError, match="Invalid option: auto"):
+        Monotone("score", "auto")
+
+
+def test_monotone_keeps_its_direction_as_a_member_of_the_enum() -> None:
+    assert Monotone("score", "increasing").direction is MonotoneDirection.INCREASING

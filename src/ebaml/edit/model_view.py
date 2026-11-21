@@ -14,11 +14,18 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import PANDAS_NA_TYPE, ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import (
+    PANDAS_NA_TYPE,
+    ExplainableBoostingModel,
+    FeatureType,
+    FeatureValue,
+    Interval,
+    normalize_feature_type,
+)
 from ebaml.core.exceptions import SelectionError
 from ebaml.graphs.terms import main_term
 
-ORDERED_TYPES = ("continuous", "ordinal")
+ORDERED_TYPES = (FeatureType.CONTINUOUS, FeatureType.ORDINAL)
 MISSING_POSITION = 0
 _LABEL_LIMIT = 6
 
@@ -62,7 +69,7 @@ class TermView:
     ebm: ExplainableBoostingModel
     feature_index: int
     feature_name: str
-    feature_type: str
+    feature_type: FeatureType
     term: int
     real_bin_count: int
 
@@ -111,7 +118,7 @@ class TermView:
             If the feature is continuous.
 
         """
-        if self.feature_type == "continuous":
+        if self.feature_type is FeatureType.CONTINUOUS:
             msg = f"The feature {self.feature_name!r} is continuous, so its bins have no categories."
             raise SelectionError(msg)
         names = cast(dict[str, int], self.ebm.bins_[self.feature_index][0])
@@ -122,14 +129,14 @@ class TermView:
         return cuts
 
     # nosemgrep: ebaml-return-attrs-not-container -- each item is a homogeneous interval of one bin
-    def bin_edges(self) -> list[tuple[float, float]]:
+    def bin_edges(self) -> list[Interval]:
         """List the left and the right edge of each real bin of a continuous feature.
 
         The first left edge and the last right edge are the bounds that the model saw.
 
         Returns
         -------
-        list[tuple[float, float]]
+        list[Interval]
             One edge pair for each real bin.
 
         """
@@ -151,9 +158,9 @@ class TermView:
             If the feature has no order.
 
         """
-        if self.feature_type == "continuous":
+        if self.feature_type is FeatureType.CONTINUOUS:
             return np.array([left for left, _ in self.bin_edges()], dtype=float)
-        if self.feature_type == "ordinal":
+        if self.feature_type is FeatureType.ORDINAL:
             return np.arange(self.real_bin_count, dtype=float)
         msg = f"The feature {self.feature_name!r} is {self.feature_type}, so its bins have no order."
         raise SelectionError(msg)
@@ -175,7 +182,7 @@ class TermView:
             The position in ``term_scores_`` of the bin of each value.
 
         """
-        if self.feature_type == "continuous":
+        if self.feature_type is FeatureType.CONTINUOUS:
             numbers = np.asarray(values, dtype=float)
             missing = np.isnan(numbers)
             positions = np.searchsorted(np.asarray(self._cuts()), np.where(missing, 0.0, numbers), side="right") + 1
@@ -207,7 +214,7 @@ class TermView:
             return "missing"
         if position == self.unseen_position:
             return "unseen"
-        if self.feature_type == "continuous":
+        if self.feature_type is FeatureType.CONTINUOUS:
             return interval_label(*self.bin_edges()[position - 1])
         return self.categories()[position - 1]
 
@@ -245,7 +252,7 @@ class TermView:
             The edges of a continuous range, or the names of the bins.
 
         """
-        if self.feature_type == "continuous" and self.is_real(positions):
+        if self.feature_type is FeatureType.CONTINUOUS and self.is_real(positions):
             edges = self.bin_edges()
             first_left = edges[positions[0] - 1][0]
             last_right = edges[positions[-1] - 1][1]
@@ -284,7 +291,14 @@ def term_view(ebm: ExplainableBoostingModel, feature: str) -> TermView:
     feature_index = names.index(feature)
     term = main_term(ebm, feature_index)
     real_bin_count = len(ebm.term_scores_[term]) - 2
-    return TermView(ebm, feature_index, feature, ebm.feature_types_in_[feature_index], term, real_bin_count)
+    return TermView(
+        ebm,
+        feature_index,
+        feature,
+        normalize_feature_type(ebm.feature_types_in_[feature_index]),
+        term,
+        real_bin_count,
+    )
 
 
 def interaction_names(ebm: ExplainableBoostingModel, feature_name: str) -> tuple[str, ...]:

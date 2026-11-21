@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 from interpret.utils._clean_x import _densify_categorical  # ruff: ignore[import-private-name] -- interpret has no public function that writes a value as the text of its category
 
-from ebaml.core.custom_types import PANDAS_NA_TYPE, ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import PANDAS_NA_TYPE, ExplainableBoostingModel, FeatureType, FeatureValue, Interval
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
@@ -104,12 +104,12 @@ class Feature:
         return f"{self.value:.4g}" if isinstance(self.value, float) else str(self.value)
 
 
-def bin_label(x_val: tuple[float, float] | str) -> str:
+def bin_label(x_val: Interval | str) -> str:
     """Render a bin: ``[lo, hi)`` for continuous features, the category otherwise.
 
     Parameters
     ----------
-    x_val: tuple[float, float] | str
+    x_val: Interval | str
         An interval ``(lo, hi)`` or a category.
 
     Returns
@@ -157,7 +157,7 @@ def _bin_index(ebm: ExplainableBoostingModel, feature_index: int, graph: EBMGrap
     ):
         msg = f"Feature {graph.feature_name!r} is missing; local explanations need every input."
         raise InvalidInstanceError(msg)
-    if graph.feature_type == "continuous":
+    if graph.feature_type is FeatureType.CONTINUOUS:
         # interpret types bins_ loosely, but the bins of a continuous feature are an array of cut points
         cuts = typing.cast(npt.NDArray[np.float64], ebm.bins_[feature_index][0])
         # a value of a continuous feature is a number or a numeric text, and float() raises for anything else
@@ -288,7 +288,11 @@ def read_features(
         graph = EBMGraph.from_ebm(ebm, index)
         weights = np.asarray(ebm.bin_weights_[main_term(ebm, index)][1:-1], dtype=float)
         bin_index = _bin_index(ebm, index, graph, instance[name])
-        plausible = _plausible_bins(weights, continuous=graph.feature_type == "continuous", min_support=min_support)
+        plausible = _plausible_bins(
+            weights,
+            continuous=graph.feature_type is FeatureType.CONTINUOUS,
+            min_support=min_support,
+        )
         plausible[bin_index] = True
         features.append(Feature(name, graph, weights, bin_index, instance[name], plausible))
     return features

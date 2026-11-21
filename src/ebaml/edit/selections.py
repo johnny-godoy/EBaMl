@@ -12,6 +12,7 @@ from typing import override
 
 import attrs
 
+from ebaml.core.custom_types import FeatureType
 from ebaml.core.exceptions import SelectionError
 from ebaml.edit.model_view import MISSING_POSITION, TermView
 
@@ -81,7 +82,7 @@ class Categories(Selection):
 
     @override
     def resolve(self, view: TermView) -> tuple[int, ...]:
-        if view.feature_type != "nominal":
+        if view.feature_type is not FeatureType.NOMINAL:
             msg = f"Categories needs a nominal feature, but {view.feature_name!r} is {view.feature_type}. Use Bins."
             raise SelectionError(msg)
         if not self.names:
@@ -146,7 +147,7 @@ class ValueInterval(Selection):
 
     @override
     def resolve(self, view: TermView) -> tuple[int, ...]:
-        if view.feature_type != "continuous":
+        if view.feature_type is not FeatureType.CONTINUOUS:
             msg = f"ValueInterval needs a continuous feature, but {view.feature_name!r} is {view.feature_type}."
             raise SelectionError(msg)
         low = -math.inf if self.low is None else self.low

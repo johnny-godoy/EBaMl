@@ -10,7 +10,6 @@ A call that changes the head can take ``expected_revision``. If the head differs
 """
 
 import hashlib
-import os
 import threading
 import uuid
 from collections.abc import Callable
@@ -21,7 +20,7 @@ from pathlib import Path
 import attrs
 import skops.io
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ExplainableBoostingModel, PathLike
 from ebaml.core.exceptions import EditError, HistoryError, StaleRevisionError, UnreviewedEditError
 from ebaml.edit import model_write
 from ebaml.edit.edit_report import EditReport, build_report
@@ -434,7 +433,7 @@ class EditSession:
 
     def save(
         self,
-        path: str | os.PathLike[str],
+        path: PathLike,
         message: str,
         *,
         author: str | None = None,
@@ -448,7 +447,7 @@ class EditSession:
 
         Parameters
         ----------
-        path : str | os.PathLike[str]
+        path : PathLike
             The file of the model.
         message : str
             The description of the change that the saved model holds, for example the business requirement that the
