@@ -117,6 +117,8 @@ only when it sends a request.
 - A reasoning model counts its hidden tokens in `max_output_tokens`. Keep the limit large, or the reply can end before
   the answer.
 - Quality, speed and cost depend on the model. Small models can ignore the number of sentences that you ask for.
+- EBaMl sends each graph as text, also to a model that can read images. Graph images for vision models are on the
+  [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 
 Every client has the retry policy of the default clients: EBaMl retries a transient failure up to 3 times.
 
