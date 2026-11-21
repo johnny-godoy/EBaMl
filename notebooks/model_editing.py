@@ -8,7 +8,11 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
+    import tempfile
+    from pathlib import Path
+
     import marimo as mo
+    import narwhals as nw
     import numpy as np
     import polars as pl
     from interpret.glassbox import ExplainableBoostingClassifier
@@ -16,31 +20,56 @@ def _():
     from ebaml import (
         Align,
         Bins,
+        Bounded,
         Categories,
         EBMGraph,
         EditSession,
+        ExtendRange,
+        FixedScore,
         Interpolate,
+        MaxStep,
+        Monotone,
         Monotonize,
         SelectionError,
         SetScores,
+        Subgroup,
         ValueInterval,
+        affected_profile,
+        check_constraints,
+        edit_effect,
+        load_gamchanger,
+        save_gamchanger,
     )
 
     return (
         Align,
         Bins,
+        Bounded,
         Categories,
         EBMGraph,
         EditSession,
         ExplainableBoostingClassifier,
+        ExtendRange,
+        FixedScore,
         Interpolate,
+        MaxStep,
+        Monotone,
         Monotonize,
+        Path,
         SelectionError,
         SetScores,
+        Subgroup,
         ValueInterval,
+        affected_profile,
+        check_constraints,
+        edit_effect,
+        load_gamchanger,
         mo,
         np,
+        nw,
         pl,
+        save_gamchanger,
+        tempfile,
     )
 
 
@@ -51,7 +80,8 @@ def _(mo) -> None:
 
     This notebook edits the graphs of an EBM with `EditSession`, as the study of GAM Changer (Wang et al., KDD 2022)
     edits a model of the risk of pneumonia: smooth a jump, flatten a dip, make a range monotone, and neutralize a
-    category.
+    category. It then checks business constraints, adds a bin where the model saw no data, measures the effect of the
+    edits on the data and on a subgroup, and saves the edits as a file that GAM Changer opens.
 
     - You need no key and no download. The data are synthetic.
     - No cell sends a request to an LLM. The edits are plain computations.
@@ -220,10 +250,77 @@ def _(mo, session, ward_edit):
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
+    ## Business constraints
+
+    A constraint states a business requirement. `check_constraints` reads the model and changes nothing. It gives one
+    violation for each constraint that the model breaks, with the bins that break it and the edit that repairs it. Here
+    the risk must rise with the age, the ward `unknown` must score 0, the risk must not jump by more than 0.3 between
+    two neighbour ages, and no score of the age may leave the range from -3 to 3.
+    """)
+
+
+@app.cell
+def _(Bounded, Categories, FixedScore, MaxStep, Monotone, check_constraints, mo, pl, session):
+    constraints = [
+        Monotone("age", "increasing"),
+        FixedScore("ward", Categories(["unknown"]), 0.0),
+        MaxStep("age", 0.3),
+        Bounded("age", -3.0, 3.0),
+    ]
+    violations = check_constraints(session.model, constraints)
+    violation_rows = pl.DataFrame(
+        [{"violation": item.description, "repair": type(item.repair).__name__} for item in violations],
+        schema={"violation": pl.String, "repair": pl.String},
+    )
+    mo.vstack([
+        mo.md(f"The model breaks {len(violations)} of {len(constraints)} constraints."),
+        mo.ui.table(violation_rows, selection=None),
+    ])
+    return constraints, violations
+
+
+@app.cell
+def _(check_constraints, constraints, mo, session, violations):
+    for violation in violations:
+        session.apply(violation.repair, f"Meet the business constraint: {violation.description}")
+    remaining = check_constraints(session.model, constraints)
+    mo.md(
+        f"Applied the repair of each of the {len(violations)} violations. A repair of one constraint can break another"
+        f" one, so check again: the model breaks {len(remaining)} of the constraints now.",
+    )
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ## Change the bins
+
+    The model saw no patient above the age of 100, so the last bin covers every higher age. `ExtendRange` adds an empty
+    bin above the oldest patient, with the score of the last bin, so no prediction changes. A later edit gives the new
+    bin its own score: here the expert knows that the risk keeps growing.
+    """)
+
+
+@app.cell
+def _(Bins, ExtendRange, SetScores, mo, session):
+    oldest = float(session.model.feature_bounds_[0][1])
+    session.apply(ExtendRange("age", high=120.0), "Ages above the data must have their own score")
+    new_bin = len(session.model.bins_[0][0])
+    last_score = float(session.model.term_scores_[0][new_bin])
+    extension_edit = SetScores("age", Bins(new_bin, new_bin), last_score + 0.5)
+    extension_report = session.preview(extension_edit)
+    session.apply(extension_edit, "The risk keeps growing above the oldest patient")
+    mo.md(f"The oldest patient was {oldest:.0f}. The new bin:\n\n```\n{extension_report.to_text()}\n```")
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
     ## The effect on the predictions
 
     An edit changes the predictions of the model, so look at the effect before you use the model. The table shows the
-    change of the predicted risk for a few patients. A check on the data and on each subgroup belongs here too.
+    change of the predicted risk for a few patients. The next two tables check the data and the subgroups, as the
+    Metric Panel and the Feature Panel of GAM Changer do.
     """)
 
 
@@ -240,6 +337,45 @@ def _(ebm, mo, np, patients, pl, session):
     mo.vstack([
         mo.md(f"The mean absolute change of the risk is `{np.abs(comparison['change']).mean():.4f}`."),
         mo.ui.table(largest, selection=None),
+    ])
+
+
+@app.cell
+def _(Subgroup, died, edit_effect, mo, nw, patients, pl, session):
+    effect = edit_effect(session, nw.from_native(patients), died, Subgroup("ward", "intensive"))
+    scope_rows = pl.DataFrame([
+        {
+            "scope": scope.scope,
+            "rows": scope.row_count,
+            "accuracy, original": None if scope.original is None else round(scope.original.accuracy, 3),
+            "accuracy, before the last edit": None if scope.last is None else round(scope.last.accuracy, 3),
+            "accuracy, current": None if scope.current is None else round(scope.current.accuracy, 3),
+        }
+        for scope in effect.scopes
+    ])
+    mo.vstack([
+        mo.md(
+            "A global metric hardly moves when a few bins change, so read the rows that the last edit changes and a"
+            " subgroup too. The last edit here is the score of the new bin, which reaches no patient of the data.",
+        ),
+        mo.ui.table(scope_rows, selection=None),
+    ])
+
+
+@app.cell
+def _(affected_profile, mo, nw, patients, pl, session):
+    profile = affected_profile(session, nw.from_native(patients), revision=session.history_table()[0].id)
+    profile_rows = pl.DataFrame([
+        {"feature": feature.feature, "bins": ", ".join(feature.bins), "l1 distance": round(feature.distance, 3)}
+        for feature in profile.features
+    ])
+    mo.vstack([
+        mo.md(
+            f"The first edit (the jump near 60) changes {profile.affected_rows} of {profile.total_rows} patients. For"
+            " each other feature, the l1 distance compares its mix among these patients with all patients. A large"
+            " distance means that the edit reaches one subgroup more than the others.",
+        ),
+        mo.ui.table(profile_rows, selection=None),
     ])
 
 
@@ -266,6 +402,39 @@ def _(mo, pl, session):
         for row in session.history_table()
     ])
     mo.ui.table(rows, selection=None)
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ## Open the edits in GAM Changer
+
+    `save_gamchanger` writes the original model and the edits as a file that the GAM Changer widget opens, so a person
+    can check the edits there. Without data, the file holds synthetic rows made from the bins, because the widget needs
+    rows to start. The result lists what the file cannot hold, and `load_gamchanger` reads the file back.
+    """)
+
+
+@app.cell
+def _(Path, ebm, load_gamchanger, mo, pl, save_gamchanger, session, tempfile):
+    export = save_gamchanger(session, Path(tempfile.mkdtemp()) / "pneumonia.gamchanger")
+    loaded = load_gamchanger(export.path, ebm)
+    commit_rows = pl.DataFrame([
+        {
+            "feature": commit.feature,
+            "type": commit.commit_type,
+            "edits": len(commit.edits),
+            "description": commit.description,
+        }
+        for commit in loaded
+    ])
+    mo.vstack([
+        mo.md(
+            f"The file holds {export.commit_count} commits and {export.sample_count} synthetic rows. It leaves out:"
+            f" {'; '.join(export.left_out) or 'nothing'}. Read back, the newest commit of each feature:",
+        ),
+        mo.ui.table(commit_rows, selection=None),
+    ])
 
 
 if __name__ == "__main__":
