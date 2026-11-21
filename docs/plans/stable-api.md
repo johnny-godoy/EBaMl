@@ -47,7 +47,7 @@ to review.
    - Run `scripts/release/smoke_install.py` on each matrix entry in the release workflow, so a release installs on every claimed
      platform. The script uses `bin/python`, so make it find `Scripts/python.exe` on Windows.
    - Make the claim match the result. Set the classifiers `Operating System ::` of `pyproject.toml` to what the matrix
-     passes. Extend the contract test of 0.15.0 to the operating systems. Update the "Requirements" list of the README
+     passes. Extend the contract test of 0.15.0 to the operating systems. Update the "Requirements" list of `docs/setup.md`
      and the table "Compatibility" of `docs/releasing.md`.
 9. **Version the documentation.** The site shows `main`. Publish a copy for each released version, with a selector, or
    write on the site which version it shows. Check that Zensical supports versions before you choose.

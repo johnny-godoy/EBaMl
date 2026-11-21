@@ -15,7 +15,7 @@ more, and no fewer.
 These facts were true when the plan was written. Check each one again before you act on it.
 
 - `pyproject.toml` sets `requires-python = ">=3.13"`, the classifier `Programming Language :: Python :: 3.13` and the
-  ruff `target-version = "py313"`. The README "Requirements" says that CI tests Linux with Python 3.13 only.
+  ruff `target-version = "py313"`. The "Requirements" of `docs/setup.md` say that CI tests Linux with Python 3.13 only.
 - The user chose 3.12 as the floor, not 3.11. The reason: the lower bounds of `numpy` (2.5.4) and `scipy` (1.18.1)
   need Python 3.12, and 3.11 would need a forked resolution of both. Do not lower the floor below 3.12.
 - The source uses PEP 695 `type` aliases and generics (`src/ebaml/core/custom_types.py`, `src/ebaml/llm/retry.py`,
@@ -56,7 +56,7 @@ These facts were true when the plan was written. Check each one again before you
 6. **Keep the toolchain pin true.** `scripts/release/toolchain_pin.py` and `scripts/release/baml_toolchain.py` must give the same
    `baml generate` on every version.
 7. **Make the claim match the result.** Set one `Programming Language :: Python :: 3.X` classifier for each version that
-   the matrix passes. Update the README "Requirements", `docs/setup.md`, the "Requirements" of `CLAUDE.md` and the table
+   the matrix passes. Update the "Requirements" of `docs/setup.md`, the "Requirements" of `CLAUDE.md` and the table
    "Compatibility" of `docs/releasing.md`.
 8. **Guard the claim.** Add a contract test in `tests/contract/` that reads `requires-python`, the classifiers and the
    versions of the CI matrix, and fails when they disagree. A claim that drifts from the matrix is the bug that this

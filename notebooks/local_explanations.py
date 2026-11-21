@@ -82,9 +82,9 @@ def _(mo) -> None:
     third is estimated by sampling. See the documentation page "Local explanations" for the details and the limits.
 
     The cells that call the LLM only run when you press their button. The default model needs an OpenRouter API key:
-    `OPENROUTER_API_KEY` from the environment that started the notebook (see the README), or the password field below
-    when it is not set. To use another model, pass `model=` to the functions: see the documentation page "Choosing the
-    model". Everything before these cells works without a key.
+    `OPENROUTER_API_KEY` from the environment that started the notebook (see the documentation page "Setup"), or the
+    password field below when it is not set. To use another model, pass `model=` to the functions: see the documentation
+    page "Choosing the model". Everything before these cells works without a key.
     """)
 
 

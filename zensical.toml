@@ -1,6 +1,6 @@
 [project]
 site_name = "EBaMl"
-site_description = "BAML for Explainable Boosting Machines. Talk to your EBM."
+site_description = "Explain an Explainable Boosting Machine in plain words: descriptions, local explanations and edits."
 site_url = "https://johnny-godoy.github.io/EBaMl/"
 repo_url = "https://github.com/johnny-godoy/EBaMl"
 repo_name = "johnny-godoy/EBaMl"
@@ -16,6 +16,7 @@ nav = [
   { "Choosing the model" = "providers.md" },
   { "MCP server" = "mcp.md" },
   { Notebooks = [
+    { "All notebooks" = "notebooks.md" },
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
     { "Custom audiences" = "audiences-notebook.md" },
@@ -33,6 +34,7 @@ nav = [
     { "Multiclass scores" = "multiclass-scores-proof.md" },
   ] },
   { Benchmark = "benchmark.md" },
+  { Development = "development.md" },
   { Releasing = "releasing.md" },
   { "API reference" = "api.md" },
   { Changelog = "changelog.md" },
@@ -66,6 +68,9 @@ toggle.name = "Switch to system preference"
 
 [project.markdown_extensions]
 admonition = {}
+# attr_list and md_in_html give the grid of cards on the home page
+attr_list = {}
+md_in_html = {}
 tables = {}
 toc.permalink = true
 pymdownx.superfences = {}

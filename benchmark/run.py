@@ -2,7 +2,8 @@
 
 Usage: ``uv run python benchmark/run.py [--task TASK ...] [--limit N] [--model PROVIDER/MODEL] [--output FILE]
 [--no-progress]``. Makes real requests. The default model is OpenRouter's ``openrouter/free``, which needs
-``OPENROUTER_API_KEY`` (see the README). ``--model`` selects another model, and the key variable of its provider.
+``OPENROUTER_API_KEY`` (see the documentation page "Setup"). ``--model`` selects another model, and the key variable
+of its provider.
 """
 
 import functools

@@ -63,7 +63,8 @@ The boundary between the two languages is the generated `baml_sdk` package.
   values.
 - `baml_src/tests/` holds the BAML tests: one `<source>_test.baml` for each source file, `support.baml` for the fakes that
   several files share, and `live/` for the tests that send real requests. `notebooks/` uses marimo. `docs/` uses Zensical
-  (`zensical.toml`) and includes README sections through `--8<--` markers, so keep the markers intact.
+  (`zensical.toml`). The guides live in `docs/`. The README is the PyPI page: a short pitch with absolute links only
+  (`tests/contract/test_readme.py`), and the site includes its parts through `--8<--` markers, so keep them intact.
 </architecture>
 
 <layout>
