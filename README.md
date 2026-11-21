@@ -1,17 +1,68 @@
 # EBaMl
 
 <!-- --8<-- [start:intro] -->
-BAML for Explainable Boosting Machines. Python extracts the graphs from an EBM, and BAML holds the prompts, the LLM
-clients and the chain-of-thought pipelines.
+EBaMl explains an [Explainable Boosting Machine](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/#ebm) (EBM) in plain words. An EBM is a
+[glass-box model](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/#glass-box-model) for tabular data: it adds one learned
+[graph](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/#shape-function) for each feature, so a person can read how each feature moves a
+prediction. EBaMl gives the graphs and the predictions of an EBM to a large language model (LLM), and returns text that
+a data scientist, a customer or a regulator can read.
 
-EBaMl is based on [TalkToEBM](https://github.com/interpretml/TalkToEBM) and adds local
-explanations (why did the model predict this for this input?) computed exactly and put in words for a layperson or a
-data scientist, a benchmark that scores answers automatically, a configurable LLM provider, token budgets and typed,
-structured logging.
+![The graph of income in an EBM of synthetic loan data. The score goes up from about -1.6 at low incomes, crosses zero
+near 40,000, and stays near +1.3 above 55,000.](https://johnny-godoy.github.io/EBaMl/generated/income-graph.svg)
 
-LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrouter/free`), so no paid API key is needed.
+- **Describe a model.** `describe_graph` and `describe_ebm` turn each graph, and the whole model, into a description.
+- **Explain one prediction.** `explain_instance` gives a [local explanation](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/#local-explanation):
+  what must change to flip the decision, which inputs settle it, and how certain it is. Python computes these facts
+  from the scores of the EBM, and the LLM only puts them in words.
+- **Edit a model.** `EditSession` changes the graphs to meet a requirement of the business, with a report and a history.
+- **Give the model to an agent.** `ebaml-mcp` is an MCP server with tools to read, explain and edit the model.
+- **Use any LLM.** The default is the free router of [OpenRouter](https://openrouter.ai). Pass `model=` to use OpenAI,
+  Anthropic, Gemini, a local Ollama server or another provider. The LLM gets the graph text and, for a local
+  explanation, the values of the input. To keep the data on your machines, use a local model.
 
+EBaMl is based on [TalkToEBM](https://github.com/interpretml/TalkToEBM). Python reads the EBM, and
+[BAML](https://docs.boundaryml.com) holds the prompts and the LLM clients.
 <!-- --8<-- [end:intro] -->
+
+## Why an EBM, and why EBaMl
+
+**Why an EBM instead of XGBoost?** A model of boosted trees, such as XGBoost, is a black box: tools such as SHAP
+estimate why it made a prediction. An EBM is a sum of one score for each feature (and for a few pairs of features), so
+the contribution of each term is exact, and a person can find a wrong pattern in a graph and edit it. The InterpretML paper says that an EBM "can be
+as accurate as many blackbox models" ([Nori et al., 2019](https://arxiv.org/abs/1909.09223)). The fit is somewhat
+slower. [What is an EBM?](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/) has the details and the sources.
+
+**What does EBaMl add to `interpret`?** `interpret` fits the EBM, draws its graphs and gives the contribution of each
+feature to a prediction. EBaMl adds the words: a description of each graph and of the model, and a local explanation
+that a customer can read. It also adds the counterfactual and the sufficient reason of a prediction, edits of single
+bins with a history, and the MCP server. [Why EBaMl?](https://johnny-godoy.github.io/EBaMl/why-ebaml/) shows one example from the model to the words.
+
+## Quick start
+
+<!-- --8<-- [start:quick-start] -->
+Install the package, and set a free [OpenRouter key](https://openrouter.ai/settings/keys) in your shell:
+
+```bash
+pip install ebaml
+export OPENROUTER_API_KEY=sk-or-...
+```
+
+Fit an EBM, and ask for a description of the graph of its first feature:
+
+```python
+from interpret.glassbox import ExplainableBoostingClassifier
+from sklearn.datasets import load_breast_cancer
+
+from ebaml import DescribeGraphRequest, describe_graph
+
+X, y = load_breast_cancer(return_X_y=True, as_frame=True)
+ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)
+print(describe_graph(DescribeGraphRequest(ebm, feature_index=0)))
+```
+
+The free router picks a model for each request, so the text changes from run to run.
+<!-- --8<-- [end:quick-start] -->
+
 ## Supported models
 
 <!-- --8<-- [start:supported-models] -->
@@ -29,535 +80,27 @@ LLM calls go through [OpenRouter](https://openrouter.ai)'s free router (`openrou
 log an `interactions_skipped` warning. ❌ not supported yet. Full support is on the
 [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
 <!-- --8<-- [end:supported-models] -->
-The MCP server reads every kind of model. Its explain tool works for every kind of model without interactions.
-## Setup
 
-<!-- --8<-- [start:setup] -->
-### Requirements
+## Learn more
 
-- Python 3.13 or later. CI tests Linux with Python 3.13 only. Other systems and later Python versions are not tested
-  yet.
-- A package installer such as [pip](https://pip.pypa.io) or [uv](https://docs.astral.sh/uv/getting-started/installation/).
-- An API key for an LLM provider. The default is [OpenRouter](https://openrouter.ai)'s free router, which needs no
-  paid plan. You can use another provider instead, see "Choosing the model".
-- The BAML toolchain 0.25, only in a source checkout (step 1).
+The [documentation](https://johnny-godoy.github.io/EBaMl/) holds the guides:
 
-### Install from PyPI
-
-```bash
-pip install ebaml            # or: uv add ebaml
-pip install "ebaml[mcp]"     # with the MCP server, or: uv add "ebaml[mcp]"
-```
-
-The wheel holds the generated SDK, so it needs no BAML toolchain. Then set the API key (step 3), and go on with
-"Usage". The wheel needs one version of `baml-bridge`, and it pins that version. To change a prompt or the provider in a
-`.baml` file, work from a source checkout.
-
-### Work from a source checkout
-
-Steps 1, 2, 4, 5 and 6 are for a source checkout. Step 3 also applies to an installation from PyPI.
-
-### 1. Install the BAML toolchain
-
-```bash
-curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s
-```
-
-The installer prints a line to add to your shell profile. Add it, then open a new shell:
-
-```bash
-. "$HOME/.baml/env"
-```
-
-Check it:
-
-```bash
-baml --version   # toolchain 0.25 or later
-```
-
-If `baml` resolves to an older install (Homebrew `baml`, or `baml-py` in a virtualenv), remove it or put `~/.baml/bin`
-first on `PATH`. The old CLIs have no `describe`, `generate add` or `agent` commands.
-
-If a command stops with "the BAML agent skill is required", run `baml agent install` and retry.
-
-### 2. Get the code and install the Python dependencies
-
-```bash
-git clone <repository-url> EBaMl
-cd EBaMl
-uv sync
-```
-
-### 3. Set the API key of your LLM provider
-
-For the default provider, OpenRouter:
-
-1. Create an account at <https://openrouter.ai> and open <https://openrouter.ai/settings/keys>.
-2. Create a key. Keys start with `sk-or-`.
-3. Export it in the shell you run the code from:
-
-```bash
-export OPENROUTER_API_KEY=sk-or-...
-```
-
-The key is read from the environment when a request is sent. It is never written to a `.baml` file.
-
-Using another provider? Set its variable instead (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, ...) and pass `model=` as
-described in "Choosing the model". Local models (Ollama) need no key.
-
-### 4. Generate the Python SDK
-
-```bash
-baml generate
-```
-
-This writes the `src/baml_sdk/` package from `baml_src/`, next to `ebaml`, so it imports wherever the project is
-installed. Rerun it every time a `.baml` file changes, including when you change the provider.
-
-If `src/baml_sdk/` does not exist, the first use of `describe_graph`, `describe_ebm` or `explain_instance` runs
-`baml generate`. `import ebaml` alone does not run it. If the package was generated by another BAML toolchain than the one
-that `baml-bridge` expects (a version skew), the first use runs `baml toolchain use <version>` and `baml generate`. If
-the agent skill check stops `baml generate`, the first use runs it again with `--agent-skill-check off`. If none of this works, `SDKUnavailableError` lists the steps that fix the cause.
-
-### 5. Check the setup
-
-```bash
-OPENROUTER_API_KEY=unused baml test -x root::Live   # offline tests on a scripted client, no network
-baml run main                         # prints "hello from baml"
-```
-
-These two do not call an LLM, so they pass without a working key or provider. They check the toolchain and the SDK.
-
-### 6. Live test (optional)
-
-Makes real requests to your provider (9 on the OpenRouter free router, so it can be slow or rate limited). It does
-nothing without `OPENROUTER_API_KEY`, so with another provider run the example under "Usage" instead.
-
-```bash
-OPENROUTER_API_KEY=sk-or-... uv run python scripts/llm/openrouter.py
-```
-
-It fits a small EBM, runs the three-turn chain directly and checks that the provider reports token usage, then runs
-`describe_graph` and `describe_ebm`. It exits non-zero on the first failed assertion.
-
-### Troubleshooting
-
-| Symptom | Cause and fix |
+| Page | Read it to |
 | --- | --- |
-| `baml: command not found` | In a source checkout, the profile line from step 1 is not loaded. Open a new shell or run `. "$HOME/.baml/env"`. |
-| `unknown command: describe` (or `generate add`, `agent`) | An older `baml` is first on `PATH`. See step 1. |
-| `SDKUnavailableError`, or `ModuleNotFoundError: baml_sdk` | The SDK is not generated or has the wrong version, and `ebaml` could not fix it. The message of the error lists the steps. Run `baml generate` (step 4). |
-| `MissingAPIKeyError` | The key of the provider is not exported in this shell. The message names the variable. See "Choosing the model" for the variable of each provider. |
-| `APIKeyRejectedError` | The provider rejected the key. Check the key, its account and its credit. |
-| `RateLimitedError` | The provider limited the rate. Lower the concurrency, `describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2))`, or pin a paid model. |
-| `ProviderUnreachableError` | A request did not reach the provider. Check the network, `HTTPS_PROXY` and `base_url`. |
-
-<!-- --8<-- [end:setup] -->
-## Usage
-
-<!-- --8<-- [start:usage] -->
-```python
-from interpret.glassbox import ExplainableBoostingClassifier
-
-from ebaml import DescribeEBMRequest, DescribeGraphRequest, PromptOptions, describe_ebm, describe_graph
-
-ebm = ExplainableBoostingClassifier().fit(X, y)
-
-print(describe_graph(DescribeGraphRequest(ebm, feature_index=0)))
-print(describe_ebm(DescribeEBMRequest(ebm, num_sentences=30, prompt=PromptOptions(dataset_description="..."))).text)
-```
-
-`describe_ebm` returns an `EBMDescription`. Its field `text` is the description. Its fields `skipped_terms` and
-`skipped_features` name the interaction terms and the features without a graph that the description leaves out. The text
-says so too, and the same names reach the log as `interactions_skipped` and `features_skipped` warnings.
-
-A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
-embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
-
-Each function takes one request: `DescribeGraphRequest`, `DescribeEBMRequest` or `ExplainInstanceRequest`. Three keyword-only fields set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
-`EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
-(`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM, see
-"Choosing the model". The requests, `GraphOptions`, `PromptOptions` and `ModelOptions` are importable from `ebaml`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
-
-A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
-because the text of a model with many classes is long. In every bin, the scores have the same mean over all the classes
-of the model. Only the differences between the classes change the predicted probabilities.
-`notebooks/multiclass.py` shows each option on the iris data. `notebooks/model_kinds.py` compares the graphs and the local
-explanations of a binary classifier, a multiclass classifier and a regressor.
-
-<!-- invisible-code-block: python
-import numpy as np
-
-y_multiclass = np.select([X["age"] < 30, X["age"] < 60], ["young", "middle"], "old")
--->
-
-```python
-from ebaml import GraphOptions
-
-multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
-print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"]))))
-```
-
-### Explaining one prediction
-
-```python
-from ebaml import DescribeEBMRequest, ExplainInstanceRequest, describe_ebm, explain_instance
-
-ebm = ExplainableBoostingClassifier(interactions=0).fit(X, y)  # binary classifier, no interactions
-global_explanation = describe_ebm(DescribeEBMRequest(ebm)).text  # computed once, prepended to every local prompt
-
-explanation = explain_instance(
-    ExplainInstanceRequest(ebm, X.iloc[0].to_dict(), global_explanation, audience="layperson")
-)
-print(explanation.counterfactual)  # what would have to change to flip the prediction
-print(explanation.sufficient_reason)  # which inputs settle the prediction on their own
-print(explanation.completions)  # how certain the outcome is as inputs become known
-```
-
-The facts are computed exactly from the scores and confidence intervals of the EBM (`ebaml.local`); the LLM only puts
-them in words. They are the three queries of [arXiv:2010.12265](https://arxiv.org/abs/2010.12265): minimum change
-required, minimum sufficient reason and count completions. `audience="layperson"` (default) gives no model numbers;
-`audience="data_scientist"` quotes scores, probabilities and confidence intervals. Subclass `ebaml.Audience` to add a
-reader with its own rules. Pass `language="French"` (any language name) to get the explanations in that language. It supports every kind of model
-without interactions, and `explanation.facts` holds the numbers behind the text. The "Local explanations" page of the documentation explains what each explanation means, the options and the limits,
-and `notebooks/local_explanations.py` walks through them on the Titanic data.
-
-### Errors
-
-Every error that `ebaml` raises on purpose derives from `ebaml.EBaMlError`. Use `except EBaMlError` to catch the errors
-of `ebaml` apart from the errors of other code. Each error for a bad value also derives from `ValueError`, so an
-`except ValueError` catches it too.
-
-| Error | `ValueError` | Raised when |
-| --- | --- | --- |
-| `InvalidOptionError` | yes | An option is not one of its valid values, for example an unknown `Normalization`. |
-| `OptionRangeError` | yes | A number option is outside its range, for example `confidence_level=1`. |
-| `InvalidInstanceError` | yes | The instance to explain lacks a value, or has a category that the EBM did not see. |
-| `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a classifier or a regressor. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
-| `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
-| `EBMGraphError` | no | The base class of the errors of a graph. |
-| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |
-| `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
-| `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
-| `TokenFitError` | yes | The token weights cannot be fitted from an empty list of samples, or a weight is negative or not finite. |
-| `SDKUnavailableError` | no | `baml_sdk` is missing, and `ebaml` cannot run `baml generate`. The error also derives from `ImportError`. |
-| `LLMRequestError` | no | The base class of the errors of a provider. Its message lists the steps that fix the cause. |
-| `MissingAPIKeyError` | no | A provider needs an API key and the environment has none. |
-| `APIKeyRejectedError` | no | A provider answers a request with "unauthorized" or "forbidden". |
-| `RateLimitedError` | no | A provider limits the rate of the requests. |
-| `ProviderUnreachableError` | no | A request does not reach the provider. |
-
-`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. The four provider errors derive from `LLMRequestError`. `ebaml` exports all of these classes.
-
-<!-- --8<-- [end:usage] -->
-## How it works
-
-| Where | What |
-| --- | --- |
-| `src/ebaml/core/` | Shared kernel: types and errors. It imports no other part of `ebaml`. |
-| `src/ebaml/graphs/` | Graph extraction and simplification (numpy, `interpret`), and the text the LLM reads. |
-| `src/ebaml/llm/` | The edge: the calls into BAML (`descriptors.py`), their options and the retry after a cut-off reply. |
-| `baml_src/talk_to_ebm.baml` | Prompts, the default LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
-| `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
-| `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |
-| `baml_src/tests/` | The BAML tests: offline tests on a scripted client, one `<source>_test.baml` for each source file, and the live prompt tests in `live/`. |
-| `src/ebaml/edit/` | Model editing: the selections of bins, the edits, the report, and the session with its history. It calls no LLM. |
-| `src/ebaml/mcp/`, `baml_src/mcp_agent.baml` | The MCP server (`ebaml-mcp`), the agent that reads it through its tools, and the terminal chat (`ebaml-chat`). |
-| `baml.toml` | Generator config for the Python SDK. |
-| `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](#benchmark)). |
-| `notebooks/` | Example notebooks, written with marimo. |
-| `docs/`, `zensical.toml` | The documentation, built with Zensical (see [Development](#development)). |
-| `tests/unit/` | Python unit tests (100% coverage required). `scripts/llm/openrouter.py` is the optional live test. |
-| `scripts/` | Maintenance scripts, see [scripts/README.md](scripts/README.md). |
-| `.github/` | CI workflow and the scripts that turn failures into reports. |
-| `src/baml_sdk/` | Generated. Do not edit. |
-
-<!-- --8<-- [start:behaviour] -->
-- **Model:** `openrouter/free` picks a free model for each request, so the model can change between calls and between
-  the turns of one conversation. Quality and speed vary with it.
-- **Retries:** transient failures (rate limits, network errors, 5xx) are retried up to 3 times. Requests the provider
-  rejects are not retried.
-- **Concurrency:** `describe_ebm` describes features concurrently, at most `max_concurrency` at a time (default 8).
-  Free models are rate limited, so lower it (`describe_ebm(DescribeEBMRequest(ebm, max_concurrency=2))`) if you see rate-limit errors.
-- **Progress:** `describe_ebm(DescribeEBMRequest(ebm, progress_bar=True))` shows a progress bar on the error stream. It counts one step for
-  each feature and one for the summary. If the error stream is not a terminal, the bar writes one line for each step,
-  so a log file or an agent that polls the console sees the progress. The benchmark and `fit_token_weights.py` show a bar
-  by default. Use `--no-progress` to turn it off.
-- **Token budget:** there is no tokenizer before a call, so the check estimates the tokens of a graph text from its
-  words and its digits. The default weights are 4.13 tokens for each word and 0.27 for each digit. They come from 100
-  graph texts that one current model counted. The estimate has a margin above the fit, so it is more often too high
-  than too low. Other models count other numbers of tokens, so the estimate is a guide. Going a little over
-  `max_tokens` only warns. Going more than `overbudget_percent` (default 50) over makes `to_text` simplify the graph, or
-  raise if it cannot. The provider's own error is the real limit. `describe_graph`, `describe_ebm` and `explain_instance` pass the
-  check. A direct call of `EBMGraph.to_text` checks nothing, unless you pass `check_budget`, for example
-  `ebaml.check_token_budget`. That check needs no LLM and no key. To choose the weights, pass a
-  `TokenEstimator` instead. To use the weights of each model and to learn them, pass
-  `GraphOptions(token_learner=TokenLearner(learning=True))`. The learner starts each model at the weights of a table
-  that ships with the package. Then it moves them toward the tokens of the graphs in your real calls. The weights
-  persist in `~/.cache/ebaml/token_weights.json`. Learning is off by default, because learned weights change the graph
-  text from one call to the next. `scripts/llm/token_weights.py` adds the weights of a new model to the table.
-
-<!-- --8<-- [end:behaviour] -->
-## Notebook
-
-[`notebooks/titanic.py`](notebooks/titanic.py) is a [marimo](https://marimo.io) notebook that ports TalkToEBM's example.
-It trains an EBM on the Titanic dataset (downloaded from OpenML), asks the LLM to describe a graph and the whole model,
-and shows the graph and text API (`from_ebm`, `simplify`, `to_text`, `from_text`). The LLM cells run only when you press
-their button. They use the default model, which needs `OPENROUTER_API_KEY`. See "Choosing the model" for other models.
-
-```bash
-uv run marimo edit notebooks/titanic.py   # interactive
-uv run marimo run notebooks/titanic.py    # as an app
-```
-
-[`notebooks/local_explanations.py`](notebooks/local_explanations.py) is the place to learn the local explanations: pick a
-passenger, see the facts with no API key, move the confidence slider, check the guarantees against random completions,
-compare what the LLM reads for a layperson and a data scientist, and (with a key) get the explanations in words.
-
-```bash
-uv run marimo edit notebooks/local_explanations.py
-```
-
-[`notebooks/model_providers.py`](notebooks/model_providers.py) sends the same request to OpenRouter, OpenAI, Anthropic,
-Ollama and a gateway with an OpenAI-compatible API, one section for each provider. It shows the key that each provider
-needs, and the errors for an unknown provider and a missing key. Each button sends real requests to one provider.
-
-```bash
-uv run marimo edit notebooks/model_providers.py
-```
-
-[`notebooks/multiclass.py`](notebooks/multiclass.py) reads an EBM of the iris data, which has three classes. It shows the
-graph with one series per class, the centring that keeps the predictions, the `classes` and `normalization` options, and
-the errors of wrong options. Two buttons describe a graph and the whole model.
-
-```bash
-uv run marimo edit notebooks/multiclass.py
-```
-
-[`notebooks/model_kinds.py`](notebooks/model_kinds.py) fits a binary classifier, a multiclass classifier and a regressor
-on the same iris features. It compares the kind that `model_kind` reads, the graph text of each kind, the fields of the
-local explanations and the error for the kinds that they do not accept. One button for each model describes the same
-graph.
-
-```bash
-uv run marimo edit notebooks/model_kinds.py
-```
-
-[`notebooks/mcp_server.py`](notebooks/mcp_server.py) starts the real `ebaml-mcp` server and connects to it as a client does.
-It lists the tools, reads a graph with a token budget, explains a row, edits the model and saves it after a confirmation,
-serves each kind of model, and shows the errors that a user can fix. One button calls the LLM tool.
-
-```bash
-uv run marimo edit notebooks/mcp_server.py
-```
-
-[`notebooks/baml_agent.py`](notebooks/baml_agent.py) runs the BAML agent from the `baml` command. A language model
-answers one question with the tools of the server, and the notebook shows the tools that it called. The steps before the
-last button need no key.
-
-```bash
-uv run marimo edit notebooks/baml_agent.py
-```
-
-[`notebooks/chat.py`](notebooks/chat.py) puts a chat box in front of the real `ebaml-chat` command. Ask about the model or
-about one row, and ask follow-up questions. The chat starts with no key, and each message needs an LLM.
-
-```bash
-uv run marimo edit notebooks/chat.py
-```
-
-## MCP server
-
-`ebaml-mcp` serves a fitted EBM to an agent, for example Claude Code. The agent reads the features and the graphs, and
-explains one prediction with the exact local facts. The agent can also edit the model so that it meets a business
-requirement: it lists the bins, previews and applies an edit with a reason, undoes it, and saves the model after a
-person confirms. These tools call no LLM, so they need no key. See the
-[MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/).
-
-### Chat with the agent
-
-`ebaml-chat` opens a chat in the terminal. An LLM answers your questions about the model with the tools of the server.
-Ask about the model, or about one row of the data, and ask follow-up questions. The command starts the server for you and
-keeps it up for the whole chat. It needs the `mcp` extra and the BAML toolchain. The default model needs
-`OPENROUTER_API_KEY`.
-
-```bash
-ebaml-chat --model model.skops --data train.parquet
-```
-
-```text
-you> Explain the prediction for row 3 of the data.
-
-The model predicts class 0 for row 3, with a probability of 0.581. Age (34) pushes toward this prediction. ...
-
-(tools: explain_prediction)
-you> What would flip it?
-```
-
-An empty line ends the chat. After each answer, the chat prints the tools that the agent called, so you can check that
-the answer rests on tool results. Use `--llm PROVIDER/MODEL` to choose another model. The [chat
-notebook](notebooks/chat.py) runs the same command behind a chat box. The
-[MCP server guide](https://johnny-godoy.github.io/EBaMl/mcp/#chat-with-the-agent) lists the options.
-
-## Benchmark
-
-The benchmark follows [TalkToEBM's benchmark](https://github.com/interpretml/TalkToEBM/tree/main/benchmark) that checks how well a
-model reads EBM graphs: function recognition (easy and hard), the largest jump, monotonicity, reading a value and the
-widest confidence interval. It makes real requests, and it asks two LLM turns per question (6 tasks, 480 questions in
-all). The default model needs `OPENROUTER_API_KEY`. The flag `--model provider/model` selects another model.
-
-```bash
-uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json
-```
-
-See [benchmark/README.md](benchmark/README.md) for the tasks, the scoring and what it leaves out.
-
-## Choosing the model
-
-<!-- --8<-- [start:changing-model] -->
-The default model is OpenRouter's free router, `openrouter/free`. It needs `OPENROUTER_API_KEY`. The `model` argument
-of `describe_graph`, `describe_ebm` and `explain_instance` selects another model for one call. EBaMl sends every LLM
-request of that call to that model. You do not change the package.
-
-### Quick start
-
-Pass the shorthand `"provider/model"`:
-
-```python
-from ebaml import DescribeEBMRequest, describe_ebm
-
-print(describe_ebm(DescribeEBMRequest(ebm, model="anthropic/claude-haiku-4-5")).text)
-```
-
-Pass `ModelOptions` to set more:
-
-```python
-from ebaml import ModelOptions
-
-model = ModelOptions(provider="anthropic", model="claude-haiku-4-5", temperature=0.2, max_output_tokens=8000)
-print(describe_ebm(DescribeEBMRequest(ebm, model=model)).text)
-```
-
-EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o-mini"` selects the provider
-`openrouter` and the model `openai/gpt-4o-mini`. EBaMl checks the provider before the first paid request. It raises
-`InvalidOptionError` if the provider is not in the table below.
-
-### Providers
-
-The provider is a BAML provider prefix. Set the environment variable of the key in the shell that runs Python.
-
-| Provider | Default key variable | Notes |
-| --- | --- | --- |
-| `openrouter` | `OPENROUTER_API_KEY` | The model name is the OpenRouter name, for example `openai/gpt-4o-mini`. |
-| `openai` | `OPENAI_API_KEY` | |
-| `anthropic` | `ANTHROPIC_API_KEY` | |
-| `google` | `GOOGLE_API_KEY` | The Gemini API. |
-| `ollama` | None | A local server. `base_url` defaults to `http://localhost:11434/v1`. |
-| `openai-generic` | None | Any OpenAI-compatible server. `base_url` is required. Set `api_key_env` if the server needs a key. |
-| `azure` | `AZURE_OPENAI_API_KEY` | The model name is the name of the deployment. Set `base_url` to the deployment, or set `AZURE_OPENAI_ENDPOINT`. |
-| `vertex` | None | Google Cloud credentials (`GOOGLE_APPLICATION_CREDENTIALS` or `gcloud auth`). The project comes from `GOOGLE_CLOUD_PROJECT`. |
-| `bedrock` | None | The AWS credentials of the machine. The region comes from `AWS_REGION`. `api_key_env` has no effect. |
-
-Run `baml describe <client>.new`, for example `baml describe aws.BedrockClient.new`, to see all settings of a client.
-
-### Options
-
-| Field | Meaning | Default |
-| --- | --- | --- |
-| `provider` | The BAML provider prefix from the table. | Required. |
-| `model` | The name of the model at the provider. | Required. |
-| `api_key_env` | The name of the environment variable that holds the key. | The variable of the provider. |
-| `base_url` | The address of the server. | The address of the provider. |
-| `temperature` | The sampling temperature. | 0.7 (0.0 in the benchmark). |
-| `max_output_tokens` | The most tokens of one reply. | See below. |
-| `headers` | Headers to add to each request. | None. |
-
-A field that you set wins over the default of the call. The output limit has two defaults:
-
-| Calls | `max_output_tokens` |
-| --- | --- |
-| Turn 1 of a graph description, the draft of the summary, and the two turns of the benchmark | 16000 |
-| All other calls, including the local explanations | 12000 |
-
-### Examples
-
-```python
-# OpenRouter, a pinned model (the free router picks a new model for each request)
-describe_ebm(DescribeEBMRequest(ebm, model="openrouter/openai/gpt-4o-mini"))
-
-# OpenAI
-describe_ebm(DescribeEBMRequest(ebm, model="openai/gpt-4o-mini"))
-
-# Google Gemini
-describe_ebm(DescribeEBMRequest(ebm, model="google/gemini-2.5-flash"))
-
-# A local model with Ollama. It needs no key.
-describe_ebm(DescribeEBMRequest(ebm, model="ollama/llama3.1"))
-
-# A company gateway with an OpenAI-compatible API
-gateway = ModelOptions(
-    provider="openai-generic",
-    model="my-model",
-    base_url="https://llm.example.com/v1",
-    api_key_env="MY_GATEWAY_KEY",
-    headers={"x-team": "ebm"},
-)
-describe_ebm(DescribeEBMRequest(ebm, model=gateway))
-```
-
-The benchmark has the flag `--model`:
-
-```bash
-uv run python benchmark/run.py --model anthropic/claude-haiku-4-5 --limit 10
-```
-
-### Keys
-
-Put the key in an environment variable, in the shell or with `os.environ`. `ModelOptions` holds the name of the
-variable, never the key, so the key does not appear in a `repr`, a log line or a traceback. EBaMl reads the variable
-only when it sends a request.
-
-### Limits
-
-- One call uses one model. The turns of a call cannot use different models.
-- Python cannot set up fallback chains or round robin. A BAML client object cannot cross from Python to BAML, so
-  Python sends plain data and BAML builds the client. A BAML client declaration can use `ai.clients.Fallback`: see
-  "Change the default model" in `CONTRIBUTING.md`.
-- A reasoning model counts its hidden tokens in `max_output_tokens`. Keep the limit large, or the reply can end before
-  the answer.
-- Quality, speed and cost depend on the model. Small models can ignore the number of sentences that you ask for.
-
-Every client has the retry policy of the default clients: EBaMl retries a transient failure up to 3 times.
-<!-- --8<-- [end:changing-model] -->
-
-## Development
-
-<!-- --8<-- [start:development] -->
-
-```bash
-baml fmt          # format .baml files
-baml check        # compile check
-baml test -x root::Live   # run the offline BAML tests
-baml generate     # regenerate src/baml_sdk/
-uv run pytest     # Python unit tests, fails under 100% coverage
-uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings
-prek run --all-files                       # every hook: formatters, ruff, vulture, pyrefly, baml fmt, ...
-uv run python scripts/mutation/run.py          # mutation testing of all modules, fails if any mutant survives
-uv run python scripts/mutation/run.py --base origin/main   # the same, but only for the lines changed since main
-uv run python scripts/mutation/run.py --module src/ebaml/local/facts.py   # the same, but only for one module
-uv run python -m scripts.ignores.check     # every lint/type/test workaround needs a reason written next to it
-uv run python -m scripts.ignores.report   # all workarounds and their reasons as one Markdown report to audit
-uv run --group docs python -m scripts.docs.build         # build the docs; fails on a broken link or a docstring warning
-uv run --group docs python -m scripts.docs.build serve   # preview the docs (exports the notebooks, so the first run is slow)
-```
-
-CI (`.github/workflows/ci.yml`) runs prek, secret and security scans (trufflehog, semgrep, trivy), `baml check` and
-`baml test`, pytest with 100% coverage, the code examples of the documentation, and, in pull requests, mutation testing of the changed lines with a 100% score. A weekly run tests all modules, in jobs of at most 500 lines each. Lint and type workarounds
-(`# noqa`, `# type: ignore`, skipped tests, ...) must carry a written reason next to them.
-
-The `python` code blocks of `README.md` and `docs/*.md` run in order, and the blocks of one file share their variables.
-The `Examples` sections of the docstrings run as doctests. `tests/docs/conftest.py` gives each Markdown file a small
-data set as `X` and `y`, and it replaces the LLM calls with fakes, so the examples send no request. Put setup that the
-reader does not need in an `<!-- invisible-code-block: python -->` comment. To skip a block, put
-`<!-- skip: next -->` above it, and write the reason in the text.
-<!-- --8<-- [end:development] -->
+| [What is an EBM?](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/) | Learn what an EBM is, and why a team uses one. |
+| [Why EBaMl?](https://johnny-godoy.github.io/EBaMl/why-ebaml/) | See one graph and one prediction go from the model to the words. |
+| [Setup](https://johnny-godoy.github.io/EBaMl/setup/) | Install from PyPI or from a source checkout, set an API key, and fix setup errors. |
+| [Usage](https://johnny-godoy.github.io/EBaMl/usage/) | Describe a graph or a model, and read the options and the errors. |
+| [Local explanations](https://johnny-godoy.github.io/EBaMl/local-explanations/) | Explain one prediction, and learn what each guarantee means. |
+| [Editing a model](https://johnny-godoy.github.io/EBaMl/editing/) | Change the graphs of an EBM to meet a requirement of the business. |
+| [Choosing the model](https://johnny-godoy.github.io/EBaMl/providers/) | Use another LLM provider with `model=`. |
+| [MCP server](https://johnny-godoy.github.io/EBaMl/mcp/) | Give an EBM to an agent, and chat with it in the terminal (`ebaml-chat`). |
+| [Notebooks](https://johnny-godoy.github.io/EBaMl/notebooks/) | Run each feature step by step in a marimo notebook. |
+| [API reference](https://johnny-godoy.github.io/EBaMl/api/) | Read every public function and class. |
+
+## Contributing
+
+Read [CONTRIBUTING.md](https://github.com/johnny-godoy/EBaMl/blob/main/CONTRIBUTING.md) and the
+[development guide](https://johnny-godoy.github.io/EBaMl/development/). The [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md)
+lists the planned releases. EBaMl is free software under the
+[MIT license](https://github.com/johnny-godoy/EBaMl/blob/main/LICENSE).

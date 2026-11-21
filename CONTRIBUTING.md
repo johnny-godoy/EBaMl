@@ -1,6 +1,6 @@
 # Contributing
 
-1. Install [uv](https://docs.astral.sh/uv/) and the BAML toolchain (see the README), then run `uv sync`, `baml generate`
+1. Install [uv](https://docs.astral.sh/uv/) and the BAML toolchain (see the [Setup](https://johnny-godoy.github.io/EBaMl/setup/) page), then run `uv sync`, `baml generate`
    and `prek install`. `prek install` adds the hooks that check each commit and its message.
 2. Make your change with tests. Run `prek run --all-files` and fix every failure; do not bypass the hooks.
 3. If a function has an invariant, write a Hypothesis property test for it. CI loads the `ci` profile (see

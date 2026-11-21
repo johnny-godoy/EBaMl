@@ -2,29 +2,60 @@
 
 --8<-- "README.md:intro"
 
+## Start here
+
+Choose the page for what you need:
+
+<div class="grid cards" markdown>
+
+-   **I do not know what an EBM is**
+
+    ---
+
+    Learn what an Explainable Boosting Machine is, how it makes a prediction, and what it costs.
+
+    [What is an EBM?](what-is-an-ebm.md)
+
+-   **I must explain decisions to people**
+
+    ---
+
+    See one prediction go from the model to a text for a layperson, with the facts behind each sentence.
+
+    [Why EBaMl?](why-ebaml.md), then [Local explanations](local-explanations.md)
+
+-   **I know EBMs, and I want the API**
+
+    ---
+
+    Install the package, describe a graph or a model, and choose the LLM.
+
+    [Setup](setup.md), [Usage](usage.md) and [API reference](api.md)
+
+-   **I build an agent**
+
+    ---
+
+    Give an EBM to an agent through the MCP server: tools to read, explain and edit the model.
+
+    [MCP server](mcp.md)
+
+</div>
+
+## Quick start
+
+--8<-- "README.md:quick-start"
+
+The [notebooks](notebooks.md) show each feature step by step, with the output of each step.
+
 ## Supported models
 
 --8<-- "README.md:supported-models"
-
-## Where to go next
-
-- [Setup](setup.md): install the BAML toolchain, set an API key, generate the SDK, troubleshooting.
-- [Choosing the model](providers.md): OpenRouter is only the default. Pass `model=` to use OpenAI, Anthropic, Gemini, Ollama and more.
-- [Usage](usage.md): describe a graph or a whole model, and how the model, retries and token budget behave.
-- [Local explanations](local-explanations.md): why did the model predict this for this input? A counterfactual, a sufficient reason and the share of completions, computed exactly and put in words for a layperson or a data scientist.
-- [Editing a model](editing.md): change the graphs of an EBM to meet a requirement of the business, with a report, a history and a review for each edit.
-- [Notebook](notebook.md): a worked example on the Titanic data, with its output.
-- [Local explanations notebook](local-notebook.md): the same, one passenger at a time, with its output.
-- [Model providers notebook](providers-notebook.md): the same request sent to OpenRouter, OpenAI, Anthropic, Ollama and a gateway, side by side.
-- [Multiclass notebook](multiclass-notebook.md): the graphs and the descriptions of an EBM with three classes.
-- [Model kinds notebook](model-kinds-notebook.md): a binary classifier, a multiclass classifier and a regressor side by side.
-- [Model editing notebook](editing-notebook.md): smooth a jump, flatten a dip, make a range monotone and neutralize a category, with the report after each edit.
-- [Benchmark](benchmark.md): how well does a model read EBM graphs?
-- [API reference](api.md): every public function and class.
 
 ## How EBaMl differs from TalkToEBM
 
 [TalkToEBM](https://github.com/interpretml/TalkToEBM) builds the prompts in Python and calls OpenAI or Azure
 directly. EBaMl keeps the Python that has to touch the EBM (extracting and simplifying the graphs) and moves the rest
 to BAML: the prompts, the LLM clients with their retries, the chain-of-thought pipelines and the token accounting. The
-provider and model are changed in a few lines of a `.baml` file, and the pipelines can be tested offline on a scripted client.
+pipelines can be tested offline on a scripted client. EBaMl also adds the local explanations, the editing of a model,
+the MCP server and the choice of the LLM from Python.

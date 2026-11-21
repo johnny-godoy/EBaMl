@@ -29,7 +29,7 @@ a unit test cannot do both.
 - Add the file to `NOTEBOOKS` in `scripts/docs/build.py`.
 - Add a page `docs/<name>-notebook.md`, with the same parts as `docs/local-notebook.md`: the purpose, what needs a key,
   the run command, the link to the guide, and the iframe.
-- Add the page to the nav in `zensical.toml`.
+- Add the page to the nav in `zensical.toml`, and add a row to the table of `docs/notebooks.md`.
 - Link the notebook from the guide of the feature.
 - Run `uv run marimo check --strict notebooks`. The `marimo-check` hook runs it too, and it finds duplicate names across cells, cycles and output that marimo hides.
 - Run `uv run --group docs python -m scripts.docs.build`. The build exports each notebook, so a broken cell fails it.
