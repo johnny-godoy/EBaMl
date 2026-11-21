@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.10.0'></a>
+## [0.10.0] - 2026-11-21
+
+### Added
+
+- `EditSession` and every edit, constraint and report work on multiclass classifiers. An edit of a graph takes `class_label`: the class to change, or `None` for every class. `Monotonize` serves multiclass models, which `monotonize` of `interpret` refuses.
+- The report of an edit names the class of each changed score, and `ClassShift` gives the shift of the weighted mean and of the intercept of each class.
+- `edit_effect` gives `MulticlassMetrics` for a multiclass model: accuracy, balanced accuracy, the mean one-versus-rest ROC AUC and the confusion matrix of all classes. The row counts name the moves between classes.
+- The MCP edit tools edit multiclass models: `list_bins` gives the score of each class, and the edit and constraint objects take `class_label`.
+
+### Changed
+
+- `load_gamchanger` and `save_gamchanger` raise `UnsupportedModelError` with the fix steps for a multiclass model, because a `.gamchanger` file holds one score in each bin.
+
 <a id='changelog-0.9.1'></a>
 ## [0.9.1] - 2026-11-21
 
