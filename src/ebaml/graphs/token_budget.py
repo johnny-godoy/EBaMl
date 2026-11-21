@@ -147,7 +147,7 @@ class TokenEstimator:
     Examples
     --------
     >>> estimator = TokenEstimator()
-    >>> estimator(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
+    >>> str(estimator(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status)
     'warn'
 
     """
@@ -314,11 +314,11 @@ The estimator never learns, so it gives the same status for the same text in eve
 
 Examples
 --------
->>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status
+>>> str(check_token_budget(text="1.5 2.5 " * 12, max_tokens=100, overbudget_percent=50).status)
 'warn'
->>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=1000, overbudget_percent=50).status
+>>> str(check_token_budget(text="1.5 2.5 " * 12, max_tokens=1000, overbudget_percent=50).status)
 'ok'
->>> check_token_budget(text="1.5 2.5 " * 12, max_tokens=50, overbudget_percent=50).status
+>>> str(check_token_budget(text="1.5 2.5 " * 12, max_tokens=50, overbudget_percent=50).status)
 'over'
 """
 
