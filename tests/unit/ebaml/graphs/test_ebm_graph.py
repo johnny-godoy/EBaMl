@@ -1041,3 +1041,10 @@ def test_from_ebm_reads_the_term_of_the_feature_when_another_feature_has_no_term
     assert np.asarray(graph.stds).tolist() == [0.1, 0.2]
     with pytest.raises(UnsupportedModelError, match="'a' has no main-effect term"):
         EBMGraph.from_ebm(ebm, 0)
+
+
+def test_a_graph_keeps_its_feature_type_as_a_member_of_the_enum() -> None:
+    assert cont_graph().feature_type is FeatureType.CONTINUOUS
+    assert cat_graph().feature_type is FeatureType.NOMINAL
+    with pytest.raises(InvalidOptionError, match="Invalid option: sideways"):
+        EBMGraph("age", "sideways", [(0.0, 1.0)], [1.0], [0.1])

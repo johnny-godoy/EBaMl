@@ -28,6 +28,7 @@ from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoo
 from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.edit.data_effect import RowChanges, row_changes
 from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession
+from ebaml.edit.history import HistoryKind
 from ebaml.edit.model_view import term_view
 from ebaml.graphs.terms import main_effect_features
 
@@ -159,7 +160,7 @@ class _Versions:
 
 def _versions(session: EditSession, revision: str) -> _Versions:
     info = session.revision_info(revision)
-    edits = [row for row in session.history_table() if row.kind == "edit"]
+    edits = [row for row in session.history_table() if row.kind is HistoryKind.EDIT]
     ids = [row.id for row in edits]
     if info.revision == ORIGINAL:
         last_revision, edited_feature = None, None

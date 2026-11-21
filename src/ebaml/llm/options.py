@@ -7,11 +7,10 @@ does alone.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Literal
 
 import attrs
 
-from ebaml.core.custom_types import FeatureType, Normalization
+from ebaml.core.custom_types import AxisPrecision, FeatureType, Normalization
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
 from ebaml.llm.token_learning import TokenLearner
 
@@ -34,7 +33,7 @@ class GraphOptions:
         See ``EBMGraph.to_text``.
     x_axis_precision: int | None
         See ``EBMGraph.to_text``.
-    y_axis_precision: int | Literal["auto"] | None
+    y_axis_precision: AxisPrecision
         See ``EBMGraph.to_text``.
     confidence_bounds: bool
         See ``EBMGraph.to_text``.
@@ -56,7 +55,7 @@ class GraphOptions:
     include_description: bool = True
     feature_format: FeatureType | str | None = None
     x_axis_precision: int | None = None
-    y_axis_precision: int | Literal["auto"] | None = None
+    y_axis_precision: AxisPrecision = None
     confidence_bounds: bool = True
     confidence_level: float = 0.95
     max_tokens: int = 3000

@@ -2,7 +2,7 @@
 
 import warnings
 from collections.abc import Sequence
-from typing import Literal, Protocol, Self, cast, runtime_checkable
+from typing import Protocol, Self, cast, runtime_checkable
 
 import attrs
 import numpy as np
@@ -11,9 +11,12 @@ import scipy
 from interpret.glassbox._ebm._utils import convert_to_intervals  # ruff: ignore[import-private-name] -- interpret has no public convert_to_intervals
 
 from ebaml.core.custom_types import (
+    AxisPrecision,
+    BudgetLevel,
     ExplainableBoostingModel,
     FeatureType,
     Normalization,
+    XValues,
     coerce_enum,
     normalize_feature_type,
 )
@@ -70,7 +73,7 @@ class TokenBudget(Protocol):
         ...
 
     @property
-    def status(self) -> Literal["ok", "warn", "over"]:
+    def status(self) -> BudgetLevel:
         """``"ok"`` within ``max_tokens``, ``"warn"`` above it, and ``"over"`` beyond ``overbudget_percent``."""
         ...
 
@@ -94,12 +97,12 @@ _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
 _BOOLEAN_KEYS = ["False", "True"]
 
 
-def _is_boolean(x_vals: Sequence[tuple[float, float]] | Sequence[str]) -> bool:
+def _is_boolean(x_vals: XValues) -> bool:
     """Whether the x-axis values are exactly the keys ``False`` and ``True`` (case-insensitive).
 
     Parameters
     ----------
-    x_vals: Sequence[tuple[float, float]] | Sequence[str]
+    x_vals: XValues
         The values of the x-axis.
 
     Returns
@@ -274,9 +277,9 @@ class EBMGraph:
     """
 
     feature_name: str = attrs.field()
-    feature_type: str = attrs.field()
+    feature_type: FeatureType = attrs.field(converter=normalize_feature_type)
     # intervals for continuous features, categories for nominal ones
-    x_vals: Sequence[tuple[float, float]] | Sequence[str] = attrs.field()
+    x_vals: XValues = attrs.field()
     # from_ebm stores NumPy arrays here; shape (n_bins,), or (n_bins, n_classes) for a multiclass classifier
     scores: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating] = attrs.field()
     stds: Sequence[float] | Sequence[Sequence[float]] | npt.NDArray[np.floating] = attrs.field()
@@ -344,7 +347,7 @@ class EBMGraph:
         """
         # read the variables from the ebm
         feature_name = ebm.feature_names_in_[feature_index]
-        feature_type = ebm.feature_types_in_[feature_index]
+        feature_type = normalize_feature_type(ebm.feature_types_in_[feature_index])
         # the scores are kept by term, and term i is not always feature i
         term = main_term(ebm, feature_index)
         scores = np.array(ebm.term_scores_[term][1:-1], dtype=float)  # Drop missing and unknown bins
@@ -366,13 +369,13 @@ class EBMGraph:
 
         # read the x-axis bins from the ebm
         match feature_type:
-            case "continuous":
+            case FeatureType.CONTINUOUS:
                 x_vals = convert_to_intervals(ebm.bins_[feature_index][0])
                 # feature bounds apply to continuous features only
                 if use_feature_bounds:
                     x_vals[0] = (ebm.feature_bounds_[feature_index][0], x_vals[0][1])
                     x_vals[-1] = (x_vals[-1][0], ebm.feature_bounds_[feature_index][1])
-            case "nominal":
+            case FeatureType.NOMINAL:
                 # the bins map each category to its (1-based, after the missing bin) position
                 # interpret types bins_ as arrays, but the bins of a nominal feature are a dict of category to position
                 bins = cast(dict[str, int], ebm.bins_[feature_index][0])
@@ -380,7 +383,7 @@ class EBMGraph:
                 # nosemgrep: ebaml-no-range-len -- positions is a dict, so the indexes look up its keys in order
                 x_vals = [positions[idx] for idx in range(len(positions))]
             case _:
-                raise InvalidOptionError(feature_type, ["continuous", "nominal"])
+                raise InvalidOptionError(feature_type, [FeatureType.CONTINUOUS, FeatureType.NOMINAL])
         if len(x_vals) != len(scores):
             msg = (
                 f"The number of bins ({len(x_vals)}) and scores ({len(scores)}) does not match"
@@ -413,11 +416,8 @@ class EBMGraph:
             If min_variation_per_cent is not between 0 and 1.
 
         """
-        match normalize_feature_type(self.feature_type):
-            case FeatureType.CONTINUOUS:
-                pass
-            case _:
-                raise InvalidOptionError(self.feature_type, ["continuous"])
+        if self.feature_type is not FeatureType.CONTINUOUS:
+            raise InvalidOptionError(self.feature_type, [FeatureType.CONTINUOUS])
         if not 0 <= min_variation_per_cent <= 1:
             msg = f"min_variation_per_cent must be between 0 and 1. Got {min_variation_per_cent}."
             raise OptionRangeError(msg)
@@ -466,7 +466,7 @@ class EBMGraph:
         if _is_boolean(self.x_vals):
             feature_format = FeatureType.BOOLEAN
         if feature_format is None:
-            feature_format = normalize_feature_type(self.feature_type)
+            feature_format = self.feature_type
         feature_format = coerce_enum(FeatureType, feature_format)
         return _FORMAT_ALIASES.get(feature_format, feature_format)
 
@@ -600,7 +600,7 @@ class EBMGraph:
         include_description: bool = True,
         feature_format: FeatureType | str | None = None,
         x_axis_precision: int | None = None,
-        y_axis_precision: int | Literal["auto"] | None = None,
+        y_axis_precision: AxisPrecision = None,
         confidence_bounds: bool = True,
         confidence_level: float = 0.95,
         max_tokens: int = 3000,
@@ -695,9 +695,9 @@ class EBMGraph:
                 overbudget_percent=overbudget_percent,
             )
             match budget.status:
-                case "ok":
+                case BudgetLevel.OK:
                     return prompt
-                case "warn":
+                case BudgetLevel.WARN:
                     warnings.warn(
                         f"The graph for feature {self.feature_name} is estimated at {budget.estimated_tokens} tokens,"
                         f" above the budget of {max_tokens}. The LLM may reject it.",

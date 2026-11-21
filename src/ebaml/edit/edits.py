@@ -9,8 +9,10 @@ of an edited bin is 0, because a score that a person sets has no fitted uncertai
 """
 
 import abc
+import enum
+import functools
 from collections.abc import Sequence
-from typing import Literal, override
+from typing import override
 
 import attrs
 import numpy as np
@@ -18,14 +20,20 @@ import numpy.typing as npt
 from scipy.optimize import lsq_linear
 from sklearn.isotonic import IsotonicRegression
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import Direction, ExplainableBoostingModel, coerce_enum
 from ebaml.core.exceptions import EditError, SelectionError
 from ebaml.edit import model_write
 from ebaml.edit.model_view import TermView, term_view
 from ebaml.edit.selections import Selection, WholeGraph
 
-Direction = Literal["increasing", "decreasing", "auto"]
-AlignTarget = Literal["left", "right", "mean"]
+
+class AlignTarget(enum.StrEnum):
+    """The value that ``Align`` gives to the selected scores."""
+
+    LEFT = "left"
+    RIGHT = "right"
+    MEAN = "mean"
+
 
 # a bin with no training weight still gets a tiny weight in a fit, so that the fit has no 0/0
 _TINY_WEIGHT_SHARE = 1e-9
@@ -239,11 +247,11 @@ class Align(Edit):
 
     feature: str
     selection: Selection
-    to: AlignTarget
+    to: AlignTarget = attrs.field(converter=functools.partial(coerce_enum, AlignTarget))
 
     def _value(self, target: _Target) -> float:
         view, positions = target.view, target.positions
-        if self.to == "mean":
+        if self.to is AlignTarget.MEAN:
             weights = target.weights
             return float(np.average(target.scores, weights=weights if weights.sum() > 0 else None))
         if not view.ordered or not view.is_real(positions):
@@ -252,7 +260,7 @@ class Align(Edit):
                 f" but {view.feature_name!r} has none in the selection."
             )
             raise EditError(msg)
-        neighbour = positions[0] - 1 if self.to == "left" else positions[-1] + 1
+        neighbour = {AlignTarget.LEFT: positions[0] - 1, AlignTarget.RIGHT: positions[-1] + 1}[self.to]
         if not view.is_real([neighbour]):
             msg = (
                 f"The selection has no bin on the {self.to} in {view.feature_name!r}."
@@ -283,7 +291,7 @@ class Monotonize(Edit):
     """
 
     feature: str
-    direction: Direction
+    direction: Direction = attrs.field(converter=functools.partial(coerce_enum, Direction))
     selection: Selection = attrs.field(factory=WholeGraph)
 
     @override
@@ -293,12 +301,14 @@ class Monotonize(Edit):
         weights = _fit_weights(target.weights)
         order = np.arange(len(target.positions), dtype=float)
         candidates = {
-            direction: IsotonicRegression(increasing=direction == "increasing").fit_transform(
+            direction: IsotonicRegression(increasing=direction is Direction.INCREASING).fit_transform(
                 order,
                 scores,
                 sample_weight=weights,
             )
-            for direction in (("increasing", "decreasing") if self.direction == "auto" else (self.direction,))
+            for direction in (
+                (Direction.INCREASING, Direction.DECREASING) if self.direction is Direction.AUTO else (self.direction,)
+            )
         }
         direction = min(candidates, key=lambda name: float(np.sum(weights * (candidates[name] - scores) ** 2)))
         model_write.set_scores(ebm, target.view.term, target.positions, candidates[direction])

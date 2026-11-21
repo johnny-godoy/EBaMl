@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 import pytest
 
-from ebaml.core.custom_types import PANDAS_NA_TYPE, FeatureValue
+from ebaml.core.custom_types import PANDAS_NA_TYPE, FeatureType, FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import SelectionError, UnsupportedModelError
 from ebaml.edit.model_view import interaction_names, term_view
@@ -130,3 +130,7 @@ def test_positions_of_bins_each_value_as_interpret_does(edit_ebm: ExplainableBoo
     missing_values: list[FeatureValue] = ["w", None, float("nan"), PANDAS_NA_TYPE()]
     assert group.positions_of(missing_values).tolist() == [group.unseen_position, 0, 0, 0]
     assert term_view(edit_ebm, "age").positions_of(cuts[:2]).tolist() == [2, 3]
+
+
+def test_the_feature_type_of_a_view_is_a_member_of_the_enum(edit_ebm: ExplainableBoostingClassifier) -> None:
+    assert term_view(edit_ebm, "score").feature_type is FeatureType.CONTINUOUS

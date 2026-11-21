@@ -17,7 +17,7 @@ import polars as pl
 import skops.io
 import skops.io.exceptions
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame, PathLike
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import DataFileError, EditError, InvalidInstanceError, UnsupportedModelError
 from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession, RevisionInfo
@@ -273,13 +273,13 @@ _TRUSTED_TYPES = [f"{cls.__module__}.{cls.__qualname__}" for cls in _EBM_CLASSES
 
 
 def _load_skops(
-    path: str | os.PathLike[str],
+    path: PathLike,
 ) -> object:  # nosemgrep: ebaml-no-object-type -- a file of any content, which the caller checks
     """Load a skops file and trust only the EBM classes.
 
     Parameters
     ----------
-    path: str | os.PathLike[str]
+    path: PathLike
         The skops file.
 
     Returns
@@ -300,7 +300,7 @@ def _load_skops(
         raise UnsupportedModelError(msg) from error
 
 
-def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
+def load_model(path: PathLike) -> ExplainableBoostingModel:
     """Load an EBM from a skops file, or from a pickled or joblib file, of the path that the user gave.
 
     A skops file is a zip archive. The loader trusts only the EBM classes, so a skops file runs no code. A pickled or
@@ -309,7 +309,7 @@ def load_model(path: str | os.PathLike[str]) -> ExplainableBoostingModel:
 
     Parameters
     ----------
-    path: str | os.PathLike[str]
+    path: PathLike
         The file of the fitted EBM.
 
     Returns
@@ -381,7 +381,7 @@ class _FileProbe:
         return "The file is neither Parquet nor UTF-8 CSV: it has no Parquet mark, and it is not UTF-8 text."
 
 
-def _probe(path: str | os.PathLike[str]) -> _FileProbe:
+def _probe(path: PathLike) -> _FileProbe:
     """Read the first and the last bytes of a file.
 
     Returns
@@ -412,7 +412,7 @@ def _probe(path: str | os.PathLike[str]) -> _FileProbe:
     )
 
 
-def load_data(path: str | os.PathLike[str]) -> Frame:
+def load_data(path: PathLike) -> Frame:
     """Read the rows from a Parquet file, or from a CSV file.
 
     The function reads the first and the last bytes of the file, not its extension. A file that starts and ends with
@@ -421,7 +421,7 @@ def load_data(path: str | os.PathLike[str]) -> Frame:
 
     Parameters
     ----------
-    path: str | os.PathLike[str]
+    path: PathLike
         The Parquet file, or the CSV file.
 
     Returns

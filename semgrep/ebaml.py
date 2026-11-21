@@ -515,3 +515,61 @@ def loops_over_numpy(scores: np.ndarray, rows: list[float]):
     for score in scores:  # nosemgrep: ebaml-numpy-loop-needs-reason -- each step uses the total of the step before
         total = total * score
     return total, doubled, summed
+
+
+class Compared:
+    feature_type: str
+    name: str
+
+
+def compare_attribute_to_text(view):
+    # ruleid: ebaml-enum-not-string-compare
+    return view.feature_type == "continuous"
+
+
+def compare_attribute_to_texts(row):
+    # ruleid: ebaml-enum-not-string-compare
+    return row.kind in ("edit", "save")
+
+
+def not_equal_attribute_to_text(edit):
+    # ruleid: ebaml-enum-not-string-compare
+    return edit.direction != "auto"
+
+
+def match_attribute_on_text(budget):
+    # ruleid: ebaml-enum-not-string-compare
+    match budget.status:
+        case "ok":
+            return 1
+    return 0
+
+
+def compare_attribute_to_member(view):
+    # ok: ebaml-enum-not-string-compare
+    return view.feature_type is FeatureType.CONTINUOUS
+
+
+def compare_other_attribute_to_text(record):
+    # ok: ebaml-enum-not-string-compare
+    return record.name == "detail"
+
+
+# ruleid: ebaml-no-literal-string-type
+Choice = Literal["increasing", "decreasing"]
+
+# ok: ebaml-no-literal-string-type
+Count = int | None
+
+# ruleid: ebaml-no-literal-string-type
+OneChoice = Literal["auto"]
+
+
+# ruleid: ebaml-use-pathlike-alias
+def takes_long_path(path: str | os.PathLike[str]) -> str:
+    return str(path)
+
+
+# ok: ebaml-use-pathlike-alias
+def takes_path_alias(path: PathLike) -> str:
+    return str(path)

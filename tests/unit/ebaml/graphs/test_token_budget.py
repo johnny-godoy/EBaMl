@@ -6,6 +6,8 @@ from typing import Literal
 import numpy as np
 import pytest
 
+from ebaml.core.custom_types import BudgetLevel
+from ebaml.core.exceptions import InvalidOptionError
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph
 from ebaml.graphs.token_budget import (
     DEFAULT_RELATIVE_SPREAD,
@@ -171,3 +173,9 @@ def test_to_text_simplifies_a_large_graph_with_an_estimator() -> None:
     long_text = graph.to_text()
     short_text = graph.to_text(max_tokens=1000, overbudget_percent=0, check_budget=TokenEstimator())
     assert estimate_tokens(short_text) <= 1000 < estimate_tokens(long_text)
+
+
+def test_a_budget_status_keeps_its_level_as_a_member_of_the_enum() -> None:
+    assert BudgetStatus(1, "warn").status is BudgetLevel.WARN
+    with pytest.raises(InvalidOptionError, match="Invalid option: fine"):
+        BudgetStatus(1, "fine")

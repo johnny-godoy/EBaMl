@@ -17,6 +17,7 @@ import skops.io
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from ebaml.core.custom_types import Direction
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import (
     EditError,
@@ -26,7 +27,7 @@ from ebaml.core.exceptions import (
     UnsupportedModelError,
 )
 from ebaml.edit.edit_session import EditSession, RevisionInfo
-from ebaml.edit.edits import Direction, Edit, EditOutcome, Monotonize, Recenter, SetScores, Shift
+from ebaml.edit.edits import Edit, EditOutcome, Monotonize, Recenter, SetScores, Shift
 from ebaml.edit.history import EditEntry, SaveEntry
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins, MissingBin, WholeGraph
@@ -35,7 +36,7 @@ from tests.unit.ebaml.edit.conftest import assert_consistent, fixed_clock, move_
 
 type Model = ExplainableBoostingClassifier | ExplainableBoostingRegressor
 
-DIRECTIONS: tuple[Direction, ...] = ("increasing", "decreasing", "auto")
+DIRECTIONS: tuple[Direction, ...] = tuple(Direction)
 
 
 def _ids() -> Callable[[], uuid.UUID]:

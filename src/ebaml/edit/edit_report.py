@@ -10,7 +10,7 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType
 from ebaml.core.exceptions import EBaMlError
 from ebaml.edit.edits import EditOutcome
 from ebaml.edit.model_view import TermView, interaction_names, interval_label, term_view
@@ -228,7 +228,7 @@ def _compare_ranges(before: TermView, after: TermView) -> _Comparison:
 
 def _compare(before: TermView, after: TermView) -> _Comparison:
     same_bins = before.real_bin_count == after.real_bin_count and (
-        before.feature_type != "continuous"
+        before.feature_type is not FeatureType.CONTINUOUS
         or [left for left, _ in before.bin_edges()[1:]] == [left for left, _ in after.bin_edges()[1:]]
     )
     return _compare_positions(before, after) if same_bins else _compare_ranges(before, after)

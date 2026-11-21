@@ -32,10 +32,10 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "to: typing.Literal['left', 'right', 'mean']"
+      "to: <enum 'AlignTarget'>"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Literal['left', 'right', 'mean']) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Union[E, str]) -> None"
   },
   "AssignScores": {
     "bases": [
@@ -352,14 +352,14 @@
     ],
     "fields": [
       "feature_name: <class 'str'>",
-      "feature_type: <class 'str'>",
-      "x_vals: collections.abc.Sequence[tuple[float, float]] | collections.abc.Sequence[str]",
+      "feature_type: <enum 'FeatureType'>",
+      "x_vals: XValues",
       "scores: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating]",
       "stds: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating]",
       "classes: collections.abc.Sequence[str]"
     ],
     "kind": "class",
-    "signature": "(feature_name: str, feature_type: str, x_vals: collections.abc.Sequence[tuple[float, float]] | collections.abc.Sequence[str], scores: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], stds: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], classes: collections.abc.Sequence[str] = ()) -> None"
+    "signature": "(feature_name: str, feature_type: str, x_vals: XValues, scores: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], stds: collections.abc.Sequence[float] | collections.abc.Sequence[collections.abc.Sequence[float]] | NDArray[numpy.floating], classes: collections.abc.Sequence[str] = ()) -> None"
   },
   "EBMGraphError": {
     "bases": [
@@ -646,7 +646,7 @@
       "include_description: <class 'bool'>",
       "feature_format: ebaml.core.custom_types.FeatureType | str | None",
       "x_axis_precision: int | None",
-      "y_axis_precision: typing.Union[int, typing.Literal['auto'], NoneType]",
+      "y_axis_precision: AxisPrecision",
       "confidence_bounds: <class 'bool'>",
       "confidence_level: <class 'float'>",
       "max_tokens: <class 'int'>",
@@ -654,7 +654,7 @@
       "token_learner: ebaml.llm.token_learning.TokenLearner | None"
     ],
     "kind": "class",
-    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: Union[int, Literal['auto'], NoneType] = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None) -> None"
+    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None) -> None"
   },
   "GraphTextError": {
     "bases": [
@@ -711,7 +711,7 @@
       "short_id: <class 'str'>",
       "sequence: <class 'int'>",
       "time: <class 'datetime.datetime'>",
-      "kind: <class 'str'>",
+      "kind: <enum 'HistoryKind'>",
       "feature: str | None",
       "edit_type: str | None",
       "description: <class 'str'>",
@@ -719,7 +719,7 @@
       "reviewed: <class 'bool'>"
     ],
     "kind": "class",
-    "signature": "(id: str, short_id: str, sequence: int, time: datetime.datetime, kind: str, feature: str | None, edit_type: str | None, description: str, reason: str, reviewed: bool) -> None"
+    "signature": "(id: str, short_id: str, sequence: int, time: datetime.datetime, kind: Union[E, str], feature: str | None, edit_type: str | None, description: str, reason: str, reviewed: bool) -> None"
   },
   "Interpolate": {
     "bases": [
@@ -979,11 +979,11 @@
     ],
     "fields": [
       "feature: <class 'str'>",
-      "direction: typing.Literal['increasing', 'decreasing']",
+      "direction: <enum 'MonotoneDirection'>",
       "selection: <class 'ebaml.edit.selections.Selection'>"
     ],
     "kind": "class",
-    "signature": "(feature: str, direction: Literal['increasing', 'decreasing'], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
   },
   "Monotonize": {
     "bases": [
@@ -992,11 +992,11 @@
     ],
     "fields": [
       "feature: <class 'str'>",
-      "direction: typing.Literal['increasing', 'decreasing', 'auto']",
+      "direction: <enum 'Direction'>",
       "selection: <class 'ebaml.edit.selections.Selection'>"
     ],
     "kind": "class",
-    "signature": "(feature: str, direction: Literal['increasing', 'decreasing', 'auto'], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
   },
   "MulticlassClassifier": {
     "bases": [
@@ -1529,7 +1529,7 @@
   },
   "load_gamchanger": {
     "kind": "function",
-    "signature": "(path: str | os.PathLike[str], ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor) -> list[ebaml.edit.gamchanger_files.GamChangerCommit]"
+    "signature": "(path: PathLike, ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor) -> list[ebaml.edit.gamchanger_files.GamChangerCommit]"
   },
   "model_kind": {
     "kind": "function",
@@ -1553,7 +1553,7 @@
   },
   "save_gamchanger": {
     "kind": "function",
-    "signature": "(session: ebaml.edit.edit_session.EditSession, path: str | os.PathLike[str], data: Frame | None = None, labels: collections.abc.Sequence[FeatureValue] | NDArray[numpy.generic] | None = None) -> ebaml.edit.gamchanger_export.GamChangerExport"
+    "signature": "(session: ebaml.edit.edit_session.EditSession, path: PathLike, data: Frame | None = None, labels: collections.abc.Sequence[FeatureValue] | NDArray[numpy.generic] | None = None) -> ebaml.edit.gamchanger_export.GamChangerExport"
   },
   "strength_word": {
     "kind": "function",

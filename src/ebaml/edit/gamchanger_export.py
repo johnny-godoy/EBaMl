@@ -13,7 +13,6 @@ with a missing value, which the widget cannot read. ``load_gamchanger`` reads th
 """
 
 import hashlib
-import os
 from collections.abc import Sequence
 from itertools import starmap
 from pathlib import Path
@@ -23,12 +22,20 @@ import numpy as np
 import numpy.typing as npt
 import orjson
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame, JSONObject, JSONValue
+from ebaml.core.custom_types import (
+    ExplainableBoostingModel,
+    FeatureType,
+    FeatureValue,
+    Frame,
+    JSONObject,
+    JSONValue,
+    PathLike,
+)
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.edit.edit_session import ORIGINAL, EditSession
 from ebaml.edit.gamchanger_files import GAMCHANGER_DECIMALS
-from ebaml.edit.history import HistoryRow
+from ebaml.edit.history import HistoryKind, HistoryRow
 from ebaml.edit.model_view import TermView, interaction_names, term_view
 from ebaml.graphs.terms import main_effect_features
 
@@ -78,9 +85,9 @@ def _rounded(values: npt.ArrayLike) -> list[float]:
 
 
 def _gamchanger_type(view: TermView) -> str:
-    if view.feature_type == "continuous":
+    if view.feature_type is FeatureType.CONTINUOUS:
         return "continuous"
-    if view.feature_type == "nominal":
+    if view.feature_type is FeatureType.NOMINAL:
         return "categorical"
     msg = (
         f"GAM Changer edits continuous and nominal features only, and {view.feature_name!r} is {view.feature_type}."
@@ -107,7 +114,7 @@ def _feature_data(ebm: ExplainableBoostingModel, view: TermView, importance: flo
         "count": view.weights[1:-1].tolist(),
         "histCount": _rounded(np.asarray(ebm.histogram_weights_[view.feature_index], dtype=float)[1:-1]),
     }
-    if view.feature_type == "continuous":
+    if view.feature_type is FeatureType.CONTINUOUS:
         edges = view.bin_edges()
         data["binEdge"] = [left for left, _ in edges] + [edges[-1][1]]
         data["histEdge"] = _rounded(np.asarray(ebm.histogram_edges_[view.feature_index], dtype=float))
@@ -125,7 +132,7 @@ def _model_data(ebm: ExplainableBoostingModel) -> JSONObject:
     encoder: dict[str, JSONValue] = {
         view.feature_name: {str(code): name for name, code in _codes(view).items()}
         for view in views
-        if view.feature_type == "nominal"
+        if view.feature_type is FeatureType.NOMINAL
     }
     lows = [float(np.min(view.scores - np.asarray(ebm.standard_deviations_[view.term]))) for view in views]
     highs = [float(np.max(view.scores + np.asarray(ebm.standard_deviations_[view.term]))) for view in views]
@@ -232,7 +239,11 @@ def _state(ebm: ExplainableBoostingModel, feature: str, *, zeroed: bool = False)
     """
     view = term_view(ebm, feature)
     scores = np.zeros_like(view.scores) if zeroed else view.scores
-    return _continuous_state(view, scores) if view.feature_type == "continuous" else _nominal_state(ebm, view, scores)
+    return (
+        _continuous_state(view, scores)
+        if view.feature_type is FeatureType.CONTINUOUS
+        else _nominal_state(ebm, view, scores)
+    )
 
 
 def _commit(row: HistoryRow, state: JSONObject, commit_type: str, description: str) -> JSONObject:
@@ -267,7 +278,7 @@ class _History:
 
 def _history(session: EditSession, original: ExplainableBoostingModel) -> _History:
     info = session.revision_info()
-    rows = [row for row in session.history_table() if row.kind == "edit"][: info.edit_count]
+    rows = [row for row in session.history_table() if row.kind is HistoryKind.EDIT][: info.edit_count]
     known = {original.feature_names_in_[index] for index in main_effect_features(original)}
     commits: list[JSONValue] = []
     left_out: list[str] = []
@@ -334,7 +345,7 @@ def _synthetic_rows(views: Sequence[TermView]) -> list[list[FeatureValue]]:
         row: list[FeatureValue] = []
         for view in views:
             bin_number = min(number, view.real_bin_count - 1)
-            if view.feature_type == "continuous":
+            if view.feature_type is FeatureType.CONTINUOUS:
                 left, right = view.bin_edges()[bin_number]
                 row.append((left + right) / 2)
             else:
@@ -353,7 +364,7 @@ def _encoded(view: TermView, value: FeatureValue) -> float:
         ``get_sample_data`` of GAM Changer writes it.
 
     """
-    if view.feature_type == "continuous":
+    if view.feature_type is FeatureType.CONTINUOUS:
         return float(np.asarray([value], dtype=float)[0])
     return int(view.positions_of([value])[0])
 
@@ -394,7 +405,7 @@ def _samples(ebm: ExplainableBoostingModel, data: Frame | None, labels: npt.NDAr
 
 def save_gamchanger(
     session: EditSession,
-    path: str | os.PathLike[str],
+    path: PathLike,
     data: Frame | None = None,
     labels: Sequence[FeatureValue] | npt.NDArray[np.generic] | None = None,
 ) -> GamChangerExport:
@@ -409,7 +420,7 @@ def save_gamchanger(
     ----------
     session : EditSession
         The session. The file holds the edits up to the head.
-    path : str | os.PathLike[str]
+    path : PathLike
         The new file. The function refuses a path that exists.
     data : Frame, optional
         Rows for the metrics of the widget, with a column for each feature of the model. Wrap a pandas or polars frame

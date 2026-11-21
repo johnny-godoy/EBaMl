@@ -1,13 +1,20 @@
 """Tests for the custom types."""
 
+import pathlib
 import typing
 
 import pytest
+from beartype.door import is_bearable
 
 from ebaml.core.custom_types import (
+    BudgetLevel,
+    Direction,
     ExplainableBoostingModel,
     FeatureType,
+    MonotoneDirection,
     Normalization,
+    PathLike,
+    Transport,
     coerce_enum,
     normalize_feature_type,
     normalize_feature_types,
@@ -82,3 +89,24 @@ def test_coerce_enum(value: str | Normalization) -> None:
 def test_coerce_enum_invalid() -> None:
     with pytest.raises(InvalidOptionError, match="bogus"):
         coerce_enum(Normalization, "bogus")
+
+
+@pytest.mark.parametrize("path", ["model.skops", pathlib.Path("model.skops")])
+def test_path_like_accepts_a_text_and_a_path(path: str | pathlib.Path) -> None:
+    assert is_bearable(path, PathLike)
+
+
+def test_path_like_rejects_a_number() -> None:
+    assert not is_bearable(3, PathLike)
+
+
+def test_each_option_enum_lists_its_values() -> None:
+    assert [level.value for level in BudgetLevel] == ["ok", "warn", "over"]
+    assert [transport.value for transport in Transport] == ["stdio", "streamable-http"]
+    assert [direction.value for direction in Direction] == ["increasing", "decreasing", "auto"]
+
+
+def test_an_edit_direction_adds_auto_to_the_monotone_directions() -> None:
+    assert [direction.value for direction in MonotoneDirection] == [
+        direction.value for direction in Direction if direction is not Direction.AUTO
+    ]

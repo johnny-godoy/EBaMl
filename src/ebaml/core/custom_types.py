@@ -1,10 +1,11 @@
 """Types for EBM models, and the coercion of options to them."""
 
 import enum
+import os
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 import narwhals as nw
 import numpy as np
@@ -21,6 +22,15 @@ ExplainableBoostingModel = ExplainableBoostingClassifier | ExplainableBoostingRe
 # The type of pd.NA. This is the only place in ebaml that imports pandas, so the rest of the code stays neutral.
 PANDAS_NA_TYPE: type[NAType] = NAType
 
+# A file system path, as the functions of ebaml accept it (types.md: inputs abstract).
+type PathLike = str | os.PathLike[str]
+# The bounds of one bin of a continuous feature.
+type Interval = tuple[float, float]
+# The x values of a graph: the bins of a continuous feature, or the categories of a nominal one.
+type XValues = Sequence[Interval] | Sequence[str]
+# The precision of an axis in digits, or "auto" to detect it from the range.
+# nosemgrep: ebaml-no-literal-string-type -- the hint mixes a number with one text, so a StrEnum cannot hold it
+type AxisPrecision = int | Literal["auto"] | None
 # A data frame of any library that narwhals supports.
 type Frame = nw.DataFrame[Any]
 # A label of a class, as NumPy's tolist() and item() return it. The numeric tower lets float cover int and bool.
@@ -55,6 +65,36 @@ class FeatureType(enum.StrEnum):
     ORDINAL = "ordinal"
     NOMINAL = "nominal"
     BOOLEAN = "boolean"
+
+
+class MonotoneDirection(enum.StrEnum):
+    """The direction of a monotone graph."""
+
+    INCREASING = "increasing"
+    DECREASING = "decreasing"
+
+
+class Direction(enum.StrEnum):
+    """The direction that an edit gives a graph. ``AUTO`` lets the edit pick the better ``MonotoneDirection``."""
+
+    INCREASING = MonotoneDirection.INCREASING.value
+    DECREASING = MonotoneDirection.DECREASING.value
+    AUTO = "auto"
+
+
+class BudgetLevel(enum.StrEnum):
+    """How an estimated number of tokens compares with the budget."""
+
+    OK = "ok"
+    WARN = "warn"
+    OVER = "over"
+
+
+class Transport(enum.StrEnum):
+    """How an MCP server talks to its client."""
+
+    STDIO = "stdio"
+    STREAMABLE_HTTP = "streamable-http"
 
 
 def normalize_feature_type(feature_type: str) -> FeatureType:

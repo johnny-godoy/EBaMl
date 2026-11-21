@@ -10,21 +10,20 @@ below the tolerance is not a violation, so that the rounding of a repair does no
 """
 
 import abc
+import functools
 from collections.abc import Iterable, Sequence
-from typing import Literal, override
+from typing import override
 
 import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ExplainableBoostingModel, MonotoneDirection, coerce_enum
 from ebaml.core.exceptions import EditError, OptionRangeError, SelectionError
 from ebaml.edit import model_write
 from ebaml.edit.edits import Clip, Edit, LimitSteps, Monotonize, RemoveFeature, SetScores
 from ebaml.edit.model_view import TermView, term_view
 from ebaml.edit.selections import EveryBin, Selection, WholeGraph
-
-MonotoneDirection = Literal["increasing", "decreasing"]
 
 DEFAULT_TOLERANCE = 1e-9
 
@@ -181,18 +180,18 @@ class Monotone(Constraint):
     """
 
     feature: str
-    direction: MonotoneDirection
+    direction: MonotoneDirection = attrs.field(converter=functools.partial(coerce_enum, MonotoneDirection))
     selection: Selection = attrs.field(factory=WholeGraph)
 
     @override
     def violation(self, ebm: ExplainableBoostingModel, tolerance: float) -> Violation | None:
         scores = _ordered_scores(ebm, self.feature, self.selection, "Monotone")
         steps = np.diff(scores.values)
-        wrong_way = -steps if self.direction == "increasing" else steps
+        wrong_way = -steps if self.direction is MonotoneDirection.INCREASING else steps
         breaks = wrong_way > tolerance
         if not breaks.any():
             return None
-        verb = "falls" if self.direction == "increasing" else "rises"
+        verb = "falls" if self.direction is MonotoneDirection.INCREASING else "rises"
         excess = float(wrong_way.max())
         description = (
             f"The graph of {self.feature} {verb} between {int(breaks.sum())} pairs of neighbour bins"
