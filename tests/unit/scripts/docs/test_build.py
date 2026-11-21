@@ -27,6 +27,8 @@ def sources(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, ...]
     monkeypatch.setattr(build, "PAPERS_ROOT", tmp_path / "papers")
     monkeypatch.setattr(build, "PAPER_DIR", tmp_path / "docs" / "proofs")
     monkeypatch.setattr(build, "SITE_DIR", tmp_path / "site")
+    # the figures fit a real EBM, which test_figures.py covers
+    monkeypatch.setattr(build, "write_figures", list)
     return (*notebooks, *package)
 
 
@@ -262,6 +264,19 @@ def test_build_and_serve_export_the_papers_before_the_site(
     monkeypatch.setattr(build, "export_papers", lambda: events.append(["papers"]))
     build.COMMANDS[command]()
     assert [event[0] if event == ["papers"] else event[2] for event in events[-2:]] == ["papers", "zensical"]
+
+
+@pytest.mark.parametrize("command", ["build", "serve"])
+def test_build_and_serve_write_the_figures_before_the_site(
+    command: str,
+    sources: tuple[Path, ...],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    del sources
+    events = record_runs(monkeypatch)
+    monkeypatch.setattr(build, "write_figures", lambda: events.append(["figures"]))
+    build.COMMANDS[command]()
+    assert [event[0] if event == ["figures"] else event[2] for event in events[-2:]] == ["figures", "zensical"]
 
 
 def page(site: Path, path: str, body: str) -> None:

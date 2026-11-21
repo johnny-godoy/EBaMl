@@ -46,6 +46,8 @@ proofs/papers/**/*.pdf
 # Notebooks exported by scripts/docs/build.py
 docs/notebooks/
 docs/proofs/
+# Figures written by scripts/docs/figures.py
+docs/generated/
 
 # The session cache of marimo
 notebooks/__marimo__/
