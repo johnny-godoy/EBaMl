@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.9.1'></a>
+## [0.9.1] - 2026-11-21
+
+### Changed
+
+- The options of an edit, a constraint, a history row and a graph are `StrEnum` members: `Direction`,
+  `MonotoneDirection`, `AlignTarget`, `HistoryKind`, `BudgetLevel` and `FeatureType`. The functions still accept the
+  plain text (`"increasing"`) and turn it into the member. A wrong text raises `InvalidOptionError`.
+- The tool `get_graph` and the option `--transport` of the server take the enums `Normalization` and `Transport`. The
+  schema of `get_graph` lists the values of `normalization` through a `$ref`.
+- The help of the edit tools lists the allowed values of each option.
+
 <a id='changelog-0.9.0'></a>
 ## [0.9.0] - 2026-11-21
 
