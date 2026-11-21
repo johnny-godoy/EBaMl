@@ -6,6 +6,9 @@ through ``model_write.replace_bins`` or ``model_write.set_bounds``, which change
 standard deviations and the training weights together. If a pair term reads the same cuts as the main effect, the main
 effect gets its own cuts first, so the pair term does not change.
 
+A bin edit changes the bins of every class of a multiclass model, because the classes share the bins. So it takes no
+class: each new bin gets the scores of every class.
+
 The training weight of a new bin is an estimate. The model keeps the weight of each bin, not the values of the rows,
 so an edit that cuts a bin shares its weight by width, as if the values were spread evenly over the bin.
 """
@@ -26,6 +29,18 @@ from ebaml.edit.selections import Selection
 
 def _number(value: float) -> str:
     return format(value, ".6g")
+
+
+def _twice(values: npt.NDArray[np.float64], position: int) -> npt.NDArray[np.float64]:
+    """Give two copies of the row of one bin: one score, or one score per class of a multiclass model.
+
+    Returns
+    -------
+    npt.NDArray[np.float64]
+        The two rows.
+
+    """
+    return np.repeat(values[[position]], 2, axis=0)
 
 
 def _continuous_view(ebm: ExplainableBoostingModel, feature: str, edit_name: str) -> TermView:
@@ -79,9 +94,9 @@ class SplitBin(Edit):
                 first=position,
                 last=position,
                 inner_cuts=[self.at],
-                scores=np.repeat(view.scores[position], 2),
+                scores=_twice(view.scores, position),
                 weights=view.weights[position] * np.array([left_share, 1 - left_share]),
-                deviations=np.repeat(np.asarray(ebm.standard_deviations_[view.term], dtype=float)[position], 2),
+                deviations=_twice(np.asarray(ebm.standard_deviations_[view.term], dtype=float), position),
                 bags=bags,
             ),
         )
@@ -124,15 +139,17 @@ def _equal_bins(view: TermView, first: int, last: int, bin_count: int) -> model_
     taken = overlaps * old_weights
     # a new bin that takes no weight averages the old scores by the width that it covers
     mix = np.where(taken.sum(axis=1, keepdims=True) > 0, taken, overlaps)
-    new_scores = (mix @ view.scores[first : last + 1]) / mix.sum(axis=1)
+    # the scores of a multiclass model have one column for each class, and the mix applies to each column
+    new_scores = (mix / mix.sum(axis=1, keepdims=True)) @ view.scores[first : last + 1]
+    bag_count = np.asarray(view.ebm.bagged_scores_[view.term]).shape[0]
     return model_write.BinReplacement(
         first=first,
         last=last,
         inner_cuts=new_edges[1:-1].tolist(),
         scores=new_scores,
         weights=overlaps @ old_weights,
-        deviations=np.zeros(bin_count),
-        bags=np.tile(new_scores, (np.asarray(view.ebm.bagged_scores_[view.term]).shape[0], 1)),
+        deviations=np.zeros_like(new_scores),
+        bags=np.broadcast_to(new_scores, (bag_count, *new_scores.shape)).copy(),
     )
 
 
@@ -189,14 +206,14 @@ def _copy_bin(
 
     """
     order = [1, 0] if new_first else [0, 1]
-    deviation = np.asarray(ebm.standard_deviations_[view.term], dtype=float)[position]
+    deviations = np.asarray(ebm.standard_deviations_[view.term], dtype=float)
     return model_write.BinReplacement(
         first=position,
         last=position,
         inner_cuts=[],
-        scores=np.repeat(view.scores[position], 2),
+        scores=_twice(view.scores, position),
         weights=np.array([view.weights[position], 0.0])[order],
-        deviations=np.repeat(deviation, 2),
+        deviations=_twice(deviations, position),
         bags=np.asarray(ebm.bagged_scores_[view.term], dtype=float)[:, [position, position]],
     )
 

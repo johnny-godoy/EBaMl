@@ -14,6 +14,7 @@ from ebaml.edit.edit_effect import (
     SUBGROUP_ROWS,
     ClassifierMetrics,
     ConfusionMatrix,
+    MulticlassMetrics,
     RegressorMetrics,
     Subgroup,
     affected_profile,
@@ -22,7 +23,7 @@ from ebaml.edit.edit_effect import (
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import SetScores, Shift
 from ebaml.edit.model_view import term_view
-from ebaml.edit.selections import Bins, Categories, MissingBin
+from ebaml.edit.selections import Bins, Categories, MissingBin, WholeGraph
 from tests.unit.ebaml.conftest import PandasFrame, as_frame
 from tests.unit.ebaml.edit.conftest import fixed_clock
 
@@ -225,3 +226,93 @@ def test_the_profile_is_empty_when_the_last_edit_reaches_no_row(
 ) -> None:
     profile = affected_profile(_session_with(edit_ebm), as_frame(edit_data))
     assert (profile.affected_rows, profile.features) == (0, ())
+
+
+def _multiclass_labels(ebm: ExplainableBoostingClassifier, data: PandasFrame) -> np.ndarray:
+    random_generator = np.random.default_rng(12)
+    probabilities = ebm.predict_proba(data)
+    picks = (random_generator.uniform(size=(len(data), 1)) > probabilities.cumsum(axis=1)).sum(axis=1)
+    classes = np.asarray(ebm.classes_)
+    labels: np.ndarray = classes[np.minimum(picks, len(classes) - 1)]
+    return labels
+
+
+def test_the_metrics_of_a_multiclass_model_match_a_reference_and_hold_the_confusion_matrix_of_all_classes(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = _session_with(multiclass_edit_ebm, Shift("age", Bins(10, 300), 2.0, class_label="high"))
+    labels = _multiclass_labels(multiclass_edit_ebm, edit_data)
+    effect = edit_effect(session, as_frame(edit_data), labels)
+    (every_row, affected, *_) = effect.scopes
+    current = every_row.current
+    assert isinstance(current, MulticlassMetrics)
+    model = session.model
+    assert isinstance(model, ExplainableBoostingClassifier)
+    predicted = model.predict(edit_data)
+    classes = ["high", "low", "mid"]
+    assert current.classes == tuple(classes)
+    assert current.confusion_matrix == tuple(
+        tuple(row) for row in metrics.confusion_matrix(labels, predicted, labels=classes).tolist()
+    )
+    assert current.accuracy == pytest.approx(metrics.accuracy_score(labels, predicted))
+    assert current.balanced_accuracy == pytest.approx(metrics.balanced_accuracy_score(labels, predicted))
+    assert current.roc_auc == pytest.approx(
+        metrics.roc_auc_score(labels, model.predict_proba(edit_data), multi_class="ovr", labels=classes),
+    )
+    assert isinstance(every_row.original, MulticlassMetrics)
+    assert every_row.original != current
+    assert 0 < affected.row_count < len(edit_data)
+
+
+def test_a_multiclass_scope_without_every_class_has_no_roc_auc_and_averages_the_recall_of_its_classes(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = _session_with(multiclass_edit_ebm)
+    labels = np.where(np.arange(len(edit_data)) % 2 == 0, "low", "mid")
+    (every_row,) = edit_effect(session, as_frame(edit_data), labels).scopes[:1]
+    current = every_row.current
+    assert isinstance(current, MulticlassMetrics)
+    assert current.roc_auc is None
+    predicted = np.asarray(session.model.predict(edit_data))
+    mean_recall = metrics.recall_score(labels, predicted, labels=["low", "mid"], average="macro")
+    assert current.balanced_accuracy == pytest.approx(mean_recall)
+
+
+def test_the_row_changes_of_a_multiclass_model_count_the_moves_between_classes(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = _session_with(multiclass_edit_ebm, Shift("age", WholeGraph(), 3.0, class_label="mid"))
+    changes = edit_effect(session, as_frame(edit_data)).changes_since_original
+    before = np.asarray(multiclass_edit_ebm.predict(edit_data))
+    after = np.asarray(session.model.predict(edit_data))
+    moved = before != after
+    assert changes.rows_with_changed_class == int(moved.sum()) > 0
+    assert {change.to_class for change in changes.class_changes} == {"mid"}
+    assert sum(change.row_count for change in changes.class_changes) == int(moved.sum())
+    for change in changes.class_changes:
+        assert change.row_count == int(((before == change.from_class) & (after == change.to_class)).sum())
+    assert changes.rows_to_positive_class is None
+    assert changes.rows_to_negative_class is None
+    probabilities = multiclass_edit_ebm.predict_proba(edit_data)
+    edited_model = session.model
+    assert isinstance(edited_model, ExplainableBoostingClassifier)
+    new_probabilities = edited_model.predict_proba(edit_data)
+    columns = probabilities.argmax(axis=1)
+    rows = np.arange(len(edit_data))
+    value_change = new_probabilities[rows, columns] - probabilities[rows, columns]
+    assert changes.mean_value_change == pytest.approx(value_change.mean())
+    assert changes.largest_value_change == pytest.approx(np.abs(value_change).max())
+    assert changes.rows_with_changed_value == int(np.count_nonzero(value_change))
+
+
+def test_the_profile_of_a_multiclass_edit_compares_the_affected_rows_with_all_rows(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = _session_with(multiclass_edit_ebm, SetScores("group", Categories(["x"]), 0.0))
+    profile = affected_profile(session, as_frame(edit_data))
+    assert profile.affected_rows == (edit_data["group"] == "x").sum()
+    assert profile.edited_feature == "group"

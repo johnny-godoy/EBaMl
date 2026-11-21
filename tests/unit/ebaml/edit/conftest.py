@@ -86,6 +86,32 @@ def edit_regressor(edit_data: PandasFrame) -> ExplainableBoostingRegressor:
         return model.fit(edit_data, target)
 
 
+MULTICLASS_CLASSES = ("low", "mid", "high")
+
+
+@pytest.fixture(scope="module")
+def multiclass_edit_ebm(edit_data: PandasFrame) -> ExplainableBoostingClassifier:
+    """Give a fitted classifier with three classes, a pair term, a missing bin and an ordinal feature.
+
+    Returns
+    -------
+    ExplainableBoostingClassifier
+        The fitted model.
+
+    """
+    random_generator = np.random.default_rng(6)
+    signal = (
+        2 * np.nan_to_num(edit_data["age"].to_numpy())
+        + (edit_data["group"] == "x").to_numpy()
+        + random_generator.normal(size=ROW_COUNT)
+    )
+    target = np.where(signal > 1, "high", np.where(signal < -1, "low", "mid"))
+    model = ExplainableBoostingClassifier(interactions=1, random_state=0, outer_bags=3, feature_types=FEATURE_TYPES)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return model.fit(edit_data, target)
+
+
 @pytest.fixture(scope="module")
 def gamchanger_ebm(edit_data: PandasFrame) -> ExplainableBoostingClassifier:
     """Give a model that GAM Changer can open: continuous and nominal features, a missing value and a pair term.
@@ -126,17 +152,40 @@ def assert_consistent(ebm: ExplainableBoostingClassifier | ExplainableBoostingRe
 
     The calls are ``predict``, ``predict_with_uncertainty``, ``explain_global``, ``term_importances``,
     ``EBMGraph.from_ebm`` and a save and load with ``skops``. The prediction with uncertainty must equal the
-    prediction, and no uncertainty attribute may hold ``None``.
+    prediction, no uncertainty attribute may hold ``None``, and the bags, the standard deviations and the weights must
+    have the shape of the scores. ``interpret``'s own ``predict_with_uncertainty`` fails on a fitted multiclass model,
+    so for that kind the check compares the mean of the bags of each edited bin with its score instead.
     """
     assert all(bags is not None for bags in ebm.bagged_scores_)
     assert all(deviations is not None for deviations in ebm.standard_deviations_)
     assert ebm.bagged_intercept_ is not None
+    for scores, bags, deviations, weights in zip(
+        ebm.term_scores_,
+        ebm.bagged_scores_,
+        ebm.standard_deviations_,
+        ebm.bin_weights_,
+        strict=True,
+    ):
+        assert np.shape(bags)[1:] == np.shape(scores)
+        assert np.shape(deviations) == np.shape(scores)
+        assert np.shape(weights) == np.shape(scores)[: np.ndim(weights)]
     ebm.predict(data)
-    score = ebm.predict_with_uncertainty(data)[:, 0]
-    assert np.allclose(
-        score,
-        np.ravel(ebm.decision_function(data)) if hasattr(ebm, "decision_function") else ebm.predict(data),
-    )
+    if np.ndim(ebm.intercept_) == 1 and np.size(ebm.intercept_) > 1:
+        assert np.shape(ebm.bagged_intercept_)[1:] == np.shape(ebm.intercept_)
+        for scores, bags, deviations in zip(
+            ebm.term_scores_,
+            ebm.bagged_scores_,
+            ebm.standard_deviations_,
+            strict=True,
+        ):
+            edited = np.asarray(deviations) == 0
+            assert np.allclose(np.asarray(bags).mean(axis=0)[edited], np.asarray(scores)[edited])
+    else:
+        score = ebm.predict_with_uncertainty(data)[:, 0]
+        assert np.allclose(
+            score,
+            np.ravel(ebm.decision_function(data)) if hasattr(ebm, "decision_function") else ebm.predict(data),
+        )
     ebm.explain_global()
     ebm.term_importances()
     for feature_index, feature_type in enumerate(ebm.feature_types_in_):
@@ -144,7 +193,7 @@ def assert_consistent(ebm: ExplainableBoostingClassifier | ExplainableBoostingRe
             EBMGraph.from_ebm(ebm, feature_index)
     saved = skops.io.dumps(ebm)
     loaded = skops.io.loads(saved, trusted=skops.io.get_untrusted_types(data=saved))
-    assert np.allclose(loaded.predict(data), ebm.predict(data))
+    assert np.array_equal(loaded.predict(data), ebm.predict(data))
 
 
 # ---- the reference edits: plain loops, written from the table of tools in the plan -----------------------------------

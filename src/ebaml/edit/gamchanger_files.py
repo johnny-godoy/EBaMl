@@ -32,13 +32,14 @@ import numpy.typing as npt
 import orjson
 
 from ebaml.core.custom_types import ExplainableBoostingModel, JSONMapping, JSONValue, PathLike
-from ebaml.core.exceptions import HistoryError
+from ebaml.core.exceptions import HistoryError, UnsupportedModelError
 from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_report import EditReport
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores, Edit
 from ebaml.edit.model_view import TermView, term_view
 from ebaml.edit.selections import Bins, Categories
+from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features
 
 # GAM Changer rounds every score that it writes to this number of decimals
@@ -454,6 +455,30 @@ def _commit(ebm: ExplainableBoostingModel, entry: JSONMapping) -> GamChangerComm
     )
 
 
+def check_one_score(ebm: ExplainableBoostingModel) -> None:
+    """Check that a model has one score in each bin, as a ``.gamchanger`` file holds.
+
+    GAM Changer reads one score per bin and one intercept, so a file cannot hold a multiclass model.
+
+    Parameters
+    ----------
+    ebm : ExplainableBoostingModel
+        The model.
+
+    Raises
+    ------
+    UnsupportedModelError
+        If the model is a multiclass classifier.
+
+    """
+    if len(model_kind(ebm).outputs) > 1:
+        msg = (
+            "A .gamchanger file holds one score in each bin, and a multiclass classifier has one score for each class."
+            " Edit the model with EditSession, and save it with EditSession.save."
+        )
+        raise UnsupportedModelError(msg)
+
+
 def load_gamchanger(path: PathLike, ebm: ExplainableBoostingModel) -> list[GamChangerCommit]:
     """Read a ``.gamchanger`` file, and build the edits of the newest commit of each feature.
 
@@ -476,9 +501,11 @@ def load_gamchanger(path: PathLike, ebm: ExplainableBoostingModel) -> list[GamCh
     ------
     HistoryError
         If the file is not a GAM Changer document, if it does not fit the model, or if a commit narrows the range of
-        a feature.
+        a feature. ``check_one_score`` raises an ``UnsupportedModelError`` for a multiclass model, which a GAM
+        Changer document cannot hold.
 
     """
+    check_one_score(ebm)
     try:
         document = _mapping(orjson.loads(Path(path).read_bytes()), "document")
     except orjson.JSONDecodeError as error:

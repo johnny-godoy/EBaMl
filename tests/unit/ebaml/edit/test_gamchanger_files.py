@@ -16,7 +16,7 @@ import pytest
 
 from ebaml.core.custom_types import JSONValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import HistoryError
+from ebaml.core.exceptions import HistoryError, UnsupportedModelError
 from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import AssignScores
@@ -467,3 +467,11 @@ def test_a_damaged_document_is_refused(gamchanger_ebm: ExplainableBoostingClassi
     _feature(letters, "score")["additive"] = ["a", "b"]
     with pytest.raises(HistoryError, match=r"The scores of the \.gamchanger file holds a value that is not a number"):
         load_gamchanger(_write(tmp_path, letters), gamchanger_ebm)
+
+
+def test_the_reader_refuses_a_multiclass_model_before_it_reads_the_file(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(UnsupportedModelError, match=r"A \.gamchanger file holds one score in each bin"):
+        load_gamchanger(tmp_path / "absent.gamchanger", multiclass_edit_ebm)

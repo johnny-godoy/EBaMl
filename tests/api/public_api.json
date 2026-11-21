@@ -32,10 +32,11 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "to: <enum 'AlignTarget'>"
+      "to: <enum 'AlignTarget'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Union[E, str]) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, to: Union[E, str], class_label: ClassLabel | None = None) -> None"
   },
   "AssignScores": {
     "bases": [
@@ -45,10 +46,11 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "values: tuple[float, ...]"
+      "values: tuple[float, ...]",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, values) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, values, class_label: ClassLabel | None = None) -> None"
   },
   "Audience": {
     "bases": [
@@ -65,10 +67,11 @@
       "position: <class 'int'>",
       "label: <class 'str'>",
       "before: <class 'float'>",
-      "after: <class 'float'>"
+      "after: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(position: int, label: str, before: float, after: float) -> None"
+    "signature": "(position: int, label: str, before: float, after: float, class_label: ClassLabel | None = None) -> None"
   },
   "BinaryClassifier": {
     "bases": [
@@ -102,10 +105,11 @@
       "feature: <class 'str'>",
       "low: <class 'float'>",
       "high: <class 'float'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, low: float, high: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, low: float, high: float, selection: ebaml.edit.selections.Selection = NOTHING, class_label: ClassLabel | None = None) -> None"
   },
   "Categories": {
     "bases": [
@@ -142,6 +146,18 @@
     "kind": "class",
     "signature": "(group: int, alternative: int) -> None"
   },
+  "ClassShift": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "class_label: ClassLabel",
+      "weighted_mean_shift: <class 'float'>",
+      "intercept_change: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(class_label: ClassLabel, weighted_mean_shift: float, intercept_change: float) -> None"
+  },
   "ClassifierMetrics": {
     "bases": [
       "object"
@@ -164,10 +180,11 @@
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
       "low: <class 'float'>",
-      "high: <class 'float'>"
+      "high: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, low: float, high: float) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, low: float, high: float, class_label: ClassLabel | None = None) -> None"
   },
   "CompletionStep": {
     "bases": [
@@ -485,10 +502,11 @@
       "graph_before: str | None",
       "graph_after: str | None",
       "base_revision: <class 'str'>",
-      "revision: str | None"
+      "revision: str | None",
+      "class_shifts: tuple[ebaml.edit.edit_report.ClassShift, ...]"
     ],
     "kind": "class",
-    "signature": "(feature: str | None, edit_type: str, description: str, changes: tuple[ebaml.edit.edit_report.BinChange, ...], largest_change: float, covered_range: str | None, weight_share: float, weighted_mean_shift: float, intercept_change: float, interactions_still_using: tuple[str, ...], removed_terms: tuple[str, ...], graph_before: str | None, graph_after: str | None, base_revision: str, revision: str | None = None) -> None"
+    "signature": "(feature: str | None, edit_type: str, description: str, changes: tuple[ebaml.edit.edit_report.BinChange, ...], largest_change: float, covered_range: str | None, weight_share: float, weighted_mean_shift: float, intercept_change: float, interactions_still_using: tuple[str, ...], removed_terms: tuple[str, ...], graph_before: str | None, graph_after: str | None, base_revision: str, revision: str | None = None, class_shifts: tuple[ebaml.edit.edit_report.ClassShift, ...] = ()) -> None"
   },
   "EditSession": {
     "bases": [
@@ -582,15 +600,17 @@
   },
   "FitLine": {
     "bases": [
+      "_LineEdit",
       "Edit",
       "object"
     ],
     "fields": [
       "feature: <class 'str'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, class_label: ClassLabel | None = None) -> None"
   },
   "FixedScore": {
     "bases": [
@@ -600,10 +620,11 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "value: <class 'float'>"
+      "value: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float, class_label: ClassLabel | None = None) -> None"
   },
   "GamChangerCommit": {
     "bases": [
@@ -723,15 +744,17 @@
   },
   "Interpolate": {
     "bases": [
+      "_LineEdit",
       "Edit",
       "object"
     ],
     "fields": [
       "feature: <class 'str'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, class_label: ClassLabel | None = None) -> None"
   },
   "Interval": {
     "bases": [
@@ -793,10 +816,11 @@
     "fields": [
       "feature: <class 'str'>",
       "step: <class 'float'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING, class_label: ClassLabel | None = None) -> None"
   },
   "LocalExplanation": {
     "bases": [
@@ -866,10 +890,11 @@
     "fields": [
       "feature: <class 'str'>",
       "step: <class 'float'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, step: float, selection: ebaml.edit.selections.Selection = NOTHING, class_label: ClassLabel | None = None) -> None"
   },
   "MinimalityStatus": {
     "bases": [
@@ -980,10 +1005,11 @@
     "fields": [
       "feature: <class 'str'>",
       "direction: <enum 'MonotoneDirection'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING, class_label: ClassLabel | None = None) -> None"
   },
   "Monotonize": {
     "bases": [
@@ -993,10 +1019,11 @@
     "fields": [
       "feature: <class 'str'>",
       "direction: <enum 'Direction'>",
-      "selection: <class 'ebaml.edit.selections.Selection'>"
+      "selection: <class 'ebaml.edit.selections.Selection'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING) -> None"
+    "signature": "(feature: str, direction: Union[E, str], selection: ebaml.edit.selections.Selection = NOTHING, class_label: ClassLabel | None = None) -> None"
   },
   "MulticlassClassifier": {
     "bases": [
@@ -1008,6 +1035,20 @@
     ],
     "kind": "class",
     "signature": "(classes: tuple[ClassLabel, ...]) -> None"
+  },
+  "MulticlassMetrics": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "accuracy: <class 'float'>",
+      "balanced_accuracy: <class 'float'>",
+      "roc_auc: float | None",
+      "classes: tuple[ClassLabel, ...]",
+      "confusion_matrix: tuple[tuple[int, ...], ...]"
+    ],
+    "kind": "class",
+    "signature": "(accuracy: float, balanced_accuracy: float, roc_auc: float | None, classes: tuple[ClassLabel, ...], confusion_matrix: tuple[tuple[int, ...], ...]) -> None"
   },
   "Normalization": {
     "bases": [
@@ -1140,10 +1181,11 @@
       "object"
     ],
     "fields": [
-      "feature: <class 'str'>"
+      "feature: <class 'str'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str) -> None"
+    "signature": "(feature: str, class_label: ClassLabel | None = None) -> None"
   },
   "Regressor": {
     "bases": [
@@ -1226,10 +1268,11 @@
     ],
     "fields": [
       "feature: <class 'str'>",
-      "factor: <class 'float'>"
+      "factor: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, factor: float) -> None"
+    "signature": "(feature: str, factor: float, class_label: ClassLabel | None = None) -> None"
   },
   "ScopeMetrics": {
     "bases": [
@@ -1282,10 +1325,11 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "value: <class 'float'>"
+      "value: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, value: float, class_label: ClassLabel | None = None) -> None"
   },
   "Shift": {
     "bases": [
@@ -1295,10 +1339,11 @@
     "fields": [
       "feature: <class 'str'>",
       "selection: <class 'ebaml.edit.selections.Selection'>",
-      "delta: <class 'float'>"
+      "delta: <class 'float'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, delta: float) -> None"
+    "signature": "(feature: str, selection: ebaml.edit.selections.Selection, delta: float, class_label: ClassLabel | None = None) -> None"
   },
   "SolveSettings": {
     "bases": [
@@ -1474,10 +1519,11 @@
       "object"
     ],
     "fields": [
-      "feature: <class 'str'>"
+      "feature: <class 'str'>",
+      "class_label: ClassLabel | None"
     ],
     "kind": "class",
-    "signature": "(feature: str) -> None"
+    "signature": "(feature: str, class_label: ClassLabel | None = None) -> None"
   },
   "__version__": {
     "kind": "str",

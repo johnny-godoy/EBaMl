@@ -7,6 +7,9 @@ breaks the constraint, and ``repair`` names the edit that makes the constraint h
 A constraint reads the scores of the main effect of a feature. A pair term that uses the feature can still change the
 effect of the feature on a prediction, so only ``Unused`` makes a claim about the pair terms. A score difference at or
 below the tolerance is not a violation, so that the rounding of a repair does not count.
+
+A multiclass model has one score per class in each bin. A constraint on a graph then takes ``class_label``: the class
+whose scores must meet it, or ``None`` for every class. The repair changes the same classes.
 """
 
 import abc
@@ -18,11 +21,11 @@ import attrs
 import numpy as np
 import numpy.typing as npt
 
-from ebaml.core.custom_types import ExplainableBoostingModel, MonotoneDirection, coerce_enum
+from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, MonotoneDirection, coerce_enum
 from ebaml.core.exceptions import EditError, OptionRangeError, SelectionError
 from ebaml.edit import model_write
 from ebaml.edit.edits import Clip, Edit, LimitSteps, Monotonize, RemoveFeature, SetScores
-from ebaml.edit.model_view import TermView, term_view
+from ebaml.edit.model_view import TermView, class_views, term_view
 from ebaml.edit.selections import EveryBin, Selection, WholeGraph
 
 DEFAULT_TOLERANCE = 1e-9
@@ -104,17 +107,23 @@ class Violation:
 
 @attrs.frozen(eq=False)
 class _Scores:
-    """The selected scores of the main effect of one feature."""
+    """The selected scores of the main effect of one feature, in each class column that the constraint reads."""
 
-    view: TermView
+    views: tuple[TermView, ...]
     positions: tuple[int, ...]
 
     @property
+    def view(self) -> TermView:
+        """The view of the first column, which has the bins and the feature type of every column."""
+        return self.views[0]
+
+    @property
     def values(self) -> npt.NDArray[np.float64]:
-        return self.view.scores[list(self.positions)]
+        """The selected scores: one row for each class column, and one value for each selected bin."""
+        return np.array([view.scores[list(self.positions)] for view in self.views], dtype=float)
 
     def labels(self, mask: npt.NDArray[np.bool_]) -> tuple[str, ...]:
-        """Name the bins where a mask is true.
+        """Name the bins where a mask is true in one class column or more.
 
         Returns
         -------
@@ -122,7 +131,10 @@ class _Scores:
             The name of each such bin, in the order of the bins.
 
         """
-        return tuple(self.view.label(position) for position, chosen in zip(self.positions, mask, strict=True) if chosen)
+        in_any = np.asarray(mask).reshape(-1, len(self.positions)).any(axis=0)
+        return tuple(
+            self.view.label(position) for position, chosen in zip(self.positions, in_any, strict=True) if chosen
+        )
 
     def pair_labels(self, mask: npt.NDArray[np.bool_]) -> tuple[str, ...]:
         """Name both bins of each pair of neighbour bins where a mask is true.
@@ -133,21 +145,52 @@ class _Scores:
             The name of each such bin, in the order of the bins, with no repeat.
 
         """
+        pairs = np.asarray(mask).reshape(-1, len(self.positions) - 1).any(axis=0)
         in_pair = np.zeros(len(self.positions), dtype=bool)
-        in_pair[:-1] |= mask
-        in_pair[1:] |= mask
+        in_pair[:-1] |= pairs
+        in_pair[1:] |= pairs
         return self.labels(in_pair)
 
     def describe(self) -> str:
-        return self.view.describe_positions(self.positions)
+        """Describe the selected bins and the classes.
+
+        Returns
+        -------
+        str
+            For example ``6 bins of age (95.5 to 105)``, or the same text with `` for the class 'low'``.
+
+        """
+        return self.view.describe_positions(self.positions) + self.class_text()
+
+    def class_text(self) -> str:
+        """Name the classes that the constraint reads.
+
+        Returns
+        -------
+        str
+            `` for each class``, `` for the class 'low'``, or an empty text for a model with one score per bin.
+
+        """
+        return " for each class" if len(self.views) > 1 else self.view.class_text()
 
 
-def _scores(ebm: ExplainableBoostingModel, feature: str, selection: Selection) -> _Scores:
-    view = term_view(ebm, feature)
-    return _Scores(view, selection.resolve(view))
+def _scores(
+    ebm: ExplainableBoostingModel,
+    feature: str,
+    selection: Selection,
+    class_label: ClassLabel | None,
+) -> _Scores:
+    views = class_views(term_view(ebm, feature), class_label)
+    return _Scores(views, selection.resolve(views[0]))
 
 
-def _ordered_scores(ebm: ExplainableBoostingModel, feature: str, selection: Selection, name: str) -> _Scores:
+def _ordered_scores(
+    ebm: ExplainableBoostingModel,
+    feature: str,
+    selection: Selection,
+    class_label: ClassLabel | None,
+    name: str,
+) -> _Scores:
     """Read the selected scores for a constraint on the order of the bins.
 
     Returns
@@ -161,7 +204,7 @@ def _ordered_scores(ebm: ExplainableBoostingModel, feature: str, selection: Sele
         If the feature has no order, or the selection holds the missing bin or the unseen bin.
 
     """
-    scores = _scores(ebm, feature, selection)
+    scores = _scores(ebm, feature, selection, class_label)
     if not scores.view.ordered:
         msg = f"{name} needs an order, but {feature!r} is {scores.view.feature_type}. Use Bounded or FixedScore."
         raise EditError(msg)
@@ -182,11 +225,12 @@ class Monotone(Constraint):
     feature: str
     direction: MonotoneDirection = attrs.field(converter=functools.partial(coerce_enum, MonotoneDirection))
     selection: Selection = attrs.field(factory=WholeGraph)
+    class_label: ClassLabel | None = None
 
     @override
     def violation(self, ebm: ExplainableBoostingModel, tolerance: float) -> Violation | None:
-        scores = _ordered_scores(ebm, self.feature, self.selection, "Monotone")
-        steps = np.diff(scores.values)
+        scores = _ordered_scores(ebm, self.feature, self.selection, self.class_label, "Monotone")
+        steps = np.diff(scores.values, axis=1)
         wrong_way = -steps if self.direction is MonotoneDirection.INCREASING else steps
         breaks = wrong_way > tolerance
         if not breaks.any():
@@ -201,7 +245,7 @@ class Monotone(Constraint):
 
     @override
     def repair(self) -> Edit:
-        return Monotonize(self.feature, self.direction, self.selection)
+        return Monotonize(self.feature, self.direction, self.selection, self.class_label)
 
 
 @attrs.frozen
@@ -214,14 +258,15 @@ class MaxStep(Constraint):
     feature: str
     step: float
     selection: Selection = attrs.field(factory=WholeGraph)
+    class_label: ClassLabel | None = None
 
     @override
     def violation(self, ebm: ExplainableBoostingModel, tolerance: float) -> Violation | None:
         if not 0 <= self.step < np.inf:
             msg = f"MaxStep needs a step that is 0 or more and finite, but the step is {self.step}."
             raise EditError(msg)
-        scores = _ordered_scores(ebm, self.feature, self.selection, "MaxStep")
-        over = np.abs(np.diff(scores.values)) - self.step
+        scores = _ordered_scores(ebm, self.feature, self.selection, self.class_label, "MaxStep")
+        over = np.abs(np.diff(scores.values, axis=1)) - self.step
         breaks = over > tolerance
         if not breaks.any():
             return None
@@ -234,7 +279,7 @@ class MaxStep(Constraint):
 
     @override
     def repair(self) -> Edit:
-        return LimitSteps(self.feature, self.step, self.selection)
+        return LimitSteps(self.feature, self.step, self.selection, self.class_label)
 
 
 @attrs.frozen
@@ -250,13 +295,14 @@ class Bounded(Constraint):
     low: float
     high: float
     selection: Selection = attrs.field(factory=EveryBin)
+    class_label: ClassLabel | None = None
 
     @override
     def violation(self, ebm: ExplainableBoostingModel, tolerance: float) -> Violation | None:
         if not self.low <= self.high:
             msg = f"Bounded needs numbers with low not above high, but low is {self.low} and high is {self.high}."
             raise EditError(msg)
-        scores = _scores(ebm, self.feature, self.selection)
+        scores = _scores(ebm, self.feature, self.selection, self.class_label)
         values = scores.values
         outside = np.maximum(self.low - values, values - self.high)
         breaks = outside > tolerance
@@ -264,14 +310,14 @@ class Bounded(Constraint):
             return None
         excess = float(outside.max())
         description = (
-            f"{int(breaks.sum())} scores of {self.feature} are outside the range {_number(self.low)} to"
-            f" {_number(self.high)}, by up to {_number(excess)}"
+            f"{int(breaks.sum())} scores of {self.feature}{scores.class_text()} are outside the range"
+            f" {_number(self.low)} to {_number(self.high)}, by up to {_number(excess)}"
         )
         return Violation(self, description, scores.labels(breaks), excess, self.repair())
 
     @override
     def repair(self) -> Edit:
-        return Clip(self.feature, self.selection, self.low, self.high)
+        return Clip(self.feature, self.selection, self.low, self.high, self.class_label)
 
 
 @attrs.frozen
@@ -281,22 +327,26 @@ class FixedScore(Constraint):
     feature: str
     selection: Selection
     value: float
+    class_label: ClassLabel | None = None
 
     @override
     def violation(self, ebm: ExplainableBoostingModel, tolerance: float) -> Violation | None:
-        scores = _scores(ebm, self.feature, self.selection)
+        scores = _scores(ebm, self.feature, self.selection, self.class_label)
         difference = np.abs(scores.values - self.value)
         breaks = difference > tolerance
         if not breaks.any():
             return None
         excess = float(difference.max())
         count = int(breaks.sum())
-        description = f"{count} scores of {self.feature} differ from {_number(self.value)}, by up to {_number(excess)}"
+        description = (
+            f"{count} scores of {self.feature}{scores.class_text()} differ from {_number(self.value)},"
+            f" by up to {_number(excess)}"
+        )
         return Violation(self, description, scores.labels(breaks), excess, self.repair())
 
     @override
     def repair(self) -> Edit:
-        return SetScores(self.feature, self.selection, self.value)
+        return SetScores(self.feature, self.selection, self.value, self.class_label)
 
 
 @attrs.frozen
@@ -381,7 +431,7 @@ def check_constraints(
     []
     >>> (violation,) = check_constraints(ebm, [Bounded("age", 0.0, 0.0)])
     >>> violation.repair
-    Clip(feature='age', selection=EveryBin(), low=0.0, high=0.0)
+    Clip(feature='age', selection=EveryBin(), low=0.0, high=0.0, class_label=None)
 
     """
     if not 0 <= tolerance < np.inf:

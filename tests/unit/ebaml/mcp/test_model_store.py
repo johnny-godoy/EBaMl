@@ -189,11 +189,13 @@ def test_a_read_of_a_revision_gives_the_model_with_the_edits_of_that_revision(
 def test_a_model_that_the_edits_do_not_support_has_reads_and_no_session(
     multiclass_ebm: ExplainableBoostingClassifier,
 ) -> None:
-    store = ModelStore(ebm=multiclass_ebm)
+    ebm = multiclass_ebm.copy()
+    vars(ebm)["link_"] = "probit"
+    store = ModelStore(ebm=ebm)
     assert store.session is None
     for revision in ("original", "current"):
         read = store.read(revision)
-        assert read.model is multiclass_ebm
+        assert read.model is ebm
         assert read.info == RevisionInfo("original", "original", 0)
     with pytest.raises(EditError, match="only revisions are 'original' and 'current', not 'abc'"):
         store.read("abc")
@@ -201,6 +203,10 @@ def test_a_model_that_the_edits_do_not_support_has_reads_and_no_session(
         store.editing()
     store.keep_description("original", "text")
     assert store.described("original") == "text"
+
+
+def test_a_multiclass_model_has_an_edit_session(multiclass_ebm: ExplainableBoostingClassifier) -> None:
+    assert ModelStore(ebm=multiclass_ebm).editing().model is not multiclass_ebm
 
 
 def test_the_kept_description_belongs_to_the_revision_that_it_describes(continuous_ebm: FittedClassifier) -> None:

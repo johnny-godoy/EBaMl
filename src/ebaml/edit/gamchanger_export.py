@@ -34,7 +34,7 @@ from ebaml.core.custom_types import (
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import InvalidInstanceError, UnsupportedModelError
 from ebaml.edit.edit_session import ORIGINAL, EditSession
-from ebaml.edit.gamchanger_files import GAMCHANGER_DECIMALS
+from ebaml.edit.gamchanger_files import GAMCHANGER_DECIMALS, check_one_score
 from ebaml.edit.history import HistoryKind, HistoryRow
 from ebaml.edit.model_view import TermView, interaction_names, term_view
 from ebaml.graphs.terms import main_effect_features
@@ -431,12 +431,14 @@ def save_gamchanger(
     Returns
     -------
     GamChangerExport
-        The file, the number of commits and rows, and each part that the file leaves out. A model with an ordinal
-        feature raises an ``UnsupportedModelError``, data that lacks a column of the model or labels of another length
-        raise an ``InvalidInstanceError``, and a path that exists raises a ``FileExistsError``.
+        The file, the number of commits and rows, and each part that the file leaves out. A multiclass model or a
+        model with an ordinal feature raises an ``UnsupportedModelError``, data that lacks a column of the model or
+        labels of another length raise an ``InvalidInstanceError``, and a path that exists raises a
+        ``FileExistsError``.
 
     """
     original = session.model_at(ORIGINAL)
+    check_one_score(original)
     model_data = _model_data(original)
     history = _history(session, original)
     samples = _samples(original, data, None if labels is None else np.asarray(labels))

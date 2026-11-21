@@ -9,7 +9,7 @@ import pytest
 from ebaml.core.custom_types import PANDAS_NA_TYPE, FeatureType, FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import SelectionError, UnsupportedModelError
-from ebaml.edit.model_view import interaction_names, term_view
+from ebaml.edit.model_view import class_views, interaction_names, term_view
 from tests.unit.ebaml.conftest import frame_of_columns
 
 
@@ -134,3 +134,35 @@ def test_positions_of_bins_each_value_as_interpret_does(edit_ebm: ExplainableBoo
 
 def test_the_feature_type_of_a_view_is_a_member_of_the_enum(edit_ebm: ExplainableBoostingClassifier) -> None:
     assert term_view(edit_ebm, "score").feature_type is FeatureType.CONTINUOUS
+
+
+def test_the_views_of_a_multiclass_model_read_one_class_each(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    view = term_view(multiclass_edit_ebm, "age")
+    views = class_views(view, None)
+    assert [one.class_label for one in views] == ["high", "low", "mid"]
+    assert [one.column for one in views] == [0, 1, 2]
+    for one in views:
+        assert np.array_equal(one.scores, view.all_scores[:, one.column])
+        assert one.class_text() == f" for the class {one.class_label!r}"
+    (mid,) = class_views(view, "mid")
+    assert mid.column == 2
+    assert view.scores.shape == view.all_scores.shape
+
+
+def test_the_view_of_a_model_with_one_score_per_bin_has_no_class(edit_ebm: ExplainableBoostingClassifier) -> None:
+    view = term_view(edit_ebm, "age")
+    assert class_views(view, None) == (view,)
+    assert not view.class_text()
+    with pytest.raises(SelectionError, match="so an edit takes no class, but it got 'yes'"):
+        class_views(view, "yes")
+    with pytest.raises(SelectionError, match="Leave class_label as None"):
+        class_views(view, 1)
+
+
+def test_the_views_name_the_classes_when_the_class_is_unknown(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    with pytest.raises(SelectionError, match=r"no class 'top'\. The classes are \['high', 'low', 'mid'\], or None"):
+        class_views(term_view(multiclass_edit_ebm, "age"), "top")

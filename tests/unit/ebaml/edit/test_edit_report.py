@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
+from ebaml.edit.bin_edits import Rebin
 from ebaml.edit.edit_report import build_report
 from ebaml.edit.edits import Edit, Recenter, RemoveTerms, SetScores, Shift
 from ebaml.edit.model_view import term_view
@@ -115,7 +116,7 @@ def test_the_text_of_a_long_report_shows_ten_bins_and_counts_the_rest(edit_ebm: 
     report = _report(Shift("score", WholeGraph(), 0.5), edit_ebm)
     text = report.to_text()
     assert text.count("\n  ") == 11  # ten bins and the line that counts the rest
-    assert f"and {report.bins_changed - 10} more bins" in text
+    assert f"and {len(report.changes) - 10} more changes" in text
 
 
 def test_the_text_of_a_report_claims_no_more_than_its_numbers_show(edit_ebm: ExplainableBoostingClassifier) -> None:
@@ -126,3 +127,56 @@ def test_the_text_of_a_report_claims_no_more_than_its_numbers_show(edit_ebm: Exp
 
 def test_the_text_of_a_report_of_one_bin_says_bin_and_not_bins(edit_ebm: ExplainableBoostingClassifier) -> None:
     assert "1 bin changed." in _report(Shift("age", MissingBin(), 1.0), edit_ebm).to_text()
+
+
+def test_the_report_of_one_class_names_the_class_of_each_change(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    report = _report(Shift("age", Bins(0, 1), 0.5, class_label="low"), multiclass_edit_ebm)
+    assert [change.class_label for change in report.changes] == ["low", "low"]
+    assert report.bins_changed == 2
+    assert "(class 'low'): " in report.to_text()
+    low = [shift for shift in report.class_shifts if shift.class_label == "low"]
+    assert [shift.class_label for shift in report.class_shifts] == ["high", "low", "mid"]
+    assert low[0].weighted_mean_shift == pytest.approx(report.weighted_mean_shift)
+    assert all(not shift.weighted_mean_shift for shift in report.class_shifts if shift.class_label != "low")
+    assert "Class 'low': the weighted mean moves by" in report.to_text()
+
+
+def test_the_report_of_every_class_counts_a_bin_once_and_lists_a_change_for_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    report = _report(SetScores("age", Bins(0, 1), 9.0), multiclass_edit_ebm)
+    assert report.bins_changed == 2
+    assert len(report.changes) == 6
+    view = term_view(multiclass_edit_ebm, "age")
+    assert report.weight_share == pytest.approx(view.weights[1:3].sum() / view.weights.sum())
+    assert report.largest_change == pytest.approx(float(np.abs(9.0 - view.scores[1:3]).max()))
+
+
+def test_the_report_of_a_multiclass_recenter_holds_the_intercept_change_of_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    shifted = copy.deepcopy(multiclass_edit_ebm)
+    Shift("score", WholeGraph(), 2.0, class_label="mid").run(shifted)
+    report = _report(Recenter("score"), shifted)
+    changes = {shift.class_label: shift.intercept_change for shift in report.class_shifts}
+    assert changes["mid"] == pytest.approx(2.0)
+    assert report.intercept_change == pytest.approx(2.0)
+    assert report.weighted_mean_shift == pytest.approx(-2.0)
+
+
+def test_the_report_of_a_multiclass_removal_holds_a_shift_of_zero_for_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    report = _report(RemoveTerms(["score"]), multiclass_edit_ebm)
+    assert [shift.weighted_mean_shift for shift in report.class_shifts] == [0.0, 0.0, 0.0]
+    assert not report.class_shifts[0].intercept_change
+
+
+def test_the_report_of_a_multiclass_rebin_compares_the_ranges_of_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    report = _report(Rebin("age", Bins(0, 3), 1), multiclass_edit_ebm)
+    assert {change.class_label for change in report.changes} == {"high", "low", "mid"}
+    assert report.class_shifts != ()

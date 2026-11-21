@@ -54,13 +54,14 @@ from ebaml.edit.edit_effect import (
     ConfusionMatrix,
     EditEffect,
     FeatureProfile,
+    MulticlassMetrics,
     RegressorMetrics,
     ScopeMetrics,
     Subgroup,
     affected_profile,
     edit_effect,
 )
-from ebaml.edit.edit_report import BinChange, EditReport
+from ebaml.edit.edit_report import BinChange, ClassShift, EditReport
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import (
     Align,
@@ -164,6 +165,7 @@ __all__ = [
     "Categories",
     "Change",
     "Choice",
+    "ClassShift",
     "ClassifierMetrics",
     "Clip",
     "CompletionStep",
@@ -233,6 +235,7 @@ __all__ = [
     "Monotone",
     "Monotonize",
     "MulticlassClassifier",
+    "MulticlassMetrics",
     "Normalization",
     "OptionRangeError",
     "OrToolsBackend",

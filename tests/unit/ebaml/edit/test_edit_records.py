@@ -36,6 +36,8 @@ from ebaml.edit.selections import Bins, Categories, EveryBin, MissingBin, Unseen
 
 EXAMPLES: list[Edit] = [
     Shift("age", Bins(1, 3), 0.5),
+    Shift("age", Bins(1, 3), 0.5, class_label="low"),
+    Shift("age", Bins(1, 3), 0.5, class_label=2),
     SetScores("age", MissingBin(), 0.0),
     SetScores("group", Categories(["x", "y"]), -1.0),
     AssignScores("score", Bins(0, 1), (0.25, -0.5)),
@@ -91,6 +93,7 @@ def test_a_constraint_record_holds_its_selection_as_a_record_and_an_unknown_name
         "low": -1.0,
         "high": 1.0,
         "selection": {"type": "EveryBin"},
+        "class_label": None,
     }
     with pytest.raises(HistoryError, match="The record names the constraint 'Shift'"):
         constraint_from_record({"type": "Shift", "feature": "age"})
@@ -108,6 +111,7 @@ def test_a_record_names_the_class_and_holds_a_selection_as_a_record() -> None:
         "feature": "age",
         "selection": {"type": "Bins", "first": 1, "last": 3},
         "delta": 0.5,
+        "class_label": None,
     }
     assert to_record(RemoveTerms(["a", "b"]))["terms"] == ("a", "b")
     assert to_record(ValueInterval(None, 2.0)) == {"type": "ValueInterval", "low": None, "high": 2.0}

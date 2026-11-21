@@ -9,7 +9,7 @@ from hypothesis import strategies as st
 
 from ebaml.core.custom_types import MonotoneDirection
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import EditError, InvalidOptionError, OptionRangeError, SelectionError, UnsupportedModelError
+from ebaml.core.exceptions import EditError, InvalidOptionError, OptionRangeError, SelectionError
 from ebaml.edit.constraints import (
     Bounded,
     Constraint,
@@ -223,11 +223,6 @@ def test_the_check_refuses_a_tolerance_that_is_negative_or_not_finite(
         check_constraints(edit_ebm, [], tolerance=tolerance)
 
 
-def test_the_check_refuses_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    with pytest.raises(UnsupportedModelError):
-        check_constraints(multiclass_ebm, [Unused("a")])
-
-
 def test_monotone_refuses_auto_because_a_constraint_needs_a_direction() -> None:
     with pytest.raises(InvalidOptionError, match="Invalid option: auto"):
         Monotone("score", "auto")
@@ -235,3 +230,53 @@ def test_monotone_refuses_auto_because_a_constraint_needs_a_direction() -> None:
 
 def test_monotone_keeps_its_direction_as_a_member_of_the_enum() -> None:
     assert Monotone("score", "increasing").direction is MonotoneDirection.INCREASING
+
+
+def test_a_constraint_of_one_class_reads_that_class_and_its_repair_changes_it(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    constraint = Monotone("age", "increasing", class_label="low")
+    (violation,) = check_constraints(multiclass_edit_ebm, [constraint])
+    assert "for the class 'low'" in violation.description
+    assert violation.repair == Monotonize("age", "increasing", WholeGraph(), "low")
+    edited = copy.deepcopy(multiclass_edit_ebm)
+    violation.repair.run(edited)
+    assert check_constraints(edited, [constraint]) == []
+    assert check_constraints(edited, [Monotone("age", "increasing", class_label="mid")]) != []
+
+
+def test_a_constraint_without_a_class_reads_every_class_of_a_multiclass_model(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    constraints = [
+        Bounded("group", -0.01, 0.01),
+        FixedScore("group", Categories(["x"]), 0.0),
+        MaxStep("age", 0.01),
+        Monotone("grade", "increasing"),
+    ]
+    violations = check_constraints(multiclass_edit_ebm, constraints)
+    assert [violation.constraint for violation in violations] == constraints
+    assert all("for each class" in violation.description for violation in violations)
+    edited = copy.deepcopy(multiclass_edit_ebm)
+    for violation in violations:
+        violation.repair.run(edited)
+    assert check_constraints(edited, constraints, tolerance=1e-6) == []
+
+
+def test_the_bins_of_a_violation_of_every_class_are_the_bins_that_break_it_in_any_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    (violation,) = check_constraints(multiclass_edit_ebm, [Bounded("group", -0.1, 0.1)])
+    scores = term_view(multiclass_edit_ebm, "group").scores
+    view = term_view(multiclass_edit_ebm, "group")
+    outside = np.flatnonzero((np.abs(scores) > 0.1).any(axis=1))
+    assert violation.bins == tuple(view.label(int(position)) for position in outside)
+    assert violation.excess == pytest.approx(float(np.abs(scores).max()) - 0.1)
+
+
+def test_unused_reads_every_class_of_a_multiclass_model(multiclass_edit_ebm: ExplainableBoostingClassifier) -> None:
+    (violation,) = check_constraints(multiclass_edit_ebm, [Unused("age")])
+    assert violation.terms == ("age", "age & group")
+    edited = copy.deepcopy(multiclass_edit_ebm)
+    violation.repair.run(edited)
+    assert check_constraints(edited, [Unused("age")]) == []

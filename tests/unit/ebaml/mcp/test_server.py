@@ -666,21 +666,24 @@ async def test_two_clients_that_edit_at_once_lose_no_edit(binary_server: MCPServ
     assert [commit["sequence"] for commit in listing["commits"]] == list(range(10))
 
 
-async def test_the_edit_tools_refuse_a_multiclass_model_and_the_read_tools_still_work(
+async def test_the_edit_tools_edit_a_multiclass_model_by_class(
     multiclass_ebm: ExplainableBoostingClassifier,
 ) -> None:
     server = create_server(ModelStore(ebm=multiclass_ebm))
+    one_class = {**LOW_BINS, "class_label": "mid"}
     calls: tuple[tuple[str, dict[str, object]], ...] = (
         ("list_bins", {"feature": "a"}),
-        ("preview_edit", {"edit": LOW_BINS}),
-        ("apply_edit", {"edit": LOW_BINS, "reason": "Test"}),
-        ("undo_edit", {}),
+        ("preview_edit", {"edit": one_class}),
+        ("apply_edit", {"edit": one_class, "reason": "Test"}),
         ("list_edits", {}),
+        ("undo_edit", {}),
     )
     for name, arguments in calls:
         is_error, text = await _call(server, name, arguments)
-        assert is_error
-        assert "binary classifiers and regressors" in text
+        assert not is_error, text
+    is_error, text = await _call(server, "preview_edit", {"edit": {**LOW_BINS, "class_label": "top"}})
+    assert is_error
+    assert "The model has no class 'top'" in text
     assert not (await _call(server, "get_model_summary"))[0]
 
 

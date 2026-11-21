@@ -11,8 +11,16 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol, cast, runtime_checkable
 
 import attrs
+import numpy as np
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType, JSONMapping, JSONObject, JSONValue
+from ebaml.core.custom_types import (
+    ClassLabel,
+    ExplainableBoostingModel,
+    FeatureType,
+    JSONMapping,
+    JSONObject,
+    JSONValue,
+)
 from ebaml.core.exceptions import EditError, InvalidInstanceError
 from ebaml.edit.constraints import DEFAULT_TOLERANCE, Constraint, Violation, check_constraints
 from ebaml.edit.data_effect import RowChanges, row_changes
@@ -44,20 +52,27 @@ class BinInfo:
 
     ``number`` is the number that ``Bins`` uses, counted from 0 among the real bins. It is ``None`` for the missing bin
     and the unseen bin. ``left`` and ``right`` are the edges of a continuous bin, and ``None`` for any other bin.
+    ``score`` is the score of the bin. A multiclass model has one score per class, so ``score`` is ``None`` and
+    ``class_scores`` holds the score of each class, in the order of ``BinList.classes``.
     """
 
     number: int | None
     label: str
     left: float | None
     right: float | None
-    score: float
+    score: float | None
     weight: float
     weight_share: float
+    class_scores: list[float] | None = None
 
 
 @attrs.frozen
 class BinList:
-    """The bins of one feature at one revision, with the training weight and the score of each bin."""
+    """The bins of one feature at one revision, with the training weight and the score of each bin.
+
+    ``classes`` names the classes of a multiclass model, in the order of ``BinInfo.class_scores``. It is empty for a
+    model with one score per bin.
+    """
 
     session: RevisionInfo
     feature: str
@@ -66,6 +81,7 @@ class BinList:
     missing: BinInfo
     unseen: BinInfo
     pair_terms_using_feature: list[str]
+    classes: list[ClassLabel] = attrs.Factory(list)
 
 
 @attrs.frozen
@@ -197,6 +213,7 @@ def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinLi
     read = store.read(revision)
     view = term_view(read.model, feature)
     scores, weights = view.scores, view.weights
+    per_class = scores.ndim > 1
     total = float(weights.sum())
     edges = view.bin_edges() if view.feature_type is FeatureType.CONTINUOUS else []
 
@@ -208,9 +225,10 @@ def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinLi
             label=view.label(position),
             left=left,
             right=right,
-            score=float(scores[position]),
+            score=None if per_class else float(scores[position]),
             weight=float(weights[position]),
             weight_share=float(weights[position]) / total if total > 0 else 0.0,
+            class_scores=scores[position].tolist() if per_class else None,
         )
 
     return BinList(
@@ -221,6 +239,7 @@ def list_bins(store: ModelStore, feature: str, revision: str = CURRENT) -> BinLi
         missing=info(0),
         unseen=info(view.unseen_position),
         pair_terms_using_feature=list(interaction_names(read.model, feature)),
+        classes=np.asarray(read.model.classes_).tolist() if per_class else [],
     )
 
 
@@ -231,7 +250,8 @@ def _hint_text(hint: object) -> str:  # nosemgrep: ebaml-no-object-type -- the t
         return " | ".join(repr(member.value) for member in hint)
     if isinstance(hint, type):
         return "selection" if issubclass(hint, Selection) else hint.__name__
-    return str(hint).replace("typing.", "")
+    # a type alias such as ClassLabel means nothing to a client, so the help shows the types that it stands for
+    return str(hint).replace("typing.", "").replace("ClassLabel", str(ClassLabel.__value__))
 
 
 @runtime_checkable
