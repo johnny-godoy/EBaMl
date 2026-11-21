@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.11.0'></a>
+## [0.11.0] - 2026-11-21
+
+### Added
+
+- The documentation has the pages "What is an EBM?", which defines an EBM, a glass-box model, a graph and a local explanation, and "Why EBaMl?", which follows one graph and one prediction from the model to the words.
+- The home page of the documentation sends each reader to a first page: a reader new to EBMs, a person who explains decisions, a user of the API and a developer of an agent.
+
+### Changed
+
+- The README is a short introduction with a quick start that runs as written. The setup, the usage, the providers, the notebooks and the development guide are on the documentation site.
+
 <a id='changelog-0.10.0'></a>
 ## [0.10.0] - 2026-11-21
 
