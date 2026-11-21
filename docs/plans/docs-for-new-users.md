@@ -1,4 +1,4 @@
-# Plan: documentation for new users (0.12.0)
+# Plan: documentation for new users (0.11.0)
 
 You are a senior technical writer and developer advocate for open-source machine learning libraries. You will
 implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in `.claude/rules/`
@@ -67,9 +67,9 @@ README is also the PyPI page, so it is the first page most people see.
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.12.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+This PR completes the milestone: it sets `version = "0.11.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
 fragment says under `Changed` that the README is a short introduction and that the site holds the guides, with the new
-pages "What is an EBM?" and "Why EBaMl?". Mark the 0.12.0 row of `ROADMAP.md` as done.
+pages "What is an EBM?" and "Why EBaMl?". Mark the 0.11.0 row of `ROADMAP.md` as done.
 </release>
 
 <done>

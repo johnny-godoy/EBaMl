@@ -1,4 +1,4 @@
-# Plan: actionable recourse (0.15.0)
+# Plan: actionable recourse (0.14.0)
 
 You are a senior engineer in optimization and formal proofs, with experience in Lean 4, mixed-integer programming and
 algorithmic recourse. You will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and
@@ -194,9 +194,9 @@ Report each guarantee that no test or proof shows.
 </evidence>
 
 <release>
-This PR completes the milestone: it sets `version = "0.15.0"` in `pyproject.toml` and runs `uv lock`. Earlier pull
+This PR completes the milestone: it sets `version = "0.14.0"` in `pyproject.toml` and runs `uv lock`. Earlier pull
 requests of the milestone each add their own fragment. The fragments list the recourse options, the cost strategies,
-the BAML helper and the MCP tools under `Added`, and each renamed field under `Changed` with **BREAKING**. Mark the 0.15.0
+the BAML helper and the MCP tools under `Added`, and each renamed field under `Changed` with **BREAKING**. Mark the 0.14.0
 row of `ROADMAP.md` as done, and delete this plan.
 </release>
 
