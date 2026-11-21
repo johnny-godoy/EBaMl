@@ -4,7 +4,8 @@ A [marimo](https://marimo.io) notebook that edits the graphs of an EBM with `Edi
 the study of GAM Changer: smooth a jump, flatten a dip, make a range monotone, and neutralize a category. The report of
 each edit shows before the notebook applies the edit. The notebook then checks business constraints and applies their
 repairs, adds a bin above the oldest patient, measures the effect on the data and on a subgroup, shows which subgroups
-an edit reaches, and saves the edits as a file that GAM Changer opens.
+an edit reaches, and saves the edits as a file that GAM Changer opens. At the end, it edits one class of a model with
+three classes and shows the confusion matrix of all classes.
 
 - The data are synthetic, so the notebook needs no download.
 - No cell sends a request to an LLM, and no cell needs a key.

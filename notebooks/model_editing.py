@@ -32,8 +32,11 @@ def _():
         Monotonize,
         SelectionError,
         SetScores,
+        Shift,
         Subgroup,
+        UnsupportedModelError,
         ValueInterval,
+        WholeGraph,
         affected_profile,
         check_constraints,
         edit_effect,
@@ -58,8 +61,11 @@ def _():
         Path,
         SelectionError,
         SetScores,
+        Shift,
         Subgroup,
+        UnsupportedModelError,
         ValueInterval,
+        WholeGraph,
         affected_profile,
         check_constraints,
         edit_effect,
@@ -81,7 +87,8 @@ def _(mo) -> None:
     This notebook edits the graphs of an EBM with `EditSession`, as the study of GAM Changer (Wang et al., KDD 2022)
     edits a model of the risk of pneumonia: smooth a jump, flatten a dip, make a range monotone, and neutralize a
     category. It then checks business constraints, adds a bin where the model saw no data, measures the effect of the
-    edits on the data and on a subgroup, and saves the edits as a file that GAM Changer opens.
+    edits on the data and on a subgroup, and saves the edits as a file that GAM Changer opens. At the end, it edits one
+    class of a model with three classes.
 
     - You need no key and no download. The data are synthetic.
     - No cell sends a request to an LLM. The edits are plain computations.
@@ -434,6 +441,96 @@ def _(Path, ebm, load_gamchanger, mo, pl, save_gamchanger, session, tempfile):
             f" {'; '.join(export.left_out) or 'nothing'}. Read back, the newest commit of each feature:",
         ),
         mo.ui.table(commit_rows, selection=None),
+    ])
+
+
+@app.cell
+def _(mo) -> None:
+    mo.md(r"""
+    ## A model with three classes
+
+    A multiclass model has one score for each class in each bin. Here the outcome of a patient is `recovered`, `icu`
+    or `died`. An edit takes `class_label`, the class whose scores it changes, or `None` for every class. Softmax reads
+    only the differences between the classes, so an edit of one class changes the probabilities of every class.
+    """)
+
+
+@app.cell
+def _(ExplainableBoostingClassifier, died, np, patients):
+    outcome_generator = np.random.default_rng(8)
+    intensive = (patients["ward"] == "intensive").to_numpy()
+    icu_share = 0.6  # the share of the patients of the intensive ward who survive after a stay in the ICU
+    went_to_icu = intensive & (outcome_generator.uniform(size=len(died)) < icu_share)
+    outcome = np.where(died == 1, "died", np.where(went_to_icu, "icu", "recovered"))
+    outcome_ebm = ExplainableBoostingClassifier(
+        feature_names=patients.columns,
+        feature_types=["continuous", "nominal"],
+        interactions=0,
+        random_state=0,
+    ).fit(patients, outcome)
+    return outcome, outcome_ebm
+
+
+@app.cell
+def _(EditSession, Monotonize, mo, outcome_ebm):
+    outcome_session = EditSession(outcome_ebm)
+    outcome_report = outcome_session.apply(
+        Monotonize("age", "increasing", class_label="died"),
+        "The risk of death must not fall when the age goes up",
+    )
+    mo.md(f"The report names the class of each change:\n\n```\n{outcome_report.to_text()}\n```")
+    return (outcome_session,)
+
+
+@app.cell
+def _(Shift, WholeGraph, mo, np, outcome_ebm, outcome_session, patients):
+    every_class = outcome_session.preview(Shift("ward", WholeGraph(), 1.0))
+    shifted = outcome_session.model.copy()
+    Shift("ward", WholeGraph(), 1.0).run(shifted)
+    unchanged = np.allclose(shifted.predict_proba(patients), outcome_session.model.predict_proba(patients))
+    moved = np.abs(outcome_session.model.predict_proba(patients) - outcome_ebm.predict_proba(patients)).max(axis=0)
+    mo.md(
+        f"The monotone edit of `died` moves the largest probability of each class ({', '.join(outcome_ebm.classes_)})"
+        f" by {', '.join(f'{change:.3f}' for change in moved)}. The same shift of every class,"
+        f" `{every_class.description}`, changes {'no' if unchanged else 'some'} probability.",
+    )
+
+
+@app.cell
+def _(
+    UnsupportedModelError,
+    edit_effect,
+    mo,
+    nw,
+    outcome,
+    outcome_session,
+    patients,
+    pl,
+    save_gamchanger,
+    tempfile,
+    Path,
+):
+    outcome_effect = edit_effect(outcome_session, nw.from_native(patients), outcome)
+    current_metrics = outcome_effect.scopes[0].current
+    matrix_rows = pl.DataFrame(
+        [list(row) for row in current_metrics.confusion_matrix],
+        schema=[f"predicted {label}" for label in current_metrics.classes],
+        orient="row",
+    ).insert_column(0, pl.Series("true class", list(current_metrics.classes)))
+    try:
+        save_gamchanger(outcome_session, Path(tempfile.mkdtemp()) / "outcome.gamchanger")
+        refusal = "none"
+    except UnsupportedModelError as error:
+        refusal = str(error)
+    mo.vstack([
+        mo.md(
+            f"The edited model has accuracy `{current_metrics.accuracy:.3f}` and a mean one-versus-rest ROC AUC of"
+            f" `{current_metrics.roc_auc:.3f}`. The confusion matrix of all classes:",
+        ),
+        mo.ui.table(matrix_rows, selection=None),
+        mo.md(
+            f"A `.gamchanger` file holds one score in each bin, so the export fails with the fix steps:\n\n> {refusal}",
+        ),
     ])
 
 

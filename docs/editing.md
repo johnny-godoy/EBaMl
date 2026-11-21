@@ -126,6 +126,51 @@ session.apply(ZeroTerm("siblings"), "The business must not score on the number o
 print(session.model.predict_proba(X)[:2])  # the edited model works as a fitted model works
 ```
 
+## Edit a multiclass model
+
+A multiclass classifier has one score for each class in each bin. Softmax turns the scores into probabilities, and it
+reads only the differences between the scores of the classes. An edit of a graph takes `class_label`, the class whose
+scores it changes. With `None`, the default, the edit changes the scores of every class in the same way, one class at a
+time.
+
+- An edit of one class also changes the probabilities of the other classes. A higher score for one class gives a lower
+  probability to each other class.
+- The same shift of every class changes no probability. `Shift` with no class moves the scores and no prediction.
+- `ZeroTerm` with no class gives every class the score 0 in every bin, so the feature changes no probability.
+- `Monotonize` fits each class on its own. With `"auto"`, it picks the direction of each class on its own.
+  `monotonize` of `interpret` refuses a multiclass model.
+- `Align` gives each class the value of its own scores, and `Recenter` moves the mean of each class into the intercept
+  of that class.
+- The classes share the bins, so `SplitBin`, `Rebin` and `ExtendRange` change the bins of every class and take no
+  class.
+- A constraint takes `class_label` too, and its repair changes the same classes.
+- A binary classifier and a regressor have one score in each bin. An edit of such a model with a class raises a
+  `SelectionError`.
+
+```python
+import numpy as np
+
+from ebaml import WholeGraph
+
+random_generator = np.random.default_rng(1)
+noisy_fare = X["fare"] + random_generator.normal(0, 100, len(X))
+ticket = np.where(noisy_fare > 350, "first", np.where(noisy_fare > 150, "second", "third"))
+three_classes = ExplainableBoostingClassifier(interactions=0, outer_bags=2).fit(X, ticket)
+
+session = EditSession(three_classes)
+report = session.apply(
+    Shift("fare", Bins(0, 2), -0.5, class_label="first"),
+    "The cheapest fares must give a smaller chance of a first-class ticket",
+)
+print(report.changes[0].class_label)  # first
+for shift in report.class_shifts:
+    print(shift.class_label, shift.weighted_mean_shift, shift.intercept_change)
+session.apply(ZeroTerm("siblings"), "The class of the ticket must not depend on the number of siblings")
+```
+
+The [notebook](editing-notebook.md) edits a model with three classes too. Each change of the report names its class. `class_shifts` holds the shift of the weighted mean and of the intercept of
+each class. `weighted_mean_shift` and `intercept_change` hold the shift with the largest size over the classes.
+
 ## Change the bins
 
 The edits above keep the bins of the model. Three edits change the bins of a continuous feature. Each one changes the
@@ -203,10 +248,12 @@ rows, the rows that the last edit changes, and a subgroup that you choose.
 | Model | Metrics |
 | --- | --- |
 | Binary classifier | Accuracy, balanced accuracy, ROC AUC and the confusion matrix. |
+| Multiclass classifier | Accuracy, balanced accuracy, the mean ROC AUC of each class against the others, and the confusion matrix of all classes. |
 | Regressor | RMSE, MAE and MAPE (a share: 0.1 means 10 %). |
 
 Without labels, the result counts the rows whose prediction changes, and for a classifier the rows whose class changes
-in each direction. A row with a missing value stays in every count, because an edit of the missing bin reaches only
+in each direction. For a multiclass classifier, the value of a row is the probability of the class that the model
+predicted before the edit, and `class_changes` counts the rows that move from each class to each other class. A row with a missing value stays in every count, because an edit of the missing bin reaches only
 such rows.
 
 `affected_profile` gives the numbers of the Feature Panel. For each other feature, it compares the bins of the rows
@@ -234,6 +281,8 @@ A score that a person sets has no fitted uncertainty. So the standard deviation 
 `predict_with_uncertainty` of the edited model gives the edited prediction. A local explanation of an edited model reads
 the confidence intervals of the model, so its confidence bounds do not include the uncertainty of the edited bins.
 A model that `interpret` monotonized has no standard deviations. A session fills them with 0 in its copy.
+`predict_with_uncertainty` of `interpret` raises an error for a multiclass model, fitted or edited, so this check is not
+available for that kind.
 
 ## History, undo and save
 
@@ -308,7 +357,9 @@ EBaMl differs from GAM Changer in these points:
 - EBaMl keeps the bagged scores and the standard deviations in step with the scores, so `predict_with_uncertainty`
   and the graph text work on the edited model. GAM Changer writes the scores only.
 - EBaMl does not round the scores. GAM Changer rounds every score to 4 decimals, also the bins that you did not edit.
-- EBaMl supports binary classifiers and regressors. A multiclass classifier raises `UnsupportedModelError`.
+- EBaMl edits binary classifiers, multiclass classifiers and regressors. GAM Changer reads one intercept, so it handles
+  no multiclass model. A `.gamchanger` file holds one score in each bin, so `load_gamchanger` and `save_gamchanger`
+  raise `UnsupportedModelError` for a multiclass model.
 - A feature with a pair term has its main effect edited only. The report names the pair terms.
 
 ### Load a `.gamchanger` file
