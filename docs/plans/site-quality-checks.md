@@ -1,4 +1,4 @@
-# Plan: quality checks of the documentation site (0.13.0)
+# Plan: quality checks of the documentation site (0.12.0)
 
 You are a senior front-end engineer who specializes in web accessibility (WCAG 2.2) and in automated tests of static
 sites. You will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in
@@ -18,7 +18,7 @@ screen reader, a keyboard, a phone or the dark theme can use the site, or that a
 - The site has a light theme, a dark theme and a theme that follows the system (`zensical.toml`, `[[project.theme.palette]]`).
 - The notebook pages and the proof pages embed an `<iframe>`. The content of a marimo export and of a PDF is not ours,
   but the page that embeds it is.
-- 0.12.0 rewrote the home page, the README and the guides. This milestone checks the result.
+- 0.11.0 rewrote the home page, the README and the guides. This milestone checks the result.
 - Chromium and Playwright for Python are in the cloud environment. CI must install them. Node.js is in CI already,
   because the `jscpd` hook needs it.
 - `testing.md` gives each test suite one question. A check of the built site answers a new question, so it is a new
@@ -61,9 +61,9 @@ screen reader, a keyboard, a phone or the dark theme can use the site, or that a
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.13.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+This PR completes the milestone: it sets `version = "0.12.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
 fragment says under `Fixed` which accessibility and link problems of the site the PR fixed. The new suite itself is
-contributor tooling and needs no entry. Mark the 0.13.0 row of `ROADMAP.md` as done.
+contributor tooling and needs no entry. Mark the 0.12.0 row of `ROADMAP.md` as done.
 </release>
 
 <done>

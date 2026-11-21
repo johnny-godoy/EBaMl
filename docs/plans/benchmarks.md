@@ -1,4 +1,4 @@
-# Plan: one benchmark directory for accuracy and performance (0.14.0)
+# Plan: one benchmark directory for accuracy and performance (0.13.0)
 
 You are a senior Python performance engineer with experience in numerical code, profilers and benchmark design. You
 will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in
@@ -83,9 +83,9 @@ changes a fact is a bug.
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.14.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+This PR completes the milestone: it sets `version = "0.13.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
 fragment marks the new benchmark command as **BREAKING** under `Changed`, and lists each performance fix that a user
-feels, with its gain on a named workload. Mark the 0.14.0 row of `ROADMAP.md` as done. The restructure and the fixes
+feels, with its gain on a named workload. Mark the 0.13.0 row of `ROADMAP.md` as done. The restructure and the fixes
 can come in earlier pull requests, each with its own fragment.
 </release>
 
