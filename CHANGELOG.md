@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.9.0'></a>
+## [0.9.0] - 2026-11-21
+
+### Added
+
+- The editing notebook shows the tools of 0.9.0: business constraints and their repairs, an empty bin above the data,
+  the effect of the edits on the data and on a subgroup, and a `.gamchanger` file that it saves and reads back.
+- 0.9.0 completes GAM Changer parity. The releases 0.8.3 to 0.8.6 hold its parts: the business constraints, the edits
+  that change the bins, the effect of an edit on data and on subgroups, and `.gamchanger` files.
+
 <a id='changelog-0.8.6'></a>
 ## [0.8.6] - 2026-11-20
 
