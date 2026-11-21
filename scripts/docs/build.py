@@ -4,7 +4,8 @@ Run it from the repo root: ``uv run --group docs python -m scripts.docs.build [b
 command, so a local build fails exactly when CI fails.
 
 The proof papers of ``proofs/papers/<topic>/paper.typ`` are compiled into ``docs/proofs/<topic>.pdf`` in the same way,
-and the proof pages link to them.
+and the proof pages link to them. ``scripts/docs/figures.py`` writes the figures of the pages into ``docs/generated/``
+from a fitted EBM.
 
 The notebook pages embed ``notebooks/<name>.html``. The script exports these files into ``docs/notebooks/`` before
 the build. Zensical copies a non-Markdown file of ``docs/`` to the site unchanged, so the public URL stays
@@ -36,6 +37,7 @@ import cyclopts
 import structlog
 import typst
 
+from scripts.docs.figures import write_figures
 from scripts.fixed_command import CommandFailedError, run_fixed
 
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
@@ -217,7 +219,7 @@ def find_broken_links(site: Path, base: str) -> list[str]:
 
 
 def build() -> int:
-    """Export the notebooks and the papers, build the site in strict mode, and fail on a warning or a broken link.
+    """Export the notebooks, papers and figures, build the site strictly, and fail on a warning or a broken link.
 
     Returns
     -------
@@ -228,6 +230,7 @@ def build() -> int:
     """
     export_notebooks()
     export_papers()
+    write_figures()
     command = [sys.executable, "-m", "zensical", "build", "--strict"]
     result = run_fixed(command, cwd=ROOT)
     # one text for both streams, so the gate sees the warnings wherever Zensical writes them
@@ -245,7 +248,7 @@ def build() -> int:
 
 
 def serve() -> int:
-    """Export the notebooks and the papers, and start the preview server of Zensical.
+    """Export the notebooks, the papers and the figures, and start the preview server of Zensical.
 
     Returns
     -------
@@ -255,6 +258,7 @@ def serve() -> int:
     """
     export_notebooks()
     export_papers()
+    write_figures()
     command = [sys.executable, "-m", "zensical", "serve"]
     return run_fixed(command, cwd=ROOT, capture_output=False).returncode
 
