@@ -1,7 +1,9 @@
 """Tests for the edits of a graph."""
 
 import copy
+from typing import cast
 
+import attrs
 import numpy as np
 import pytest
 from hypothesis import given, settings
@@ -9,7 +11,7 @@ from hypothesis import strategies as st
 
 from ebaml.core.custom_types import Direction
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import EditError, InvalidOptionError, SelectionError, UnsupportedModelError
+from ebaml.core.exceptions import EditError, InvalidOptionError, SelectionError
 from ebaml.edit import edits
 from ebaml.edit.edits import (
     Align,
@@ -42,6 +44,7 @@ from ebaml.edit.selections import (
 )
 from tests.unit.ebaml.conftest import PandasFrame
 from tests.unit.ebaml.edit.conftest import (
+    MULTICLASS_CLASSES,
     assert_consistent,
     reference_interpolate,
     reference_isotonic,
@@ -552,12 +555,6 @@ def test_remove_feature_names_the_features_when_the_feature_is_unknown_or_unused
         RemoveFeature("grade").run(ebm)
 
 
-def test_every_edit_refuses_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    for edit in (Shift("a", WholeGraph(), 1.0), ZeroTerm("a"), Scale("a", 2.0), RemoveFeature("a"), RemoveTerms(["a"])):
-        with pytest.raises(UnsupportedModelError):
-            edit.run(copy.deepcopy(multiclass_ebm))
-
-
 def test_an_edit_works_on_a_regressor(edit_regressor: ExplainableBoostingRegressor, edit_data: PandasFrame) -> None:
     edited, _ = _run(Monotonize("score", "increasing"), edit_regressor)
     assert_consistent(edited, edit_data)
@@ -626,3 +623,177 @@ def test_after_any_sequence_of_edits_the_model_stays_consistent(
 def test_the_options_of_an_edit_become_members_of_their_enums() -> None:
     assert Monotonize("score", "auto").direction is Direction.AUTO
     assert Align("score", WholeGraph(), "left").to is AlignTarget.LEFT
+
+
+# ---- multiclass models -----------------------------------------------------------------------------------------------
+
+# one edit of each class that changes the scores of a graph, with the class to edit
+CLASS_EDITS = (
+    Shift("age", Bins(0, 4), 0.5, class_label="low"),
+    SetScores("group", Categories(["x"]), 0.0, class_label="low"),
+    AssignScores("age", Bins(0, 1), [1.0, 2.0], class_label="low"),
+    Align("age", Bins(3, 5), "left", class_label="low"),
+    Monotonize("age", "increasing", class_label="low"),
+    Interpolate("age", Bins(2, 9), class_label="low"),
+    FitLine("grade", WholeGraph(), class_label="low"),
+    Clip("age", EveryBin(), -0.1, 0.1, class_label="low"),
+    LimitSteps("age", 0.05, Bins(0, 20), class_label="low"),
+    Scale("age", 2.0, class_label="low"),
+    ZeroTerm("age", class_label="low"),
+)
+
+
+def _column(ebm: ExplainableBoostingClassifier, feature: str, class_label: str) -> np.ndarray:
+    return np.asarray(term_view(ebm, feature).scores)[:, list(ebm.classes_).index(class_label)]
+
+
+@pytest.mark.parametrize("edit", CLASS_EDITS, ids=lambda edit: type(edit).__name__)
+def test_an_edit_of_one_class_changes_the_scores_of_that_class_only(
+    edit: Edit,
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, outcome = _run(edit, multiclass_edit_ebm)
+    feature = outcome.feature
+    assert feature is not None
+    assert not np.array_equal(_column(edited, feature, "low"), _column(multiclass_edit_ebm, feature, "low"))
+    for other in ("mid", "high"):
+        assert np.array_equal(_column(edited, feature, other), _column(multiclass_edit_ebm, feature, other))
+    assert "for the class 'low'" in outcome.description
+    assert_consistent(edited, edit_data)
+
+
+@pytest.mark.parametrize("edit", CLASS_EDITS, ids=lambda edit: type(edit).__name__)
+def test_an_edit_without_a_class_changes_every_class_of_a_multiclass_model(
+    edit: Edit,
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    every_class = attrs.evolve(cast(Shift, edit), class_label=None)  # every edit of CLASS_EDITS is an attrs class
+    edited, outcome = _run(every_class, multiclass_edit_ebm)
+    feature = outcome.feature
+    assert feature is not None
+    for class_label in MULTICLASS_CLASSES:
+        assert not np.array_equal(
+            _column(edited, feature, class_label),
+            _column(multiclass_edit_ebm, feature, class_label),
+        )
+    assert "for each class" in outcome.description
+    assert_consistent(edited, edit_data)
+
+
+def test_the_same_shift_of_every_class_changes_no_probability(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, _ = _run(Shift("age", WholeGraph(), 3.0), multiclass_edit_ebm)
+    assert np.allclose(edited.predict_proba(edit_data), multiclass_edit_ebm.predict_proba(edit_data))
+
+
+def test_a_shift_of_one_class_changes_the_probabilities_of_the_other_classes(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, _ = _run(Shift("age", WholeGraph(), 3.0, class_label="low"), multiclass_edit_ebm)
+    low = list(edited.classes_).index("low")
+    before = np.asarray(multiclass_edit_ebm.predict_proba(edit_data))
+    after = np.asarray(edited.predict_proba(edit_data))
+    known = ~np.asarray(edit_data["age"].isna(), dtype=bool)
+    low_after: np.ndarray = after[known, low]
+    low_before: np.ndarray = before[known, low]
+    assert (low_after > low_before).all()
+    assert np.all(np.delete(after, low, axis=1)[known] < np.delete(before, low, axis=1)[known])
+
+
+def test_recenter_of_every_class_moves_each_mean_into_its_intercept_and_changes_no_probability(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, _ = _run(Recenter("age"), multiclass_edit_ebm)
+    view = term_view(edited, "age")
+    assert np.allclose(np.average(view.scores, axis=0, weights=view.weights), 0.0)
+    shifts = np.asarray(edited.intercept_) - np.asarray(multiclass_edit_ebm.intercept_)
+    original = term_view(multiclass_edit_ebm, "age")
+    assert np.allclose(shifts, np.average(original.scores, axis=0, weights=original.weights))
+    assert np.allclose(edited.predict_proba(edit_data), multiclass_edit_ebm.predict_proba(edit_data))
+
+
+def test_recenter_of_one_class_moves_the_intercept_of_that_class_only(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    moved = Shift("score", WholeGraph(), 1.0, class_label="mid")
+    shifted, _ = _run(moved, multiclass_edit_ebm)
+    edited, _ = _run(Recenter("score", class_label="mid"), shifted)
+    shifts = np.asarray(edited.intercept_) - np.asarray(shifted.intercept_)
+    mid = list(edited.classes_).index("mid")
+    assert shifts[mid] == pytest.approx(1.0)
+    assert np.count_nonzero(shifts) == 1
+    assert np.allclose(np.asarray(edited.bagged_intercept_) - np.asarray(shifted.bagged_intercept_), shifts)
+
+
+def test_monotonize_of_every_class_with_auto_picks_the_direction_of_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    edited, outcome = _run(Monotonize("age", "auto"), multiclass_edit_ebm)
+    scores = term_view(edited, "age").scores[1:-1]
+    steps = np.diff(scores, axis=0)
+    rises, falls = (steps >= -1e-12).all(axis=0), (steps <= 1e-12).all(axis=0)
+    assert (rises | falls).all()
+    assert "increasing or decreasing" in outcome.description or outcome.description.endswith((
+        "increasing",
+        "decreasing",
+    ))
+    low = list(edited.classes_).index("low")
+    assert np.all(steps[:, low] <= 1e-12)  # the low class falls when the age goes up
+
+
+def test_align_of_every_class_gives_each_class_its_own_value(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    edited, outcome = _run(Align("age", Bins(3, 5), "left"), multiclass_edit_ebm)
+    original = term_view(multiclass_edit_ebm, "age").scores
+    assert np.array_equal(term_view(edited, "age").scores[4:7], np.tile(original[3], (3, 1)))
+    assert outcome.description.count(", ") == len(MULTICLASS_CLASSES) - 1
+
+
+def test_clip_of_every_class_reports_the_bins_that_any_class_changes(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    _, outcome = _run(Clip("group", EveryBin(), -0.05, 0.05), multiclass_edit_ebm)
+    scores = term_view(multiclass_edit_ebm, "group").scores
+    outside = np.flatnonzero((np.abs(scores) > 0.05).any(axis=1))
+    assert outcome.positions == tuple(outside.tolist())
+
+
+def test_remove_feature_removes_the_pair_terms_of_a_multiclass_model(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited, outcome = _run(RemoveFeature("age"), multiclass_edit_ebm)
+    assert outcome.removed_terms == ("age", "age & group")
+    assert edited.predict_proba(edit_data).shape == (len(edit_data), 3)
+    assert_consistent(edited, edit_data)
+
+
+def test_an_edit_of_a_class_names_the_classes_when_the_class_is_unknown(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    with pytest.raises(SelectionError, match=r"no class 'top'\. The classes are \['high', 'low', 'mid'\]"):
+        Shift("age", WholeGraph(), 1.0, class_label="top").run(copy.deepcopy(multiclass_edit_ebm))
+
+
+@pytest.mark.parametrize("fixture", ["edit_ebm", "edit_regressor"])
+def test_a_model_with_one_score_per_bin_refuses_a_class(fixture: str, request: pytest.FixtureRequest) -> None:
+    ebm = request.getfixturevalue(fixture)
+    with pytest.raises(SelectionError, match="one score in each bin, so an edit takes no class, but it got 1"):
+        ZeroTerm("age", class_label=1).run(copy.deepcopy(ebm))
+
+
+def test_a_class_label_matches_a_class_by_value_or_by_text(edit_data: PandasFrame) -> None:
+    random_generator = np.random.default_rng(7)
+    target = random_generator.integers(0, 3, size=len(edit_data))
+    ebm = ExplainableBoostingClassifier(interactions=0, outer_bags=1, max_rounds=20).fit(edit_data[["score"]], target)
+    for class_label in (1, 1.0, "1"):
+        edited, outcome = _run(SetScores("score", MissingBin(), 9.0, class_label=class_label), ebm)
+        assert term_view(edited, "score").scores[0].tolist() == [0.0, 9.0, 0.0]
+        assert "for the class 1" in outcome.description

@@ -54,7 +54,8 @@ def _start_session(ebm: ExplainableBoostingModel) -> EditSession | None:
     Returns
     -------
     EditSession | None
-        The session. The reads of the server work with no session, and the edit tools raise the error of the session.
+        The session, or ``None`` for a model whose kind EBaMl cannot read. The reads of the server work with no
+        session, and the edit tools raise the error of the session.
 
     """
     try:
@@ -79,8 +80,8 @@ class ModelStore:
         ``narwhals.from_native``.
     session: EditSession | None
         The edits of the session. The default is a new session on ``original``, or ``None`` for a model that the
-        edits do not support (a multiclass classifier). Pass a replayed session to continue the work of an earlier
-        session.
+        edits do not support (a model with a link that EBaMl cannot read). Pass a replayed session to continue the
+        work of an earlier session.
     output_directory: Path | None
         The directory where ``save_model`` writes. The user gives it at start. Without it, the server saves nothing.
     label_column: str | None
@@ -168,7 +169,10 @@ class ModelStore:
 
         """
         if self.session is None:
-            msg = "Editing supports binary classifiers and regressors. A multiclass classifier has no edit session."
+            msg = (
+                "Editing supports binary classifiers, multiclass classifiers and regressors, and EBaMl cannot read"
+                " the kind of this model, so it has no edit session."
+            )
             raise UnsupportedModelError(msg)
         return self.session
 

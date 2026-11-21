@@ -23,13 +23,14 @@ import numpy as np
 import numpy.typing as npt
 from sklearn import metrics
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Frame
+from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
 from ebaml.edit.data_effect import RowChanges, row_changes
 from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession
 from ebaml.edit.history import HistoryKind
 from ebaml.edit.model_view import term_view
+from ebaml.graphs.model_kinds import BinaryClassifier, ModelKind, MulticlassClassifier, model_kind
 from ebaml.graphs.terms import main_effect_features
 
 ALL_ROWS = "all rows"
@@ -69,6 +70,23 @@ class ClassifierMetrics:
 
 
 @attrs.frozen
+class MulticlassMetrics:
+    """The metrics of a multiclass classifier on a set of rows.
+
+    ``roc_auc`` is the mean over the classes of the area under the ROC curve of one class against the others (the macro
+    one-versus-rest area). It is ``None`` when the rows do not hold every class, because the area of a class with no
+    row is not defined. ``confusion_matrix`` has one row for each true class and one column for each predicted class,
+    in the order of ``classes``.
+    """
+
+    accuracy: float
+    balanced_accuracy: float
+    roc_auc: float | None
+    classes: tuple[ClassLabel, ...]
+    confusion_matrix: tuple[tuple[int, ...], ...]
+
+
+@attrs.frozen
 class RegressorMetrics:
     """The errors of a regressor on a set of rows.
 
@@ -81,7 +99,7 @@ class RegressorMetrics:
     mape: float | None
 
 
-type Metrics = ClassifierMetrics | RegressorMetrics
+type Metrics = ClassifierMetrics | MulticlassMetrics | RegressorMetrics
 
 
 @attrs.frozen
@@ -205,29 +223,72 @@ class _Outputs(abc.ABC):
 
 
 @attrs.frozen(eq=False)
+class _Confusion:
+    """The classes of a classifier, the confusion matrix of rows in their order, and the accuracy on the rows."""
+
+    classes: list[ClassLabel]
+    matrix: npt.NDArray[np.int64]
+    accuracy: float
+
+
+@attrs.frozen(eq=False)
 class _ClassifierOutputs(_Outputs):
+    """The predictions and the metrics of a binary classifier. The multiclass outputs extend it."""
+
     model: ExplainableBoostingClassifier
 
     @override
     def predictions(self, rows: Frame) -> npt.NDArray[np.float64]:
         return np.asarray(self.model.predict_proba(rows.to_native()), dtype=float)
 
+    def confusion(self, rows: Frame, labels: npt.NDArray[np.generic]) -> _Confusion:
+        """Compare the predicted classes of rows with their labels.
+
+        Returns
+        -------
+        _Confusion
+            The classes, the confusion matrix with one row for each true class, and the accuracy.
+
+        """
+        classes: list[ClassLabel] = np.asarray(self.model.classes_).tolist()
+        predicted = np.asarray(self.model.predict(rows.to_native()))
+        matrix = np.asarray(metrics.confusion_matrix(labels, predicted, labels=classes), dtype=np.int64)
+        return _Confusion(classes, matrix, float(metrics.accuracy_score(labels, predicted)))
+
     @override
     def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
-        classes = list(self.model.classes_)
-        predicted = np.asarray(self.model.predict(rows.to_native()))
-        positive: npt.NDArray[np.bool_] = np.asarray(labels) == classes[1]
-        matrix = metrics.confusion_matrix(labels, predicted, labels=classes)
-        accuracy = float(metrics.accuracy_score(labels, predicted))
+        confusion = self.confusion(rows, labels)
+        positive: npt.NDArray[np.bool_] = np.asarray(labels) == confusion.classes[1]
         # with one class in the rows, the balanced accuracy is the recall of that class, which is the accuracy
         has_both_classes = bool(positive.any() and not positive.all())
+        recalls = np.diag(confusion.matrix) / confusion.matrix.sum(axis=1).clip(min=1)
         return ClassifierMetrics(
-            accuracy=accuracy,
-            balanced_accuracy=float(metrics.balanced_accuracy_score(labels, predicted))
-            if has_both_classes
-            else accuracy,
+            accuracy=confusion.accuracy,
+            balanced_accuracy=float(recalls.mean()) if has_both_classes else confusion.accuracy,
             roc_auc=float(metrics.roc_auc_score(positive, self.predictions(rows)[:, 1])) if has_both_classes else None,
-            confusion_matrix=ConfusionMatrix(*(int(count) for count in np.asarray(matrix).ravel())),
+            confusion_matrix=ConfusionMatrix(*(int(count) for count in confusion.matrix.ravel())),
+        )
+
+
+@attrs.frozen(eq=False)
+class _MulticlassOutputs(_ClassifierOutputs):
+    """The predictions and the metrics of a multiclass classifier."""
+
+    @override
+    def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
+        confusion = self.confusion(rows, labels)
+        # the balanced accuracy is the mean recall of the classes in the rows; a class with no row has no recall
+        totals = confusion.matrix.sum(axis=1)
+        seen = totals > 0
+        probabilities = self.predictions(rows)
+        return MulticlassMetrics(
+            accuracy=confusion.accuracy,
+            balanced_accuracy=float(np.mean(np.diag(confusion.matrix)[seen] / totals[seen])),
+            roc_auc=float(metrics.roc_auc_score(labels, probabilities, multi_class="ovr", labels=confusion.classes))
+            if seen.all()
+            else None,
+            classes=tuple(confusion.classes),
+            confusion_matrix=tuple(tuple(int(count) for count in row) for row in confusion.matrix.tolist()),
         )
 
 
@@ -251,22 +312,30 @@ class _RegressorOutputs(_Outputs):
 
 
 @functools.singledispatch
-def _outputs(model: ExplainableBoostingModel) -> _Outputs:
-    """Select the predictions and the metrics of a kind of model. A classifier registers its own.
+def _outputs_of_kind(_kind: ModelKind, model: ExplainableBoostingModel) -> _Outputs:
+    """Select the predictions and the metrics of a kind of model. Each kind of classifier registers its own.
 
     Returns
     -------
     _Outputs
-        The outputs of a regressor. ``beartype`` admits only the two classes of EBM, so a model that reaches this
-        function and not the registration of the classifier is a regressor.
+        The outputs of a regressor, the kind that registers no function.
 
     """
     return _RegressorOutputs(cast(ExplainableBoostingRegressor, model))
 
 
-@_outputs.register(ExplainableBoostingClassifier)
-def _classifier(model: ExplainableBoostingClassifier) -> _Outputs:
-    return _ClassifierOutputs(model)
+@_outputs_of_kind.register
+def _binary(_kind: BinaryClassifier, model: ExplainableBoostingModel) -> _Outputs:
+    return _ClassifierOutputs(cast(ExplainableBoostingClassifier, model))
+
+
+@_outputs_of_kind.register
+def _multiclass(_kind: MulticlassClassifier, model: ExplainableBoostingModel) -> _Outputs:
+    return _MulticlassOutputs(cast(ExplainableBoostingClassifier, model))
+
+
+def _outputs(model: ExplainableBoostingModel) -> _Outputs:
+    return _outputs_of_kind(model_kind(model), model)
 
 
 def _model_rows(ebm: ExplainableBoostingModel, data: Frame) -> Frame:

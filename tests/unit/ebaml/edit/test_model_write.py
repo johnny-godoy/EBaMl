@@ -12,11 +12,6 @@ from tests.unit.ebaml.conftest import PandasFrame
 from tests.unit.ebaml.edit.conftest import assert_consistent, strip_uncertainty
 
 
-def test_a_multiclass_model_is_not_editable(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    with pytest.raises(UnsupportedModelError, match="binary classifiers and regressors"):
-        model_write.check_editable(multiclass_ebm)
-
-
 def test_set_scores_writes_the_value_in_every_bag_and_zeroes_the_deviation(
     edit_ebm: ExplainableBoostingClassifier,
     edit_data: PandasFrame,
@@ -173,3 +168,115 @@ def test_replace_bins_refuses_new_bins_whose_attributes_do_not_fit_their_number(
     )
     with pytest.raises(EditError, match="must give 2 values for each attribute of the new bins"):
         model_write.replace_bins(copy.deepcopy(edit_ebm), 1, 1, replacement)
+
+
+def test_every_kind_of_model_is_editable(
+    edit_ebm: ExplainableBoostingClassifier,
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    model_write.check_editable(edit_ebm)
+    model_write.check_editable(multiclass_edit_ebm)
+
+
+def test_a_model_with_an_unknown_link_is_not_editable(edit_ebm: ExplainableBoostingClassifier) -> None:
+    ebm = copy.deepcopy(edit_ebm)
+    vars(ebm)["link_"] = "probit"
+    with pytest.raises(UnsupportedModelError, match="EBaMl reads the links"):
+        model_write.check_editable(ebm)
+
+
+def test_set_scores_of_one_class_writes_that_column_only(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    model_write.set_scores(ebm, 0, [0, 3], [0.25, -0.5], column=1)
+    assert ebm.term_scores_[0][[0, 3], 1].tolist() == [0.25, -0.5]
+    assert np.all(ebm.bagged_scores_[0][:, [0, 3], 1] == [0.25, -0.5])
+    assert ebm.standard_deviations_[0][[0, 3], 1].tolist() == [0.0, 0.0]
+    others = [0, 2]
+    assert np.array_equal(ebm.term_scores_[0][:, others], multiclass_edit_ebm.term_scores_[0][:, others])
+    assert np.array_equal(ebm.bagged_scores_[0][:, :, others], multiclass_edit_ebm.bagged_scores_[0][:, :, others])
+    assert np.array_equal(
+        ebm.standard_deviations_[0][:, others],
+        multiclass_edit_ebm.standard_deviations_[0][:, others],
+    )
+    assert_consistent(ebm, edit_data)
+
+
+def test_set_scores_without_a_column_writes_every_class(multiclass_edit_ebm: ExplainableBoostingClassifier) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    model_write.set_scores(ebm, 0, [2], 0.0)
+    assert ebm.term_scores_[0][2].tolist() == [0.0, 0.0, 0.0]
+    assert not np.any(ebm.bagged_scores_[0][:, 2])
+    assert ebm.standard_deviations_[0][2].tolist() == [0.0, 0.0, 0.0]
+
+
+def test_shift_term_of_one_class_moves_that_column_and_the_intercept_of_that_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    model_write.shift_term(ebm, 1, -0.5, intercept_shift=0.5, column=2)
+    expected = np.asarray(multiclass_edit_ebm.term_scores_[1]).copy()
+    expected[:, 2] -= 0.5
+    assert np.allclose(ebm.term_scores_[1], expected)
+    assert np.allclose(ebm.bagged_scores_[1][:, :, 2], multiclass_edit_ebm.bagged_scores_[1][:, :, 2] - 0.5)
+    assert np.array_equal(ebm.bagged_scores_[1][:, :, :2], multiclass_edit_ebm.bagged_scores_[1][:, :, :2])
+    third_class_only = np.array([0.0, 0.0, 0.5])
+    assert np.allclose(ebm.intercept_, np.asarray(multiclass_edit_ebm.intercept_) + third_class_only)
+    assert np.allclose(ebm.bagged_intercept_, np.asarray(multiclass_edit_ebm.bagged_intercept_) + third_class_only)
+    assert np.allclose(ebm.predict_proba(edit_data), multiclass_edit_ebm.predict_proba(edit_data))
+
+
+def test_shift_term_of_every_class_moves_every_intercept(multiclass_edit_ebm: ExplainableBoostingClassifier) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    model_write.shift_term(ebm, 1, 0.25, intercept_shift=-0.25)
+    assert np.allclose(ebm.term_scores_[1], np.asarray(multiclass_edit_ebm.term_scores_[1]) + 0.25)
+    assert np.allclose(ebm.intercept_, np.asarray(multiclass_edit_ebm.intercept_) - 0.25)
+
+
+def test_scale_term_of_one_class_scales_that_column_only(multiclass_edit_ebm: ExplainableBoostingClassifier) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    model_write.scale_term(ebm, 0, -2.0, column=0)
+    original = multiclass_edit_ebm
+    assert np.allclose(ebm.term_scores_[0][:, 0], -2.0 * original.term_scores_[0][:, 0])
+    assert np.allclose(ebm.bagged_scores_[0][:, :, 0], -2.0 * original.bagged_scores_[0][:, :, 0])
+    assert np.allclose(ebm.standard_deviations_[0][:, 0], 2.0 * original.standard_deviations_[0][:, 0])
+    assert np.array_equal(ebm.term_scores_[0][:, 1:], original.term_scores_[0][:, 1:])
+    assert np.array_equal(ebm.standard_deviations_[0][:, 1:], original.standard_deviations_[0][:, 1:])
+
+
+def test_repair_uncertainty_gives_a_multiclass_model_one_bagged_intercept_per_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    strip_uncertainty(ebm, terms=[0], intercept=True)
+    model_write.repair_uncertainty(ebm)
+    assert np.shape(ebm.bagged_intercept_) == (3, 3)
+    assert np.array_equal(ebm.bagged_intercept_, np.tile(ebm.intercept_, (3, 1)))
+    assert np.shape(ebm.bagged_scores_[0]) == (3, *np.shape(ebm.term_scores_[0]))
+
+
+def test_replace_bins_splices_every_class_of_a_multiclass_model(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    ebm = copy.deepcopy(multiclass_edit_ebm)
+    term = 1
+    scores = np.asarray(ebm.term_scores_[term])
+    replacement = model_write.BinReplacement(
+        first=2,
+        last=3,
+        inner_cuts=[],
+        scores=[[1.0, 2.0, 3.0]],
+        weights=[5.0],
+        deviations=[[0.0, 0.0, 0.0]],
+        bags=np.full((3, 1, 3), [1.0, 2.0, 3.0]),
+    )
+    model_write.replace_bins(ebm, 1, term, replacement)
+    assert np.array_equal(ebm.term_scores_[term], np.vstack((scores[:2], [[1.0, 2.0, 3.0]], scores[4:])))
+    assert np.array_equal(ebm.bagged_scores_[term][:, 2], np.full((3, 3), [1.0, 2.0, 3.0]))
+    assert ebm.bin_weights_[term][2] == pytest.approx(5.0)
+    assert len(ebm.bins_[1][0]) == len(multiclass_edit_ebm.bins_[1][0]) - 1
+    assert_consistent(ebm, edit_data)

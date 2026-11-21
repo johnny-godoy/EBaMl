@@ -3,6 +3,10 @@
 ``term_scores_`` has one row for the missing bin first and one row for the unseen bin last, so the position of a real
 bin in ``term_scores_`` is one more than its position in the graph. A *position* in this package is an index of
 ``term_scores_``. A *bin number* is an index among the real bins, counted from 0, as in the graph text.
+
+A multiclass classifier has one score for each class in each bin, so its term scores have one *column* for each class.
+A view of one column reads the scores of one class. A binary classifier and a regressor have one score in each bin, and
+their views have no column.
 """
 
 import math
@@ -16,6 +20,7 @@ import numpy.typing as npt
 
 from ebaml.core.custom_types import (
     PANDAS_NA_TYPE,
+    ClassLabel,
     ExplainableBoostingModel,
     FeatureType,
     FeatureValue,
@@ -23,6 +28,7 @@ from ebaml.core.custom_types import (
     normalize_feature_type,
 )
 from ebaml.core.exceptions import SelectionError
+from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_term
 
 ORDERED_TYPES = (FeatureType.CONTINUOUS, FeatureType.ORDINAL)
@@ -63,7 +69,9 @@ def interval_label(left: float, right: float) -> str:
 class TermView:
     """The main-effect term of one feature in one EBM.
 
-    The view reads the model on demand, so it shows the scores that the model holds when you read them.
+    The view reads the model on demand, so it shows the scores that the model holds when you read them. ``column`` is
+    the class whose scores the view reads in a multiclass model, and ``class_label`` names that class. Both are ``None``
+    for a view of every score.
     """
 
     ebm: ExplainableBoostingModel
@@ -72,6 +80,8 @@ class TermView:
     feature_type: FeatureType
     term: int
     real_bin_count: int
+    column: int | None = None
+    class_label: ClassLabel | None = None
 
     @property
     def ordered(self) -> bool:
@@ -84,9 +94,30 @@ class TermView:
         return self.real_bin_count + 1
 
     @property
-    def scores(self) -> npt.NDArray[np.float64]:
-        """The scores of every row of the term, the missing bin first and the unseen bin last."""
+    def all_scores(self) -> npt.NDArray[np.float64]:
+        """The scores of every row of the term, with one column for each class of a multiclass model."""
         return np.asarray(self.ebm.term_scores_[self.term], dtype=float)
+
+    @property
+    def scores(self) -> npt.NDArray[np.float64]:
+        """The scores of every row of the term in the column of the view, the missing bin first and the unseen bin last.
+
+        A view with no column gives every score: one per row for a binary classifier and a regressor, and one row of
+        scores per bin for a multiclass model.
+        """
+        scores = self.all_scores
+        return scores if self.column is None else scores[:, self.column]
+
+    def class_text(self) -> str:
+        """Name the class of the view for the text of an edit.
+
+        Returns
+        -------
+        str
+            For example `` for the class 'low'``, or an empty text for a view with no class.
+
+        """
+        return "" if self.class_label is None else f" for the class {self.class_label!r}"
 
     @property
     def weights(self) -> npt.NDArray[np.float64]:
@@ -323,3 +354,49 @@ def interaction_names(ebm: ExplainableBoostingModel, feature_name: str) -> tuple
         for name, features in zip(ebm.term_names_, ebm.term_features_, strict=True)
         if len(features) > 1 and feature_index in features
     )
+
+
+def class_views(view: TermView, class_label: ClassLabel | None) -> tuple[TermView, ...]:
+    """Give the views of the classes that an edit changes.
+
+    A binary classifier and a regressor have one score in each bin, so the edit takes no class, and the view stays as
+    it is. A multiclass classifier has one score per class. ``None`` then gives one view for each class, and a class
+    label gives the view of that class.
+
+    Parameters
+    ----------
+    view : TermView
+        The view of the term, with no column.
+    class_label : ClassLabel | None
+        The class to edit, or ``None`` for every class.
+
+    Returns
+    -------
+    tuple[TermView, ...]
+        One view for each class to edit, in the order of ``classes_``.
+
+    Raises
+    ------
+    SelectionError
+        If a model with one score per bin gets a class, or a multiclass model has no such class.
+
+    """
+    outputs = model_kind(view.ebm).outputs
+    if len(outputs) == 1:
+        if class_label is not None:
+            msg = (
+                f"The model has one score in each bin, so an edit takes no class, but it got {class_label!r}."
+                " Leave class_label as None."
+            )
+            raise SelectionError(msg)
+        return (view,)
+    classes: list[ClassLabel] = np.asarray(view.ebm.classes_).tolist()
+    columns = [
+        column
+        for column, known in enumerate(classes)
+        if class_label is None or known == class_label or str(known) == str(class_label)
+    ]
+    if not columns:
+        msg = f"The model has no class {class_label!r}. The classes are {classes}, or None for every class."
+        raise SelectionError(msg)
+    return tuple(attrs.evolve(view, column=column, class_label=classes[column]) for column in columns)

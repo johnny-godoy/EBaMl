@@ -61,6 +61,7 @@ def test_list_bins_reads_the_revision_that_the_caller_names(store: ModelStore) -
     before = edit_tools.list_bins(store, "a")
     edit_tools.apply_edit(store, edit_tools.parse_edit(RAISE_LOW_BINS), "Raise the lowest bins")
     after = edit_tools.list_bins(store, "a")
+    assert before.bins[0].score is not None
     assert after.bins[0].score == pytest.approx(before.bins[0].score + 0.5)
     earlier = edit_tools.list_bins(store, "a", "original")
     assert earlier.bins == before.bins
@@ -75,24 +76,6 @@ def test_list_bins_names_the_pair_terms_that_use_the_feature(interaction_ebm: Ex
 def test_list_bins_of_an_unknown_feature_lists_the_features(store: ModelStore) -> None:
     with pytest.raises(SelectionError, match=r"no feature 'zzz'. The features are \['a', 'b', 'c'\]"):
         edit_tools.list_bins(store, "zzz")
-
-
-def test_the_edit_tools_refuse_a_model_that_the_edits_do_not_support(
-    multiclass_ebm: ExplainableBoostingClassifier,
-) -> None:
-    store = ModelStore(ebm=multiclass_ebm)
-    calls = [
-        lambda: edit_tools.list_bins(store, "a"),
-        lambda: edit_tools.preview_edit(store, Shift("a", Bins(0, 0), 1.0)),
-        lambda: edit_tools.apply_edit(store, Shift("a", Bins(0, 0), 1.0), "Reason"),
-        lambda: edit_tools.undo(store),
-        lambda: edit_tools.redo(store),
-        lambda: edit_tools.checkout(store, "original"),
-        lambda: edit_tools.list_edits(store),
-    ]
-    for call in calls:
-        with pytest.raises(UnsupportedModelError, match="binary classifiers and regressors"):
-            call()
 
 
 def test_parse_edit_builds_the_edit_and_its_selection_from_the_kind_fields() -> None:
@@ -170,9 +153,12 @@ def test_the_help_lists_every_edit_and_every_selection_with_its_fields() -> None
         assert f"kind {name}(" in text
     for name in ("RemoveTerms", "RemoveFeature", "Bins", "Categories", "MissingBin", "UnseenBin", "WholeGraph"):
         assert f"kind {name}(" in text
-    assert "kind Shift(feature: str, selection: selection, delta: float): Add one value to each selected score" in text
+    assert (
+        "kind Shift(feature: str, selection: selection, delta: float, class_label: str | float | None = None):"
+        " Add one value to each selected score"
+    ) in text
     assert "kind Monotonize(feature: str, direction: 'increasing' | 'decreasing' | 'auto'," in text
-    assert "selection: selection = whole graph)" in text
+    assert "selection: selection = whole graph, class_label: str | float | None = None)" in text
     assert "kind Bins(first: int, last: int)" in text
     # bug: every default read "= whole graph", the None bounds of ValueInterval too
     assert "kind ValueInterval(low: float | None = None, high: float | None = None)" in text
@@ -350,8 +336,11 @@ def test_the_constraint_help_lists_every_constraint_and_every_selection_with_its
     text = edit_tools.constraint_kinds_help()
     for name in ("Monotone", "MaxStep", "Bounded", "FixedScore", "Unused", "Bins", "EveryBin", "WholeGraph"):
         assert f"kind {name}(" in text
-    assert "kind Bounded(feature: str, low: float, high: float, selection: selection = every bin)" in text
-    assert "direction: 'increasing' | 'decreasing', selection: selection = whole graph)" in text
+    assert (
+        "kind Bounded(feature: str, low: float, high: float, selection: selection = every bin,"
+        " class_label: str | float | None = None)"
+    ) in text
+    assert "direction: 'increasing' | 'decreasing', selection: selection = whole graph, class_label:" in text
     assert 'Example: {"kind": "Monotone"' in text
 
 
@@ -361,11 +350,17 @@ def test_check_constraints_gives_each_violation_with_a_repair_that_the_edit_tool
     assert check.constraint_count == 1
     assert check.session == RevisionInfo("original", "original", 0)
     (violation,) = check.violations
-    assert violation.constraint == MISSING_SCORES_ONE
+    assert violation.constraint == {**MISSING_SCORES_ONE, "class_label": None}
     assert violation.bins == ["missing"]
     assert violation.terms == []
     assert violation.excess == pytest.approx(1.0 - term_view(store.editing().model, "a").scores[0])
-    assert violation.repair == {"kind": "SetScores", "feature": "a", "selection": {"kind": "MissingBin"}, "value": 1.0}
+    assert violation.repair == {
+        "kind": "SetScores",
+        "feature": "a",
+        "selection": {"kind": "MissingBin"},
+        "value": 1.0,
+        "class_label": None,
+    }
     assert edit_tools.parse_edit(violation.repair) == SetScores("a", MissingBin(), 1.0)
 
 
@@ -382,3 +377,40 @@ def test_check_constraints_changes_nothing_and_reads_the_revision_that_the_calle
 def test_check_constraints_takes_a_tolerance(store: ModelStore) -> None:
     constraint = edit_tools.parse_constraint(MISSING_SCORES_ONE)
     assert edit_tools.check_model_constraints(store, [constraint], tolerance=10.0).violations == []
+
+
+def test_the_bins_of_a_multiclass_model_hold_the_score_of_each_class(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    store = ModelStore(ebm=multiclass_ebm)
+    listed = edit_tools.list_bins(store, "a")
+    scores = term_view(multiclass_ebm, "a").scores
+    assert listed.classes == ["high", "low", "mid"]
+    assert listed.bins[0].score is None
+    assert listed.bins[0].class_scores == scores[1].tolist()
+    assert listed.missing.class_scores == scores[0].tolist()
+
+
+def test_the_edit_tools_edit_one_class_of_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
+    store = ModelStore(ebm=multiclass_ebm)
+    edit = edit_tools.parse_edit({
+        "kind": "Shift",
+        "feature": "a",
+        "selection": {"kind": "Bins", "first": 0.0, "last": 0.0},
+        "delta": 1.0,
+        "class_label": "low",
+    })
+    result = edit_tools.apply_edit(store, edit, "Reason")
+    assert [change.class_label for change in result.report.changes] == ["low"]
+    assert "(class 'low')" in result.report_text
+    assert edit_tools.list_edits(store).commits[0].edit_type == "Shift"
+
+
+def test_the_edit_tools_refuse_a_model_whose_kind_ebaml_cannot_read(
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    ebm = multiclass_ebm.copy()
+    vars(ebm)["link_"] = "probit"
+    store = ModelStore(ebm=ebm)
+    with pytest.raises(UnsupportedModelError, match="cannot read the kind of this model"):
+        edit_tools.list_edits(store)

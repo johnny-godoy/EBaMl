@@ -43,6 +43,9 @@ _EDIT_WORKFLOW = (
     " apply only what the person asked for. If several edits meet the requirement, propose the one that changes the"
     " fewest scores. A direct edit does not re-centre the graph: the report shows the shift of the weighted mean of"
     " the graph, and the edit Recenter moves that mean into the intercept with no change of any prediction."
+    " A multiclass model has one score per class in each bin, so its edits take class_label: the class to change, or"
+    " null for every class. Only the differences between the classes change a probability: an edit of one class"
+    " also changes the probabilities of the other classes, and the same shift of every class changes none."
 )
 
 _CONSTRAINT_WORKFLOW = (
@@ -52,7 +55,8 @@ _CONSTRAINT_WORKFLOW = (
     " it, because a repair changes real predictions. A repair of one constraint can break another one, so call"
     " check_constraints again after each repair. A constraint other than Unused reads the main effect of the feature"
     " only, and a pair term can still change the effect of the feature. A difference at or below the tolerance is not"
-    " a violation."
+    " a violation. For a multiclass model, class_label names the class that must meet the constraint, or null for"
+    " every class."
 )
 
 
@@ -280,7 +284,8 @@ def _register_bin_tools(server: MCPServer, store: ModelStore) -> None:
         -------
         str
             JSON with the session, the bins (number, label, edges, score, weight, weight_share), the missing bin, the
-            unseen bin and the pair terms.
+            unseen bin and the pair terms. For a multiclass model, score is null, class_scores holds the score of
+            each class, and classes names the classes in the same order.
 
         """
         with _tool_errors():
@@ -389,7 +394,8 @@ def _register_effect_tools(server: MCPServer, store: ModelStore) -> None:
         str
             JSON with the session, the counts of changed rows since the original and since the last edit, and for each
             scope the number of rows and the metrics of the three models (accuracy, balanced accuracy, ROC AUC and the
-            confusion matrix of a classifier, or RMSE, MAE and MAPE of a regressor).
+            confusion matrix of a classifier, with a row and a column for each class of a multiclass model, or RMSE,
+            MAE and MAPE of a regressor).
 
         """
         with _tool_errors():

@@ -316,3 +316,15 @@ def test_the_writer_refuses_an_ordinal_feature_a_path_that_exists_and_data_that_
         save_gamchanger(session, tmp_path / "a.gamchanger", as_frame(edit_data[["age", "score"]]))
     with pytest.raises(InvalidInstanceError, match="the data has 600 rows and the labels 2"):
         save_gamchanger(session, tmp_path / "b.gamchanger", as_frame(edit_data), [0, 1])
+
+
+def test_the_writer_refuses_a_multiclass_model_and_writes_no_file(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(
+        UnsupportedModelError,
+        match=r"Edit the model with EditSession, and save it with EditSession\.save",
+    ):
+        save_gamchanger(EditSession(multiclass_edit_ebm), tmp_path / "multiclass.gamchanger")
+    assert not (tmp_path / "multiclass.gamchanger").exists()

@@ -24,7 +24,6 @@ from ebaml.core.exceptions import (
     HistoryError,
     StaleRevisionError,
     UnreviewedEditError,
-    UnsupportedModelError,
 )
 from ebaml.edit.edit_session import EditSession, RevisionInfo
 from ebaml.edit.edits import Edit, EditOutcome, Monotonize, Recenter, SetScores, Shift
@@ -69,11 +68,6 @@ def test_a_new_session_holds_a_copy_of_the_original_model(edit_ebm: ExplainableB
     assert session.model.term_scores_[0].tolist() == edit_ebm.term_scores_[0].tolist()
     assert session.history == ()
     assert session.history_table() == []
-
-
-def test_a_session_refuses_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    with pytest.raises(UnsupportedModelError):
-        EditSession(multiclass_ebm)
 
 
 def test_a_session_on_a_monotonized_model_repairs_the_copy_and_leaves_the_model(
@@ -682,3 +676,21 @@ def test_two_threads_that_save_at_once_never_take_the_same_file(
         outcomes = sorted(pool.map(save, range(2)))
     assert outcomes == ["saved", "taken"]
     assert sum(isinstance(entry, SaveEntry) for entry in session.history) == 1
+
+
+def test_a_session_applies_undoes_and_replays_the_edits_of_a_multiclass_model(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = EditSession(multiclass_edit_ebm, clock=fixed_clock())
+    report = session.apply(Monotonize("age", "increasing", class_label="high"), "the risk rises with the age")
+    session.apply(SetScores("group", WholeGraph(), 0.0), "the group must not matter")
+    assert report.changes[0].class_label == "high"
+    assert_consistent(session.model, edit_data)
+    replayed = EditSession.replay(multiclass_edit_ebm, session.to_json())
+    for replayed_scores, scores in zip(replayed.model.term_scores_, session.model.term_scores_, strict=True):
+        assert np.array_equal(replayed_scores, scores)
+    session.undo()
+    session.undo()
+    for undone_scores, scores in zip(session.model.term_scores_, multiclass_edit_ebm.term_scores_, strict=True):
+        assert np.array_equal(undone_scores, scores)

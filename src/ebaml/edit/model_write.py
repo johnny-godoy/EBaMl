@@ -10,6 +10,10 @@ attribute itself. The functions keep three facts true:
 
 An edit that changes the bins of a feature (``replace_bins``) changes the cuts, the scores, the bags, the standard
 deviations and the training weights of the main effect in one step, so their shapes always agree.
+
+A multiclass classifier has one score for each class in each bin. The term scores then have one column for each class,
+and a *column* in this module is the index of a class. A column of ``None`` addresses every score of the bins: the one
+score of a binary classifier or a regressor, or every class of a multiclass classifier.
 """
 
 from collections.abc import Sequence
@@ -20,29 +24,54 @@ import numpy as np
 import numpy.typing as npt
 
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.core.exceptions import EditError, UnsupportedModelError
+from ebaml.core.exceptions import EditError
 from ebaml.graphs.model_kinds import model_kind
 
 
 def check_editable(ebm: ExplainableBoostingModel) -> None:
-    """Check that the model is one that the edits support.
+    """Check that the model is one that the edits support: a binary classifier, a multiclass classifier or a regressor.
 
     Parameters
     ----------
     ebm : ExplainableBoostingModel
-        The fitted EBM.
-
-    Raises
-    ------
-    UnsupportedModelError
-        If the model is a multiclass classifier.
+        The fitted EBM. ``model_kind`` raises an ``UnsupportedModelError`` if EBaMl cannot read its kind, for
+        example a model with an unknown link.
 
     """
-    if len(model_kind(ebm).outputs) > 1:
-        msg = (
-            "Editing supports binary classifiers and regressors. A multiclass classifier has one score for each class."
-        )
-        raise UnsupportedModelError(msg)
+    model_kind(ebm)
+
+
+# nosemgrep: ebaml-return-attrs-not-container -- the tuple is a NumPy index, so its shape is the point
+def _rows(bins: list[int] | slice, column: int | None) -> tuple[list[int] | slice] | tuple[list[int] | slice, int]:
+    """Give the index of some bins of a term, in one column or in every column.
+
+    Returns
+    -------
+    tuple[list[int] | slice] | tuple[list[int] | slice, int]
+        The index of ``term_scores_`` and ``standard_deviations_``. Put ``slice(None)`` before it for the bags.
+
+    """
+    return (bins,) if column is None else (bins, column)
+
+
+def _intercept_offset(
+    ebm: ExplainableBoostingModel,
+    shift: float,
+    column: int | None,
+) -> float | npt.NDArray[np.float64]:
+    """Give the value to add to the intercept: ``shift`` for every class, or ``shift`` for one class only.
+
+    Returns
+    -------
+    float | npt.NDArray[np.float64]
+        A number, or one number for each class.
+
+    """
+    if column is None:
+        return shift
+    offset = np.zeros(np.asarray(ebm.intercept_, dtype=float).shape)
+    offset[column] = shift
+    return offset
 
 
 def _bag_count(ebm: ExplainableBoostingModel) -> int:
@@ -69,11 +98,18 @@ def repair_uncertainty(ebm: ExplainableBoostingModel) -> None:
     bag_count = _bag_count(ebm)
     for term, scores in enumerate(ebm.term_scores_):
         if ebm.bagged_scores_[term] is None:
-            ebm.bagged_scores_[term] = np.tile(np.asarray(scores, dtype=float), (bag_count, 1))
+            values = np.asarray(scores, dtype=float)
+            ebm.bagged_scores_[term] = np.broadcast_to(values, (bag_count, *values.shape)).copy()
         if ebm.standard_deviations_[term] is None:
             ebm.standard_deviations_[term] = np.zeros_like(np.asarray(scores, dtype=float))
     if ebm.bagged_intercept_ is None:
-        ebm.bagged_intercept_ = np.full(bag_count, float(np.ravel(ebm.intercept_)[0]))
+        intercept = np.asarray(ebm.intercept_, dtype=float)
+        # a regressor and a binary classifier keep one bagged intercept per bag, and a multiclass model one per class
+        ebm.bagged_intercept_ = (
+            np.tile(intercept, (bag_count, 1))
+            if intercept.size > 1
+            else np.full(bag_count, float(intercept.ravel()[0]))
+        )
 
 
 def _check_finite(values: npt.ArrayLike) -> None:
@@ -82,14 +118,22 @@ def _check_finite(values: npt.ArrayLike) -> None:
         raise EditError(msg)
 
 
-def _shift_intercept(ebm: ExplainableBoostingModel, intercept_shift: float) -> None:
+def _shift_intercept(ebm: ExplainableBoostingModel, intercept_shift: float, column: int | None) -> None:
     if intercept_shift:
+        offset = _intercept_offset(ebm, intercept_shift, column)
         # interpret types intercept_ as a float on a regressor and as an array on a classifier
-        vars(ebm)["intercept_"] = ebm.intercept_ + intercept_shift
-        ebm.bagged_intercept_ += intercept_shift
+        vars(ebm)["intercept_"] = ebm.intercept_ + offset
+        ebm.bagged_intercept_ = np.asarray(ebm.bagged_intercept_, dtype=float) + offset
 
 
-def set_scores(ebm: ExplainableBoostingModel, term: int, positions: Sequence[int], values: npt.ArrayLike) -> None:
+def set_scores(
+    ebm: ExplainableBoostingModel,
+    term: int,
+    positions: Sequence[int],
+    values: npt.ArrayLike,
+    *,
+    column: int | None = None,
+) -> None:
     """Set the scores of some bins of a term, in every bag, with a standard deviation of 0.
 
     Parameters
@@ -102,24 +146,33 @@ def set_scores(ebm: ExplainableBoostingModel, term: int, positions: Sequence[int
         The positions of the bins in ``term_scores_``.
     values : npt.ArrayLike
         The new score of each bin, or one score for all of them.
+    column : int | None, default=None
+        The class whose scores to set, or ``None`` for every score of the bins.
 
     """
     _check_finite(values)
     repair_uncertainty(ebm)
-    indices = list(positions)
+    rows = _rows(list(positions), column)
     scores = np.array(ebm.term_scores_[term], dtype=float)
     bags = np.array(ebm.bagged_scores_[term], dtype=float)
     deviations = np.array(ebm.standard_deviations_[term], dtype=float)
-    scores[indices] = values
-    bags[:, indices] = scores[indices]
-    deviations[indices] = 0.0
+    scores[rows] = values
+    bags[slice(None), *rows] = scores[rows]
+    deviations[rows] = 0.0
     ebm.term_scores_[term] = scores
     ebm.bagged_scores_[term] = bags
     ebm.standard_deviations_[term] = deviations
 
 
-def shift_term(ebm: ExplainableBoostingModel, term: int, delta: float, *, intercept_shift: float) -> None:
-    """Add one value to every score of a term, and the opposite value to the intercept if the caller asks.
+def shift_term(
+    ebm: ExplainableBoostingModel,
+    term: int,
+    delta: float,
+    *,
+    intercept_shift: float,
+    column: int | None = None,
+) -> None:
+    """Add one value to every score of a term, and a value to the intercept if the caller asks.
 
     The bags move with the scores, so the standard deviations stay as they are.
 
@@ -133,16 +186,23 @@ def shift_term(ebm: ExplainableBoostingModel, term: int, delta: float, *, interc
         The value to add to each score of the term.
     intercept_shift : float
         The value to add to the intercept and to each bagged intercept.
+    column : int | None, default=None
+        The class whose scores and intercept to shift, or ``None`` for every score of the term.
 
     """
     _check_finite([delta, intercept_shift])
     repair_uncertainty(ebm)
-    ebm.term_scores_[term] = np.asarray(ebm.term_scores_[term], dtype=float) + delta
-    ebm.bagged_scores_[term] = np.asarray(ebm.bagged_scores_[term], dtype=float) + delta
-    _shift_intercept(ebm, intercept_shift)
+    rows = _rows(slice(None), column)
+    scores = np.array(ebm.term_scores_[term], dtype=float)
+    bags = np.array(ebm.bagged_scores_[term], dtype=float)
+    scores[rows] += delta
+    bags[slice(None), *rows] += delta
+    ebm.term_scores_[term] = scores
+    ebm.bagged_scores_[term] = bags
+    _shift_intercept(ebm, intercept_shift, column)
 
 
-def scale_term(ebm: ExplainableBoostingModel, term: int, factor: float) -> None:
+def scale_term(ebm: ExplainableBoostingModel, term: int, factor: float, *, column: int | None = None) -> None:
     """Multiply the scores, the bags and the standard deviations of a term by a factor.
 
     Parameters
@@ -153,13 +213,22 @@ def scale_term(ebm: ExplainableBoostingModel, term: int, factor: float) -> None:
         The index of the term.
     factor : float
         The factor. A negative factor flips the graph, and the standard deviation scales by its absolute value.
+    column : int | None, default=None
+        The class whose scores to scale, or ``None`` for every score of the term.
 
     """
     _check_finite(factor)
     repair_uncertainty(ebm)
-    ebm.term_scores_[term] = np.asarray(ebm.term_scores_[term], dtype=float) * factor
-    ebm.bagged_scores_[term] = np.asarray(ebm.bagged_scores_[term], dtype=float) * factor
-    ebm.standard_deviations_[term] = np.asarray(ebm.standard_deviations_[term], dtype=float) * abs(factor)
+    rows = _rows(slice(None), column)
+    scores = np.array(ebm.term_scores_[term], dtype=float)
+    bags = np.array(ebm.bagged_scores_[term], dtype=float)
+    deviations = np.array(ebm.standard_deviations_[term], dtype=float)
+    scores[rows] *= factor
+    bags[slice(None), *rows] *= factor
+    deviations[rows] *= abs(factor)
+    ebm.term_scores_[term] = scores
+    ebm.bagged_scores_[term] = bags
+    ebm.standard_deviations_[term] = deviations
 
 
 def remove_terms(ebm: ExplainableBoostingModel, term_names: Sequence[str]) -> None:
@@ -200,8 +269,9 @@ class BinReplacement:
     """New bins for the real bins from position ``first`` to ``last`` of a continuous main effect.
 
     The new bins cover the same range of values as the old ones. The cuts between them are ``inner_cuts``, in
-    increasing order, so there is one new bin more than inner cuts. ``scores``, ``weights`` and ``deviations`` hold one
-    value for each new bin, and ``bags`` holds one row for each bag and one column for each new bin.
+    increasing order, so there is one new bin more than inner cuts. ``weights`` holds one value for each new bin.
+    ``scores`` and ``deviations`` hold one row for each new bin, with one value per class for a multiclass model.
+    ``bags`` holds one row for each bag, with the shape of ``scores`` in each row.
     """
 
     first: int
@@ -239,7 +309,7 @@ def replace_bins(ebm: ExplainableBoostingModel, feature_index: int, term: int, r
     columns = [
         np.asarray(values, dtype=float) for values in (replacement.scores, replacement.weights, replacement.deviations)
     ]
-    if any(column.shape != (new_count,) for column in columns) or new_bags.shape[1:] != (new_count,):
+    if any(column.shape[:1] != (new_count,) for column in columns) or new_bags.shape[1:2] != (new_count,):
         msg = f"An edit that changes the bins must give {new_count} values for each attribute of the new bins."
         raise EditError(msg)
     for values in (*columns, new_bags, replacement.inner_cuts):
@@ -253,14 +323,16 @@ def replace_bins(ebm: ExplainableBoostingModel, feature_index: int, term: int, r
     ebm.bins_[feature_index] = levels
     new_scores, new_weights, new_deviations = columns
 
-    def spliced(old: npt.ArrayLike, new: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
-        values = np.asarray(old, dtype=float)
-        return np.concatenate((values[..., :first], new, values[..., last + 1 :]), axis=-1)
+    def spliced(old: npt.ArrayLike, new: npt.NDArray[np.float64], bin_axis: int) -> npt.NDArray[np.float64]:
+        values = np.moveaxis(np.asarray(old, dtype=float), bin_axis, 0)
+        joined = np.concatenate((values[:first], np.moveaxis(new, bin_axis, 0), values[last + 1 :]))
+        return np.moveaxis(joined, 0, bin_axis)
 
-    ebm.term_scores_[term] = spliced(ebm.term_scores_[term], new_scores)
-    ebm.bin_weights_[term] = spliced(ebm.bin_weights_[term], new_weights)
-    ebm.standard_deviations_[term] = spliced(ebm.standard_deviations_[term], new_deviations)
-    ebm.bagged_scores_[term] = spliced(ebm.bagged_scores_[term], new_bags)
+    # the bins are the first axis of a term, and the second axis of its bags
+    ebm.term_scores_[term] = spliced(ebm.term_scores_[term], new_scores, 0)
+    ebm.bin_weights_[term] = spliced(ebm.bin_weights_[term], new_weights, 0)
+    ebm.standard_deviations_[term] = spliced(ebm.standard_deviations_[term], new_deviations, 0)
+    ebm.bagged_scores_[term] = spliced(ebm.bagged_scores_[term], new_bags, 1)
 
 
 def set_bounds(ebm: ExplainableBoostingModel, feature_index: int, low: float, high: float) -> None:

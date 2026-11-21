@@ -10,7 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import EditError, UnsupportedModelError
+from ebaml.core.exceptions import EditError
 from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.edit_report import build_report
 from ebaml.edit.edits import Edit, EditOutcome, SetScores
@@ -303,12 +303,6 @@ def test_extend_range_needs_a_bound_outside_the_range(
         ExtendRange("age", low, high).run(copy.deepcopy(edit_ebm))
 
 
-def test_every_bin_edit_refuses_a_multiclass_model(multiclass_ebm: ExplainableBoostingClassifier) -> None:
-    for edit in (SplitBin("a", 0.0), Rebin("a", WholeGraph(), 2), ExtendRange("a", high=99.0)):
-        with pytest.raises(UnsupportedModelError):
-            edit.run(copy.deepcopy(multiclass_ebm))
-
-
 def test_the_report_of_a_split_shows_no_change_and_the_report_of_a_rebin_names_the_ranges(
     edit_ebm: ExplainableBoostingClassifier,
 ) -> None:
@@ -377,3 +371,30 @@ def test_after_any_sequence_of_bin_edits_and_score_edits_the_model_stays_consist
         except EditError:
             continue  # a random edit may name a bin or a value that the model does not have after the edits before it
         assert_consistent(model, edit_data)
+
+
+def test_a_split_and_an_extension_of_a_multiclass_model_change_no_probability(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    for edit in (SplitBin("age", 0.01), ExtendRange("age", low=-10.0, high=10.0)):
+        edited = copy.deepcopy(multiclass_edit_ebm)
+        edit.run(edited)
+        assert np.allclose(edited.predict_proba(edit_data), multiclass_edit_ebm.predict_proba(edit_data))
+        assert_consistent(edited, edit_data)
+
+
+def test_a_rebin_of_a_multiclass_model_mixes_the_scores_of_each_class(
+    multiclass_edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    edited = copy.deepcopy(multiclass_edit_ebm)
+    outcome = Rebin("age", Bins(0, 5), 1).run(edited)
+    before, after = term_view(multiclass_edit_ebm, "age"), term_view(edited, "age")
+    mix = before.weights[1:7] / before.weights[1:7].sum()
+    assert np.allclose(after.scores[1], mix @ before.scores[1:7])
+    assert after.real_bin_count == before.real_bin_count - 5
+    assert np.array_equal(np.asarray(edited.standard_deviations_[after.term])[1], np.zeros(3))
+    assert np.allclose(np.asarray(edited.bagged_scores_[after.term])[:, 1], after.scores[1])
+    assert outcome.positions == (1,)
+    assert_consistent(edited, edit_data)
