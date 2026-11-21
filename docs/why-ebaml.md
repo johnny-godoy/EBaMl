@@ -18,8 +18,9 @@ run, or another model, gives other words.
 near 40,000, and stays near +1.3 above 55,000. The confidence band is widest at the highest incomes, where the data is
 sparse.](generated/income-graph.svg)
 
-An LLM cannot read the picture reliably, so EBaMl writes the graph as text. `EBMGraph.to_text` lists the score and the
-confidence interval of each bin. The text below drops the bins that change the score by less than 5 % of its range
+Many LLMs read only text. A vision model can read the picture, but it estimates each value from the axes. So EBaMl
+writes the graph as text, which every model reads and which gives the exact numbers. `EBMGraph.to_text` lists the
+score and the confidence interval of each bin. The text below drops the bins that change the score by less than 5 % of its range
 (`EBMGraph.simplify`):
 
 ```text
