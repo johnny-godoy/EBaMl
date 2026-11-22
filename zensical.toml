@@ -50,6 +50,9 @@ nav = [
 ]
 
 [project.theme]
+# The system fonts: the site loads no stylesheet from Google Fonts, which can have no integrity hash and costs a
+# request to a third party on each page.
+font = false
 features = [
   "content.code.copy",
   "navigation.instant",
