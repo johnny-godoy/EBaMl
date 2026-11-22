@@ -77,7 +77,7 @@ it is large.
      of the LP). The paper proves them on paper only. State the counterexample of
      `test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two` with its numbers,
      and prove with `norm_num` or `decide` that one change is enough there.
-   - The milestone 0.14.0 (`docs/plans/actionable-recourse.md`, proof stage 2) adds the same Lean model of the
+   - The milestone 0.13.0 (`docs/plans/actionable-recourse.md`, proof stage 2) adds the same Lean model of the
      covering problem. If it is on `main`, build on its definitions. If this stage comes first, the milestone
      builds on yours. Do not add a second model of the same problem.
 5. **A fixed number of margins.** This is an open question for this project. Find out whether the covering problem

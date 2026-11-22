@@ -1,4 +1,4 @@
-# Plan: graphs for vision models (0.15.0)
+# Plan: graphs for vision models (0.14.0)
 
 You are a senior Python engineer with experience in multimodal LLM APIs, data visualization and BAML. You will implement
 one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in `.claude/rules/` first, with
@@ -170,9 +170,9 @@ no path describes a graph without sending it. Report each guarantee that no test
 </evidence>
 
 <release>
-This PR completes the milestone: it sets `version = "0.15.0"` in `pyproject.toml` and runs `uv lock`. Earlier pull
+This PR completes the milestone: it sets `version = "0.14.0"` in `pyproject.toml` and runs `uv lock`. Earlier pull
 requests of the milestone each add their own fragment. The fragments list `GraphMode`, `VisionFallback`,
-`ModelOptions.vision`, the new exception and warning, the extra and the MCP tool under `Added`. Mark the 0.15.0 row of
+`ModelOptions.vision`, the new exception and warning, the extra and the MCP tool under `Added`. Mark the 0.14.0 row of
 `ROADMAP.md` as done, and delete this plan.
 </release>
 
