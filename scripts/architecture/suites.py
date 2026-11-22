@@ -1,17 +1,17 @@
 """Fail when the test suites break the rules of ``.claude/rules/testing.md``.
 
-The suites under ``tests/`` are ``unit``, ``integration``, ``api``, ``contract`` and ``docs``. The unit suite has its
-own guards (the mirrored layout of ``check_layout``, 100 % coverage and mutation testing). This check guards the other
-three, so that they stay thorough:
+The suites under ``tests/`` are ``unit``, ``integration``, ``api``, ``contract``, ``site`` and ``docs``. The unit suite
+has its own guards (the mirrored layout of ``check_layout``, 100 % coverage and mutation testing). This check guards the
+others that run with a marker, so that they stay thorough:
 
 1. ``tests/`` holds the known suites only, and each suite is a package with a docstring.
-2. Each of the suites ``integration``, ``api`` and ``contract`` holds at least one test module, and each of its modules
-   is a test module, a ``conftest.py`` or the ``__init__.py``.
+2. Each of the suites ``integration``, ``api``, ``contract`` and ``site`` holds at least one test module, and each of
+   its Python modules is a test module, a ``conftest.py`` or the ``__init__.py``.
 3. An integration test uses the real ``baml_sdk``. A test of that suite that replaces a function of ``baml_sdk`` with a
    fake tests nothing that a unit test does not, so the check fails on ``fake_sdk`` and on ``setattr(baml_sdk, ...)``.
-4. ``pyproject.toml`` registers the marker of each suite, runs with ``--strict-markers`` and lists each suite in
-   ``testpaths``.
-5. The CI workflow runs each of the three suites.
+4. ``pyproject.toml`` registers the marker of each suite and runs with ``--strict-markers``. ``testpaths`` lists each
+   suite that ``uv run pytest`` runs. The ``site`` suite builds the docs, so it is not in ``testpaths``.
+5. A CI workflow runs each guarded suite: ``ci.yml`` the first three, and ``docs.yml`` the ``site`` suite.
 
 Run it from the repo root: ``uv run python -m scripts.architecture.suites``.
 """
@@ -19,16 +19,26 @@ Run it from the repo root: ``uv run python -m scripts.architecture.suites``.
 import ast
 import sys
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-KNOWN_SUITES = ("unit", "integration", "api", "contract", "docs")
-# The suites that run through pytest with a marker, and that this check guards beyond the layout of the unit suite.
-GUARDED_SUITES = ("integration", "api", "contract")
+KNOWN_SUITES = ("unit", "integration", "api", "contract", "site", "docs")
+# The suites that ``uv run pytest`` runs, so ``testpaths`` lists them.
+DEFAULT_SUITES = ("unit", "integration", "api", "contract")
+# The suites that run through pytest with a marker.
+MARKED_SUITES = (*DEFAULT_SUITES, "site")
 HELPER_FILES = frozenset({"__init__.py", "conftest.py"})
-CI_WORKFLOW = Path(".github") / "workflows" / "ci.yml"
+WORKFLOWS = Path(".github") / "workflows"
+# The suites that this check guards beyond the layout of the unit suite, with the workflow that runs each one.
+SUITE_WORKFLOWS = {
+    "integration": WORKFLOWS / "ci.yml",
+    "api": WORKFLOWS / "ci.yml",
+    "contract": WORKFLOWS / "ci.yml",
+    "site": WORKFLOWS / "docs.yml",
+}
+GUARDED_SUITES: tuple[str, ...] = tuple(SUITE_WORKFLOWS)
 
 
 def _has_docstring(path: Path) -> bool:
@@ -130,15 +140,15 @@ def _guarded_suite_problems(tests: Path, name: str) -> list[str]:
     return problems
 
 
-def configuration_problems(pyproject: dict[str, Any], workflow: str) -> list[str]:
-    """List the ways in which the pytest configuration and the CI workflow leave a suite out.
+def configuration_problems(pyproject: dict[str, Any], workflows: Mapping[Path, str]) -> list[str]:
+    """List the ways in which the pytest configuration and the CI workflows leave a suite out.
 
     Parameters
     ----------
     pyproject: dict[str, Any]
         The parsed ``pyproject.toml``.
-    workflow: str
-        The text of the CI workflow.
+    workflows: Mapping[Path, str]
+        The text of each workflow of ``SUITE_WORKFLOWS``, by its path. A missing workflow counts as empty.
 
     Returns
     -------
@@ -152,15 +162,15 @@ def configuration_problems(pyproject: dict[str, Any], workflow: str) -> list[str
     problems = []
     if "--strict-markers" not in str(pytest_options.get("addopts", "")):
         problems.append("pyproject.toml: addopts lacks --strict-markers, so a misspelled marker passes")
-    for suite in KNOWN_SUITES[:4]:
+    for suite in MARKED_SUITES:
         if suite not in markers:
             problems.append(f"pyproject.toml: the marker {suite!r} is not registered")
-        if f"tests/{suite}" not in testpaths:
+        if suite in DEFAULT_SUITES and f"tests/{suite}" not in testpaths:
             problems.append(f"pyproject.toml: testpaths lacks tests/{suite}")
     problems.extend(
-        f"{CI_WORKFLOW.as_posix()}: no step runs tests/{suite}"
-        for suite in GUARDED_SUITES
-        if f"tests/{suite}" not in workflow
+        f"{workflow.as_posix()}: no step runs tests/{suite}"
+        for suite, workflow in SUITE_WORKFLOWS.items()
+        if f"tests/{suite}" not in workflows.get(workflow, "")
     )
     return problems
 
@@ -181,8 +191,12 @@ def main(argv: Sequence[str] = ()) -> int:
     """
     root = Path(argv[0]) if argv else ROOT
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
-    workflow = (root / CI_WORKFLOW).read_text(encoding="utf-8")
-    problems = [*suite_problems(root / "tests"), *configuration_problems(pyproject, workflow)]
+    workflows = {
+        workflow: (root / workflow).read_text(encoding="utf-8")
+        for workflow in set(SUITE_WORKFLOWS.values())
+        if (root / workflow).is_file()
+    }
+    problems = [*suite_problems(root / "tests"), *configuration_problems(pyproject, workflows)]
     for problem in problems:
         sys.stderr.write(f"{problem}\n")
     return 1 if problems else 0

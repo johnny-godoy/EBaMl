@@ -38,7 +38,7 @@ graphify-out/
 .mutation/
 
 # Built documentation
-site/
+/site/
 
 # Lean (proofs/)
 proofs/.lake/
@@ -51,3 +51,6 @@ docs/generated/
 
 # The session cache of marimo
 notebooks/__marimo__/
+
+# The Node tools of the site test suite (npm ci --prefix tests/site)
+node_modules/

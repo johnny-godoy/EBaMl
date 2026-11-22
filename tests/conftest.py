@@ -1,7 +1,7 @@
 """Fixtures and hooks for every test suite, and the local LLM server of the integration and contract tests.
 
-The suites are ``unit``, ``integration``, ``api``, ``contract`` and ``docs`` (``.claude/rules/testing.md``). The hook
-below marks each test with the name of its suite, so that ``pytest -m integration`` runs one suite and
+The suites are ``unit``, ``integration``, ``api``, ``contract``, ``site`` and ``docs`` (``.claude/rules/testing.md``).
+The hook below marks each test with the name of its suite, so that ``pytest -m integration`` runs one suite and
 ``--strict-markers`` rejects a misspelled name.
 
 The server speaks the chat completions protocol of OpenAI on the loopback interface. A test points a ``ModelOptions`` at
@@ -245,7 +245,7 @@ def serve_fake_llm() -> Generator[FakeLLM]:
         thread.join()
 
 
-SUITES = ("unit", "integration", "api", "contract")
+SUITES = ("unit", "integration", "api", "contract", "site")
 KEY_VARIABLE = "FAKE_LLM_KEY"
 FAKE_KEY = "fake-key-of-the-tests"
 PROVIDER_KEYS = ("OPENROUTER_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "AZURE_OPENAI_API_KEY")

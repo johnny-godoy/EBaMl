@@ -98,6 +98,7 @@ GATES = [
     Gate("pytest", "pytest (100% coverage)", "pytest + 100% coverage", "always"),
     Gate("mutation", "mutation (changed modules, 100% score)", "mutation score 100%", "always"),
     Gate("docs", "docs build", "docs build", "always"),
+    Gate("site", "docs site checks", "docs site checks (accessibility, links, HTML, layout, performance)", "always"),
     Gate("fragment", "fragment", "changelog fragment", "pull_request"),
     Gate("title", "title", "pull request title", "pull_request"),
     Gate("commits", "commits", "commit messages", "pull_request"),

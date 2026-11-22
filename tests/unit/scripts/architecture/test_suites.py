@@ -11,13 +11,18 @@ PYPROJECT: dict[str, Any] = {
         "pytest": {
             "ini_options": {
                 "addopts": "--cov=ebaml --strict-markers",
-                "markers": ["unit: x", "integration: x", "api: x", "contract: x"],
+                "markers": ["unit: x", "integration: x", "api: x", "contract: x", "site: x"],
                 "testpaths": ["tests/unit", "tests/integration", "tests/api", "tests/contract"],
             },
         },
     },
 }
-WORKFLOW = "uv run pytest tests/integration tests/api tests/contract"
+CI_WORKFLOW = suites.WORKFLOWS / "ci.yml"
+DOCS_WORKFLOW = suites.WORKFLOWS / "docs.yml"
+WORKFLOWS = {
+    CI_WORKFLOW: "uv run pytest tests/integration tests/api tests/contract",
+    DOCS_WORKFLOW: "uv run pytest tests/site",
+}
 DOCSTRING = '"""Docstring."""\n'
 
 
@@ -34,6 +39,7 @@ GOOD = {
     "integration/test_flow.py": "def test_flow(): ...\n",
     "api/test_names.py": "def test_names(): ...\n",
     "contract/test_wire.py": "def test_wire(): ...\n",
+    "site/test_pages.py": "def test_pages(): ...\n",
 }
 
 
@@ -92,14 +98,14 @@ def test_the_other_suites_may_use_the_fake_of_the_sdk(tmp_path: Path) -> None:
 
 
 def test_configuration_without_problems() -> None:
-    assert suites.configuration_problems(PYPROJECT, WORKFLOW) == []
+    assert suites.configuration_problems(PYPROJECT, WORKFLOWS) == []
 
 
 def test_configuration_without_strict_markers() -> None:
     options = {"addopts": "--cov=ebaml", "markers": PYPROJECT["tool"]["pytest"]["ini_options"]["markers"]}
     found = suites.configuration_problems(
         {"tool": {"pytest": {"ini_options": {**PYPROJECT["tool"]["pytest"]["ini_options"], **options}}}},
-        WORKFLOW,
+        WORKFLOWS,
     )
     assert found == ["pyproject.toml: addopts lacks --strict-markers, so a misspelled marker passes"]
 
@@ -107,10 +113,10 @@ def test_configuration_without_strict_markers() -> None:
 def test_configuration_without_marker_and_path() -> None:
     options = {
         "addopts": "--strict-markers",
-        "markers": ["unit: x", "api: x", "contract: x"],
+        "markers": ["unit: x", "api: x", "contract: x", "site: x"],
         "testpaths": ["tests/unit", "tests/api", "tests/contract"],
     }
-    found = suites.configuration_problems({"tool": {"pytest": {"ini_options": options}}}, WORKFLOW)
+    found = suites.configuration_problems({"tool": {"pytest": {"ini_options": options}}}, WORKFLOWS)
     assert found == [
         "pyproject.toml: the marker 'integration' is not registered",
         "pyproject.toml: testpaths lacks tests/integration",
@@ -118,19 +124,41 @@ def test_configuration_without_marker_and_path() -> None:
 
 
 def test_configuration_of_a_project_without_pytest_settings() -> None:
-    found = suites.configuration_problems({}, WORKFLOW)
-    assert len(found) == 1 + 2 * 4
+    found = suites.configuration_problems({}, WORKFLOWS)
+    assert len(found) == 1 + 2 * len(suites.DEFAULT_SUITES) + 1
 
 
 def test_workflow_that_leaves_a_suite_out() -> None:
-    found = suites.configuration_problems(PYPROJECT, "uv run pytest tests/integration tests/api")
+    found = suites.configuration_problems(
+        PYPROJECT,
+        {**WORKFLOWS, CI_WORKFLOW: "uv run pytest tests/integration tests/api"},
+    )
     assert found == [".github/workflows/ci.yml: no step runs tests/contract"]
+
+
+def test_the_site_suite_needs_its_marker_but_no_test_path() -> None:
+    options = {
+        **PYPROJECT["tool"]["pytest"]["ini_options"],
+        "markers": ["unit: x", "integration: x", "api: x", "contract: x"],
+    }
+    found = suites.configuration_problems({"tool": {"pytest": {"ini_options": options}}}, WORKFLOWS)
+    assert found == ["pyproject.toml: the marker 'site' is not registered"]
+
+
+def test_the_docs_workflow_must_run_the_site_suite() -> None:
+    found = suites.configuration_problems(PYPROJECT, {CI_WORKFLOW: WORKFLOWS[CI_WORKFLOW]})
+    assert found == [".github/workflows/docs.yml: no step runs tests/site"]
+
+
+def test_a_site_suite_without_a_test_module(tmp_path: Path) -> None:
+    files = {name: text for name, text in GOOD.items() if not name.startswith("site/test_")}
+    assert suites.suite_problems(build(tmp_path, files)) == ["tests/site: the suite has no test module"]
 
 
 def test_main_reports_the_problems_of_a_project(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     build(tmp_path, {**GOOD, "smoke/__init__.py": DOCSTRING})
     (tmp_path / ".github" / "workflows").mkdir(parents=True)
-    (tmp_path / ".github" / "workflows" / "ci.yml").write_text(WORKFLOW, encoding="utf-8")
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text(WORKFLOWS[CI_WORKFLOW], encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\naddopts = "--strict-markers"\n',
         encoding="utf-8",
