@@ -1,4 +1,4 @@
-# Plan: one benchmark directory for accuracy and performance (0.16.0)
+# Plan: one benchmark directory for accuracy and performance (0.15.0)
 
 You are a senior Python performance engineer with experience in numerical code, profilers and benchmark design. You
 will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in
@@ -34,11 +34,10 @@ changes a fact is a bug.
   oracle test of contract 1 and an update of the proof correspondence table.
 - CI runners are noisy: the same job varies by 10 % or more. An absolute time threshold on a pull request fails at
   random.
-- The milestones 0.13.0 to 0.15.0 come first. 0.13.0 adds recourse plans to the local explanations: cost strategies
+- The milestones 0.13.0 and 0.14.0 come first. 0.13.0 adds recourse plans to the local explanations: cost strategies
   and a weighted search through the MIP (`docs/plans/actionable-recourse.md`). 0.14.0 adds `--mode text|vision|mixed`
-  to `benchmark/run.py` (`docs/plans/vision-graphs.md`). 0.15.0 adds the CI matrix of Python versions
-  (`docs/plans/python-versions.md`). Read each one on `main` before you start: the restructured command keeps `--mode`,
-  the workloads cover the recourse search, and the performance benchmark runs on one Python version of the matrix.
+  to `benchmark/run.py` (`docs/plans/vision-graphs.md`). Read both on `main` before you start: the restructured
+  command keeps `--mode`, and the workloads cover the recourse search.
 </context>
 
 <steps>
@@ -88,9 +87,9 @@ changes a fact is a bug.
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.16.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+This PR completes the milestone: it sets `version = "0.15.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
 fragment marks the new benchmark command as **BREAKING** under `Changed`, and lists each performance fix that a user
-feels, with its gain on a named workload. Mark the 0.16.0 row of `ROADMAP.md` as done. The restructure and the fixes
+feels, with its gain on a named workload. Mark the 0.15.0 row of `ROADMAP.md` as done. The restructure and the fixes
 can come in earlier pull requests, each with its own fragment.
 </release>
 
