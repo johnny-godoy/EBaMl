@@ -86,6 +86,11 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     # its key says so
     counterfactual |= audience.flip(facts.confidence_level)
     counterfactual |= audience.support(facts.min_support)
+    # the limits of the person are conditions of the search too, so the prompt names them when the keys exist
+    if facts.recourse.immutable:
+        counterfactual["features_kept_unchanged"] = list(facts.recourse.immutable)
+    if facts.recourse.allowed:
+        counterfactual["allowed_values"] = facts.recourse.describe()
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason

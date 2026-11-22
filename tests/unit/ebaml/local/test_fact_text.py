@@ -13,6 +13,7 @@ from ebaml.local.audience import Audience, DataScientist, Layperson
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
+from ebaml.local.recourse import Levels, RecourseOptions, ValueRange
 from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 
@@ -398,3 +399,19 @@ def test_only_a_data_scientist_gets_the_lower_bound_of_a_set(audience: Audience,
     if keys:
         assert counterfactual["smallest_possible_number_of_changes"] == 0
         assert sufficient["smallest_possible_number_of_features"] == 1
+
+
+@pytest.mark.parametrize("audience", [Layperson(), DataScientist()], ids=repr)
+def test_the_counterfactual_names_the_limits_of_the_person(audience: Audience) -> None:
+    # contract 3: "smallest" holds only among the changes that the limits allow, so the facts name the limits
+    recourse = RecourseOptions(immutable=["b", "a"], allowed={"x": ValueRange(high=3), "f": Levels(["p"])})
+    facts = attrs.evolve(_text_facts_with_everything(0.5), recourse=recourse)
+    counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
+    assert counterfactual["features_kept_unchanged"] == ["a", "b"]
+    assert counterfactual["allowed_values"] == {"f": "one of p", "x": "from -inf to 3, bins that overlap the range"}
+
+
+def test_the_counterfactual_names_no_limit_without_recourse_options() -> None:
+    counterfactual = orjson.loads(local_text.facts_to_texts(_text_facts_with_everything(0.5)).counterfactual)
+    assert "features_kept_unchanged" not in counterfactual
+    assert "allowed_values" not in counterfactual

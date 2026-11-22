@@ -136,6 +136,17 @@ test "the questions state a condition of the facts only through its key" {
     assert.is_true(!completions.includes("gets more certain"))
 }
 
+test "the counterfactual names the limits of the person only through their keys" {
+    // Immutable features and allowed values narrow the search, so "smallest" and "no change" hold only within them.
+    let counterfactual = counterfactual_question(3);
+    assert.is_true(counterfactual.includes("If the facts give \"features_kept_unchanged\""));
+    assert.is_true(counterfactual.includes("If the facts give \"allowed_values\""));
+    assert.is_true(counterfactual.includes("limit every claim about the smallest set"));
+    assert.is_true(counterfactual.includes("within the limits that the facts list"));
+    // with no limits, the answer states none
+    assert.is_true(counterfactual.includes("make no statement about limits"))
+}
+
 test "each local function gets its own facts, question and system role" {
     let facts = LocalFactTexts {
         prediction: "PRED-FACT",
