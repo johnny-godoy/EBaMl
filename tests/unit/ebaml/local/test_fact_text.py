@@ -10,6 +10,7 @@ from ebaml.core.custom_types import JSONObject
 from ebaml.local import fact_text as local_text
 from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
+from ebaml.local.costs import DataCost, UserCost
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
@@ -417,3 +418,32 @@ def test_the_counterfactual_names_no_limit_without_recourse_options() -> None:
     counterfactual = orjson.loads(local_text.facts_to_texts(_text_facts_with_everything(0.5)).counterfactual)
     assert "features_kept_unchanged" not in counterfactual
     assert "allowed_values" not in counterfactual
+
+
+@pytest.mark.parametrize("audience", [Layperson(), DataScientist()], ids=repr)
+def test_the_counterfactual_names_the_costs_and_the_cap(audience: Audience) -> None:
+    # contract 3: with costs, the plan is the cheapest and not the smallest, so the facts name the costs
+    recourse = RecourseOptions(costs=UserCost(per_feature={"f0": 2.5}), max_changes=2)
+    facts = attrs.evolve(_text_facts_with_everything(0.5), recourse=recourse)
+    facts = attrs.evolve(facts, counterfactual=attrs.evolve(facts.counterfactual, cost=2.5))
+    counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
+    assert counterfactual["costs_of_the_changes"] == "each change costs what the caller gave"
+    assert counterfactual["total_cost"] == pytest.approx(2.5)
+    assert counterfactual["max_changes"] == 2
+
+
+def test_the_counterfactual_names_the_costs_when_no_plan_exists() -> None:
+    facts = attrs.evolve(
+        _text_facts_with_everything(0.5),
+        counterfactual=None,
+        recourse=RecourseOptions(costs=DataCost()),
+    )
+    counterfactual = orjson.loads(local_text.facts_to_texts(facts).counterfactual)
+    assert counterfactual["costs_of_the_changes"] == "each change costs its distance in the training data"
+    assert "total_cost" not in counterfactual
+    assert "max_changes" not in counterfactual
+
+
+def test_the_counterfactual_names_no_cost_with_equal_costs() -> None:
+    counterfactual = orjson.loads(local_text.facts_to_texts(_text_facts_with_everything(0.5)).counterfactual)
+    assert "costs_of_the_changes" not in counterfactual

@@ -12,6 +12,7 @@ import orjson
 
 from ebaml.core.custom_types import JSONMapping, JSONObject
 from ebaml.local.audience import Audience, Layperson
+from ebaml.local.costs import UnitCost
 from ebaml.local.fact_types import LocalFacts
 from ebaml.local.local_kinds import OutputKind
 
@@ -91,6 +92,13 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
         counterfactual["features_kept_unchanged"] = list(facts.recourse.immutable)
     if facts.recourse.allowed:
         counterfactual["allowed_values"] = facts.recourse.describe()
+    # with other costs than the default, the plan is the cheapest one and not the smallest, so the facts say so
+    if facts.recourse.costs != UnitCost():
+        counterfactual["costs_of_the_changes"] = facts.recourse.costs.describe()
+        if cf is not None:
+            counterfactual["total_cost"] = round(cf.cost, 4)
+    if facts.recourse.max_changes is not None:
+        counterfactual["max_changes"] = facts.recourse.max_changes
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason

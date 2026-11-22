@@ -147,6 +147,15 @@ test "the counterfactual names the limits of the person only through their keys"
     assert.is_true(counterfactual.includes("make no statement about limits"))
 }
 
+test "the counterfactual calls a plan the cheapest only under the costs of its key" {
+    // With costs, the plan is the cheapest and may have more changes than the smallest set.
+    let counterfactual = counterfactual_question(3);
+    assert.is_true(counterfactual.includes("If the facts give \"costs_of_the_changes\""));
+    assert.is_true(counterfactual.includes("never call it the fewest changes"));
+    assert.is_true(counterfactual.includes("the difficulties are assumptions"));
+    assert.is_true(counterfactual.includes("If the facts give \"max_changes\""))
+}
+
 test "each local function gets its own facts, question and system role" {
     let facts = LocalFactTexts {
         prediction: "PRED-FACT",
