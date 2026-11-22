@@ -12,17 +12,16 @@ The marimo exports in ``notebooks/`` are not pages of the project, so their link
 are.
 """
 
-import concurrent.futures
 import html.parser
 import posixpath
-import urllib.error
-import urllib.request
 from collections.abc import Iterable, Mapping
 from typing import override
 from urllib.parse import unquote, urljoin, urlsplit
 
 import attrs
 import pytest
+from playwright.sync_api import APIRequestContext, Playwright
+from playwright.sync_api import Error as PlaywrightError
 
 from tests.site.conftest import Site
 
@@ -30,8 +29,7 @@ LINK_ATTRIBUTES = frozenset({"href", "src"})
 # The hosts whose answer to a script is not a sign of a broken link, each with its reason. Add a host only after the
 # weekly check fails on it for a link that works in a browser.
 FLAKY_HOSTS: dict[str, str] = {}
-REQUEST_TIMEOUT_SECONDS = 30
-REQUEST_WORKERS = 8
+REQUEST_TIMEOUT_MILLISECONDS = 30_000
 FIRST_ERROR_STATUS = 400
 USER_AGENT = "Mozilla/5.0 (compatible; link check of a documentation site)"
 
@@ -155,7 +153,7 @@ def _external_addresses(site: Site, site_links: SiteLinks) -> list[str]:
     return sorted(address for address in addresses if urlsplit(address).hostname not in FLAKY_HOSTS)
 
 
-def _status(address: str) -> str | None:
+def _failure(client: APIRequestContext, address: str) -> str | None:
     """Request an external address, and describe the failure.
 
     Returns
@@ -164,19 +162,20 @@ def _status(address: str) -> str | None:
         A description of the failure, or ``None`` if the address answers with a status below 400.
 
     """
-    request = urllib.request.Request(address, headers={"User-Agent": USER_AGENT})  # ruff: ignore[suspicious-url-open-usage] -- the addresses are the http and https links of the built site
     try:
-        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS):  # ruff: ignore[suspicious-url-open-usage] -- the addresses are the http and https links of the built site
-            return None
-    except urllib.error.HTTPError as error:
-        return None if error.code < FIRST_ERROR_STATUS else f"{address}: HTTP {error.code}"
-    except (urllib.error.URLError, TimeoutError) as error:
-        return f"{address}: {error}"
+        response = client.get(address, timeout=REQUEST_TIMEOUT_MILLISECONDS, fail_on_status_code=False)
+    except PlaywrightError as error:
+        return f"{address}: {error.message.splitlines()[0]}"
+    return None if response.status < FIRST_ERROR_STATUS else f"{address}: HTTP {response.status}"
 
 
 @pytest.mark.external_links
-def test_every_external_link_answers(site: Site, site_links: SiteLinks) -> None:
-    addresses = _external_addresses(site, site_links)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=REQUEST_WORKERS) as pool:
-        failures = [failure for failure in pool.map(_status, addresses) if failure is not None]
+def test_every_external_link_answers(site: Site, site_links: SiteLinks, playwright: Playwright) -> None:
+    client = playwright.request.new_context(user_agent=USER_AGENT)
+    failures = [
+        failure
+        for address in _external_addresses(site, site_links)
+        if (failure := _failure(client, address)) is not None
+    ]
+    client.dispose()
     assert not failures, "\n".join(failures)
