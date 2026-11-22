@@ -154,7 +154,10 @@ class Counterfactual:
         ``lower_bound`` (``AT_LOWER_BOUND``), or the search proves nothing (``UNPROVED``).
     lower_bound: int
         No set of fewer changes gives the new decision. It equals the number of changes when ``minimality`` is a
-        proof of sorting or of the solver.
+        proof of sorting, or of the solver with equal costs.
+    cost: float
+        The sum of the costs of the changes under ``RecourseOptions.costs``. With equal costs of 1 it is the number
+        of changes. With other costs, ``minimality`` tells whether the plan is the cheapest one, not the smallest.
 
     """
 
@@ -163,6 +166,7 @@ class Counterfactual:
     new_output: float
     minimality: MinimalityStatus
     lower_bound: int
+    cost: float
 
 
 @attrs.frozen

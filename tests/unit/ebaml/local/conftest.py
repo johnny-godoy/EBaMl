@@ -637,6 +637,36 @@ class OracleProblem:
             for margin in self.margins
         )
 
+    def cheapest_flip(self, costs: Sequence[float], max_changes: int | None) -> float | None:
+        """Return the lowest cost of a change that flips the decision, by the definitions of the recourse paper.
+
+        Each changed feature moves to an end bin other than the bin of the instance, and costs ``costs[feature]``. The
+        search tries every set of at most ``max_changes`` features and every choice of their end bins.
+
+        Returns
+        -------
+        float | None
+            The lowest cost, or None if no change within the cap flips the decision.
+
+        """
+        best = None
+        largest = self.feature_count if max_changes is None else min(max_changes, self.feature_count)
+        for size in range(1, largest + 1):
+            for features in itertools.combinations(range(self.feature_count), size):
+                ends = [
+                    [bin_index for bin_index in self.reachable[feature] if bin_index != self.instance_bins[feature]]
+                    for feature in features
+                ]
+                flips = any(
+                    self.robust_margin(margin, dict(zip(features, bins, strict=True))) < 0
+                    for bins in itertools.product(*ends)
+                    for margin in self.margins
+                )
+                cost = sum(costs[feature] for feature in features)
+                if flips and (best is None or cost < best):
+                    best = cost
+        return best
+
     def worst_case_margin(self, fixed: Sequence[int]) -> float:
         """Return the lowest guaranteed margin over every completion of the free features and every margin.
 

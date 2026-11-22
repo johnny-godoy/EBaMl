@@ -111,7 +111,8 @@ def _mathopt_model(model: CoveringModel) -> _MathOptModel:
         )
     if model.max_picks is not None:
         built.add_linear_constraint(mathopt.fast_sum(variables) <= model.max_picks)
-    built.minimize(mathopt.fast_sum(variables))
+    costs = model.costs or [1.0] * len(variables)
+    built.minimize(mathopt.fast_sum(cost * variable for cost, variable in zip(costs, variables, strict=True)))
     return _MathOptModel(built, variables)
 
 

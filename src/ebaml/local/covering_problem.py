@@ -46,6 +46,11 @@ class CoveringProblem:
         The worst case of each margin when no alternative is picked.
     groups: Sequence[Sequence[Sequence[float]]]
         ``groups[group][alternative][margin]`` is the gain of the alternative for the margin. A gain can be negative.
+    costs: Sequence[Sequence[float]] | None
+        ``costs[group][alternative]`` is the cost of the alternative, finite and above zero. With costs, a solution is a
+        cheapest sufficient set instead of a smallest one (``proofs/papers/recourse/paper.typ``).
+    max_changes: int | None
+        The most picks of a solution, or ``None`` for no cap.
 
     Examples
     --------
@@ -57,6 +62,32 @@ class CoveringProblem:
 
     worst: Sequence[float]
     groups: Sequence[Sequence[Sequence[float]]]
+    costs: Sequence[Sequence[float]] | None = None
+    max_changes: int | None = None
+
+    @property
+    def weighted(self) -> bool:
+        """True if the problem asks for the cheapest set under costs or a cap, not for the smallest set."""
+        return self.costs is not None or self.max_changes is not None
+
+    def cost(self, choices: Sequence[Choice]) -> float:
+        """Return the cost of the chosen alternatives: the sum of their costs, or their number with no costs.
+
+        Parameters
+        ----------
+        choices: Sequence[Choice]
+            The picked alternatives.
+
+        Returns
+        -------
+        float
+            The cost.
+
+        """
+        if self.costs is None:
+            return float(len(choices))
+        costs = self.costs
+        return float(sum(costs[choice.group][choice.alternative] for choice in choices))
 
     def margins(self, choices: Sequence[Choice]) -> list[float]:
         """Return each margin when the chosen alternatives are picked.
@@ -235,3 +266,29 @@ def _dominates(stronger: Sequence[float], weaker: Sequence[float], stronger_firs
     """
     at_least = all(strong >= weak for strong, weak in zip(stronger, weaker, strict=True))
     return at_least and (stronger_first or list(stronger) != list(weaker))
+
+
+def make_weighted_cover(problem: CoveringProblem, choices: Sequence[Choice], *, proved: bool) -> Cover:
+    """Build the result of a search for a cheapest set under costs or a cap.
+
+    The size of a cheapest set says nothing about its cost, so the result is never ``AT_LOWER_BOUND``. Its lower bound
+    is the number of picks that every sufficient set needs when the empty set is not sufficient: ``1``.
+
+    Parameters
+    ----------
+    problem: CoveringProblem
+        The problem.
+    choices: Sequence[Choice]
+        A set of picks that the check in Python accepts, within the cap.
+    proved: bool
+        True if the solver proved that no sufficient set within the cap is cheaper.
+
+    Returns
+    -------
+    Cover
+        The picks by group, their smallest margin, the bound, and ``minimality``: ``SOLVER_PROOF`` or ``UNPROVED``.
+
+    """
+    ordered = sorted(choices)
+    minimality = MinimalityStatus.SOLVER_PROOF if proved else MinimalityStatus.UNPROVED
+    return Cover(ordered, min(problem.margins(ordered)), 1 if ordered else 0, minimality)

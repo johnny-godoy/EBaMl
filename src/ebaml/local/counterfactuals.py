@@ -6,6 +6,7 @@ from collections.abc import Callable, Sequence
 import attrs
 import numpy as np
 
+from ebaml.local.costs import check_costs
 from ebaml.local.covering_problem import CoveringProblem
 from ebaml.local.decisions import Margin
 from ebaml.local.fact_features import Feature, bin_label, robust_scores
@@ -67,6 +68,7 @@ def _counterfactual(
         new_output=outcome.output,
         minimality=MinimalityStatus.SORTING_PROOF,  # sorting finds the smallest set of one margin, as the paper proves
         lower_bound=len(changes),
+        cost=float(len(changes)),
     )
 
 
@@ -176,10 +178,9 @@ def _target_counterfactual(
     frame: PredictionFrame,
     margins: Sequence[Margin],
     totals: Totals,
-    *,
-    options: LocalOptions,
+    search: "_Search",
 ) -> Counterfactual | None:
-    """Find the fewest changes after which every margin of the target class holds.
+    """Find the fewest changes, or the cheapest plan, after which every margin of the target class holds.
 
     Each feature is a group, and each of its plausible bins other than the bin of the instance is an alternative. A set
     of changes moves each changed feature to one bin. ``options.search`` solves this covering problem over every choice
@@ -195,8 +196,8 @@ def _target_counterfactual(
         The margins of the target class against every other class.
     totals : Totals
         The scores and the intercepts of the instance, and the standard deviations to move the scores by.
-    options : LocalOptions
-        Uses ``search`` and ``seed``.
+    search : _Search
+        Uses ``search`` and ``seed`` of the options, the costs of the bins when they are not all equal, and the cap.
 
     Returns
     -------
@@ -215,8 +216,8 @@ def _target_counterfactual(
         margin.offset(totals.intercepts) + sum(view.current for view in margin_views)
         for margin, margin_views in zip(margins, views, strict=True)
     ]
-    problem = CoveringProblem(worst, [feature_alternatives.gains for feature_alternatives in alternatives])
-    cover = options.search.solve(problem, seed=options.seed)
+    problem = search.problem(worst, alternatives)
+    cover = search.options.search.solve(problem, seed=search.options.seed)
     if cover is None:
         return None
     changed = [
@@ -243,7 +244,149 @@ def _target_counterfactual(
         new_output=outcome.output,
         minimality=cover.minimality,
         lower_bound=cover.lower_bound,
+        cost=problem.cost(cover.choices),
     )
+
+
+@attrs.frozen
+class _Limits:
+    """The costs of the bins of each feature, ``None`` when every reachable change costs the same, and the cap.
+
+    ``unit`` is the cost of one change when every reachable change costs the same, and ``1`` otherwise.
+    """
+
+    costs: list[list[float]] | None
+    max_changes: int | None
+    unit: float = 1.0
+
+
+@attrs.frozen
+class _Search:
+    """The options of the search and the limits that the recourse options give."""
+
+    options: LocalOptions
+    limits: _Limits
+
+    def problem(self, worst: Sequence[float], alternatives: Sequence["_Alternatives"]) -> CoveringProblem:
+        """Build the covering problem of the alternatives, with their costs and the cap.
+
+        Returns
+        -------
+        CoveringProblem
+            The problem.
+
+        """
+        costs = self.limits.costs
+        return CoveringProblem(
+            worst,
+            [feature_alternatives.gains for feature_alternatives in alternatives],
+            costs=None if costs is None else _alternative_costs(alternatives, costs),
+            max_changes=self.limits.max_changes,
+        )
+
+
+def _alternative_costs(alternatives: Sequence[_Alternatives], costs: Sequence[Sequence[float]]) -> list[list[float]]:
+    return [
+        [costs[index][bin_index] for bin_index in feature_alternatives.bins]
+        for index, feature_alternatives in enumerate(alternatives)
+    ]
+
+
+def _flip_alternatives(views: Sequence[Feature], sign: int, z: float) -> list[_Alternatives]:
+    """List the reachable bins of each feature with how much each one lowers the robust margin of one margin.
+
+    The gain of a bin is the signed score of the instance minus the pessimistic signed score of the bin, as the drop
+    of ``_counterfactual`` and the gain of Section 4 of ``proofs/papers/recourse/paper.typ``.
+
+    Returns
+    -------
+    list[_Alternatives]
+        The alternatives of each feature, with one gain each.
+
+    """
+    alternatives = []
+    for view in views:
+        pessimistic = robust_scores(view, sign, z, towards_outcome=False)
+        bins = [int(bin_index) for bin_index in np.flatnonzero(view.reachable) if bin_index != view.bin_index]
+        alternatives.append(
+            _Alternatives(bins, [[sign * view.current - float(pessimistic[bin_index])] for bin_index in bins]),
+        )
+    return alternatives
+
+
+def _cheapest_flip(
+    features: Sequence[Feature],
+    frame: PredictionFrame,
+    totals: Totals,
+    search: _Search,
+) -> Counterfactual | None:
+    """Find the cheapest plan after which one margin of the decision fails, with ``options.search``.
+
+    Each margin is a covering problem with one margin. The answer is the cheapest of the plans of the margins.
+
+    Returns
+    -------
+    Counterfactual | None
+        The cheapest plan, or None if the search proves that no plan within the cap flips a margin.
+
+    """
+    found = []
+    for margin in frame.side.margins:
+        views = [feature.against(margin.columns) for feature in features]
+        alternatives = _flip_alternatives(views, margin.sign, totals.z)
+        robust = margin.sign * margin.offset(totals.intercepts) + sum(margin.sign * view.current for view in views)
+        problem = search.problem([-robust], alternatives)
+        cover = search.options.search.solve(problem, seed=search.options.seed)
+        if cover is None:
+            continue
+        changed = [
+            (views[choice.group], alternatives[choice.group].bins[choice.alternative]) for choice in cover.choices
+        ]
+        new_scores = np.array(totals.scores, dtype=float)
+        for view, bin_index in changed:
+            new_scores += view.outputs(bin_index) - view.outputs(view.bin_index)
+        outcome = frame.after(margin, new_scores.tolist())
+        found.append(
+            Counterfactual(
+                changes=[
+                    Change(
+                        view.name,
+                        view.label,
+                        bin_label(view.graph.x_vals[bin_index]),
+                        float(view.scores[bin_index]) - view.current,
+                    )
+                    for view, bin_index in changed
+                ],
+                new_decision=outcome.decision,
+                new_output=outcome.output,
+                minimality=cover.minimality,
+                lower_bound=cover.lower_bound,
+                cost=problem.cost(cover.choices),
+            ),
+        )
+    return min(found, key=lambda counterfactual: counterfactual.cost, default=None)
+
+
+def _limits(features: Sequence[Feature], options: LocalOptions) -> _Limits:
+    """Read the costs and the cap of the recourse options, and check the costs.
+
+    Returns
+    -------
+    _Limits
+        The limits.
+
+    """
+    costs = options.recourse.costs.costs(features)
+    check_costs(features, costs)
+    reachable = {
+        feature_costs[bin_index]
+        for feature, feature_costs in zip(features, costs, strict=True)
+        for bin_index in np.flatnonzero(feature.reachable).tolist()
+        if bin_index != feature.bin_index
+    }
+    if len(reachable) <= 1:
+        return _Limits(None, options.recourse.max_changes, next(iter(reachable), 1.0))
+    return _Limits(costs, options.recourse.max_changes)
 
 
 def choose_counterfactual(
@@ -254,7 +397,10 @@ def choose_counterfactual(
     kind: LocalKind,
     options: LocalOptions,
 ) -> Counterfactual | None:
-    """Find the counterfactual that the options ask for: the target class if there is one, else the smallest.
+    """Find the counterfactual that the options ask for: the target class if there is one, else a flip.
+
+    With equal costs, the flip is the fewest changes, which sorting finds exactly. With other costs, it is the cheapest
+    plan, which ``options.search`` finds. ``RecourseOptions.max_changes`` caps the number of changes of both.
 
     Parameters
     ----------
@@ -275,7 +421,16 @@ def choose_counterfactual(
         The counterfactual, or None if no change gives it.
 
     """
-    if options.target_class is None:
-        return _smallest_counterfactual(features, frame, totals.scores, totals.intercepts, totals.z)
-    margins = kind.target_margins(options.target_class, frame)
-    return _target_counterfactual(features, frame, margins, totals, options=options)
+    limits = _limits(features, options)
+    if options.target_class is not None:
+        margins = kind.target_margins(options.target_class, frame)
+        found = _target_counterfactual(features, frame, margins, totals, _Search(options, limits))
+    elif limits.costs is None:
+        found = _smallest_counterfactual(features, frame, totals.scores, totals.intercepts, totals.z)
+        # every plan has at least the changes that sorting finds (Theorem 4 of the recourse paper), so a cap below
+        # them proves that no plan exists
+        if found is not None and limits.max_changes is not None and len(found.changes) > limits.max_changes:
+            found = None
+    else:
+        found = _cheapest_flip(features, frame, totals, _Search(options, limits))
+    return None if found is None else attrs.evolve(found, cost=found.cost * limits.unit)

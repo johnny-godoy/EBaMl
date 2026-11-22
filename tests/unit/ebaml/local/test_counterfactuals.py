@@ -19,11 +19,13 @@ from ebaml.local import fact_features as fact_features_module
 from ebaml.local import fact_types as fact_types_module
 from ebaml.local import facts as facts_module
 from ebaml.local.audience import DataScientist
+from ebaml.local.costs import UserCost
 from ebaml.local.covering_backend import Stop
 from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearchCover, MipCover
 from ebaml.local.decisions import Threshold
 from ebaml.local.fact_text import facts_to_texts
-from ebaml.local.local_kinds import MulticlassLocal
+from ebaml.local.fact_types import Counterfactual
+from ebaml.local.local_kinds import BinaryLocal, MulticlassLocal
 from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from ebaml.local.recourse import RecourseOptions
@@ -308,11 +310,10 @@ def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest
     scores = [intercepts[output] + sum(f.outputs(0)[output] for f in features) for output in range(3)]
     kind = MulticlassLocal(("c0", "c1", "c2"))
     frame = kind.frame(scores, [0.0] * 3, intercepts=intercepts, confidence_level=0.0, decision=None)
-    margins = kind.target_margins("c0", frame)
     totals = counterfactuals_module.Totals(scores, intercepts, 0.0)
     assert _brute_force_target_size(features, scores, 0) == 1
-    options = fact_types_module.LocalOptions(search=MipCover(OrToolsBackend(solver)))
-    counterfactual = counterfactuals_module._target_counterfactual(features, frame, margins, totals, options=options)
+    options = fact_types_module.LocalOptions(search=MipCover(OrToolsBackend(solver)), target_class="c0")
+    counterfactual = counterfactuals_module.choose_counterfactual(features, frame, totals, kind=kind, options=options)
     assert counterfactual is not None
     assert counterfactual.new_decision == "c0"
     assert [(change.feature, change.to_value) for change in counterfactual.changes] == [("f0", "f01")]
@@ -570,3 +571,58 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     )
     assert default.counterfactual is not None
     assert default.counterfactual.minimality is SORTING
+
+
+def test_a_cap_below_the_fewest_changes_proves_that_no_plan_exists() -> None:
+    # Theorem 4 of the recourse paper: every plan has at least the changes of the sorting search. Each feature lowers
+    # the margin 1.5 by at most 1, so a flip needs two changes.
+    features = [hand("a", [1.0, 0.0]), hand("b", [1.0, 0.0]), hand("c", [0.5, 0.0])]
+    kind = BinaryLocal(("no", "yes"))
+    scores = [-1.0 + sum(feature.current for feature in features)]
+    frame = kind.frame(scores, [0.0], intercepts=[-1.0], confidence_level=0.0, decision=None)
+    totals = counterfactuals_module.Totals(scores, [-1.0], 0.0)
+
+    def plan(max_changes: int) -> Counterfactual | None:
+        options = fact_types_module.LocalOptions(recourse=RecourseOptions(max_changes=max_changes))
+        return counterfactuals_module.choose_counterfactual(features, frame, totals, kind=kind, options=options)
+
+    two = plan(2)
+    assert two is not None
+    assert len(two.changes) == 2
+    assert two.cost == pytest.approx(2.0)
+    assert plan(1) is None
+
+
+def test_equal_costs_other_than_one_keep_the_sorting_search_and_scale_the_cost() -> None:
+    model, frame = multiclass_model()
+    instance = instance_of(frame, 0)
+    options = fact_types_module.LocalOptions(
+        confidence_level=0.0,
+        recourse=RecourseOptions(costs=UserCost(default=3.0)),
+    )
+    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
+    assert counterfactual is not None
+    assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
+    assert counterfactual.cost == pytest.approx(3.0 * len(counterfactual.changes))
+
+
+@settings(max_examples=20, deadline=None)
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]))
+def test_a_target_counterfactual_with_costs_reaches_the_target_class(row: int, target: int) -> None:
+    model, frame = multiclass_model()
+    instance = instance_of(frame, row)
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    assume(target != predicted)
+    names = list(model.feature_names_in_)
+    costs = UserCost(per_feature={name: float(position + 1) for position, name in enumerate(names)})
+    options = fact_types_module.LocalOptions(
+        confidence_level=0.0,
+        min_support=0.0,
+        target_class=int(model.classes_[target]),
+        recourse=RecourseOptions(costs=costs),
+    )
+    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
+    if counterfactual is None:
+        return
+    assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
+    assert counterfactual.cost == sum(names.index(change.feature) + 1.0 for change in counterfactual.changes)

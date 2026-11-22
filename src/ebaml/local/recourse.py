@@ -22,6 +22,7 @@ import numpy.typing as npt
 
 from ebaml.core.custom_types import FeatureType, Interval
 from ebaml.core.exceptions import InvalidOptionError, RecourseOptionError
+from ebaml.local.costs import CostStrategy, UnitCost
 from ebaml.local.fact_features import Feature, bin_label
 
 
@@ -236,6 +237,13 @@ class RecourseOptions:
         For some features, the values that the counterfactual may move them to: a ``ValueRange`` for a continuous
         feature, and ``Levels`` for a nominal or ordinal one. An allowed value must also be plausible
         (``LocalOptions.min_support``). A feature that is in neither field may take every plausible value.
+    costs: CostStrategy
+        How hard each change is. ``UnitCost()`` (the default) makes the counterfactual the fewest changes. Another
+        strategy (``DataCost``, ``UserCost``, ``ScaledCost``) makes it the cheapest plan, which the search of
+        ``LocalOptions.search`` finds, because sorting is exact for equal costs only.
+    max_changes: int | None
+        The most features that the counterfactual may change, or ``None`` for no cap. A cheapest plan without a cap can
+        change many cheap features.
 
     Examples
     --------
@@ -250,6 +258,8 @@ class RecourseOptions:
     # a copy, so that a change of the caller's mapping does not change the options; a dict, so that the options
     # serialize to JSON
     allowed: Mapping[str, AllowedValues] = attrs.field(factory=dict, converter=dict)
+    costs: CostStrategy = attrs.field(factory=UnitCost)
+    max_changes: int | None = attrs.field(default=None, validator=attrs.validators.optional(attrs.validators.ge(1)))
 
     def restrict(self, features: Sequence[Feature]) -> list[Feature]:
         """Limit the bins that each feature can end in.

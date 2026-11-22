@@ -229,6 +229,14 @@ capabilities:
     status: active
     context: benchmark
 
+  - id: recourse-cost-strategy
+    responsibility: Give a cost to each change of a recourse plan of the counterfactual
+    owner: ebaml.local
+    symbol: ebaml.local.costs:CostStrategy
+    consumers: [ebaml.local, ebaml.llm, ebaml.mcp]
+    keywords: [cost, strategy, recourse, difficulty, counterfactual, plan]
+    status: active
+
 # Approved overlaps of two contracts. Add an entry only for a pair that scripts.architecture.contract_overlap reports, and
 # write why the two contracts stay apart (for example, a consumer defines its own Protocol to keep the import direction).
 exceptions: []
