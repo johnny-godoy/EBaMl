@@ -40,14 +40,14 @@ to review.
 7. **Update the rules.** Rewrite "Current state, not history" in `.claude/rules/writing-style.md`: the docs describe
    the current state, and deprecated items stay in the docs, marked as deprecated, until their removal. Update
    `CLAUDE.md` if it mentions the pre-1.0 policy.
-8. **Test every claimed platform.** 0.16.0 added the matrix of Python versions on Linux
+8. **Test every claimed platform.** 0.15.0 added the matrix of Python versions on Linux
    (`docs/plans/python-versions.md`). Add the operating systems and decide what the package claims:
    - Add macOS and Windows to the matrix. A full matrix on each pull request costs runner time. Keep the pull request
-     jobs of 0.16.0, and run the other systems on the schedule and in the release workflow.
+     jobs of 0.15.0, and run the other systems on the schedule and in the release workflow.
    - Run `scripts/release/smoke_install.py` on each matrix entry in the release workflow, so a release installs on every claimed
      platform. The script uses `bin/python`, so make it find `Scripts/python.exe` on Windows.
    - Make the claim match the result. Set the classifiers `Operating System ::` of `pyproject.toml` to what the matrix
-     passes. Extend the contract test of 0.16.0 to the operating systems. Update the "Requirements" list of `docs/setup.md`
+     passes. Extend the contract test of 0.15.0 to the operating systems. Update the "Requirements" list of `docs/setup.md`
      and the table "Compatibility" of `docs/releasing.md`.
 9. **Version the documentation.** The site shows `main`. Publish a copy for each released version, with a selector, or
    write on the site which version it shows. Check that Zensical supports versions before you choose.
