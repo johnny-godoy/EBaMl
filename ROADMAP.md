@@ -30,7 +30,7 @@ EBaMl will reach three goals:
 | 0.9.0 | GAM Changer parity: edits of the bins, the effect of an edit on data and on subgroups, business constraints, and `.gamchanger` files. | [model-editing](docs/plans/model-editing.md) | 0.8.0 | Done |
 | 0.10.0 | Editing of every model kind. Every feature works for every model kind. | [model-editing](docs/plans/model-editing.md) | 0.6.0, 0.9.0 | Done |
 | 0.11.0 | Documentation for new users: what an EBM is, why it matters, a short README and the guides on the site. | None | 0.10.0 | Done |
-| 0.12.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | [site-quality-checks](docs/plans/site-quality-checks.md) | 0.11.0 | Planned |
+| 0.12.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | None | 0.11.0 | Done |
 | 0.13.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.10.0 | Planned |
 | 0.14.0 | Actionable recourse: immutable features, allowed values, cost strategies and several plans for the counterfactual, with proofs. | [actionable-recourse](docs/plans/actionable-recourse.md) | 0.10.0 | Planned |
 | 0.15.0 | Graphs for vision models: text, vision and mixed modes, with a safe fallback or a specific error for a model without image input. | [vision-graphs](docs/plans/vision-graphs.md) | 0.13.0 | Planned |
