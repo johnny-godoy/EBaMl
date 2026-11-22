@@ -33,8 +33,8 @@ any number of margins.
 
 - Floating point and the tolerances of the MIP solver. A proved optimum rests on the certificate of the solver.
 - The rule for ties between plans of the same cost. The proof allows any cheapest plan.
-- The code of the costs, the cap and the diverse plans. The paper fixes the model that this code follows, and the
-  unit tests compare the code with an exhaustive oracle.
+- The link to the code. A unit test compares the cost of each plan with an exhaustive oracle on small models. The code
+  has no diverse plans.
 - The counterfactual of a chosen class of a multiclass classifier, and a lower bound from an LP relaxation.
 - The running time of the reduction from the knapsack problem. The NP-completeness of the knapsack problem is a
   citation of Karp.

@@ -316,6 +316,36 @@ that its claims hold within them. The sufficient reason and the completions igno
 what the instance can be, not what the person can do. A name that is not a feature of the model, or values that leave
 no plausible bin, raise a `RecourseOptionError`.
 
+### Costs of the changes
+
+Some changes are harder than others. Pass a cost strategy as `RecourseOptions(costs=...)`, and the counterfactual is
+then the cheapest plan: the plan whose changes have the smallest sum of costs.
+
+| Strategy | Cost of a change |
+| --- | --- |
+| `UnitCost()` (the default) | 1. The cheapest plan is the plan with the fewest changes. |
+| `DataCost()` | The distance in the training data: for a continuous feature, the distance between the bin centers divided by the median absolute deviation; for a category, `1 - share` of the level. These are estimates from the binned data of the EBM. |
+| `UserCost(per_feature=..., per_bin=..., default=...)` | The costs that you give, for a feature or for one bin of a feature. |
+| `ScaledCost(base, multipliers)` | The cost of `base` times a difficulty for some features. |
+
+`RecourseOptions(max_changes=...)` caps the number of changes, because a cheapest plan with no cap can change many
+cheap features. Each cost must be finite and above zero. With equal costs, sorting finds the plan exactly. With other
+costs, `LocalOptions.search` finds it: `MipCover` proves the cheapest plan unless its time limit ends first, and
+`GreedyCover` and `LocalSearchCover` return a valid plan with no proof. `Counterfactual.cost` holds the cost of the plan.
+
+```python
+from ebaml import UserCost
+
+costly = RecourseOptions(costs=UserCost(per_feature={"fare": 3.0}), max_changes=2)
+plan = compute_local_facts(ebm, instance, LocalOptions(recourse=costly)).counterfactual
+if plan is not None:
+    print([change.feature for change in plan.changes], plan.cost)
+```
+
+The texts for the LLM name the costs, and the explanation calls the plan the cheapest one under the given difficulties,
+never the fewest changes. The [proof of the recourse plans](recourse-proof.md) shows why sorting is exact for equal
+costs only, and why the problem with other costs is NP-hard.
+
 ## Audience
 
 An audience is an instance of a subclass of `Audience`. Two audiences ship with the package. Pass one as an object, or
@@ -469,7 +499,7 @@ The fields `language`, `local`, `prompt` and `model` are keyword-only. `local` i
 | `local.max_steps` | `5` | The most features revealed one by one in `completions`. |
 | `local.n_samples` | `10000` | Samples used for `completions`. |
 | `local.seed` | `0` | Seed of the sampling, so that the facts are reproducible. |
-| `local.recourse` | `RecourseOptions()` | The features that the counterfactual must not change, and the values that each feature may take. See [Recourse limits](#recourse-limits). |
+| `local.recourse` | `RecourseOptions()` | The features that the counterfactual must not change, the values that each feature may take, the costs of the changes and the cap on their number. See [Recourse limits](#recourse-limits). |
 | `prompt.expert_description`, `prompt.dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
 
 `explain_instance` takes `model=` like `describe_ebm`: see [Choosing the model](providers.md). Token usage of the three calls is logged at `INFO` on the
