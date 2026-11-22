@@ -1,6 +1,6 @@
 # Setup
 
-### Requirements
+## Requirements
 
 - Python 3.13 or later. CI tests Linux with Python 3.13 only. Other systems and later Python versions are not tested
   yet.
@@ -9,7 +9,7 @@
   paid plan. You can use another provider instead: see [Choosing the model](providers.md).
 - The BAML toolchain 0.25, only in a source checkout (step 1).
 
-### Install from PyPI
+## Install from PyPI
 
 ```bash
 pip install ebaml            # or: uv add ebaml
@@ -20,7 +20,7 @@ The wheel holds the generated SDK, so it needs no BAML toolchain. Then set the A
 [Usage](usage.md). The wheel needs one version of `baml-bridge`, and it pins that version. To change a prompt or the provider in a
 `.baml` file, work from a source checkout.
 
-### Work from a source checkout
+## Work from a source checkout
 
 Steps 1, 2, 4, 5 and 6 are for a source checkout. Step 3 also applies to an installation from PyPI.
 
@@ -107,7 +107,7 @@ OPENROUTER_API_KEY=sk-or-... uv run python scripts/llm/openrouter.py
 It fits a small EBM, runs the three-turn chain directly and checks that the provider reports token usage, then runs
 `describe_graph` and `describe_ebm`. It exits non-zero on the first failed assertion.
 
-### Troubleshooting
+## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
