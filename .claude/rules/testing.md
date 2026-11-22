@@ -9,11 +9,23 @@ and a bug fix adds its guard to the suite where the bug shows (`bug-fixes.md`).
 | Integration | `tests/integration/` | Do the parts work together, from an EBM to the text that the user reads? | Only the LLM, as a local server (`tests/conftest.py`) | `check_test_suites`: no fake of `baml_sdk` |
 | API | `tests/api/` | Do the public names, signatures, errors, tools and commands keep their promises? | Nothing | `public_api.json`, the tool snapshot and `check_api_breaks` |
 | Contract | `tests/contract/` | Does ebaml agree with what it does not own: the generated SDK, the provider protocol, the packaging? | Nothing, or the local server | The checks of the SDK against the sources, and the wire format |
+| Site | `tests/site/` | Can every reader use the built docs site: a screen reader, a keyboard, a phone, the dark theme? Does each link lead somewhere? | Nothing; the suite builds the site and serves it locally | axe, html-validate, Lighthouse CI, the checks of the keyboard, the layout and the links |
 | Docs | `README.md`, `docs/`, docstrings | Does each example in the docs run? | The LLM, as in `tests/docs/conftest.py` | Sybil |
 
 `pytest` marks each test with the name of its suite (`tests/conftest.py`), so `uv run pytest -m integration` runs one
 suite. `--strict-markers` rejects a misspelled name. CI runs the unit suite with the coverage gate, and the other
 suites without coverage, so that a slow end-to-end test cannot stand in for a missing unit test.
+
+## Site tests
+
+- Run them with `uv run --group docs pytest tests/site --no-cov`, after `npm ci --prefix tests/site`. The suite builds
+  the site, so `uv run pytest` leaves it out (`testpaths`). `docs.yml` runs it in the job `docs site checks`.
+- Each test takes the pages from the nav of `zensical.toml`, so a new page gets every check. Do not add a hand list.
+- Fix a finding in the Markdown, `docs/stylesheets/extra.css`, `docs/javascripts/` or `zensical.toml`. A rule that the
+  theme breaks on every page gets one entry with its reason, as in `RULES` of `test_html.py`. Do not turn off a rule to
+  make the suite pass.
+- The external links are checked only with `--external-links`, by `site-links-weekly.yml`. Add a host to
+  `FLAKY_HOSTS` only with a reason.
 
 ## Integration tests
 
@@ -49,6 +61,6 @@ suites without coverage, so that a slow end-to-end test cannot stand in for a mi
 
 ## Check
 
-- `uv run python -m scripts.architecture.suites` checks the suites, the markers, `testpaths` and the CI step.
+- `uv run python -m scripts.architecture.suites` checks the suites, the markers, `testpaths` and the CI steps.
 - Prove each new guard: break the code that it guards, watch the test fail, and restore the code (`bug-fixes.md`).
 - Run the suites: `uv run pytest tests/integration tests/api tests/contract --no-cov`.

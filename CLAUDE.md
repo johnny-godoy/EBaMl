@@ -22,6 +22,7 @@ uv run pytest                      # all suites; CI gates unit tests at 100% cov
 uv run pytest tests/integration tests/api tests/contract --no-cov   # integration (real BAML runtime, local LLM server), API and contract tests
 uv run pytest tests/unit/ebaml/test_x.py::test_name --no-cov   # one test, without the coverage gate
 uv run pytest README.md docs src --no-cov   # the code examples of the docs and the docstrings; the LLM replies are fakes
+uv run --group docs pytest tests/site --no-cov   # build the docs and check the site: axe, keyboard, links, HTML, Lighthouse; needs `npm ci --prefix tests/site`
 prek run --all-files               # all hooks: ruff, marimo check, vulture, deptry, jscpd, pyrefly, import-linter, semgrep, check-layout, baml fmt, check-ignores, check-ignore-repeats, uv lock --check
 uv run python -m scripts.architecture.abstractions --search graph text   # find a shared contract before you add one; --check validates architecture/abstractions.yml
 uv run --only-group dist python -m scripts.release.smoke_install dist/ebaml-X.Y.Z-py3-none-any.whl X.Y.Z --extras mcp   # install a built file in a clean environment; the release workflow runs it
