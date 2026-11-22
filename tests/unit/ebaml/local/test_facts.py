@@ -848,7 +848,13 @@ def test_each_plan_matches_the_oracle(
         assert problem.flips(changed)
         assert max_changes is None or len(changed) <= max_changes
         # contract 2: equal costs keep the proof of sorting, and other costs rest on the proof of the solver
-        equal = len(set(costs)) == 1
+        # only the features with a bin to move to count, as in the code
+        movable = [
+            cost
+            for cost, ends, instance_bin in zip(costs, problem.reachable, model.instance_bins, strict=True)
+            if any(bin_index != instance_bin for bin_index in ends)
+        ]
+        equal = len(set(movable)) <= 1
         assert counterfactual.minimality is (MinimalityStatus.SORTING_PROOF if equal else MinimalityStatus.SOLVER_PROOF)
 
 
