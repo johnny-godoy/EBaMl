@@ -33,16 +33,13 @@ EBaMl will reach three goals:
 | 0.12.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | None | 0.11.0 | Done |
 | 0.13.0 | Actionable recourse: immutable features, allowed values, cost strategies and several plans for the counterfactual, with proofs. | [actionable-recourse](docs/plans/actionable-recourse.md) | 0.10.0 | Planned |
 | 0.14.0 | Graphs for vision models: text, vision and mixed modes, with a safe fallback or a specific error for a model without image input. | [vision-graphs](docs/plans/vision-graphs.md) | 0.10.0 | Planned |
-| 0.15.0 | Python 3.12 and later: the package supports every CPython release from 3.12, and a CI matrix tests each one. | [python-versions](docs/plans/python-versions.md) | 0.13.0, 0.14.0 | Planned |
-| 0.16.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.15.0 | Planned |
+| 0.15.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.13.0, 0.14.0 | Planned |
+| 0.16.0 | Python 3.12 and later: the package supports every CPython release from 3.12, and a CI matrix tests each one. | [python-versions](docs/plans/python-versions.md) | 0.15.0 | Planned |
 | **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0, 0.16.0 | Planned |
 
-Until 0.15.0, pull requests run on Linux with Python 3.13 only. A matrix of Python versions makes each CI run longer,
-so it comes after the features. The plan of 0.15.0 adds the Python versions from 3.12, and the plan of 1.0.0 adds the
+Until 0.16.0, pull requests run on Linux with Python 3.13 only. A matrix of Python versions makes each CI run longer,
+so it comes last before 1.0.0. The plan of 0.16.0 adds the Python versions from 3.12, and the plan of 1.0.0 adds the
 other operating systems. Each plan makes the package claim only what the matrix passes.
-
-The benchmarks of 0.16.0 come after the matrix, so they measure the features of every earlier milestone, and the
-hotspot fixes are the last changes before the API freezes.
 
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
 model that has them. The README table "Supported models" shows the state of each feature. Full support needs a

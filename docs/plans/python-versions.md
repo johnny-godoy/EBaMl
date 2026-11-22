@@ -1,4 +1,4 @@
-# Plan: Python 3.12 and later (0.15.0)
+# Plan: Python 3.12 and later (0.16.0)
 
 You are a senior Python engineer who maintains libraries that support several Python versions. You will implement one
 milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in `.claude/rules/` first, because
@@ -64,8 +64,8 @@ These facts were true when the plan was written. Check each one again before you
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.15.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
-fragment says under `Added` which Python versions the package supports. Mark the 0.15.0 row of `ROADMAP.md` as done.
+This PR completes the milestone: it sets `version = "0.16.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+fragment says under `Added` which Python versions the package supports. Mark the 0.16.0 row of `ROADMAP.md` as done.
 </release>
 
 <done>
