@@ -6,7 +6,7 @@
   "devDependencies": {
     "@lhci/cli": "0.16.1",
     "axe-core": "4.14.0",
-    "html-validate": "11.21.0"
+    "html-validate": "11.21.1"
   },
   "overrides": {
     "basic-ftp": "6.2.6"
