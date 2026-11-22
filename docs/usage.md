@@ -45,7 +45,7 @@ multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"]))))
 ```
 
-### Explaining one prediction
+## Explaining one prediction
 
 ```python
 from ebaml import DescribeEBMRequest, ExplainInstanceRequest, describe_ebm, explain_instance
@@ -69,7 +69,7 @@ reader with its own rules. Pass `language="French"` (any language name) to get t
 without interactions, and `explanation.facts` holds the numbers behind the text. The [Local explanations](local-explanations.md) page explains what each explanation means, the options and the limits,
 and the [local explanations notebook](local-notebook.md) walks through them on the Titanic data.
 
-### Errors
+## Errors
 
 Every error that `ebaml` raises on purpose derives from `ebaml.EBaMlError`. Use `except EBaMlError` to catch the errors
 of `ebaml` apart from the errors of other code. Each error for a bad value also derives from `ValueError`, so an

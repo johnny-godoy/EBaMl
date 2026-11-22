@@ -10,7 +10,7 @@ The default model is OpenRouter's free router, `openrouter/free`. It needs `OPEN
 of `describe_graph`, `describe_ebm` and `explain_instance` selects another model for one call. EBaMl sends every LLM
 request of that call to that model. You do not change the package.
 
-### Quick start
+## Quick start
 
 Pass the shorthand `"provider/model"`:
 
@@ -33,7 +33,7 @@ EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o
 `openrouter` and the model `openai/gpt-4o-mini`. EBaMl checks the provider before the first paid request. It raises
 `InvalidOptionError` if the provider is not in the table below.
 
-### Providers
+## Providers
 
 The provider is a BAML provider prefix. Set the environment variable of the key in the shell that runs Python.
 
@@ -51,7 +51,7 @@ The provider is a BAML provider prefix. Set the environment variable of the key 
 
 Run `baml describe <client>.new`, for example `baml describe aws.BedrockClient.new`, to see all settings of a client.
 
-### Options
+## Options
 
 | Field | Meaning | Default |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ A field that you set wins over the default of the call. The output limit has two
 | Turn 1 of a graph description, the draft of the summary, and the two turns of the benchmark | 16000 |
 | All other calls, including the local explanations | 12000 |
 
-### Examples
+## Examples
 
 ```python
 # OpenRouter, a pinned model (the free router picks a new model for each request)
@@ -102,13 +102,13 @@ The benchmark has the flag `--model`:
 uv run python benchmark/run.py --model anthropic/claude-haiku-4-5 --limit 10
 ```
 
-### Keys
+## Keys
 
 Put the key in an environment variable, in the shell or with `os.environ`. `ModelOptions` holds the name of the
 variable, never the key, so the key does not appear in a `repr`, a log line or a traceback. EBaMl reads the variable
 only when it sends a request.
 
-### Limits
+## Limits
 
 - One call uses one model. The turns of a call cannot use different models.
 - Python cannot set up fallback chains or round robin. A BAML client object cannot cross from Python to BAML, so
