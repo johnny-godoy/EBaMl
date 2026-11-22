@@ -12,7 +12,7 @@ alternative, as `_alternatives` builds them. The margin of a plan is minus the r
 * `margin_cfProblem` and `valid_cfProblem_iff` are Lemma 1: a plan is valid iff its change flips the prediction.
 * `sorting_cheapest` is Theorem 4: with unit costs, the sorting search returns a cheapest plan. This keeps the status
   `SORTING_PROOF`.
-* `sorting_not_cheapest` is Proposition 1: with costs, the bin with the largest drop is not always in a cheapest
+* `sorting_not_cheapest` is Lemma 2: with costs, the bin with the largest drop is not always in a cheapest
   plan, so the code sends a weighted problem to the MIP.
 * `knapsack_canFlipOn_iff` is Theorem 5: every instance of the knapsack problem is the counterfactual of a binary EBM,
   so the weighted problem with one margin is NP-hard (Karp's theorem is a citation).
@@ -193,7 +193,7 @@ theorem cost_embed {A' : ∀ i, Finset (B i)} (hA : ∀ i, A' i ⊆ A i) (cost :
 
 /-! ### Why the weighted search does not sort -/
 
-/-- Proposition 1. One feature with two alternatives: the first lowers the robust margin by `10` and costs `5`, the
+/-- Lemma 2. One feature with two alternatives: the first lowers the robust margin by `10` and costs `5`, the
 second lowers it by `2` and costs `1`, and the margin is `1`. The first has the largest drop, but no cheapest plan
 picks it, because the second alone is a valid plan of cost `1`. -/
 noncomputable def twoBins : Problem Unit (fun _ => Bool) Unit where
