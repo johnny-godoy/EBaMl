@@ -29,6 +29,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
     ProviderUnreachableError,
     RateLimitedError,
+    RecourseOptionError,
     SDKUnavailableError,
     SearchLimitError,
     SelectionError,
@@ -146,6 +147,7 @@ from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
+from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 
 if TYPE_CHECKING:
     from ebaml.llm.descriptors import EBMDescription, LocalExplanation, describe_ebm, describe_graph, explain_instance
@@ -217,6 +219,7 @@ __all__ = [
     "InvalidOptionError",
     "LLMRequestError",
     "Layperson",
+    "Levels",
     "LimitSteps",
     "LocalExplanation",
     "LocalFacts",
@@ -244,9 +247,12 @@ __all__ = [
     "Prediction",
     "PromptOptions",
     "ProviderUnreachableError",
+    "RangeMatch",
     "RateLimitedError",
     "Rebin",
     "Recenter",
+    "RecourseOptionError",
+    "RecourseOptions",
     "Regressor",
     "RegressorMetrics",
     "RemoveFeature",
@@ -273,6 +279,7 @@ __all__ = [
     "UnsupportedModelError",
     "Unused",
     "ValueInterval",
+    "ValueRange",
     "Violation",
     "WholeGraph",
     "ZeroTerm",

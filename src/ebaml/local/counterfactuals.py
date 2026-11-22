@@ -135,7 +135,7 @@ class _Alternatives:
 
 
 def _alternatives(views: Sequence[Feature], z: float) -> _Alternatives:
-    """List the plausible bins of a feature, other than the bin of the instance, with their gains for each margin.
+    """List the bins that a feature can reach, other than the bin of the instance, with their gains for each margin.
 
     The scores of the new bin move by ``z`` deviations against the target class, as in ``_counterfactual``. A gain can
     be negative: a bin that lowers one margin can still be part of the smallest set.
@@ -154,7 +154,7 @@ def _alternatives(views: Sequence[Feature], z: float) -> _Alternatives:
 
     """
     first = views[0]
-    bins = [int(bin_index) for bin_index in np.flatnonzero(first.plausible) if bin_index != first.bin_index]
+    bins = [int(bin_index) for bin_index in np.flatnonzero(first.reachable) if bin_index != first.bin_index]
     gains = [
         [float(view.scores[bin_index] - z * view.stds[bin_index] - view.current) for view in views]
         for bin_index in bins

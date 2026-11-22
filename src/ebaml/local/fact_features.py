@@ -26,6 +26,11 @@ class Feature:
     value: FeatureValue
     plausible: np.ndarray  # bins with enough training support to be offered as alternatives
     columns: tuple[int, int] | None = None  # the two outputs of a multiclass margin that this view compares
+    # the bins that the counterfactual can end in: the allowed plausible bins and the bin of the instance
+    # (``RecourseOptions.restrict``); with no recourse options, every plausible bin
+    reachable: np.ndarray = attrs.field(
+        default=attrs.Factory(lambda feature: feature.plausible.copy(), takes_self=True),
+    )
 
     @property
     def scores(self) -> npt.NDArray[np.float64]:
@@ -309,7 +314,8 @@ def robust_scores(
 
     With ``towards_outcome`` the scores are lowered, so they are what is guaranteed in favour of the outcome; without
     it they are raised, so they are the most the outcome can still be argued against. Bins without enough support are
-    ``inf``, so that taking the minimum skips them.
+    ``inf``, so that taking the minimum skips them. Without ``towards_outcome`` the scores serve the counterfactual, so
+    every bin that it cannot reach (``Feature.reachable``) is ``inf`` too.
 
     Parameters
     ----------
@@ -330,4 +336,6 @@ def robust_scores(
     """
     scores = sign * feature.scores
     stds = z * feature.stds
-    return np.where(feature.plausible, scores - stds if towards_outcome else scores + stds, np.inf)
+    if towards_outcome:
+        return np.where(feature.plausible, scores - stds, np.inf)
+    return np.where(feature.reachable, scores + stds, np.inf)

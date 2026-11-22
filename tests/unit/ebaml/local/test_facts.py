@@ -14,7 +14,7 @@ from hypothesis import strategies as st
 
 from ebaml.core.custom_types import ClassLabel, FeatureValue
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, UnsupportedModelError
+from ebaml.core.exceptions import InvalidInstanceError, OptionRangeError, RecourseOptionError, UnsupportedModelError
 from ebaml.local import completions as completions_module
 from ebaml.local import counterfactuals as counterfactuals_module
 from ebaml.local import fact_features as fact_features_module
@@ -26,6 +26,7 @@ from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearc
 from ebaml.local.decisions import Interval, Threshold
 from ebaml.local.local_kinds import Outcome, OutputKind
 from ebaml.local.minimality import MinimalityStatus
+from ebaml.local.recourse import RecourseOptions
 from tests.unit.ebaml.conftest import (
     MISSING_VALUE,
     FittedClassifier,
@@ -48,6 +49,8 @@ from tests.unit.ebaml.local.conftest import (
     FittedModel,
     SmallModel,
     Templates,
+    allowed_bins,
+    bin_range,
     build_ebm,
     exact_share,
     feature_name,
@@ -60,6 +63,8 @@ from tests.unit.ebaml.local.conftest import (
     oracle_problem,
     plausible_bins,
     probability_after,
+    recourse_from_specs,
+    recourse_specs,
     sig,
 )
 
@@ -676,6 +681,7 @@ def _small_facts(
     *,
     confidence_level: float,
     min_support: float,
+    recourse: RecourseOptions | None = None,
 ) -> tuple[FittedModel, fact_types_module.LocalFacts]:
     model, limits = case
     ebm = build_ebm(templates, model)
@@ -686,6 +692,7 @@ def _small_facts(
         decision=_decision(limits),
         n_samples=8,
         max_steps=0,
+        recourse=recourse or RecourseOptions(),
     )
     return ebm, facts_module.compute_local_facts(ebm, model.instance, options)
 
@@ -724,6 +731,116 @@ def test_the_facts_match_the_oracle_of_the_paper(
         assert guaranteed > 0
         assert reason.guaranteed_margin == pytest.approx(guaranteed)
         assert reason.minimality.is_smallest
+
+
+def _bin_text(model: SmallModel, feature_index: int, bin_index: int) -> str:
+    if feature_index % 2 == 0:
+        return f"c{bin_index}"
+    low, high = bin_range(bin_index, model.shape[feature_index])
+    return f"[{low:.4g}, {high:.4g})"
+
+
+def _flip_size(facts: fact_types_module.LocalFacts) -> float:
+    return math.inf if facts.counterfactual is None else len(facts.counterfactual.changes)
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+    data=st.data(),
+)
+def test_the_facts_with_recourse_options_match_the_oracle_of_the_paper(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+    data: st.DataObject,
+) -> None:
+    # contract 1: the counterfactual is the fewest changes over the end bins of Definition 2 of the paper
+    model, limits = case
+    recourse = recourse_from_specs(data.draw(recourse_specs(model.shape)))
+    problem = oracle_problem(
+        model,
+        confidence_level=confidence_level,
+        min_support=min_support,
+        limits=limits,
+        recourse=recourse,
+    )
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    left_empty = [
+        name
+        for index, name in enumerate(names)
+        if name in recourse.allowed
+        and not allowed_bins(index, model.shape[index], recourse.allowed[name]) & set(problem.plausible[index])
+    ]
+    if left_empty:
+        with pytest.raises(RecourseOptionError, match="leave no plausible bin"):
+            _small_facts(
+                small_templates,
+                case,
+                confidence_level=confidence_level,
+                min_support=min_support,
+                recourse=recourse,
+            )
+        return
+    _, facts = _small_facts(
+        small_templates,
+        case,
+        confidence_level=confidence_level,
+        min_support=min_support,
+        recourse=recourse,
+    )
+    counterfactual = facts.counterfactual
+    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
+    if counterfactual is not None:
+        changed = [names.index(change.feature) for change in counterfactual.changes]
+        assert problem.flips(changed)
+        assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
+        # contract 5: no immutable feature changes, and each new value is an end bin of its feature
+        for change, feature_index in zip(counterfactual.changes, changed, strict=True):
+            assert change.feature not in recourse.immutable
+            ends = {_bin_text(model, feature_index, bin_index) for bin_index in problem.reachable[feature_index]}
+            assert change.to_value in ends
+    # the allowed values describe what the person can do, so the sufficient reason ignores them
+    reason = facts.sufficient_reason
+    assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
+
+
+@settings(max_examples=150, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    data=st.data(),
+)
+def test_a_new_immutable_feature_never_makes_a_flip_easier(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    data: st.DataObject,
+) -> None:
+    # contract 7, Lemma 19 of the paper: fewer allowed bins never give fewer changes, and never make a flip possible
+    model, _ = case
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    frozen = data.draw(st.lists(st.sampled_from(names), unique=True))
+    more = data.draw(st.sampled_from(names))
+    _, free = _small_facts(
+        small_templates,
+        case,
+        confidence_level=confidence_level,
+        min_support=0.0,
+        recourse=RecourseOptions(immutable=frozen),
+    )
+    _, limited = _small_facts(
+        small_templates,
+        case,
+        confidence_level=confidence_level,
+        min_support=0.0,
+        recourse=RecourseOptions(immutable=[*frozen, more]),
+    )
+    assert _flip_size(limited) >= _flip_size(free)
+    assert limited.sufficient_reason == free.sufficient_reason
 
 
 @settings(max_examples=200, deadline=None)
