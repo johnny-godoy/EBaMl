@@ -1,0 +1,35 @@
+/*
+ * Colors that pass the contrast ratio of WCAG 2.2 AA (4.5:1 for normal text) in both color schemes.
+ * The theme gives the accent color (the active nav link, a link under the pointer) and the labels of the API reference
+ * less contrast, and the theme also makes the labels transparent. The site suite (tests/site) runs axe on each page in both schemes and fails on a lower ratio.
+ */
+[data-md-color-scheme="default"] {
+  --md-accent-fg-color: #3f51e5;
+  --ebaml-label-fg-color: #6b6b6b;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-accent-fg-color: #8c9eff;
+  --ebaml-label-fg-color: #9e9e9e;
+}
+
+.md-typeset .doc-label {
+  opacity: 1;
+}
+
+.doc-label code {
+  color: var(--ebaml-label-fg-color);
+}
+
+/* A reader who moves into an embedded notebook or paper with the Tab key sees which frame has the focus. Chrome gives
+ * such a frame no :focus state, so javascripts/frame-focus.js sets the class. */
+.md-typeset iframe.ebaml-focused {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
+
+/* The theme hides the "Back to top" button with opacity only, so the Tab key can move the focus to a button that the
+ * reader cannot see. */
+.md-top[hidden] {
+  visibility: hidden;
+}

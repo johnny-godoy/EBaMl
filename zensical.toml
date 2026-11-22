@@ -5,6 +5,10 @@ site_url = "https://johnny-godoy.github.io/EBaMl/"
 repo_url = "https://github.com/johnny-godoy/EBaMl"
 repo_name = "johnny-godoy/EBaMl"
 strict = true
+# colors that pass the contrast checks of WCAG 2.2 AA in both color schemes, and focus that a reader can see (tests/site)
+extra_css = ["stylesheets/extra.css"]
+# a focus ring on an embedded notebook or paper (tests/site)
+extra_javascript = ["javascripts/frame-focus.js"]
 # The plans are handoff prompts for the agent that implements a milestone, with XML tags that are not HTML. ROADMAP.md
 # links them on GitHub, so the site does not publish them.
 exclude_docs = """
