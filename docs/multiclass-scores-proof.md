@@ -37,6 +37,8 @@ Its appendix gives the commands to repeat the check. A CI job repeats it when th
 - [Lean files](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/EBaMlProofs/MulticlassScores)
 - [Typst source of the paper](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/papers/multiclass-scores)
 
+<p><a href="proofs/multiclass-scores.pdf">Open the paper (PDF) in its own page</a></p>
+
 <iframe
   src="proofs/multiclass-scores.pdf"
   title="The proof of the multiclass scores, as a PDF"
