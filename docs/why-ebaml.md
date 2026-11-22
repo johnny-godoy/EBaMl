@@ -16,7 +16,7 @@ run, or another model, gives other words.
 
 ![The graph of income in an EBM of synthetic loan data. The score goes up from about -1.6 at low incomes, crosses zero
 near 40,000, and stays near +1.3 above 55,000. The confidence band is widest at the highest incomes, where the data is
-sparse.](generated/income-graph.svg)
+sparse.](generated/income-graph.svg){ width="640" height="360" }
 
 Many LLMs read only text. A vision model can read the picture, but it estimates each value from the axes. So EBaMl
 writes the graph as text, which every model reads and which gives the exact numbers. `EBMGraph.to_text` lists the
