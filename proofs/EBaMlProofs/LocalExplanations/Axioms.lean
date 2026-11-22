@@ -55,7 +55,11 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.LocalExplanations.Model.canFlipOn_P
 #print axioms EBaMlProofs.LocalExplanations.Model.isLowest_beta
 #print axioms EBaMlProofs.LocalExplanations.Model.canFlip_of_canFlipOn
+#print axioms EBaMlProofs.LocalExplanations.Model.canFlipInsideOn_iff
 #print axioms EBaMlProofs.LocalExplanations.Model.min_change_insideOn
 #print axioms EBaMlProofs.LocalExplanations.Model.min_change_insideOn_none
+#print axioms EBaMlProofs.LocalExplanations.Model.canFlipInsideOn_P
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.canFlipClassOn_iff
 #print axioms EBaMlProofs.LocalExplanations.Multiclass.min_change_classOn
 #print axioms EBaMlProofs.LocalExplanations.Multiclass.min_change_classOn_none
+#print axioms EBaMlProofs.LocalExplanations.Multiclass.canFlipClassOn_P

@@ -14,6 +14,9 @@ predicted class `w` against a rival `j` is `s_w - s_j`, and its deviation is the
 * `canFlipClass_iff` is Theorem 7, part 1: the class changes when one margin fails.
 * `min_change_class` and `min_change_class_none` are Theorem 7, parts 2 and 3: the smallest change of the class is the
   smallest of the answers for the rivals.
+* `canFlipClassOn_iff`, `min_change_classOn` and `min_change_classOn_none` restate Theorem 7 for the allowed bins
+  `A` of `Model.lean`. `canFlipClassOn_P` shows that `A = P` gives `CanFlipClass`, and parts 1 to 3 of Theorem 7 are
+  their corollaries.
 * `sufficient_class_iff` is Lemma 11: a set keeps the class iff it is sufficient for each margin. So the
   sufficient reason is the covering problem of `Covering.lean`.
 * `sd_sum_bound` is Lemma 12: the sum of two deviations bounds the deviation of their difference for any correlation.
@@ -90,19 +93,73 @@ at least one rival is negative. -/
 def CanFlipClass (S : Finset ι) : Prop :=
   ∃ v : ∀ i, B i, (∀ i ∈ S, v i ∈ M.P i) ∧ ∃ j, j ≠ M.w ∧ (M.marginModel j).robustMargin S v < 0
 
-/-- Theorem 7, part 1: the class changes when one margin fails. A set can change it iff it can flip the margin
-of one rival. -/
-theorem canFlipClass_iff (S : Finset ι) :
-    M.CanFlipClass S ↔ ∃ j, j ≠ M.w ∧ (M.marginModel j).CanFlip S := by
+/-! ### Theorem 7 for allowed bins -/
+
+section Allowed
+
+variable [∀ i, DecidableEq (B i)] (A : ∀ i, Finset (B i))
+
+omit [Fintype ι] [DecidableEq ι] in
+/-- Every margin model has the same bins, because they share the bin of the instance. -/
+theorem marginModel_bins (j : κ) : (M.marginModel j).bins A = (M.marginModel M.w).bins A := rfl
+
+/-- Some admissible change over `A` of the features in `S` makes the predicted class lose to a rival. -/
+def CanFlipClassOn (S : Finset ι) : Prop :=
+  ∃ v : ∀ i, B i, (M.marginModel M.w).AdmissibleOn A S v ∧ ∃ j, j ≠ M.w ∧ (M.marginModel j).robustMargin S v < 0
+
+/-- Theorem 7, part 1, for allowed bins: a set can change the class iff it can flip the margin of one rival. -/
+theorem canFlipClassOn_iff (S : Finset ι) :
+    M.CanFlipClassOn A S ↔ ∃ j, j ≠ M.w ∧ (M.marginModel j).CanFlipOn A S := by
   constructor
   · rintro ⟨v, hv, j, hj, h⟩
     exact ⟨j, hj, v, hv, h⟩
   · rintro ⟨j, hj, v, hv, h⟩
     exact ⟨v, hv, j, hj, h⟩
 
+/-- Theorem 7, part 2, for allowed bins (minimum change of the class). The rival `j₀` has the position `k` of
+`min_changeOn`, and every other rival is impossible to flip over `A`, or needs at least `k` features. -/
+theorem min_change_classOn {n : ℕ} {e : Fin n ≃ ι} {j₀ : κ} (hj₀ : j₀ ≠ M.w)
+    (he : Antitone ((M.marginModel j₀).dropOn A ∘ e)) {k : ℕ} (hk : k ≤ n)
+    (hflip : (M.marginModel j₀).margin < partialSum ((M.marginModel j₀).dropOn A) e k)
+    (hbefore : ∀ j, 1 ≤ j → j < k →
+      partialSum ((M.marginModel j₀).dropOn A) e j ≤ (M.marginModel j₀).margin)
+    (hrivals : ∀ j, j ≠ M.w →
+      (∀ S, ¬ (M.marginModel j).CanFlipOn A S) ∨ ∀ S, (M.marginModel j).CanFlipOn A S → k ≤ S.card) :
+    (∃ S : Finset ι, M.CanFlipClassOn A S ∧ S.card = k) ∧
+      ∀ S : Finset ι, M.CanFlipClassOn A S → k ≤ S.card := by
+  obtain ⟨w, hw⟩ := (M.marginModel j₀).exists_isLowest A
+  obtain ⟨⟨ha, hb⟩, _⟩ := (M.marginModel j₀).min_changeOn A he hk hflip hbefore hw
+  refine ⟨⟨prefixSet e hk, ⟨w, ha, j₀, hj₀, hb⟩, card_prefixSet e hk⟩, fun S hS => ?_⟩
+  obtain ⟨j, hj, hflipj⟩ := (M.canFlipClassOn_iff A S).1 hS
+  rcases hrivals j hj with hnone | hcard
+  · exact absurd hflipj (hnone S)
+  · exact hcard S hflipj
+
+/-- Theorem 7, part 3, for allowed bins (no answer). -/
+theorem min_change_classOn_none (hnone : ∀ j, j ≠ M.w → ∀ S, ¬ (M.marginModel j).CanFlipOn A S)
+    (S : Finset ι) : ¬ M.CanFlipClassOn A S := by
+  rw [canFlipClassOn_iff]
+  rintro ⟨j, hj, h⟩
+  exact hnone j hj S h
+
+/-- With `A = P`, a change of the class over the allowed bins is a change of the class. -/
+theorem canFlipClassOn_P (S : Finset ι) : M.CanFlipClassOn M.P S ↔ M.CanFlipClass S := by
+  have hb : ∀ i, (M.marginModel M.w).bins M.P i = M.P i := (M.marginModel M.w).bins_P
+  simp only [CanFlipClassOn, CanFlipClass, Model.AdmissibleOn, hb]
+
+end Allowed
+
+/-- Theorem 7, part 1: the class changes when one margin fails. A set can change it iff it can flip the margin
+of one rival. This is `canFlipClassOn_iff` with `A = P`. -/
+theorem canFlipClass_iff (S : Finset ι) :
+    M.CanFlipClass S ↔ ∃ j, j ≠ M.w ∧ (M.marginModel j).CanFlip S := by
+  classical
+  rw [← M.canFlipClassOn_P, canFlipClassOn_iff]
+  exact exists_congr fun j => and_congr_right fun _ => (M.marginModel j).canFlipOn_P S
+
 /-- Theorem 7, part 2 (minimum change of the class). Let the rival `j₀` have the position `k` of `min_change`,
 and let every other rival either be impossible to flip, or need at least `k` features. Then `k` is the size of the
-smallest set that changes the class, and the set of `j₀` changes it. -/
+smallest set that changes the class, and the set of `j₀` changes it. This is `min_change_classOn` with `A = P`. -/
 theorem min_change_class {n : ℕ} {e : Fin n ≃ ι} {j₀ : κ} (hj₀ : j₀ ≠ M.w)
     (he : Antitone ((M.marginModel j₀).drop ∘ e)) {k : ℕ} (hk : k ≤ n)
     (hflip : (M.marginModel j₀).margin < partialSum (M.marginModel j₀).drop e k)
@@ -110,19 +167,26 @@ theorem min_change_class {n : ℕ} {e : Fin n ≃ ι} {j₀ : κ} (hj₀ : j₀ 
     (hrivals : ∀ j, j ≠ M.w →
       (∀ S, ¬ (M.marginModel j).CanFlip S) ∨ ∀ S, (M.marginModel j).CanFlip S → k ≤ S.card) :
     (∃ S : Finset ι, M.CanFlipClass S ∧ S.card = k) ∧ ∀ S : Finset ι, M.CanFlipClass S → k ≤ S.card := by
-  obtain ⟨⟨ha, hb⟩, _⟩ := (M.marginModel j₀).min_change he hk hflip hbefore
-  refine ⟨⟨prefixSet e hk, ⟨(M.marginModel j₀).beta, ha, j₀, hj₀, hb⟩, card_prefixSet e hk⟩, fun S hS => ?_⟩
-  obtain ⟨j, hj, hflipj⟩ := (M.canFlipClass_iff S).1 hS
-  rcases hrivals j hj with hnone | hcard
-  · exact absurd hflipj (hnone S)
-  · exact hcard S hflipj
+  classical
+  have hP : (M.marginModel j₀).dropOn M.P = (M.marginModel j₀).drop := (M.marginModel j₀).dropOn_P
+  rw [← hP] at he hflip hbefore
+  have hrivals' : ∀ j, j ≠ M.w →
+      (∀ S, ¬ (M.marginModel j).CanFlipOn M.P S) ∨ ∀ S, (M.marginModel j).CanFlipOn M.P S → k ≤ S.card := by
+    intro j hj
+    have hc : ∀ S, (M.marginModel j).CanFlipOn M.P S ↔ (M.marginModel j).CanFlip S :=
+      (M.marginModel j).canFlipOn_P
+    simpa only [hc] using hrivals j hj
+  obtain ⟨⟨S, hS, hcard⟩, hmin⟩ := M.min_change_classOn M.P hj₀ he hk hflip hbefore hrivals'
+  exact ⟨⟨S, (M.canFlipClassOn_P S).1 hS, hcard⟩, fun S hS => hmin S ((M.canFlipClassOn_P S).2 hS)⟩
 
-/-- Theorem 7, part 3 (no answer): if no set can flip the margin of any rival, no set changes the class. -/
+/-- Theorem 7, part 3 (no answer): if no set can flip the margin of any rival, no set changes the class. This is
+`min_change_classOn_none` with `A = P`. -/
 theorem min_change_class_none (hnone : ∀ j, j ≠ M.w → ∀ S, ¬ (M.marginModel j).CanFlip S) (S : Finset ι) :
     ¬ M.CanFlipClass S := by
-  rw [canFlipClass_iff]
-  rintro ⟨j, hj, h⟩
-  exact hnone j hj S h
+  classical
+  rw [← M.canFlipClassOn_P]
+  refine M.min_change_classOn_none M.P (fun j hj S h => hnone j hj S ?_) S
+  exact ((M.marginModel j).canFlipOn_P S).1 h
 
 /-- The sufficient-reason problem of the predicted class: one margin for each rival. -/
 noncomputable def problem : Covering.Problem ι {j // j ≠ M.w} :=
