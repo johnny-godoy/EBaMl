@@ -7,8 +7,9 @@ EBaMl explains an [Explainable Boosting Machine](https://johnny-godoy.github.io/
 prediction. EBaMl gives the graphs and the predictions of an EBM to a large language model (LLM), and returns text that
 a data scientist, a customer or a regulator can read.
 
-![The graph of income in an EBM of synthetic loan data. The score goes up from about -1.6 at low incomes, crosses zero
-near 40,000, and stays near +1.3 above 55,000.](https://johnny-godoy.github.io/EBaMl/generated/income-graph.svg)
+<img src="https://johnny-godoy.github.io/EBaMl/generated/income-graph.svg" width="640" height="360"
+alt="The graph of income in an EBM of synthetic loan data. The score goes up from about -1.6 at low incomes, crosses zero
+near 40,000, and stays near +1.3 above 55,000.">
 
 - **Describe a model.** `describe_graph` and `describe_ebm` turn each graph, and the whole model, into a description.
 - **Explain one prediction.** `explain_instance` gives a [local explanation](https://johnny-godoy.github.io/EBaMl/what-is-an-ebm/#local-explanation):

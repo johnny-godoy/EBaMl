@@ -40,7 +40,7 @@ score of each income. The band is the 95 % confidence interval of the score. A s
 
 ![The graph of income in an EBM of synthetic loan data. The score goes up from about -1.6 at low incomes, crosses zero
 near 40,000, and stays near +1.3 above 55,000. The confidence band is widest at the highest incomes, where the data is
-sparse.](generated/income-graph.svg)
+sparse.](generated/income-graph.svg){ width="640" height="360" }
 
 The docs build fits the EBM and draws this graph from it (`scripts/docs/figures.py`), so the graph always shows what
 the code computes.
