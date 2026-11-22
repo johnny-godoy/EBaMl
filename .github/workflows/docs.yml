@@ -46,6 +46,7 @@ jobs:
               - "pyproject.toml"
               - "uv.lock"
               - "scripts/docs/build.py"
+              - "tests/site/**"
               - ".github/workflows/docs.yml"
               - ".github/actions/**"
 
@@ -83,10 +84,36 @@ jobs:
             test -s "site/notebooks/${name}.html" || { echo "::error::site/notebooks/${name}.html is missing or empty"; exit 1; }
           done
           test -s site/proofs/local-explanations.pdf || { echo "::error::site/proofs/local-explanations.pdf is missing or empty"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        # The site job checks this build, so it does not export the notebooks again.
+        with:
+          name: site
+          path: site
+          retention-days: 1
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           path: site
+
+  site:
+    name: docs site checks
+    needs: [changes, build]
+    # The ruleset requires this check on every pull request, so it is skipped with the build, not removed.
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup # the tests import scripts.docs.build, which imports ebaml
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site
+          path: site
+      - name: Install Chromium for Playwright
+        run: uv run --frozen playwright install --with-deps chromium
+      - name: Check accessibility, links, HTML, layout and performance
+        # The external links are left out: a weekly workflow checks them (site-links-weekly.yml).
+        run: uv run --frozen --group docs pytest tests/site --prebuilt-site --no-cov
 
   deploy:
     name: deploy

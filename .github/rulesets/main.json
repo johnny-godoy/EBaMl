@@ -44,6 +44,7 @@
           { "context": "pytest (100% coverage)", "integration_id": 15368 },
           { "context": "mutation (changed modules, 100% score)", "integration_id": 15368 },
           { "context": "docs build", "integration_id": 15368 },
+          { "context": "docs site checks", "integration_id": 15368 },
           { "context": "fragment", "integration_id": 15368 },
           { "context": "title", "integration_id": 15368 },
           { "context": "commits", "integration_id": 15368 }
