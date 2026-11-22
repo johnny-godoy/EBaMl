@@ -41,6 +41,7 @@ nav = [
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },
     { "Multiclass scores" = "multiclass-scores-proof.md" },
+    { "Recourse plans" = "recourse-proof.md" },
   ] },
   { Benchmark = "benchmark.md" },
   { Development = "development.md" },
