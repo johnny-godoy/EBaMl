@@ -7,6 +7,7 @@ from ebaml.local.covering_solvers import CoveringSolver, MipCover
 from ebaml.local.decisions import Decision
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
+from ebaml.local.recourse import RecourseOptions
 
 
 @attrs.frozen
@@ -43,6 +44,10 @@ class LocalOptions:
         fewest changes after which the class is no longer the predicted class. A class asks for the fewest changes
         after which every margin of that class holds at once, over every choice of bins. ``search`` finds the changes.
         Another kind of model accepts ``None`` only.
+    recourse: RecourseOptions
+        The limits that the counterfactual keeps to: the features that it must not change, and the values that each
+        feature may take. The default sets no limit. The sufficient reason and the completions ignore it, because they
+        describe what the world can be and not what the person can do.
 
     """
 
@@ -54,6 +59,7 @@ class LocalOptions:
     decision: Decision | None = None
     search: CoveringSolver = attrs.field(factory=MipCover)
     target_class: ClassLabel | None = None
+    recourse: RecourseOptions = attrs.field(factory=RecourseOptions)
 
 
 @attrs.frozen
@@ -217,6 +223,8 @@ class LocalFacts:
         value.
     n_samples: int
         ``LocalOptions.n_samples`` of the facts: the size of the sample behind each share of ``completions``.
+    recourse: RecourseOptions
+        ``LocalOptions.recourse`` of the facts: the limits that the counterfactual keeps to.
 
     """
 
@@ -228,3 +236,4 @@ class LocalFacts:
     confidence_level: float
     min_support: float
     n_samples: int
+    recourse: RecourseOptions = attrs.field(factory=RecourseOptions)

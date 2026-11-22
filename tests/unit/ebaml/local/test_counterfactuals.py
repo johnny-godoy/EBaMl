@@ -26,6 +26,7 @@ from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.local_kinds import MulticlassLocal
 from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
+from ebaml.local.recourse import RecourseOptions
 from tests.unit.ebaml.conftest import (
     FittedClassifier,
     FittedRegressor,
@@ -154,6 +155,28 @@ def test_a_target_counterfactual_reaches_the_target_class(row: int, target: int)
     assert counterfactual.new_decision == model.classes_[target]
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert 1 <= len(counterfactual.changes) <= 3
+
+
+@settings(max_examples=40, deadline=None)
+@given(row=st.integers(0, 239), target=st.sampled_from([0, 1, 2]), frozen=st.integers(0, 2))
+def test_a_target_counterfactual_changes_no_immutable_feature(row: int, target: int, frozen: int) -> None:
+    # contract 5: the covering problem of a target class offers no bin of an immutable feature
+    model, frame = multiclass_model()
+    instance = instance_of(frame, row)
+    predicted = int(np.argmax(model.decision_function(frame.iloc[[row]])))
+    assume(target != predicted)
+    name = model.feature_names_in_[frozen]
+    options = fact_types_module.LocalOptions(
+        confidence_level=0.0,
+        min_support=0.0,
+        target_class=int(model.classes_[target]),
+        recourse=RecourseOptions(immutable=[name]),
+    )
+    facts = facts_module.compute_local_facts(model, instance, options)
+    if facts.counterfactual is None:
+        return
+    assert name not in [change.feature for change in facts.counterfactual.changes]
+    assert model.predict(_changed_row(instance, facts.counterfactual))[0] == model.classes_[target]
 
 
 @settings(max_examples=40, deadline=None)

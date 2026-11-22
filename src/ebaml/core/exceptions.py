@@ -55,6 +55,10 @@ class OptionRangeError(EBaMlError, ValueError):
     """Exception raised when a number option is outside its range."""
 
 
+class RecourseOptionError(EBaMlError, ValueError):
+    """Exception raised when the recourse options of a counterfactual do not fit the model."""
+
+
 class EBMGraphError(EBaMlError):
     """Exception raised for errors in the EBM graph processing."""
 

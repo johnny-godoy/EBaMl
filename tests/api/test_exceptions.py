@@ -26,6 +26,7 @@ BUILTIN_BASE = {
     "OptionRangeError": ValueError,
     "ProviderUnreachableError": None,
     "RateLimitedError": None,
+    "RecourseOptionError": ValueError,
     "SDKUnavailableError": ImportError,
     "SearchLimitError": None,
     "SelectionError": ValueError,

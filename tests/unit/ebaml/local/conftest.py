@@ -37,6 +37,7 @@ from ebaml.local.covering_problem import Choice, Cover, CoveringProblem
 from ebaml.local.local_kinds import Outcome
 from ebaml.local.minimality import MinimalityStatus
 from ebaml.local.ortools_backend import OrToolsBackend
+from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 from tests.unit.ebaml.conftest import (
     FittedClassifier,
     FittedRegressor,
@@ -581,6 +582,9 @@ class OracleProblem:
         The bin of the instance for each feature.
     deviation_count: float
         The number of deviations that a score moves against a claim.
+    reachable: list[list[int]]
+        The end bins of each feature for the counterfactual (Definition 2 of the paper): the allowed plausible bins and
+        the bin of the instance. With no recourse options, the plausible bins.
 
     """
 
@@ -588,6 +592,9 @@ class OracleProblem:
     plausible: list[list[int]]
     instance_bins: list[int]
     deviation_count: float
+    reachable: list[list[int]] = attrs.field(
+        default=attrs.Factory(lambda problem: problem.plausible, takes_self=True),
+    )
 
     @property
     def feature_count(self) -> int:
@@ -620,10 +627,10 @@ class OracleProblem:
         Returns
         -------
         bool
-            True if a choice of plausible bins gives a robust margin below zero.
+            True if a choice of end bins gives a robust margin below zero.
 
         """
-        choices = itertools.product(*(self.plausible[feature] for feature in features))
+        choices = itertools.product(*(self.reachable[feature] for feature in features))
         return any(
             self.robust_margin(margin, dict(zip(features, bins, strict=True))) < 0
             for bins in choices
@@ -734,30 +741,161 @@ def oracle_margins(model: SmallModel, limits: Sequence[float] = ()) -> list[Orac
     return [_signed(model, 1, low), _signed(model, -1, high)]
 
 
+def bin_range(bin_index: int, bin_count: int) -> tuple[float, float]:
+    """Return the values of a bin of a continuous feature of a small model.
+
+    The values of the training data are the integers from 0 to ``bin_count - 1``, so ``interpret`` cuts at the
+    half-integers, and the first and the last bin end at the lowest and the highest value.
+
+    Returns
+    -------
+    tuple[float, float]
+        The low and the high end of the bin.
+
+    """
+    low = 0.0 if bin_index == 0 else bin_index - 0.5
+    high = bin_count - 1.0 if bin_index == bin_count - 1 else bin_index + 0.5
+    return low, high
+
+
+def allowed_bins(feature_index: int, bin_count: int, values: ValueRange | Levels) -> set[int]:
+    """List the bins that allowed values give, by the definitions of ``RangeMatch`` and ``Levels``.
+
+    A range allows a bin with some values in it (overlap), or with all of its values in it (inside). Levels allow the
+    bins of their categories.
+
+    Returns
+    -------
+    set[int]
+        The allowed bins, before the rule of the plausible bins.
+
+    """
+    if feature_index % 2 == 0:
+        assert isinstance(values, Levels)
+        return {bin_index for bin_index in range(bin_count) if f"c{bin_index}" in values.levels}
+    assert isinstance(values, ValueRange)
+    bins = set()
+    for bin_index in range(bin_count):
+        low, high = bin_range(bin_index, bin_count)
+        if values.match == "overlap":
+            allowed = low <= values.high and high > values.low
+        else:
+            allowed = low >= values.low and high <= values.high
+        if allowed:
+            bins.add(bin_index)
+    return bins
+
+
+def reachable_bins(model: SmallModel, plausible: Sequence[Sequence[int]], recourse: RecourseOptions) -> list[list[int]]:
+    """List the end bins of each feature for the counterfactual, by Definition 2 of the paper.
+
+    An immutable feature ends in the bin of the instance only. A feature with allowed values ends in an allowed
+    plausible bin or in the bin of the instance. Another feature ends in any plausible bin.
+
+    Returns
+    -------
+    list[list[int]]
+        The end bins of each feature.
+
+    """
+    reachable = []
+    for index, (bins, instance_bin) in enumerate(zip(plausible, model.instance_bins, strict=True)):
+        name = feature_name(index)
+        if name in recourse.immutable:
+            reachable.append([instance_bin])
+        elif name in recourse.allowed:
+            allowed = allowed_bins(index, model.shape[index], recourse.allowed[name]) & set(bins)
+            reachable.append(sorted(allowed | {instance_bin}))
+        else:
+            reachable.append(list(bins))
+    return reachable
+
+
 def oracle_problem(
     model: SmallModel,
     *,
     confidence_level: float,
     min_support: float,
     limits: Sequence[float] = (),
+    recourse: RecourseOptions | None = None,
 ) -> OracleProblem:
     """Build the inputs of the paper for a small model and the options of the facts.
 
     Returns
     -------
     OracleProblem
-        The margins, the plausible bins, the instance and the number of deviations.
+        The margins, the plausible bins, the end bins of the counterfactual, the instance and the number of deviations.
 
     """
+    plausible = [
+        plausible_bins(weights, continuous=index % 2 == 1, min_support=min_support, instance_bin=instance_bin)
+        for index, (weights, instance_bin) in enumerate(zip(model.weights, model.instance_bins, strict=True))
+    ]
     return OracleProblem(
         margins=oracle_margins(model, limits),
-        plausible=[
-            plausible_bins(weights, continuous=index % 2 == 1, min_support=min_support, instance_bin=instance_bin)
-            for index, (weights, instance_bin) in enumerate(zip(model.weights, model.instance_bins, strict=True))
-        ],
+        plausible=plausible,
         instance_bins=model.instance_bins,
         deviation_count=deviation_count(confidence_level),
+        reachable=reachable_bins(model, plausible, recourse or RecourseOptions()),
     )
+
+
+# the limits of one feature: ("free",), ("immutable",), ("levels", categories) or ("range", low, high, match)
+type RecourseSpec = tuple[str, ...] | tuple[str, list[str]] | tuple[str, float, float, str]
+
+
+@st.composite
+def recourse_specs(draw: st.DrawFn, shape: Sequence[int]) -> list[RecourseSpec]:
+    """Draw the limits of each feature of a small model: free, immutable, or with allowed values.
+
+    Hypothesis draws plain values, not the attrs classes, because beartype samples with ``random`` when it checks a
+    class. ``recourse_from_specs`` builds the options. The ends of a range are on a grid of quarters plus or minus an
+    eighth, so they never fall on a cut of the bins, which is a half-integer.
+
+    Returns
+    -------
+    list[RecourseSpec]
+        The limits of each feature.
+
+    """
+    specs: list[RecourseSpec] = []
+    for index, bin_count in enumerate(shape):
+        role = draw(st.sampled_from(["free", "immutable", "allowed"]))
+        if role != "allowed":
+            specs.append((role,))
+        elif index % 2 == 0:
+            categories = [f"c{bin_index}" for bin_index in range(bin_count)]
+            specs.append(("levels", draw(st.lists(st.sampled_from(categories), min_size=1, unique=True))))
+        else:
+            ends = sorted(draw(st.lists(st.integers(min_value=-1, max_value=4 * bin_count), min_size=2, max_size=2)))
+            match = draw(st.sampled_from([match.value for match in RangeMatch]))
+            specs.append(("range", ends[0] / 4 - 1 / 8, ends[1] / 4 + 1 / 8, match))
+    return specs
+
+
+def recourse_from_specs(specs: Sequence[RecourseSpec]) -> RecourseOptions:
+    """Build the recourse options of a small model from the drawn limits of each feature.
+
+    Returns
+    -------
+    RecourseOptions
+        The options.
+
+    """
+    immutable = []
+    allowed: dict[str, ValueRange | Levels] = {}
+    for index, spec in enumerate(specs):
+        name = feature_name(index)
+        match spec:
+            case ("immutable",):
+                immutable.append(name)
+            case ("levels", list() as levels):
+                allowed[name] = Levels(levels)
+            case ("range", float() as low, float() as high, str() as match):
+                allowed[name] = ValueRange(low=low, high=high, match=match)
+            case _:
+                pass
+    return RecourseOptions(immutable=immutable, allowed=allowed)
 
 
 # the helpers that the tests of several modules of the local explanations share
