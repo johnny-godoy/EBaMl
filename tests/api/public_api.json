@@ -230,6 +230,13 @@
     "kind": "class",
     "signature": "(feature: str, value: str, score: float, std: float) -> None"
   },
+  "CostStrategy": {
+    "bases": [
+      "object"
+    ],
+    "kind": "class",
+    "signature": "(*args, **kwargs)"
+  },
   "Counterfactual": {
     "bases": [
       "object"
@@ -239,10 +246,11 @@
       "new_decision: ClassLabel",
       "new_output: <class 'float'>",
       "minimality: <enum 'MinimalityStatus'>",
-      "lower_bound: <class 'int'>"
+      "lower_bound: <class 'int'>",
+      "cost: <class 'float'>"
     ],
     "kind": "class",
-    "signature": "(changes: list[ebaml.local.fact_types.Change], new_decision: ClassLabel, new_output: float, minimality: ebaml.local.minimality.MinimalityStatus, lower_bound: int) -> None"
+    "signature": "(changes: list[ebaml.local.fact_types.Change], new_decision: ClassLabel, new_output: float, minimality: ebaml.local.minimality.MinimalityStatus, lower_bound: int, cost: float) -> None"
   },
   "Cover": {
     "bases": [
@@ -267,10 +275,11 @@
       "margin_needs: list[float]",
       "group_members: list[list[int]]",
       "max_picks: int | None",
-      "integer: <class 'bool'>"
+      "integer: <class 'bool'>",
+      "costs: list[float] | None"
     ],
     "kind": "class",
-    "signature": "(choices: list[ebaml.local.covering_problem.Choice], margin_rows: list[list[float]], margin_needs: list[float], group_members: list[list[int]], max_picks: int | None, integer: bool) -> None"
+    "signature": "(choices: list[ebaml.local.covering_problem.Choice], margin_rows: list[list[float]], margin_needs: list[float], group_members: list[list[int]], max_picks: int | None, integer: bool, costs: list[float] | None = None) -> None"
   },
   "CoveringProblem": {
     "bases": [
@@ -278,10 +287,12 @@
     ],
     "fields": [
       "worst: collections.abc.Sequence[float]",
-      "groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]]"
+      "groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]]",
+      "costs: collections.abc.Sequence[collections.abc.Sequence[float]] | None",
+      "max_changes: int | None"
     ],
     "kind": "class",
-    "signature": "(worst: collections.abc.Sequence[float], groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]]) -> None"
+    "signature": "(worst: collections.abc.Sequence[float], groups: collections.abc.Sequence[collections.abc.Sequence[collections.abc.Sequence[float]]], costs: collections.abc.Sequence[collections.abc.Sequence[float]] | None = None, max_changes: int | None = None) -> None"
   },
   "CoveringSolver": {
     "bases": [
@@ -289,6 +300,14 @@
     ],
     "kind": "class",
     "signature": "(*args, **kwargs)"
+  },
+  "DataCost": {
+    "bases": [
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
   },
   "DataFileError": {
     "bases": [
@@ -1228,10 +1247,12 @@
     ],
     "fields": [
       "immutable: tuple[str, ...]",
-      "allowed: collections.abc.Mapping[str, AllowedValues]"
+      "allowed: collections.abc.Mapping[str, AllowedValues]",
+      "costs: <class 'ebaml.local.costs.CostStrategy'>",
+      "max_changes: int | None"
     ],
     "kind": "class",
-    "signature": "(immutable: collections.abc.Collection[str] = NOTHING, allowed=NOTHING) -> None"
+    "signature": "(immutable: collections.abc.Collection[str] = NOTHING, allowed=NOTHING, costs: ebaml.local.costs.CostStrategy = NOTHING, max_changes: int | None = None) -> None"
   },
   "Regressor": {
     "bases": [
@@ -1319,6 +1340,17 @@
     ],
     "kind": "class",
     "signature": "(feature: str, factor: float, class_label: ClassLabel | None = None) -> None"
+  },
+  "ScaledCost": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "base: <class 'ebaml.local.costs.CostStrategy'>",
+      "multipliers: collections.abc.Mapping[str, float]"
+    ],
+    "kind": "class",
+    "signature": "(base: ebaml.local.costs.CostStrategy, multipliers=NOTHING) -> None"
   },
   "ScopeMetrics": {
     "bases": [
@@ -1482,6 +1514,14 @@
     "kind": "exception",
     "signature": null
   },
+  "UnitCost": {
+    "bases": [
+      "object"
+    ],
+    "fields": [],
+    "kind": "class",
+    "signature": "() -> None"
+  },
   "UnreviewedEditError": {
     "bases": [
       "EBaMlError",
@@ -1522,6 +1562,18 @@
     ],
     "kind": "class",
     "signature": "(feature: str) -> None"
+  },
+  "UserCost": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "per_feature: collections.abc.Mapping[str, float]",
+      "per_bin: collections.abc.Mapping[str, collections.abc.Mapping[str, float]]",
+      "default: <class 'float'>"
+    ],
+    "kind": "class",
+    "signature": "(per_feature=NOTHING, per_bin: collections.abc.Mapping[str, collections.abc.Mapping[str, float]] = NOTHING, default: float = 1.0) -> None"
   },
   "ValueInterval": {
     "bases": [

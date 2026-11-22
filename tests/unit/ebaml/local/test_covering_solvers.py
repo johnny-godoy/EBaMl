@@ -402,3 +402,71 @@ def test_the_local_search_stops_and_proves_the_set_that_reaches_the_lp_bound() -
     assert [choice.group for choice in result.choices] == [1, 3]
     assert result.lower_bound == 2
     assert result.minimality.is_smallest
+
+
+# one margin that needs 1: the first group gains 2 and costs 5, the second gains 2 and costs 1, the third gains 1 and
+# costs 1, so the cheapest set is {1} and the fewest changes are {0} or {1}
+_WEIGHTED = CoveringProblem([-1.0], [[[2.0]], [[2.0]], [[1.0]]], costs=[[5.0], [1.0], [1.0]])
+
+
+def test_mip_cover_finds_the_cheapest_set_of_a_problem_with_costs() -> None:
+    cover = MipCover().solve(_WEIGHTED, seed=0)
+    assert cover is not None
+    assert cover.choices == [Choice(1, 0)]
+    assert cover.minimality is MinimalityStatus.SOLVER_PROOF
+    assert cover.lower_bound == 1
+    assert _WEIGHTED.cost(cover.choices) == pytest.approx(1.0)
+
+
+def test_mip_cover_keeps_the_cap_of_a_problem() -> None:
+    # two picks of the third group are not possible, so the cap of 1 leaves {1}; a margin of 2.5 needs two picks
+    problem = CoveringProblem([-2.5], [[[2.0]], [[2.0]], [[1.0]]], max_changes=1)
+    assert MipCover().solve(problem, seed=0) is None
+
+
+def test_mip_cover_returns_no_change_when_the_empty_set_is_sufficient() -> None:
+    cover = MipCover().solve(CoveringProblem([1.0], [[[1.0]]], costs=[[1.0]]), seed=0)
+    assert cover is not None
+    assert cover.choices == []
+    assert cover.lower_bound == 0
+
+
+def test_mip_cover_raises_when_the_time_limit_ends_with_no_plan() -> None:
+    backend = ScriptedBackend(answer=lambda _model: ModelResult(ModelStatus.NO_SOLUTION))
+    with pytest.raises(SearchLimitError, match="time limit"):
+        MipCover(backend).solve(_WEIGHTED, seed=0)
+
+
+def test_mip_cover_tightens_the_margins_when_a_weighted_answer_fails_the_check() -> None:
+    # the script answers with a set that fails the check in Python, so the solver asks again with a larger epsilon
+    backend = ScriptedBackend(answer=lambda _model: ModelResult(ModelStatus.OPTIMAL, [Choice(2, 0)], 1.0))
+    with pytest.raises(SearchLimitError):
+        MipCover(backend).solve(_WEIGHTED, seed=0)
+    assert len(backend.calls) > 1
+    assert backend.calls[0][0].costs == [5.0, 1.0, 1.0]
+
+
+@pytest.mark.parametrize("solver", [GreedyCover(), LocalSearchCover()], ids=repr)
+def test_a_fast_search_returns_an_unproved_plan_of_a_problem_with_costs(solver: CoveringSolver) -> None:
+    cover = solver.solve(_WEIGHTED, seed=0)
+    assert cover is not None
+    assert cover.minimality is MinimalityStatus.UNPROVED
+    assert _WEIGHTED.sufficient(cover.choices)
+
+
+@pytest.mark.parametrize("solver", [GreedyCover(), LocalSearchCover()], ids=repr)
+def test_a_fast_search_rejects_a_set_above_the_cap(solver: CoveringSolver) -> None:
+    problem = CoveringProblem([-2.5], [[[2.0]], [[2.0]], [[1.0]]], max_changes=1)
+    with pytest.raises(SearchLimitError, match="above max_changes=1"):
+        solver.solve(problem, seed=0)
+
+
+def test_a_fast_search_proves_that_no_plan_exists_when_no_set_exists() -> None:
+    problem = CoveringProblem([-5.0], [[[1.0]], [[1.0]]], costs=[[1.0], [2.0]])
+    assert GreedyCover().solve(problem, seed=0) is None
+
+
+def test_a_problem_without_costs_costs_its_number_of_picks() -> None:
+    problem = CoveringProblem([-1.0], [[[2.0]], [[2.0]]])
+    assert not problem.weighted
+    assert problem.cost([Choice(0, 0), Choice(1, 0)]) == pytest.approx(2.0)

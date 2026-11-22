@@ -21,6 +21,7 @@ from ebaml.local import fact_features as fact_features_module
 from ebaml.local import fact_types as fact_types_module
 from ebaml.local import facts as facts_module
 from ebaml.local import sufficient_reasons as sufficient_reasons_module
+from ebaml.local.costs import UserCost
 from ebaml.local.covering_backend import Stop
 from ebaml.local.covering_solvers import CoveringSolver, GreedyCover, LocalSearchCover, MipCover
 from ebaml.local.decisions import Interval, Threshold
@@ -806,6 +807,75 @@ def test_the_facts_with_recourse_options_match_the_oracle_of_the_paper(
     # the allowed values describe what the person can do, so the sufficient reason ignores them
     reason = facts.sufficient_reason
     assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+    data=st.data(),
+)
+def test_each_plan_matches_the_oracle(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+    data: st.DataObject,
+) -> None:
+    # contracts 1 and 5: the counterfactual is a cheapest plan within the cap, by the definitions of the recourse paper
+    model, limits = case
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    costs = data.draw(st.lists(st.integers(min_value=1, max_value=4), min_size=len(names), max_size=len(names)))
+    max_changes = data.draw(st.one_of(st.none(), st.integers(min_value=1, max_value=len(names))))
+    recourse = RecourseOptions(
+        costs=UserCost(per_feature={name: float(cost) for name, cost in zip(names, costs, strict=True)}),
+        max_changes=max_changes,
+    )
+    problem = oracle_problem(model, confidence_level=confidence_level, min_support=min_support, limits=limits)
+    _, facts = _small_facts(
+        small_templates,
+        case,
+        confidence_level=confidence_level,
+        min_support=min_support,
+        recourse=recourse,
+    )
+    expected = problem.cheapest_flip([float(cost) for cost in costs], max_changes)
+    counterfactual = facts.counterfactual
+    assert (None if counterfactual is None else counterfactual.cost) == expected
+    if counterfactual is not None:
+        changed = [names.index(change.feature) for change in counterfactual.changes]
+        assert problem.flips(changed)
+        assert max_changes is None or len(changed) <= max_changes
+        # contract 2: equal costs keep the proof of sorting, and other costs rest on the proof of the solver
+        equal = len(set(costs)) == 1
+        assert counterfactual.minimality is (MinimalityStatus.SORTING_PROOF if equal else MinimalityStatus.SOLVER_PROOF)
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    data=st.data(),
+)
+def test_a_lower_cap_never_makes_a_plan_cheaper(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    data: st.DataObject,
+) -> None:
+    # contract 7, Theorem 2 of the recourse paper: a stricter cap never gives a cheaper plan or makes a plan possible
+    model, _ = case
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    costs = UserCost(per_feature={name: float(data.draw(st.integers(1, 4))) for name in names})
+    cap = data.draw(st.integers(min_value=1, max_value=len(names)))
+    loose = RecourseOptions(costs=costs, max_changes=cap)
+    strict = RecourseOptions(costs=costs, max_changes=max(1, cap - 1))
+    _, wide = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=0.0, recourse=loose)
+    _, narrow = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=0.0, recourse=strict)
+    wide_cost = math.inf if wide.counterfactual is None else wide.counterfactual.cost
+    narrow_cost = math.inf if narrow.counterfactual is None else narrow.counterfactual.cost
+    assert narrow_cost >= wide_cost
 
 
 @settings(max_examples=150, deadline=None)

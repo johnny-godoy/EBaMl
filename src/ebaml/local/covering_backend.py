@@ -64,6 +64,8 @@ class CoveringModel:
         The most picks, or ``None`` for no limit.
     integer: bool
         True for the integer model, False for the LP relaxation.
+    costs: list[float] | None
+        The cost of each variable in the objective, or ``None`` to minimize the number of picks.
 
     """
 
@@ -73,6 +75,7 @@ class CoveringModel:
     group_members: list[list[int]]
     max_picks: int | None
     integer: bool
+    costs: list[float] | None = None
 
 
 class ModelStatus(enum.Enum):
@@ -141,6 +144,8 @@ def build_model(
 ) -> CoveringModel:
     """Write the problem as a linear model: picks of the kept alternatives, each margin at least ``epsilon``.
 
+    The objective is the number of picks, or the sum of their costs when the problem has costs.
+
     Each margin is divided by the size of its numbers, so that ``epsilon`` is relative and the coefficients are at most
     ``1``. The division does not change the set of solutions.
 
@@ -181,4 +186,5 @@ def build_model(
         for group, alternatives in enumerate(kept)
         if len(alternatives) > 1
     ]
-    return CoveringModel(choices, margin_rows, margin_needs, group_members, max_picks, integer)
+    costs = None if problem.costs is None else [problem.cost([choice]) for choice in choices]
+    return CoveringModel(choices, margin_rows, margin_needs, group_members, max_picks, integer, costs)

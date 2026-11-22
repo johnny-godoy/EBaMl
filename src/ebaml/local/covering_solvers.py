@@ -36,6 +36,7 @@ from ebaml.local.covering_problem import (
     Cover,
     CoveringProblem,
     make_cover,
+    make_weighted_cover,
     reduce_problem,
 )
 from ebaml.local.ortools_backend import OrToolsBackend
@@ -180,6 +181,60 @@ def _default_backend() -> MipBackend:
     return OrToolsBackend()
 
 
+def _unproved_plan(problem: CoveringProblem, cover: Cover | None) -> Cover | None:
+    """Turn the smallest set of a fast search into a plan of a problem with costs or a cap, which proves nothing.
+
+    A fast search ignores the costs, so its set is a valid plan with no claim about its cost. ``None`` stays ``None``:
+    the search proved that no set exists at all, so none exists within the cap either.
+
+    Returns
+    -------
+    Cover | None
+        The plan, marked ``UNPROVED``, or None.
+
+    Raises
+    ------
+    SearchLimitError
+        If the set of the search has more picks than the cap allows. Only ``MipCover`` searches within the cap.
+
+    """
+    if cover is None:
+        return None
+    if problem.max_changes is not None and len(cover.choices) > problem.max_changes:
+        msg = (
+            f"The fast search found a set of {len(cover.choices)} changes, above max_changes={problem.max_changes}. "
+            "Use MipCover, which searches within the cap."
+        )
+        raise SearchLimitError(msg)
+    return make_weighted_cover(problem, cover.choices, proved=False)
+
+
+def _fast_plan(solver: "CoveringSolver", problem: CoveringProblem, seed: int) -> Cover | None:
+    """Solve a problem with costs or a cap as a fast search does: the smallest set, with no claim about its cost.
+
+    Returns
+    -------
+    Cover | None
+        The plan of ``_unproved_plan``.
+
+    """
+    return _unproved_plan(problem, solver.solve(attrs.evolve(problem, costs=None, max_changes=None), seed=seed))
+
+
+def _start_fast(solver: "CoveringSolver", problem: CoveringProblem, backend: MipBackend | None, seed: int) -> _Opening:
+    """Open a fast search: a problem with costs or a cap gets its plan of ``_fast_plan`` at once.
+
+    Returns
+    -------
+    _Opening
+        The final plan of a problem with costs or a cap, else the opening of ``_open``.
+
+    """
+    if problem.weighted:
+        return _Opening(final=True, result=_fast_plan(solver, problem, seed))
+    return _open(problem, backend, seed, give_up=_GREEDY_GAVE_UP)
+
+
 @attrs.frozen
 class GreedyCover:
     """Build a set with the greedy algorithm of set cover, then remove the picks that the set does not need.
@@ -223,7 +278,7 @@ class GreedyCover:
             finds no set of a problem with negative gains, ``_no_set_found`` raises a ``SearchLimitError``.
 
         """
-        opening = _open(problem, self.bound_backend, seed, give_up=_GREEDY_GAVE_UP)
+        opening = _start_fast(self, problem, self.bound_backend, seed)
         if opening.final:
             return opening.result
         return make_cover(problem, opening.greedy, opening.lower_bound, proved=False)
@@ -283,7 +338,7 @@ class LocalSearchCover:
             exists. If the greedy finds no set to start from, ``_no_set_found`` raises a ``SearchLimitError``.
 
         """
-        opening = _open(problem, self.bound_backend, seed, give_up=_GREEDY_GAVE_UP)
+        opening = _start_fast(self, problem, self.bound_backend, seed)
         if opening.final:
             return opening.result
         random_generator = np.random.default_rng(seed if self.seed is None else self.seed)
@@ -348,6 +403,8 @@ class MipCover:
             ends with no set of a problem that is not monotone, ``_no_set_found`` raises a ``SearchLimitError``.
 
         """
+        if problem.weighted:
+            return self._cheapest(problem, seed)
         opening = _open(problem, self.backend, seed)
         if opening.final:
             return opening.result
@@ -373,6 +430,42 @@ class MipCover:
         if opening.greedy:
             return make_cover(problem, opening.greedy, opening.lower_bound, proved=False)
         return _no_set_found(problem, opening.lower_bound, self._limit_message())
+
+    def _cheapest(self, problem: CoveringProblem, seed: int) -> Cover | None:
+        """Find a cheapest set within the cap, with the integer program of the recourse paper.
+
+        The reduction of ``reduce_problem`` keeps the smallest size, not the smallest cost, so the model offers every
+        alternative (Theorem 1 of ``proofs/papers/recourse/paper.typ``).
+
+        Returns
+        -------
+        Cover | None
+            The cheapest set, ``SOLVER_PROOF`` when the solver proves the optimum, or None if the solver proves that no
+            set within the cap exists.
+
+        Raises
+        ------
+        SearchLimitError
+            If the time limit ends with no set.
+
+        """
+        if problem.sufficient([]):
+            return make_weighted_cover(problem, [], proved=True)
+        every = [[position for position, _ in enumerate(alternatives)] for alternatives in problem.groups]
+        epsilon = MARGIN_EPSILON
+        for _ in range(_EPSILON_TRIES):
+            result = self.backend.solve(
+                build_model(problem, every, epsilon=epsilon, max_picks=problem.max_changes),
+                SolveSettings(seed=seed, time_limit=self.time_limit, stop=self.stop),
+            )
+            if result.status is ModelStatus.INFEASIBLE:
+                return None
+            if result.status is ModelStatus.NO_SOLUTION:
+                break
+            if problem.sufficient(result.picks):
+                return make_weighted_cover(problem, result.picks, proved=result.status is ModelStatus.OPTIMAL)
+            epsilon *= _EPSILON_STEP
+        raise SearchLimitError(self._limit_message())
 
     @staticmethod
     def _infeasible(problem: CoveringProblem, opening: _Opening) -> Cover | None:

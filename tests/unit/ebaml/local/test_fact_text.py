@@ -223,6 +223,7 @@ def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
             new_output=0.7,
             minimality=MinimalityStatus.SORTING_PROOF,
             lower_bound=1,
+            cost=1.0,
         ),
         sufficient_reason=local.SufficientReason(
             ["f0"],
@@ -306,6 +307,7 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
             new_output=0.82,
             minimality=MinimalityStatus.SORTING_PROOF,
             lower_bound=1,
+            cost=1.0,
         ),
     )
     counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
