@@ -134,6 +134,17 @@ class MipBackend(Protocol):
         ...
 
 
+# A scaled coefficient below this size is rounding noise of a gain that is zero (for example 2.8e-17 from a
+# difference of two equal sums). GLOP can report a feasible LP as infeasible when a row holds such a coefficient, so
+# the model writes zero. The change of a margin is at most this size times the number of variables, far below
+# MARGIN_EPSILON, and the check in Python uses the exact gains.
+_NOISE = 1e-12
+
+
+def _coefficient(scaled_gain: float) -> float:
+    return 0.0 if abs(scaled_gain) < _NOISE else scaled_gain
+
+
 def build_model(
     problem: CoveringProblem,
     kept: Sequence[Sequence[int]],
@@ -177,7 +188,7 @@ def build_model(
     choices = [Choice(group, alternative) for group, alternatives in enumerate(kept) for alternative in alternatives]
     position = {choice: index for index, choice in enumerate(choices)}
     margin_rows = [
-        [problem.groups[choice.group][choice.alternative][margin] / scale for choice in choices]
+        [_coefficient(problem.groups[choice.group][choice.alternative][margin] / scale) for choice in choices]
         for margin, scale in enumerate(problem.scales)
     ]
     margin_needs = [epsilon - worst / scale for worst, scale in zip(problem.worst, problem.scales, strict=True)]
