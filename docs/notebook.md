@@ -1,3 +1,8 @@
+---
+title: Titanic notebook
+description: A marimo notebook that trains an EBM on the Titanic data and asks an LLM to describe a graph and the model.
+---
+
 # Notebook
 
 A [marimo](https://marimo.io) notebook that trains an EBM on the Titanic data, asks the LLM to describe a graph and the

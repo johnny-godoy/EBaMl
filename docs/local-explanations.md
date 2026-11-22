@@ -1,3 +1,7 @@
+---
+description: "Explain one prediction of an EBM: the counterfactual, the sufficient reason and the contributions, put in words by an LLM."
+---
+
 # Local explanations
 
 `describe_ebm` explains how an EBM works *in general*. A local explanation answers a different question: **why did the

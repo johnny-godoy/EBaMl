@@ -1,3 +1,7 @@
+---
+description: What the release workflow of EBaMl checks, what a user can check, and what to do when a release fails.
+---
+
 # Releasing
 
 A merge to `main` releases the pending changelog fragments. This page lists what the release workflow checks, what a

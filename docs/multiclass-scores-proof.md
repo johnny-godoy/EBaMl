@@ -1,3 +1,8 @@
+---
+title: Proof of the multiclass scores
+description: What the Lean proof shows about the scores of a multiclass EBM and the text of its graphs.
+---
+
 # Proof of the multiclass scores
 
 The graph of a multiclass classifier has one series of scores for each class. The text of the graph and the prompt

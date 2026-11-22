@@ -1,3 +1,7 @@
+---
+description: Change the graph of one feature of a fitted EBM, so that the model meets a requirement of the business.
+---
+
 # Editing a model
 
 An edit changes the graph of one feature of a fitted EBM, so that the model meets a requirement of the business. For

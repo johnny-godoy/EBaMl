@@ -1,3 +1,7 @@
+---
+description: "The terms of an Explainable Boosting Machine that the EBaMl documentation uses: graphs, bins, scores and terms."
+---
+
 # What is an EBM?
 
 This page is for a reader who knows machine learning but has not used an Explainable Boosting Machine. It defines the

@@ -1,3 +1,7 @@
+---
+description: Install EBaMl from PyPI or from a source checkout, set the API key of your LLM provider and check the setup.
+---
+
 # Setup
 
 ## Requirements

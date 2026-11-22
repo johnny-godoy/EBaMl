@@ -1,3 +1,8 @@
+---
+title: Custom audiences notebook
+description: A marimo notebook that writes six custom audiences for the local explanations of the Titanic EBM.
+---
+
 # Custom audiences notebook
 
 A [marimo](https://marimo.io) notebook that writes six audiences for the local explanations of the Titanic EBM. An

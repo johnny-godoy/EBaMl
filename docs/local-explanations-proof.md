@@ -1,3 +1,8 @@
+---
+title: Proof of the local explanations
+description: What the Lean proof shows about the counterfactual and the sufficient reason of a local explanation.
+---
+
 # Proof of the local explanations
 
 The counterfactual and the sufficient reason of [local explanations](local-explanations.md) are exact. This page

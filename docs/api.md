@@ -1,3 +1,7 @@
+---
+description: "The public names of ebaml: the functions that describe graphs and models, explain a prediction and edit a model, with their options and errors."
+---
+
 # API reference
 
 Import every public name from `ebaml`, for example `from ebaml import describe_ebm`. The sections below name the module that defines each name.

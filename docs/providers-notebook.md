@@ -1,3 +1,8 @@
+---
+title: Model providers notebook
+description: A marimo notebook that sends the same request to OpenRouter, OpenAI, Anthropic, Ollama and a gateway.
+---
+
 # Model providers notebook
 
 A [marimo](https://marimo.io) notebook that sends the same request to several LLM providers: OpenRouter, OpenAI,
