@@ -73,6 +73,11 @@ reduction keeps the optimum and the approximation ratio (Theorem 10). So the har
 @dinur2014 holds for the sufficient reason (Corollary 5). The claim covers the gain table of the sufficient reason.
 It does not cover the counterfactual of a chosen class (@sec-limits).
 
+*Claim 8 (allowed bins).* When the caller limits the bins that a feature may move to, and makes some features
+immutable, Claims 1, 4 and 6 hold for the changes that keep to these limits. The answer never changes an immutable
+feature, and fewer allowed bins never make a flip easier (@sec-allowed, Theorems 11 and 12, Lemmas 18 and 19). The
+code has no recourse options, so it computes the case $A = P$, and the claim describes the model only.
+
 The proof does not cover the other parts of the code. @sec-limits lists them. The counterfactual and the sufficient
 reason move different scores by $z$ deviations. @sec-limits states the uncertainty model of each claim.
 
@@ -998,6 +1003,110 @@ Lemma 17. It stops early when a set reaches the bound. A fixed seed gives the sa
   [a step of the local search], [`greedy_cover(problem, stay, excluded=...)`], [`LocalSearchCover.solve`],
 )
 
+= Allowed bins of a recourse plan <sec-allowed>
+
+A recourse plan is a counterfactual that a person can carry out. The person may be unable to change some features,
+and may reach only some bins of the others. This section restates the counterfactual for such limits and proves
+Lemma 4 and Theorem 2 again in the general model. It then shows that the model of @sec-model is the case in which
+every plausible bin is allowed, so that Lemma 4 and Theorem 2 are corollaries. Lean checks this reduction, and the
+paper does not assume that the old proofs carry over.
+
+#definition("allowed bins", [
+  For each feature $i$, the _allowed bins_ are a finite set $A_i subset.eq B_i$. An _immutable_ feature has
+  $A_i = emptyset$. The _end bins_ of feature $i$ are $E_i = A_i union {c_i}$, because to keep the bin of the instance
+  is no change. A change $(S, w)$ is _admissible over $A$_ when $w_i in E_i$ for each $i in S$. The _drop over $A$_ is
+  $d_i (A) = t_i (c_i) - min_(v in E_i) p_i (v)$, and the bins $w$ are _lowest over $A$_ when
+  $w_i in E_i$ and $p_i (w_i) = min_(v in E_i) p_i (v)$ for each feature $i$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.bins", "EBaMlProofs.LocalExplanations.Model.dropOn", "EBaMlProofs.LocalExplanations.Model.IsLowest", "EBaMlProofs.LocalExplanations.Model.AdmissibleOn", "EBaMlProofs.LocalExplanations.Model.CanFlipOn"))
+
+The set $E_i$ holds $c_i$, so it is not empty, and the minimum exists. The recourse options of the code give
+$A_i subset.eq P_i$: an allowed bin must be plausible. The theorems below do not need this fact. Lemma 19 uses it to
+link a flip over $A$ to a flip of @sec-model. Lowest bins exist, because each $E_i$ is finite and not empty
+(`Model.exists_isLowest`). The sufficient reason does not read $A$: $W(F)$ and the gains $h_i$ use $P_i$ only. So the
+allowed bins never change a sufficient reason.
+
+#lemma("best change over allowed bins", [
+  For each change $(S, w)$ that is admissible over $A$: $R(S, w) >= M - d(S; A)$, where
+  $d(S; A) = sum_(i in S) d_i (A)$. Equality holds when $w$ is lowest over $A$. Therefore a set $S$ has an admissible
+  change over $A$ that flips the prediction iff $d(S; A) > M$.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.robustMargin_geOn", "EBaMlProofs.LocalExplanations.Model.robustMargin_lowest", "EBaMlProofs.LocalExplanations.Model.canFlipOn_iff"))
+
+#proof[
+  *ASSUME:* allowed bins $A$ and a change $(S, w)$. *PROVE:* the bound, the equality and the equivalence.
+
+  #step(1, "1", [The bound holds. The equation of Lemma 4 does not use $P_i$. For $i in S$ the bin $w_i$ is in $E_i$,
+    so $p_i (w_i) >= min_(v in E_i) p_i (v)$, and $t_i (c_i) - p_i (w_i) <= d_i (A)$. Sum over $S$.])
+  #step(1, "2", [The equality holds when $w$ is lowest over $A$, because then each term equals $d_i (A)$.])
+  #step(1, "3", [*Case* an admissible change flips the prediction. Then $0 > R(S, w) >= M - d(S; A)$ by
+    $chevron.l 1 chevron.r 1$.])
+  #step(1, "4", [*Case* $d(S; A) > M$. Take lowest bins $w$. They are admissible over $A$, and
+    $R(S, w) = M - d(S; A) < 0$ by $chevron.l 1 chevron.r 2$.])
+  #step(1, "5", [*Q.E.D.* by $chevron.l 1 chevron.r 3$ and $chevron.l 1 chevron.r 4$.])
+]
+
+#theorem("minimum change over allowed bins", [
+  Let $e$ sort the drops $d_i (A)$ in descending order, and let $k$ be the first position at which the sum $Pi_k$ of
+  the first $k$ drops is above $M$. Let $w$ be lowest over $A$. Then
+  (a) the change of the first $k$ features to the bins $w_i$ is admissible over $A$ and flips the prediction,
+  (b) no admissible change over $A$ of fewer than $k$ features flips the prediction,
+  (c) each of these $k$ features moves to a bin $w_i in A_i$ with $w_i eq.not c_i$, so no immutable feature is among
+  them, and
+  (d) if $Pi_k <= M$ for each $k <= n$, no admissible change over $A$ of any set flips the prediction.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.min_changeOn (a, b)", "EBaMlProofs.LocalExplanations.Model.chosen_bin_differsOn (c)", "EBaMlProofs.LocalExplanations.Model.min_changeOn_none (d)"))
+
+#proof[
+  *ASSUME:* allowed bins $A$, an ordering $e$ of the drops over $A$, lowest bins $w$, and the conditions of the
+  statement. *PROVE:* (a)–(d).
+
+  #step(1, "1", [(a), (b) and (d) hold. Repeat the proof of Theorem 2 with $d_i (A)$ for $d_i$, $w$ for $beta$, and
+    Lemma 18 for Lemma 4. That proof uses only Theorem 1, Corollary 1, Lemma 3 and Lemma 4.])
+  #step(1, "2", [(c) holds. Let $j < k$ and $i = e(j)$.])
+  #step(2, "1", [$d_i (A) > 0$ by Corollary 2.])
+  #step(2, "2", [*Assume* $w_i = c_i$. Then $min_(v in E_i) p_i (v) = p_i (c_i) >= t_i (c_i)$, because $z >= 0$ and
+    $sigma_i >= 0$. Hence $d_i (A) <= 0$, which contradicts $chevron.l 2 chevron.r 1$.])
+  #step(2, "3", [$w_i in E_i = A_i union {c_i}$ and $w_i eq.not c_i$ by $chevron.l 2 chevron.r 2$, so $w_i in A_i$.
+    An immutable feature has $A_i = emptyset$, so it is not among the first $k$.])
+  #step(1, "3", [*Q.E.D.* by $chevron.l 1 chevron.r 1$ and $chevron.l 1 chevron.r 2$.])
+]
+
+The code picks the lowest bin with `np.argmin`. The theorem holds for each lowest bin, so a tie in `np.argmin` does
+not change (a) to (d).
+
+#theorem([the model of @sec-model is the case $A = P$], [
+  Let $A_i = P_i$ for each feature. Then $E_i = P_i$, $d_i (A) = d_i$, the bins $beta$ are lowest over $A$, and a change
+  is admissible over $A$ iff it is a change of @sec-model. Therefore Lemma 4 and Theorem 2 are Lemma 18 and Theorem 11
+  with $A = P$. The same holds for Theorem 6 and Theorem 7, which Lean restates for allowed bins.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.bins_P", "EBaMlProofs.LocalExplanations.Model.dropOn_P", "EBaMlProofs.LocalExplanations.Model.isLowest_beta", "EBaMlProofs.LocalExplanations.Model.canFlipOn_P"))
+
+#proof[
+  *ASSUME:* $A = P$. *PROVE:* the four equalities and the corollaries.
+
+  #step(1, "1", [$E_i = P_i union {c_i} = P_i$, because $c_i in P_i$.])
+  #step(1, "2", [$d_i (A) = d_i$ and the bins $beta$ are lowest, because the minimum over $E_i$ is the minimum over
+    $P_i$ by $chevron.l 1 chevron.r 1$, and $p_i (beta_i)$ is that minimum.])
+  #step(1, "3", [The admissible changes are the changes of @sec-model by $chevron.l 1 chevron.r 1$.])
+  #step(1, "4", [*Q.E.D.* Lean derives Lemma 4 and Theorem 2 from Lemma 18 and Theorem 11 with
+    $chevron.l 1 chevron.r 1$ to $chevron.l 1 chevron.r 3$. It derives Theorems 6 and 7 from their statements over
+    $A$ in the same way. The appendix names each Lean theorem.])
+]
+
+#lemma("fewer allowed bins never make a flip easier", [
+  If $A_i subset.eq A'_i$ for each feature, then $d_i (A) <= d_i (A')$ for each feature, and each set that has an
+  admissible change over $A$ that flips the prediction has one over $A'$. In particular, a new immutable feature or a
+  smaller interval of allowed values never makes a plan possible. If $A_i subset.eq P_i$ for each feature, a flip
+  over $A$ is a flip of @sec-model.
+], lean: ("proofs/EBaMlProofs/LocalExplanations/Model.lean", "EBaMlProofs.LocalExplanations.Model.dropOn_mono", "EBaMlProofs.LocalExplanations.Model.canFlipOn_mono", "EBaMlProofs.LocalExplanations.Model.canFlip_of_canFlipOn"))
+
+#proof[
+  *ASSUME:* $A_i subset.eq A'_i$ for each feature. *PROVE:* the inequality and the two implications.
+
+  #step(1, "1", [$E_i subset.eq E'_i$, so the minimum of $p_i$ over $E'_i$ is at most the minimum over $E_i$, and
+    $d_i (A) <= d_i (A')$.])
+  #step(1, "2", [An admissible change over $A$ is admissible over $A'$ by $chevron.l 1 chevron.r 1$. Its robust
+    margin does not depend on $A$.])
+  #step(1, "3", [*Q.E.D.* The last claim is $chevron.l 1 chevron.r 2$ with $A' = P$ and Theorem 12.])
+]
+
 = Limits <sec-limits>
 
 The proof does not cover the following points.
@@ -1102,7 +1211,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`4784b6b006e3c9fc629af0c482b5bfb8fac0e453`],
+  [Lean sources checked at commit], [`8ca9ccbb50d972a76ea718dabb186fb69938ee6b`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -1119,7 +1228,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 4784b6b006e3c9fc629af0c482b5bfb8fac0e453
+git checkout 8ca9ccbb50d972a76ea718dabb186fb69938ee6b
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
@@ -1133,32 +1242,32 @@ This takes tens of minutes, and the result is the same.
 with `error`. The file `Axioms.lean` prints these lines, in this order:
 
 ```text
-info: EBaMlProofs/LocalExplanations/Axioms.lean:12:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:16:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:17:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:18:0: 'EBaMlProofs.LocalExplanations.Model.shift_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:19:0: 'EBaMlProofs.LocalExplanations.Model.shift_margin_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:20:0: 'EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:21:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInside_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:22:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:23:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:24:0: 'EBaMlProofs.LocalExplanations.problemOfModels_sufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:25:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:26:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:27:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:28:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:29:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:30:0: 'EBaMlProofs.LocalExplanations.Multiclass.logit_marginModel' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:31:0: 'EBaMlProofs.LocalExplanations.Multiclass.winner_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:32:0: 'EBaMlProofs.LocalExplanations.Multiclass.marginModel_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:33:0: 'EBaMlProofs.LocalExplanations.Multiclass.canFlipClass_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:34:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:35:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:36:0: 'EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/LocalExplanations/Axioms.lean:37:0: 'EBaMlProofs.LocalExplanations.sd_sum_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:13:0: 'EBaMlProofs.LocalExplanations.Greedy.threshold_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:14:0: 'EBaMlProofs.LocalExplanations.Model.min_change' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:15:0: 'EBaMlProofs.LocalExplanations.Model.min_change_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:16:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differs' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:17:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:18:0: 'EBaMlProofs.LocalExplanations.Model.min_sufficient_reason_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:19:0: 'EBaMlProofs.LocalExplanations.Model.shift_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:20:0: 'EBaMlProofs.LocalExplanations.Model.shift_margin_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:21:0: 'EBaMlProofs.LocalExplanations.Model.shift_robustMargin_neg_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:22:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInside_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:23:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:24:0: 'EBaMlProofs.LocalExplanations.Model.min_change_inside_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:25:0: 'EBaMlProofs.LocalExplanations.problemOfModels_sufficient' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:26:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.sufficient_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:27:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.prune_minimal' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:28:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.exact_minimum' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:29:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.card_search_space' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:30:0: 'EBaMlProofs.LocalExplanations.Covering.Problem.minimum_of_card_le_one' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:31:0: 'EBaMlProofs.LocalExplanations.Multiclass.logit_marginModel' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:32:0: 'EBaMlProofs.LocalExplanations.Multiclass.winner_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:33:0: 'EBaMlProofs.LocalExplanations.Multiclass.marginModel_eps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:34:0: 'EBaMlProofs.LocalExplanations.Multiclass.canFlipClass_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:35:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:36:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_class_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:37:0: 'EBaMlProofs.LocalExplanations.Multiclass.sufficient_class_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:38:0: 'EBaMlProofs.LocalExplanations.sd_sum_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:39:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.half_lt_sum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:40:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.sufficient_iff_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:41:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.min_size_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1168,6 +1277,24 @@ info: EBaMlProofs/LocalExplanations/Axioms.lean:44:0: 'EBaMlProofs.LocalExplanat
 info: EBaMlProofs/LocalExplanations/Axioms.lean:45:0: 'EBaMlProofs.LocalExplanations.Hardness.SetCover.isApprox_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:46:0: 'EBaMlProofs.LocalExplanations.Hardness.multiclass_isOptimum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 info: EBaMlProofs/LocalExplanations/Axioms.lean:47:0: 'EBaMlProofs.LocalExplanations.Hardness.multiclass_isApprox_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:48:0: 'EBaMlProofs.LocalExplanations.Model.canFlipOn_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:49:0: 'EBaMlProofs.LocalExplanations.Model.min_changeOn' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:50:0: 'EBaMlProofs.LocalExplanations.Model.min_changeOn_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:51:0: 'EBaMlProofs.LocalExplanations.Model.chosen_bin_differsOn' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:52:0: 'EBaMlProofs.LocalExplanations.Model.dropOn_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:53:0: 'EBaMlProofs.LocalExplanations.Model.canFlipOn_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:54:0: 'EBaMlProofs.LocalExplanations.Model.dropOn_P' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:55:0: 'EBaMlProofs.LocalExplanations.Model.canFlipOn_P' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:56:0: 'EBaMlProofs.LocalExplanations.Model.isLowest_beta' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:57:0: 'EBaMlProofs.LocalExplanations.Model.canFlip_of_canFlipOn' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:58:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInsideOn_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:59:0: 'EBaMlProofs.LocalExplanations.Model.min_change_insideOn' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:60:0: 'EBaMlProofs.LocalExplanations.Model.min_change_insideOn_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:61:0: 'EBaMlProofs.LocalExplanations.Model.canFlipInsideOn_P' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:62:0: 'EBaMlProofs.LocalExplanations.Multiclass.canFlipClassOn_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:63:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_classOn' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:64:0: 'EBaMlProofs.LocalExplanations.Multiclass.min_change_classOn_none' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/LocalExplanations/Axioms.lean:65:0: 'EBaMlProofs.LocalExplanations.Multiclass.canFlipClassOn_P' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 The build may print warnings that Mathlib modules are "designed for use with the module system". These warnings
@@ -1234,4 +1361,19 @@ stands for a Lean namespace:
   [Lemma 16 (a dominated alternative)], [Not checked in Lean (@sec-solvers)], [none],
   [Corollary 6 (the reduction of the code)], [Not checked in Lean (@sec-solvers)], [none],
   [Lemma 17 (the lower bound of the LP)], [Not checked in Lean (@sec-solvers)], [none],
+  [Definition 2 (allowed bins)], [`Model.bins`, `Model.dropOn`, `Model.IsLowest`, `Model.AdmissibleOn`,
+    `Model.CanFlipOn`, `Model.exists_isLowest`], [`Model.lean`],
+  [Lemma 18 (best change over allowed bins)], [`Model.robustMargin_geOn`, `Model.robustMargin_lowest`,
+    `Model.canFlipOn_iff`], [`Model.lean`],
+  [Theorem 11 (a, b)], [`Model.min_changeOn`], [`Model.lean`],
+  [Theorem 11 (c)], [`Model.chosen_bin_differsOn`], [`Model.lean`],
+  [Theorem 11 (d)], [`Model.min_changeOn_none`], [`Model.lean`],
+  [Theorem 12 (the case $A = P$)], [`Model.bins_P`, `Model.amin_P`, `Model.dropOn_P`, `Model.isLowest_beta`,
+    `Model.admissibleOn_P`, `Model.canFlipOn_P`], [`Model.lean`],
+  [Theorem 12 for Theorem 6], [`Model.canFlipInsideOn_iff`, `Model.min_change_insideOn`,
+    `Model.min_change_insideOn_none`, `Model.canFlipInsideOn_P`], [`Regressor.lean`],
+  [Theorem 12 for Theorem 7], [`MC.canFlipClassOn_iff`, `MC.min_change_classOn`, `MC.min_change_classOn_none`,
+    `MC.canFlipClassOn_P`], [`Multiclass.lean`],
+  [Lemma 19 (fewer allowed bins)], [`Model.dropOn_mono`, `Model.canFlipOn_mono`, `Model.canFlip_of_canFlipOn`],
+    [`Model.lean`],
 )
