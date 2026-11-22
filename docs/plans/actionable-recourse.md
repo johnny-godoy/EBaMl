@@ -93,10 +93,16 @@ Settle these points in the first pull request, and ask the user only where the t
 - **Ties.** Two plans of equal cost: prefer fewer changes, then the lower feature positions, so a run is reproducible.
   Solve the minimum cost first, then the fewest changes at that cost. Write the float tolerance next to the code, and
   write it in the paper's limits.
-- **Diverse plans.** Plan `k + 1` is the cheapest plan whose set of changed features contains the set of no earlier
-  plan. A plan that adds a feature to an earlier plan, or keeps the same features with other bins, is then not a new
-  plan. Add one linear constraint for each earlier plan to the MIP. Show this definition to the user before you
-  implement it, with one example of the plans that it rejects.
+- **Diverse plans.** The user chose the precedent of GAM Coach, as its code implements it (`generate_cfs` and
+  `create_milp` in `gamcoach/gamcoach.py`): after each plan, remove from the MIP the variable of every pair (feature,
+  bin) that the plan uses. Plan `k + 1` is then the cheapest plan that uses no pair (feature, bin) of an earlier plan.
+  It may change a feature of an earlier plan to another bin, and it may share features with an earlier plan, but never
+  the same bin of the same feature. For example, if plan 1 moves income to `[40k, 50k)`, plan 2 may move income to
+  `[50k, 60k)`, but no later plan moves income to `[40k, 50k)`. The paper of GAM Coach (appendix A.8) describes a
+  weaker rule, which forbids only the whole earlier solution. Follow the code, and write the difference in the paper
+  of the milestone. In the MIP, fix each removed variable to 0, so the problem keeps one variable for each allowed bin.
+  A search that proves no further plan ends the list early. GAM Coach skips an iteration with no optimal solution, so
+  it can return fewer plans: report the status of each plan instead (`<design>`, "Guarantee names").
 - **Guarantee names.** Rename the claim from "smallest" to "optimal" where costs apply:
   - `MinimalityStatus.is_smallest` becomes `is_optimal`.
   - `lower_bound: int` becomes `cost_lower_bound: float`.
@@ -139,8 +145,8 @@ the general model to `LocalExplanations`, and put the cost results in a new topi
      as a named premise, as in `Hardness.lean`.
 4. **Monotonicity (contract 7).** Prove that a higher confidence level never lowers the cheapest cost and never makes an
    infeasible plan feasible. Prove the same for a smaller allowed set, a new immutable feature and a lower cap.
-5. **Diverse plans.** Prove that each plan is valid, that plan `k + 1` is the cheapest plan that meets the exclusion
-   rule, and that the costs of the plans do not go down.
+5. **Diverse plans.** Prove that each plan is valid, that plan `k + 1` is the cheapest plan that uses no pair
+   (feature, bin) of an earlier plan, and that the costs of the plans do not go down.
 6. **Lower bound.** If the code reports `AT_LOWER_BOUND` from an LP relaxation, prove that the relaxation bounds the
    cheapest cost from below. The bound itself rests on the LP solver, as in the paper today.
 7. Run `#print axioms` on each main theorem in `Axioms.lean`. Update the correspondence table of the
@@ -162,7 +168,7 @@ Split the work into pull requests that pass every check alone. A suitable order:
    objective to `CoveringProblem`, to `build_model` in `covering_backend.py` and to the solvers. `GreedyCover` and
    `LocalSearchCover` must report `UNPROVED` for a weighted problem unless they prove more. Send a weighted one-margin
    problem to `options.search`, and keep the sorting search for unit costs. Add the cap.
-5. **Diverse plans.** Add the exclusion constraints and `plans`. Return the list cheapest first, and stop early with
+5. **Diverse plans.** Fix the variables of the pairs (feature, bin) of the earlier plans to 0, and add `plans`. Return the list cheapest first, and stop early with
    the plans found when the search proves that no further plan exists.
 6. **Result types and prompts.** Rename the guarantee fields, change `LocalFacts`, and update `fact_text.py` and the
    counterfactual prompt in `baml_src/local_explanations.baml`. Add offline BAML tests that fail on the old wording:
