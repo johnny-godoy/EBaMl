@@ -13,6 +13,20 @@ updates:
     commit-message:
       prefix: build
       include: scope
+  # The Node tools of the site test suite: axe-core, html-validate and Lighthouse CI.
+  - package-ecosystem: npm
+    directory: /tests/site
+    schedule:
+      interval: weekly
+    groups:
+      site-checks:
+        patterns: ["*"]
+    cooldown:
+      default-days: 7
+    # conventional commits: "build(deps-dev): bump ..."
+    commit-message:
+      prefix: build
+      include: scope
   # The workflows and the composite actions pin each action to a commit SHA, so Dependabot must update both places.
   - package-ecosystem: github-actions
     directories:
