@@ -45,6 +45,13 @@ term per feature.
   hardness result of Dinur and Steurer for Set Cover then holds for the sufficient reason: for every `α > 0`, it is
   NP-hard to find a sufficient set that is at most `(1 - α) ln m` times the smallest, with `m` margins.
 
+- **Allowed bins.** The model of the counterfactual also accepts limits on the bins that each feature may move to.
+  An immutable feature may move to no bin. The minimum change, the answer "inside" and the change of the class keep
+  their guarantees under such limits, and the counterfactual never changes an immutable feature. Fewer allowed bins
+  never make a flip possible. The model without limits is the case in which every plausible bin is allowed, and Lean
+  derives the claims above from the claims with limits. The sufficient reason does not read the limits. EBaMl has no
+  option that sets the limits, so the code computes the case without limits.
+
 Both claims of the first two items come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the
 threshold. For the counterfactual, the numbers are the *drops* of the features. For the sufficient reason, they are
