@@ -49,8 +49,8 @@ term per feature.
   An immutable feature may move to no bin. The minimum change, the answer "inside" and the change of the class keep
   their guarantees under such limits, and the counterfactual never changes an immutable feature. Fewer allowed bins
   never make a flip possible. The model without limits is the case in which every plausible bin is allowed, and Lean
-  derives the claims above from the claims with limits. The sufficient reason does not read the limits. EBaMl has no
-  option that sets the limits, so the code computes the case without limits.
+  derives the claims above from the claims with limits. The sufficient reason does not read the limits. The limits are
+  `LocalOptions.recourse` (see [Recourse limits](local-explanations.md#recourse-limits)).
 
 Both claims of the first two items come from one abstract result. Sort numbers from the largest to the smallest, and add them until the sum
 passes a threshold. The number of terms that this takes is the smallest number of terms of any set that passes the

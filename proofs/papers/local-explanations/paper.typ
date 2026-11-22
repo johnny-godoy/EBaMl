@@ -76,7 +76,8 @@ It does not cover the counterfactual of a chosen class (@sec-limits).
 *Claim 8 (allowed bins).* When the caller limits the bins that a feature may move to, and makes some features
 immutable, Claims 1, 4 and 6 hold for the changes that keep to these limits. The answer never changes an immutable
 feature, and fewer allowed bins never make a flip easier (@sec-allowed, Theorems 11 and 12, Lemmas 18 and 19). The
-code has no recourse options, so it computes the case $A = P$, and the claim describes the model only.
+code builds $A$ from `LocalOptions.recourse` in `RecourseOptions.restrict`, and computes the case $A = P$ when the
+options set no limit.
 
 The proof does not cover the other parts of the code. @sec-limits lists them. The counterfactual and the sufficient
 reason move different scores by $z$ deviations. @sec-limits states the uncertainty model of each claim.
@@ -1211,7 +1212,7 @@ the versions, the expected output and a table from each statement to its Lean na
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`8ca9ccbb50d972a76ea718dabb186fb69938ee6b`],
+  [Lean sources checked at commit], [`555fb31c03f07e9082160ec9d561dbf458d459f5`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -1219,8 +1220,8 @@ the versions, the expected output and a table from each statement to its Lean na
 
 The files in `proofs/EBaMlProofs/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
 are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
-`src/ebaml/local/facts.py`, `fact_features.py`, `counterfactuals.py`, `sufficient_reasons.py` and
-`completions.py`. Read the paper together with the version of those files at the commit of this paper.
+`src/ebaml/local/facts.py`, `fact_features.py`, `counterfactuals.py`, `sufficient_reasons.py`,
+`completions.py` and `recourse.py`. Read the paper together with the version of those files at the commit of this paper.
 
 *Commands from a clean clone.*
 
@@ -1228,7 +1229,7 @@ are the same at the commit above and at the commit of this paper. The functions 
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 8ca9ccbb50d972a76ea718dabb186fb69938ee6b
+git checkout 555fb31c03f07e9082160ec9d561dbf458d459f5
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof
