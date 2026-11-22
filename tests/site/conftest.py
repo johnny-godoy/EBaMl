@@ -108,6 +108,19 @@ class Site:
         """
         return self.base_url + path
 
+    def project_pages(self) -> list[Path]:
+        """List the pages that the project writes: each ``index.html`` and the 404 page.
+
+        The marimo exports in ``notebooks/`` and the files of the theme in ``assets/`` are not pages of the project.
+
+        Returns
+        -------
+        list[Path]
+            The pages, in a fixed order.
+
+        """
+        return [*sorted(self.directory.rglob("index.html")), self.directory / "404.html"]
+
     def sitemap_pages(self) -> list[str]:
         """List the pages of the sitemap of the build.
 

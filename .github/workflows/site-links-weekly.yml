@@ -1,0 +1,67 @@
+name: External links (weekly)
+
+# The site suite checks the internal links of the docs on each pull request. A remote site can fail for a day, so the
+# external links are checked here, once a week, and never block a merge. This run builds the site from main and requests
+# each external link (tests/site/test_links.py). It opens an issue when a link fails, and it adds a comment to that issue
+# on later runs while the issue stays open, so one open problem gives one issue.
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # The notebook only calls the LLM on a button press, so exporting it needs no key; BAML reads it when a request is sent.
+  OPENROUTER_API_KEY: unused
+
+jobs:
+  links:
+    name: external links
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup # the notebooks import baml_sdk, so it must be generated
+      - name: Cache the Titanic data
+        # The same cache as docs.yml: OpenML sometimes answers HTTP 503, and the dataset never changes.
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/scikit_learn_data
+          key: openml-titanic-v1
+      - name: Build the docs
+        env:
+          SCIKIT_LEARN_DATA: ${{ runner.temp }}/scikit_learn_data
+        run: uv run --frozen --group docs python -m scripts.docs.build
+      - name: Check the external links
+        run: uv run --frozen --group docs pytest tests/site --prebuilt-site --external-links -m external_links --no-cov
+
+  report:
+    name: report
+    needs: [links]
+    if: failure()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open an issue, or comment on the open one
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          echo "The weekly check of the external links of the docs failed. The log of the run names each link. Run: $run_url" > /tmp/issue.md
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Weekly link check"' \
+            --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file /tmp/issue.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Weekly link check failed ($(date -u +%F))" \
+              --body-file /tmp/issue.md
+          fi
