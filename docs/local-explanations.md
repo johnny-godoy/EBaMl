@@ -286,6 +286,36 @@ print(compute_local_facts(multiclass, instance, LocalOptions(target_class=other)
 A multiclass classifier accepts no `decision`. The [proof page](local-explanations-proof.md) lists the claims that the
 proof covers for a multiclass classifier. On an exact tie between the two highest classes, the proof does not apply.
 
+## Recourse limits
+
+A counterfactual is a plan for a person, and the person may be unable to make some changes. Pass the limits as
+`LocalOptions(recourse=RecourseOptions(...))`:
+
+- `immutable` names the features that the counterfactual must not change, for example an age.
+- `allowed` gives, for some features, the values that the counterfactual may move them to: a `ValueRange(low, high)`
+  for a continuous feature, and `Levels([...])` for a nominal or ordinal feature.
+
+An EBM groups the values of a continuous feature in bins, so a range and a bin can overlap in part. The field `match` of
+`ValueRange` selects the rule. `RangeMatch.OVERLAP` (the default) allows each bin with some values in the range.
+`RangeMatch.INSIDE` allows only each bin with all of its values in the range. An allowed value must also be plausible
+(`min_support`).
+
+```python
+from ebaml import RecourseOptions, ValueRange
+
+recourse = RecourseOptions(immutable=["age"], allowed={"fare": ValueRange(high=300, match="inside")})
+limited = compute_local_facts(ebm, instance, LocalOptions(recourse=recourse))
+if limited.counterfactual is not None:
+    print([change.feature for change in limited.counterfactual.changes])
+```
+
+The counterfactual is then the fewest changes among the changes that the limits allow, and it never changes an
+immutable feature. Fewer allowed values never make a change of the decision possible. The [proof
+page](local-explanations-proof.md) lists these claims. The texts for the LLM name the limits, so the explanation says
+that its claims hold within them. The sufficient reason and the completions ignore the limits, because they describe
+what the instance can be, not what the person can do. A name that is not a feature of the model, or values that leave
+no plausible bin, raise a `RecourseOptionError`.
+
 ## Audience
 
 An audience is an instance of a subclass of `Audience`. Two audiences ship with the package. Pass one as an object, or
@@ -439,6 +469,7 @@ The fields `language`, `local`, `prompt` and `model` are keyword-only. `local` i
 | `local.max_steps` | `5` | The most features revealed one by one in `completions`. |
 | `local.n_samples` | `10000` | Samples used for `completions`. |
 | `local.seed` | `0` | Seed of the sampling, so that the facts are reproducible. |
+| `local.recourse` | `RecourseOptions()` | The features that the counterfactual must not change, and the values that each feature may take. See [Recourse limits](#recourse-limits). |
 | `prompt.expert_description`, `prompt.dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
 
 `explain_instance` takes `model=` like `describe_ebm`: see [Choosing the model](providers.md). Token usage of the three calls is logged at `INFO` on the
