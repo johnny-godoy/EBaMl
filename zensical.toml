@@ -5,6 +5,11 @@ site_url = "https://johnny-godoy.github.io/EBaMl/"
 repo_url = "https://github.com/johnny-godoy/EBaMl"
 repo_name = "johnny-godoy/EBaMl"
 strict = true
+# The plans are handoff prompts for the agent that implements a milestone, with XML tags that are not HTML. ROADMAP.md
+# links them on GitHub, so the site does not publish them.
+exclude_docs = """
+plans/
+"""
 nav = [
   { Home = "index.md" },
   { "What is an EBM?" = "what-is-an-ebm.md" },
