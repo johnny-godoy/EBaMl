@@ -65,10 +65,11 @@ plan is _cheapest_ when it is valid and no valid plan costs less.
   [$x_(i,a) in {0, 1}$], [a point of the integer program], [`Problem.Point`],
 )
 
-The code builds the alternatives in `_alternatives` of `counterfactuals.py`, from `Feature.reachable`. At the commit
-of this paper, `build_model` of `covering_backend.py` writes the margin constraints and the constraint of one pick per
-group, with the objective "fewest picks". It has no cost objective, cap or exclusion. This paper fixes the model that
-these parts must follow. A smaller allowed set and an immutable feature remove alternatives. The diverse plans
+The code builds the alternatives in `_alternatives` of `counterfactuals.py`, from `Feature.reachable`. `build_model` of
+`covering_backend.py` writes the margin constraints, the constraint of one pick per group, the cap (`max_picks`) and
+the objective: the sum of the costs (`CoveringModel.costs`), or the number of picks without costs. `MipCover` solves a
+problem with costs over every alternative, without the reduction of `reduce_problem`, which keeps the smallest size
+and not the smallest cost. A smaller allowed set and an immutable feature remove alternatives. The diverse plans
 exclude the alternatives of the earlier plans, as the code of GAM Coach removes their variables.
 
 = The abstract results <sec-plans>
@@ -197,8 +198,9 @@ largest drop, which sorting picks, is not in a cheapest plan.
   tolerance (`MARGIN_EPSILON`), and its optimum rests on its certificate, which Lean does not check.
 - *Ties.* Two plans can have the same cost. The code then prefers fewer changes and lower feature positions. The
   proofs allow any cheapest plan, and they do not model the tie rule.
-- *The code.* At the commit of this paper, the code has no cost objective, cap or exclusion. The unit tests that
-  compare the code with an exhaustive oracle guard the link between the code and this model.
+- *The code.* The test `test_each_plan_matches_the_oracle` compares the cost of the code with an exhaustive oracle of
+  this model on small models. It checks the link on some inputs, and it is not a proof. The diverse plans are not in
+  the code.
 - *Several margins.* The abstract results hold for any number of margins. The application covers one margin. The
   counterfactual of a chosen class of a multiclass classifier is outside the Lean model.
 - *The lower bound.* The paper proves no bound of an LP relaxation for the weighted problem.
@@ -225,7 +227,7 @@ of each main theorem. The appendix gives the commands and the expected output.
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`2eafcc9eb3b58cd0dfcd34a1d1ffa0a4b7087ff1`],
+  [Lean sources checked at commit], [`e884739ed45ee33a4e877a1e3984dbf129cfb00d`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -236,7 +238,7 @@ of each main theorem. The appendix gives the commands and the expected output.
 ```sh
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 2eafcc9eb3b58cd0dfcd34a1d1ffa0a4b7087ff1
+git checkout e884739ed45ee33a4e877a1e3984dbf129cfb00d
 cd proofs
 lake exe cache get
 lake build
