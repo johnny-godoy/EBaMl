@@ -1,3 +1,8 @@
+---
+title: Model kinds notebook
+description: A marimo notebook that compares a binary classifier, a multiclass classifier and a regressor on the iris data.
+---
+
 # Model kinds notebook
 
 A [marimo](https://marimo.io) notebook that fits a binary classifier, a multiclass classifier and a regressor on the

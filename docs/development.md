@@ -1,3 +1,7 @@
+---
+description: How EBaMl works inside, and the checks that each change of a contributor must pass.
+---
+
 # Development
 
 This page is for contributors. [CONTRIBUTING.md](https://github.com/johnny-godoy/EBaMl/blob/main/CONTRIBUTING.md) has the steps

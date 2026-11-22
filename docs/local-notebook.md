@@ -1,3 +1,8 @@
+---
+title: Local explanations notebook
+description: A marimo notebook that explains single predictions of the Titanic EBM and checks the guarantees by brute force.
+---
+
 # Local explanations notebook
 
 A [marimo](https://marimo.io) notebook that explains single predictions of the Titanic EBM. It is the best place to

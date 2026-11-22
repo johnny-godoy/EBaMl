@@ -1,3 +1,8 @@
+---
+title: MCP server notebook
+description: A marimo notebook that starts the ebaml-mcp server and calls its tools as a client does.
+---
+
 # MCP server notebook
 
 A [marimo](https://marimo.io) notebook that starts the real `ebaml-mcp` server and connects to it as a client does.

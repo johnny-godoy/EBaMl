@@ -1,3 +1,7 @@
+---
+description: The functions of EBaMl that call an LLM, with their options and their errors.
+---
+
 # Usage
 
 This page shows the functions that call the LLM, their options and their errors. To install EBaMl and set an API key

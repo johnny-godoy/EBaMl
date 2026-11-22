@@ -1,3 +1,8 @@
+---
+title: Model editing notebook
+description: A marimo notebook that edits the graphs of an EBM with EditSession and checks business constraints.
+---
+
 # Model editing notebook
 
 A [marimo](https://marimo.io) notebook that edits the graphs of an EBM with `EditSession`. It follows the examples of

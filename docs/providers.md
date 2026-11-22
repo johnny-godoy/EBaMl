@@ -1,3 +1,7 @@
+---
+description: "Choose the LLM of each call with the model argument: providers, options, keys and limits."
+---
+
 # Choosing the model
 
 <!-- invisible-code-block: python

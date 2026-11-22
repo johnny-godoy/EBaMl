@@ -1,3 +1,8 @@
+---
+title: BAML agent notebook
+description: A marimo notebook that runs the BAML agent, which explains an EBM through the tools of the ebaml-mcp server.
+---
+
 # BAML agent notebook
 
 A [marimo](https://marimo.io) notebook that runs the BAML agent. The agent is a language model that explains an EBM

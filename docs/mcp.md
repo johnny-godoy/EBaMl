@@ -1,3 +1,7 @@
+---
+description: "Give an agent a fitted EBM through the Model Context Protocol: read, explain and edit the model with ebaml-mcp."
+---
+
 # MCP server
 
 `ebaml-mcp` gives an agent a fitted EBM through the [Model Context Protocol](https://modelcontextprotocol.io). The

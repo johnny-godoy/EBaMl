@@ -1,3 +1,7 @@
+---
+description: "Why an EBM needs words: EBaMl puts the graphs and the facts of a prediction in plain text for each reader."
+---
+
 # Why EBaMl?
 
 An [EBM](what-is-an-ebm.md#ebm) is a [glass-box model](what-is-an-ebm.md#glass-box-model): a person can read every

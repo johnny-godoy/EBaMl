@@ -1,3 +1,8 @@
+---
+title: Multiclass notebook
+description: A marimo notebook that reads an EBM of the iris data, which has three classes, and shows its graph options.
+---
+
 # Multiclass notebook
 
 A [marimo](https://marimo.io) notebook that reads an EBM of the iris data, which has three classes. It shows the kind of

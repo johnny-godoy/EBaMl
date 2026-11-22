@@ -1,3 +1,8 @@
+---
+title: Chat notebook
+description: A marimo notebook with a chat box in front of the ebaml-chat command, which answers questions about an EBM.
+---
+
 # Chat notebook
 
 A [marimo](https://marimo.io) notebook that puts a chat box in front of the real `ebaml-chat` command. The agent is a

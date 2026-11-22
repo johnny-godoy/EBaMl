@@ -1,3 +1,8 @@
+---
+title: Languages notebook
+description: A marimo notebook that gets the local explanations of the Titanic EBM in several languages.
+---
+
 # Languages notebook
 
 A [marimo](https://marimo.io) notebook that gets the local explanations of the Titanic EBM in several languages. The

@@ -1,3 +1,7 @@
+---
+description: "The marimo notebooks of EBaMl: each one shows one feature working, step by step."
+---
+
 # All notebooks
 
 The notebooks in `notebooks/` are [marimo](https://marimo.io) notebooks. Each one shows one feature working, step by
