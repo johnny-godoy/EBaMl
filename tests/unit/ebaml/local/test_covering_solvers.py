@@ -470,3 +470,12 @@ def test_a_problem_without_costs_costs_its_number_of_picks() -> None:
     problem = CoveringProblem([-1.0], [[[2.0]], [[2.0]]])
     assert not problem.weighted
     assert problem.cost([Choice(0, 0), Choice(1, 0)]) == pytest.approx(2.0)
+
+
+def test_a_gain_of_rounding_noise_does_not_make_the_problem_infeasible() -> None:
+    # GLOP called the LP of this problem infeasible because of the gain 2.8e-17, so the sufficient reason of a
+    # multiclass model was None although fixing both features is sufficient
+    problem = CoveringProblem([-0.125, -1.1875], [[[0.5, 0.5]], [[2.7755575615628914e-17, 1.0]]])
+    cover = MipCover().solve(problem, seed=0)
+    assert cover is not None
+    assert cover.choices == [Choice(0, 0), Choice(1, 0)]
