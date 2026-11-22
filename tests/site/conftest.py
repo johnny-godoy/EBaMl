@@ -9,7 +9,8 @@ Each test gets the address of the server, so a link that works locally and fails
 The pages come from the nav of ``zensical.toml``, so a new page gets the checks with no edit of a test.
 ``test_the_nav_lists_every_page_of_the_sitemap`` makes sure that no built page escapes the nav.
 
-Playwright starts its own Chromium. To use another build of Chromium, set
+The Node tools (axe-core, html-validate and Lighthouse CI) are pinned in ``tests/site/package.json``. Install them
+with ``npm ci --prefix tests/site``. Playwright starts its own Chromium. To use another build of Chromium, set
 ``EBAML_CHROMIUM`` to its executable.
 """
 
@@ -29,6 +30,8 @@ import pytest
 from playwright.sync_api import Browser, Playwright, sync_playwright
 from scripts.docs.build import CONFIG, SITE_DIR, build
 
+SUITE_DIR = Path(__file__).resolve().parent
+NODE_MODULES = SUITE_DIR / "node_modules"
 CHROMIUM_VARIABLE = "EBAML_CHROMIUM"
 EXTERNAL_LINKS_OPTION = "--external-links"
 PREBUILT_SITE_OPTION = "--prebuilt-site"
@@ -210,6 +213,26 @@ def browser(playwright: Playwright, chromium_path: str) -> Iterator[Browser]:
     started = playwright.chromium.launch(executable_path=chromium_path)
     yield started
     started.close()
+
+
+def node_tool(*parts: str) -> Path:
+    """Find a file of the Node tools of the suite, and fail with the install command if it is missing.
+
+    Parameters
+    ----------
+    *parts: str
+        The path of the file inside ``tests/site/node_modules``.
+
+    Returns
+    -------
+    Path
+        The file.
+
+    """
+    path = NODE_MODULES.joinpath(*parts)
+    if not path.exists():
+        pytest.fail(f"{path} is missing: install the Node tools of the suite with `npm ci --prefix tests/site`")
+    return path
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

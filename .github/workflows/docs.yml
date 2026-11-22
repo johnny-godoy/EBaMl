@@ -109,6 +109,9 @@ jobs:
         with:
           name: site
           path: site
+      - name: Install the Node tools of the site suite
+        # axe-core, at the version of tests/site/package-lock.json
+        run: npm ci --prefix tests/site
       - name: Install Chromium for Playwright
         run: uv run --frozen playwright install --with-deps chromium
       - name: Check accessibility, links, HTML, layout and performance
