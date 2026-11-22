@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.12.2'></a>
+## [0.12.2] - 2026-11-22
+
+### Added
+
+- `RecourseOptions(costs=...)` makes the counterfactual the cheapest plan under a cost strategy: `UnitCost` (the default, the fewest changes), `DataCost` (distances in the training data, as GAM Coach computes them), `UserCost` and `ScaledCost`. `CostStrategy` is the protocol of a strategy of your own.
+- `RecourseOptions(max_changes=...)` caps the number of changes of the counterfactual.
+- `Counterfactual.cost` holds the cost of the plan. With costs that are not all equal, `MipCover` solves the integer program of the plans, and `GreedyCover` and `LocalSearchCover` return a valid plan marked `UNPROVED`.
+- The counterfactual facts and prompt name the costs and the cap, so the explanation calls a plan the cheapest under the given difficulties and never the fewest changes.
+
+### Changed
+
+- **BREAKING:** `Counterfactual` has the new required field `cost`. Code that builds a `Counterfactual` by hand must pass it.
+
+### Fixed
+
+- The sufficient reason of a decision with several margins no longer comes back as "none" when a gain is rounding noise of zero (such as `2.8e-17`). The LP solver had called the problem infeasible, so the facts claimed that no set of inputs keeps the decision.
+
 <a id='changelog-0.12.1'></a>
 ## [0.12.1] - 2026-11-22
 
