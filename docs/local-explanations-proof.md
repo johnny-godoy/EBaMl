@@ -164,6 +164,8 @@ Its appendix gives the commands to repeat the check. A CI job repeats it when th
 - [Lean files](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/EBaMlProofs)
 - [Typst source of the paper](https://github.com/johnny-godoy/EBaMl/tree/main/proofs/papers/local-explanations)
 
+<p><a href="proofs/local-explanations.pdf">Open the paper (PDF) in its own page</a></p>
+
 <iframe
   src="proofs/local-explanations.pdf"
   title="The proof of the local explanations, as a PDF"
