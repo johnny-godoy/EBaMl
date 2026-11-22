@@ -583,7 +583,8 @@ def download_report(gate: str) -> str:
     Returns
     -------
     str
-        The markdown of the report, or an empty string if the artifact does not exist yet.
+        The markdown of the report, or an empty string if the artifact does not exist yet. A download that is not a
+        zip file counts as missing, so the next poll tries again and the watch does not stop.
 
     """
     repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
@@ -597,7 +598,11 @@ def download_report(gate: str) -> str:
     ]
     texts: list[str] = []
     for artifact in artifacts:
-        with zipfile.ZipFile(io.BytesIO(fetch_archive(artifact["archive_download_url"]))) as archive:
+        try:
+            archive = zipfile.ZipFile(io.BytesIO(fetch_archive(artifact["archive_download_url"])))
+        except zipfile.BadZipFile:
+            return ""
+        with archive:
             texts += [archive.read(name).decode("utf-8", errors="replace") for name in archive.namelist()]
     return "\n".join(texts)
 
