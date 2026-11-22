@@ -28,6 +28,7 @@ a change with no code. .claude/rules/testing.md tells which suite answers which 
       `test_exceptions.py`):
 - [ ] Contract tests in `tests/contract/`. A new call into `baml_sdk` needs a row in `CALLED`:
 - [ ] Examples in the docs (`README.md`, `docs/*.md`, the docstring `Examples`):
+- [ ] Site checks in `tests/site/` (accessibility, links, HTML, layout and performance of the built docs):
 - [ ] Offline BAML tests in `baml_src/tests/`, or live prompt tests in `baml_src/tests/live/`:
 - [ ] Tests of a progress bar (one line for each step, no output by default, no bar for an empty loop):
 - [ ] A guard of a bug fix that fails on the old code (a unit test, or a semgrep rule with `ruleid` and `ok` lines in
