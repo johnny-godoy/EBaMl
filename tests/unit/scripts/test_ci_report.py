@@ -1,6 +1,8 @@
 """Tests for the gates of the CI report: their states, their links and the final comment."""
 
 import importlib.util
+import io
+import zipfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -138,3 +140,34 @@ def test_a_failed_gate_shows_the_log_around_its_first_error(
 @pytest.mark.parametrize("url", ["", "https://example.test/not-a-job"])
 def test_a_failed_gate_without_a_job_log_only_points_to_it(ci_report: ModuleType, url: str) -> None:
     assert ci_report.failure_text(url) == ci_report.log_pointer(url)
+
+
+def _report_artifacts(ci_report: ModuleType, monkeypatch: pytest.MonkeyPatch, archive: bytes) -> None:
+    listing = {"artifacts": [{"name": "report-semgrep", "expired": False, "archive_download_url": "https://x.test/a"}]}
+
+    def api(_method: str, _path: str) -> dict[str, Any]:
+        return listing
+
+    def fetch_archive(_url: str) -> bytes:
+        return archive
+
+    monkeypatch.setattr(ci_report, "api", api)
+    monkeypatch.setattr(ci_report, "fetch_archive", fetch_archive)
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GITHUB_RUN_ID", "1")
+
+
+def test_a_report_artifact_is_read_from_its_zip_archive(ci_report: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("semgrep.md", "the semgrep report")
+    _report_artifacts(ci_report, monkeypatch, buffer.getvalue())
+    assert ci_report.download_report("semgrep") == "the semgrep report"
+
+
+def test_a_download_that_is_not_a_zip_archive_does_not_stop_the_watch(
+    ci_report: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _report_artifacts(ci_report, monkeypatch, b"not a zip archive")
+    assert not ci_report.download_report("semgrep")
