@@ -1,0 +1,41 @@
+lean4:
+  type: web
+  title: "The Lean 4 Theorem Prover and Programming Language"
+  author: ["de Moura, Leonardo", "Ullrich, Sebastian"]
+  date: 2021
+  url: https://lean-lang.org
+
+mathlib2020:
+  type: web
+  title: "The Lean Mathematical Library"
+  author: ["The mathlib Community"]
+  date: 2020
+  url: https://arxiv.org/abs/1910.09336
+  note: "arXiv:1910.09336. Source: https://github.com/leanprover-community/mathlib4."
+
+karp1972:
+  type: chapter
+  title: "Reducibility among Combinatorial Problems"
+  author: ["Karp, Richard M."]
+  date: 1972
+  parent:
+    type: book
+    title: "Complexity of Computer Computations"
+    editor: ["Miller, Raymond E.", "Thatcher, James W."]
+    publisher: "Plenum Press"
+  page-range: "85-103"
+
+wang2023:
+  type: web
+  title: "GAM Coach: Towards Interactive and User-centered Algorithmic Recourse"
+  author: ["Wang, Zijie J.", "Wortman Vaughan, Jennifer", "Caruana, Rich", "Chau, Duen Horng"]
+  date: 2023
+  url: https://arxiv.org/abs/2302.14165
+  note: "arXiv:2302.14165. CHI 2023. Code: https://github.com/poloclub/gam-coach (MIT license)."
+
+ebamllocal:
+  type: web
+  title: "Optimality of the Greedy Local Explanations of EBaMl"
+  author: ["EBaMl contributors"]
+  date: 2026
+  url: https://github.com/johnny-godoy/EBaMl/blob/main/proofs/papers/local-explanations/paper.typ

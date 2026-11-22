@@ -10,6 +10,7 @@ directory are in `.claude/rules/proofs.md`.
 | --- | --- | --- | --- |
 | `LocalExplanations` | The sorting rules of `src/ebaml/local/` solve the minimum change required and the minimum sufficient reason exactly. | `EBaMlProofs/LocalExplanations/` | `papers/local-explanations/paper.typ` |
 | `MulticlassScores` | Softmax depends only on the differences between the scores of the classes, and the graphs of a multiclass EBM keep its predictions. | `EBaMlProofs/MulticlassScores/` | `papers/multiclass-scores/paper.typ` |
+| `Recourse` | An optimum of the integer program of a recourse plan is a cheapest plan, sorting is exact for unit costs, the weighted problem is NP-hard, and stricter settings never give a cheaper plan. | `EBaMlProofs/Recourse/` | `papers/recourse/paper.typ` |
 
 ## Layout
 
