@@ -10,7 +10,9 @@ This file proves that the local explanations of a regressor are the explanations
 
 * `shift` is the model of a margin with the threshold `τ`. `shift_eps` and `shift_margin_eq` are Lemma 7.
 * `shift_robustMargin_neg_iff` is Lemma 8: a change flips the margin iff the new score is on the other side of `τ`.
-* `canFlipInside_iff`, `min_change_inside` and `min_change_inside_none` are Theorem 6.
+* `canFlipInside_iff`, `min_change_inside` and `min_change_inside_none` are Theorem 6. They are the case `A = P` of
+  `canFlipInsideOn_iff`, `min_change_insideOn` and `min_change_insideOn_none`, which hold for the allowed bins `A` of
+  `Model.lean`.
 * `ofModels_sufficient` is Lemma 9, and it links the sufficient reason of several margins to `Covering`.
 -/
 
@@ -98,10 +100,20 @@ theorem inside_eps {lo hi : ℝ} (h : m.Inside lo hi) : (m.shift lo).eps = 1 ∧
 def CanFlipInside (lo hi : ℝ) (S : Finset ι) : Prop :=
   ∃ w, m.Admissible S w ∧ ((m.shift lo).robustMargin S w < 0 ∨ (m.shift hi).robustMargin S w < 0)
 
-/-- Theorem 6, part 1: the answer "inside" fails when one margin fails. A set can flip it iff it can flip
-the margin of the low end or the margin of the high end. -/
-theorem canFlipInside_iff (lo hi : ℝ) (S : Finset ι) :
-    m.CanFlipInside lo hi S ↔ (m.shift lo).CanFlip S ∨ (m.shift hi).CanFlip S := by
+/-! ### Theorem 6 for allowed bins -/
+
+section Allowed
+
+variable [∀ i, DecidableEq (B i)] (A : ∀ i, Finset (B i))
+
+/-- Some admissible change over `A` of the features in `S` makes at least one margin of "inside" fail. -/
+def CanFlipInsideOn (lo hi : ℝ) (S : Finset ι) : Prop :=
+  ∃ w, m.AdmissibleOn A S w ∧ ((m.shift lo).robustMargin S w < 0 ∨ (m.shift hi).robustMargin S w < 0)
+
+/-- Theorem 6, part 1, for allowed bins: a set can flip "inside" iff it can flip the margin of the low end or the
+margin of the high end. The shifted models have the bins of `m`, because they keep the bin of the instance. -/
+theorem canFlipInsideOn_iff (lo hi : ℝ) (S : Finset ι) :
+    m.CanFlipInsideOn A lo hi S ↔ (m.shift lo).CanFlipOn A S ∨ (m.shift hi).CanFlipOn A S := by
   constructor
   · rintro ⟨w, hw, h | h⟩
     · exact Or.inl ⟨w, hw, h⟩
@@ -110,9 +122,58 @@ theorem canFlipInside_iff (lo hi : ℝ) (S : Finset ι) :
     · exact ⟨w, hw, Or.inl h⟩
     · exact ⟨w, hw, Or.inr h⟩
 
+/-- Theorem 6, part 2, for allowed bins (minimum change of "inside"). Let each margin have the position `k` of
+`min_changeOn`. Then the smaller position is the size of the smallest set that flips the answer over `A`. -/
+theorem min_change_insideOn {lo hi : ℝ} {n : ℕ} {e₁ e₂ : Fin n ≃ ι}
+    (he₁ : Antitone ((m.shift lo).dropOn A ∘ e₁)) {k₁ : ℕ} (hk₁ : k₁ ≤ n)
+    (hflip₁ : (m.shift lo).margin < partialSum ((m.shift lo).dropOn A) e₁ k₁)
+    (hbefore₁ : ∀ j, 1 ≤ j → j < k₁ → partialSum ((m.shift lo).dropOn A) e₁ j ≤ (m.shift lo).margin)
+    (he₂ : Antitone ((m.shift hi).dropOn A ∘ e₂)) {k₂ : ℕ} (hk₂ : k₂ ≤ n)
+    (hflip₂ : (m.shift hi).margin < partialSum ((m.shift hi).dropOn A) e₂ k₂)
+    (hbefore₂ : ∀ j, 1 ≤ j → j < k₂ → partialSum ((m.shift hi).dropOn A) e₂ j ≤ (m.shift hi).margin) :
+    (∃ S : Finset ι, m.CanFlipInsideOn A lo hi S ∧ S.card = min k₁ k₂) ∧
+      ∀ S : Finset ι, m.CanFlipInsideOn A lo hi S → min k₁ k₂ ≤ S.card := by
+  obtain ⟨w₁, hw₁⟩ := (m.shift lo).exists_isLowest A
+  obtain ⟨w₂, hw₂⟩ := (m.shift hi).exists_isLowest A
+  obtain ⟨⟨ha₁, hb₁⟩, hc₁⟩ := (m.shift lo).min_changeOn A he₁ hk₁ hflip₁ hbefore₁ hw₁
+  obtain ⟨⟨ha₂, hb₂⟩, hc₂⟩ := (m.shift hi).min_changeOn A he₂ hk₂ hflip₂ hbefore₂ hw₂
+  refine ⟨?_, fun S hS => ?_⟩
+  · rcases le_total k₁ k₂ with hle | hle
+    · exact ⟨prefixSet e₁ hk₁, ⟨w₁, ha₁, Or.inl hb₁⟩, by rw [card_prefixSet, min_eq_left hle]⟩
+    · exact ⟨prefixSet e₂ hk₂, ⟨w₂, ha₂, Or.inr hb₂⟩, by rw [card_prefixSet, min_eq_right hle]⟩
+  · rcases (m.canFlipInsideOn_iff A lo hi S).1 hS with h | h
+    · exact (min_le_left _ _).trans (hc₁ S h)
+    · exact (min_le_right _ _).trans (hc₂ S h)
+
+/-- Theorem 6, part 3, for allowed bins (no answer). -/
+theorem min_change_insideOn_none {lo hi : ℝ} {n : ℕ} {e₁ e₂ : Fin n ≃ ι}
+    (he₁ : Antitone ((m.shift lo).dropOn A ∘ e₁))
+    (h₁ : ∀ k ≤ n, partialSum ((m.shift lo).dropOn A) e₁ k ≤ (m.shift lo).margin)
+    (he₂ : Antitone ((m.shift hi).dropOn A ∘ e₂))
+    (h₂ : ∀ k ≤ n, partialSum ((m.shift hi).dropOn A) e₂ k ≤ (m.shift hi).margin)
+    (S : Finset ι) : ¬ m.CanFlipInsideOn A lo hi S := by
+  rw [canFlipInsideOn_iff]
+  rintro (h | h)
+  · exact (m.shift lo).min_changeOn_none A he₁ h₁ S h
+  · exact (m.shift hi).min_changeOn_none A he₂ h₂ S h
+
+/-- With `A = P`, a flip of "inside" over the allowed bins is a flip of "inside". -/
+theorem canFlipInsideOn_P (lo hi : ℝ) (S : Finset ι) : m.CanFlipInsideOn m.P lo hi S ↔ m.CanFlipInside lo hi S := by
+  simp only [CanFlipInsideOn, CanFlipInside, admissibleOn_P]
+
+end Allowed
+
+/-- Theorem 6, part 1: the answer "inside" fails when one margin fails. A set can flip it iff it can flip
+the margin of the low end or the margin of the high end. This is `canFlipInsideOn_iff` with `A = P`. -/
+theorem canFlipInside_iff (lo hi : ℝ) (S : Finset ι) :
+    m.CanFlipInside lo hi S ↔ (m.shift lo).CanFlip S ∨ (m.shift hi).CanFlip S := by
+  classical
+  rw [← m.canFlipInsideOn_P, canFlipInsideOn_iff, ← (m.shift lo).canFlipOn_P, ← (m.shift hi).canFlipOn_P]
+  rfl
+
 /-- Theorem 6, part 2 (minimum change of "inside"). Let each margin have the position `k` of `min_change`.
 Then the smaller of the two positions is the size of the smallest set that flips the answer, and the set of the
-margin with the smaller position flips it. -/
+margin with the smaller position flips it. This is `min_change_insideOn` with `A = P`. -/
 theorem min_change_inside {lo hi : ℝ} {n : ℕ} {e₁ e₂ : Fin n ≃ ι}
     (he₁ : Antitone ((m.shift lo).drop ∘ e₁)) {k₁ : ℕ} (hk₁ : k₁ ≤ n)
     (hflip₁ : (m.shift lo).margin < partialSum (m.shift lo).drop e₁ k₁)
@@ -122,27 +183,29 @@ theorem min_change_inside {lo hi : ℝ} {n : ℕ} {e₁ e₂ : Fin n ≃ ι}
     (hbefore₂ : ∀ j, 1 ≤ j → j < k₂ → partialSum (m.shift hi).drop e₂ j ≤ (m.shift hi).margin) :
     (∃ S : Finset ι, m.CanFlipInside lo hi S ∧ S.card = min k₁ k₂) ∧
       ∀ S : Finset ι, m.CanFlipInside lo hi S → min k₁ k₂ ≤ S.card := by
-  obtain ⟨⟨ha₁, hb₁⟩, hc₁⟩ := (m.shift lo).min_change he₁ hk₁ hflip₁ hbefore₁
-  obtain ⟨⟨ha₂, hb₂⟩, hc₂⟩ := (m.shift hi).min_change he₂ hk₂ hflip₂ hbefore₂
-  refine ⟨?_, fun S hS => ?_⟩
-  · rcases le_total k₁ k₂ with hle | hle
-    · exact ⟨prefixSet e₁ hk₁, ⟨(m.shift lo).beta, ha₁, Or.inl hb₁⟩, by
-        rw [card_prefixSet, min_eq_left hle]⟩
-    · exact ⟨prefixSet e₂ hk₂, ⟨(m.shift hi).beta, ha₂, Or.inr hb₂⟩, by
-        rw [card_prefixSet, min_eq_right hle]⟩
-  · rcases (m.canFlipInside_iff lo hi S).1 hS with h | h
-    · exact (min_le_left _ _).trans (hc₁ S h)
-    · exact (min_le_right _ _).trans (hc₂ S h)
+  classical
+  have hP₁ : (m.shift lo).dropOn m.P = (m.shift lo).drop := (m.shift lo).dropOn_P
+  have hP₂ : (m.shift hi).dropOn m.P = (m.shift hi).drop := (m.shift hi).dropOn_P
+  rw [← hP₁] at he₁ hflip₁ hbefore₁
+  rw [← hP₂] at he₂ hflip₂ hbefore₂
+  obtain ⟨⟨S, hS, hcard⟩, hmin⟩ :=
+    m.min_change_insideOn m.P he₁ hk₁ hflip₁ hbefore₁ he₂ hk₂ hflip₂ hbefore₂
+  exact ⟨⟨S, (m.canFlipInsideOn_P lo hi S).1 hS, hcard⟩,
+    fun S hS => hmin S ((m.canFlipInsideOn_P lo hi S).2 hS)⟩
 
-/-- Theorem 6, part 3 (no answer): if neither margin can be flipped by any set, "inside" cannot be flipped. -/
+/-- Theorem 6, part 3 (no answer): if neither margin can be flipped by any set, "inside" cannot be flipped. This
+is `min_change_insideOn_none` with `A = P`. -/
 theorem min_change_inside_none {lo hi : ℝ} {n : ℕ} {e₁ e₂ : Fin n ≃ ι}
     (he₁ : Antitone ((m.shift lo).drop ∘ e₁)) (h₁ : ∀ k ≤ n, partialSum (m.shift lo).drop e₁ k ≤ (m.shift lo).margin)
     (he₂ : Antitone ((m.shift hi).drop ∘ e₂)) (h₂ : ∀ k ≤ n, partialSum (m.shift hi).drop e₂ k ≤ (m.shift hi).margin)
     (S : Finset ι) : ¬ m.CanFlipInside lo hi S := by
-  rw [canFlipInside_iff]
-  rintro (h | h)
-  · exact (m.shift lo).min_change_none he₁ h₁ S h
-  · exact (m.shift hi).min_change_none he₂ h₂ S h
+  classical
+  have hP₁ : (m.shift lo).dropOn m.P = (m.shift lo).drop := (m.shift lo).dropOn_P
+  have hP₂ : (m.shift hi).dropOn m.P = (m.shift hi).drop := (m.shift hi).dropOn_P
+  rw [← hP₁] at he₁ h₁
+  rw [← hP₂] at he₂ h₂
+  rw [← m.canFlipInsideOn_P]
+  exact m.min_change_insideOn_none m.P he₁ h₁ he₂ h₂ S
 
 end Model
 
