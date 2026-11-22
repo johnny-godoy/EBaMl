@@ -808,6 +808,16 @@
     "kind": "class",
     "signature": "()"
   },
+  "Levels": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "levels: tuple[str, ...]"
+    ],
+    "kind": "class",
+    "signature": "(levels: collections.abc.Collection[str]) -> None"
+  },
   "LimitSteps": {
     "bases": [
       "Edit",
@@ -847,10 +857,11 @@
       "completions: list[ebaml.local.fact_types.CompletionStep]",
       "confidence_level: <class 'float'>",
       "min_support: <class 'float'>",
-      "n_samples: <class 'int'>"
+      "n_samples: <class 'int'>",
+      "recourse: <class 'ebaml.local.recourse.RecourseOptions'>"
     ],
     "kind": "class",
-    "signature": "(prediction: ebaml.local.fact_types.Prediction, contributions: list[ebaml.local.fact_types.Contribution], counterfactual: ebaml.local.fact_types.Counterfactual | None, sufficient_reason: ebaml.local.fact_types.SufficientReason | None, completions: list[ebaml.local.fact_types.CompletionStep], confidence_level: float, min_support: float, n_samples: int) -> None"
+    "signature": "(prediction: ebaml.local.fact_types.Prediction, contributions: list[ebaml.local.fact_types.Contribution], counterfactual: ebaml.local.fact_types.Counterfactual | None, sufficient_reason: ebaml.local.fact_types.SufficientReason | None, completions: list[ebaml.local.fact_types.CompletionStep], confidence_level: float, min_support: float, n_samples: int, recourse: ebaml.local.recourse.RecourseOptions = NOTHING) -> None"
   },
   "LocalOptions": {
     "bases": [
@@ -864,10 +875,11 @@
       "min_support: <class 'float'>",
       "decision: ebaml.local.decisions.Decision | None",
       "search: <class 'ebaml.local.covering_solvers.CoveringSolver'>",
-      "target_class: ClassLabel | None"
+      "target_class: ClassLabel | None",
+      "recourse: <class 'ebaml.local.recourse.RecourseOptions'>"
     ],
     "kind": "class",
-    "signature": "(confidence_level: float = 0.95, max_steps: int = 5, n_samples: int = 10000, seed: int = 0, min_support: float = 0.01, decision: ebaml.local.decisions.Decision | None = None, search: ebaml.local.covering_solvers.CoveringSolver = NOTHING, target_class: ClassLabel | None = None) -> None"
+    "signature": "(confidence_level: float = 0.95, max_steps: int = 5, n_samples: int = 10000, seed: int = 0, min_support: float = 0.01, decision: ebaml.local.decisions.Decision | None = None, search: ebaml.local.covering_solvers.CoveringSolver = NOTHING, target_class: ClassLabel | None = None, recourse: ebaml.local.recourse.RecourseOptions = NOTHING) -> None"
   },
   "LocalSearchCover": {
     "bases": [
@@ -1151,6 +1163,18 @@
     "kind": "exception",
     "signature": null
   },
+  "RangeMatch": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "OVERLAP",
+      "INSIDE"
+    ],
+    "signature": "(*values)"
+  },
   "RateLimitedError": {
     "bases": [
       "LLMRequestError",
@@ -1186,6 +1210,28 @@
     ],
     "kind": "class",
     "signature": "(feature: str, class_label: ClassLabel | None = None) -> None"
+  },
+  "RecourseOptionError": {
+    "bases": [
+      "EBaMlError",
+      "ValueError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "RecourseOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "immutable: tuple[str, ...]",
+      "allowed: collections.abc.Mapping[str, AllowedValues]"
+    ],
+    "kind": "class",
+    "signature": "(immutable: collections.abc.Collection[str] = NOTHING, allowed=NOTHING) -> None"
   },
   "Regressor": {
     "bases": [
@@ -1488,6 +1534,18 @@
     ],
     "kind": "class",
     "signature": "(low: float | None = None, high: float | None = None) -> None"
+  },
+  "ValueRange": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "low: <class 'float'>",
+      "high: <class 'float'>",
+      "match: <enum 'RangeMatch'>"
+    ],
+    "kind": "class",
+    "signature": "(low: float = -inf, high: float = inf, match: ebaml.local.recourse.RangeMatch | str = <RangeMatch.OVERLAP: 'overlap'>) -> None"
   },
   "Violation": {
     "bases": [

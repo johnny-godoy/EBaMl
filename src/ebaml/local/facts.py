@@ -89,7 +89,9 @@ def compute_local_facts(
 
     The classifier is binary or multiclass. The function raises an ``UnsupportedModelError`` for an EBM that is not a
     classifier or a regressor, and for an EBM with interactions. It raises an ``InvalidInstanceError`` for an instance
-    that lacks a value or has an unknown category. A regressor explains the answer to ``LocalOptions.decision``.
+    that lacks a value or has an unknown category. It raises a ``RecourseOptionError`` when ``LocalOptions.recourse``
+    names a feature that the model does not have, or values that do not fit a feature. A regressor explains the answer
+    to ``LocalOptions.decision``.
 
     A counterfactual and a sufficient reason are the smallest sets only if their ``minimality`` says so. Sorting proves
     it for a decision with one margin. A decision with several margins and the counterfactual of a target class
@@ -121,7 +123,7 @@ def compute_local_facts(
         raise OptionRangeError(msg)
     z = statistics.NormalDist().inv_cdf((1 + options.confidence_level) / 2)
     kind = _local_kind(ebm)
-    features = read_features(ebm, instance, options.min_support)
+    features = options.recourse.restrict(read_features(ebm, instance, options.min_support))
     intercepts = np.ravel(ebm.intercept_).tolist()
     scores = (np.array(intercepts) + sum(f.outputs(f.bin_index) for f in features)).tolist()
     score_stds = np.sqrt(sum(f.output_stds(f.bin_index) ** 2 for f in features)).tolist()
@@ -176,4 +178,5 @@ def compute_local_facts(
         confidence_level=options.confidence_level,
         min_support=options.min_support,
         n_samples=options.n_samples,
+        recourse=options.recourse,
     )

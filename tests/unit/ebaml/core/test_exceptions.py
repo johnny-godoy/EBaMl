@@ -25,6 +25,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
     ProviderUnreachableError,
     RateLimitedError,
+    RecourseOptionError,
     SDKUnavailableError,
     SearchLimitError,
     SelectionError,
@@ -44,6 +45,7 @@ VALUE_ERRORS = [
     InvalidInstanceError,
     InvalidOptionError,
     OptionRangeError,
+    RecourseOptionError,
     SelectionError,
     TokenFitError,
     UnsupportedModelError,
@@ -71,7 +73,7 @@ def test_graph_error_hierarchy(exc: type[Exception]) -> None:
 
 def test_every_error_of_the_module_derives_from_the_base_class() -> None:
     errors = [value for _, value in inspect.getmembers(exceptions, inspect.isclass) if issubclass(value, Exception)]
-    assert len(errors) == 24
+    assert len(errors) == 25
     assert all(issubclass(error, EBaMlError) for error in errors)
 
 
