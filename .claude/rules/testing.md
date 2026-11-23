@@ -55,6 +55,7 @@ suites without coverage, so that a slow end-to-end test cannot stand in for a mi
   `pyproject.toml`, the requests of the local server. It never copies the other side into the test.
 - A new call into `baml_sdk` needs a row in `CALLED` of `test_sdk_calls.py`, so that a reviewer sees each new crossing of
   the boundary.
+- A key that a prompt reads must be a key that the facts emit (`test_fact_keys.py`, `renames.md`).
 - A value that two files must keep equal (the defaults of a model in `model_spec.baml` and in `talk_to_ebm.baml`) gets a
   test that reads both.
 - If a contract test fails after `git pull`, run `baml generate` first: the generated SDK is not in git.

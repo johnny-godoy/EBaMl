@@ -2,6 +2,32 @@
 # semgrep/ebaml.py; run `uvx --python 3.13 --from semgrep==1.183.0 semgrep --test semgrep` to check them. The layer limits live in pyproject.toml
 # ([tool.importlinter]); the rules for them are in .claude/rules/architecture.md.
 rules:
+  - id: ebaml-no-first-item-alias
+    languages: [python]
+    severity: ERROR
+    message: >-
+      A property that returns the first item of a list field, or None, is a second name for `field[0]`. It hides that
+      the field is a list, and its name does not say "first". Read the list where it is used. A rename keeps no alias
+      of the old name to make the diff smaller. See .claude/rules/renames.md.
+    pattern-either:
+      - pattern: |
+          @property
+          def $NAME(self):
+              ...
+              return self.$FIELD[0] if self.$FIELD else None
+      - pattern: |
+          @property
+          def $NAME(self):
+              ...
+              return self.$FIELD[0] if len(self.$FIELD) > 0 else None
+      - pattern: |
+          @property
+          def $NAME(self):
+              ...
+              return next(iter(self.$FIELD), None)
+    paths:
+      include: ["/src/ebaml/"]
+
   - id: ebaml-no-kwargs-bag
     languages: [python]
     severity: ERROR
