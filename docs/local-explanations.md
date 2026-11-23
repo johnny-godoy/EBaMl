@@ -84,7 +84,7 @@ multiclass classifier, the answer "inside" of an interval) and the counterfactua
 | `AT_LOWER_BOUND` | The set has as many members as the lower bound, so no smaller set exists. The bound rests on the LP solver. |
 | `UNPROVED` | The search found a set, but it did not prove that the set is the smallest. A smaller set can exist. |
 
-`MinimalityStatus.is_smallest` is false only for `UNPROVED`. The prompts read this boolean as `is_smallest_set`.
+`MinimalityStatus.is_optimal` is false only for `UNPROVED`. It means the smallest set, or the cheapest plan when the changes have costs. The prompts read this boolean as `is_smallest_set`.
 
 ### Counterfactual
 
@@ -153,12 +153,14 @@ no score, so no claim covers the uncertainty of the model.
 | `prediction.margin` | The log-odds of the predicted class. It is positive for every prediction. | The distance of the value from the threshold, on the side of the decision. |
 | `prediction.threshold` | `0`: the log-odds at which the class changes. | The threshold of the question. |
 | `prediction.output_kind` | `OutputKind.PROBABILITY` | `OutputKind.VALUE` |
-| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change)`. | The same. |
+| `counterfactuals` | The plans, cheapest first (see [Several plans](#several-plans)). `counterfactual` is the first one, or `None`. | The same. |
+| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change, to_bin)`. | The same. |
 | `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
 | `sufficient_reason.features` | The features that fix the prediction. | The features that fix the answer. |
 | `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. | The worst case of the distance from the threshold, with these features fixed. |
 | `counterfactual.minimality`, `sufficient_reason.minimality` | A `MinimalityStatus`: `SORTING_PROOF`, `SOLVER_PROOF`, `AT_LOWER_BOUND` or `UNPROVED`. It is always `SORTING_PROOF` for one margin. | The same. It can be `UNPROVED` for the answer "inside" of an interval. |
-| `counterfactual.lower_bound`, `sufficient_reason.lower_bound` | No set has fewer members than this number. | The same. |
+| `counterfactual.cost`, `counterfactual.cost_lower_bound` | The cost of the plan, and a cost that no plan beats. With the default costs, the cost is the number of changes. | The same. |
+| `sufficient_reason.lower_bound` | No set has fewer members than this number. | The same. |
 | `completions` | One `CompletionStep(fixed, share)` for each step. | The same. |
 
 <!-- invisible-code-block: python
@@ -345,6 +347,23 @@ if plan is not None:
 The texts for the LLM name the costs, and the explanation calls the plan the cheapest one under the given difficulties,
 never the fewest changes. The [proof of the recourse plans](recourse-proof.md) shows why sorting is exact for equal
 costs only, and why the problem with other costs is NP-hard.
+
+### Several plans
+
+`RecourseOptions(plans=k)` asks for up to `k` plans. As in GAM Coach, each plan after the first is the cheapest plan
+that uses no pair of a feature and a bin of an earlier plan, so it can move a feature of an earlier plan to another
+bin. `LocalFacts.counterfactuals` holds the plans in the order found, so their costs do not go down. A shorter list
+means that the search proves that no further plan exists, and an empty list that no plan exists at all. Each plan has
+its own `minimality`, because the time limit of the solver can end during any plan.
+
+```python
+several = compute_local_facts(ebm, instance, LocalOptions(recourse=RecourseOptions(plans=3)))
+for plan in several.counterfactuals:
+    print([change.feature for change in plan.changes], plan.cost, plan.minimality)
+```
+
+The texts for the LLM list the plans after the first as other plans. The explanation calls such a plan the cheapest one
+without the changes of the earlier plans only when its search proves it.
 
 ## Audience
 

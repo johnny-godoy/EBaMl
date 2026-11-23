@@ -166,7 +166,7 @@ this bound.
 | `Counterfactual.new_output` | The probability of the new class. | The new predicted value. | The probability of the new class. |
 | `SufficientReason.guaranteed_margin` | The worst case of the margin. | The worst case of the margin. | The smallest worst case over the margins. |
 | `SufficientReason.minimality` | Always `SORTING_PROOF`. | `SORTING_PROOF` for one margin. | See the solver. |
-| `SufficientReason.lower_bound`, `Counterfactual.lower_bound` | The size of the set. | The size of the set for one margin, else the bound of the LP. | The bound of the LP for a covering problem. |
+| `SufficientReason.lower_bound`, `Counterfactual.cost_lower_bound` (with equal costs of 1) | The size of the set. | The size of the set for one margin, else the bound of the LP. | The bound of the LP for a covering problem. |
 
 ## How the proof is checked
 
