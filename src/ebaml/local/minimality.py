@@ -2,8 +2,9 @@
 
 A counterfactual and a sufficient reason are sets, and the facts say how far the set is proved to be the smallest.
 ``MinimalityStatus`` names the reason, so that a result never claims more than its search established (contract 2 of
-``.claude/rules/semantic-contracts.md``). The prompts read only ``MinimalityStatus.is_smallest``, because the reader of
-an explanation needs to know whether the set is the smallest, and not how the code proved it.
+``.claude/rules/semantic-contracts.md``). The prompts read only ``MinimalityStatus.is_optimal``, because the reader of
+an explanation needs to know whether the set is optimal, and not how the code proved it. With costs, optimal means the
+cheapest plan (``proofs/papers/recourse/paper.typ``).
 """
 
 import enum
@@ -33,8 +34,8 @@ class MinimalityStatus(enum.StrEnum):
     UNPROVED = "unproved"
 
     @property
-    def is_smallest(self) -> bool:
-        """Tell whether no smaller set exists.
+    def is_optimal(self) -> bool:
+        """Tell whether the set is optimal: no smaller set exists, or no cheaper plan when the changes have costs.
 
         Returns
         -------

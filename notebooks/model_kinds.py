@@ -347,7 +347,7 @@ def _(
             "solver": solver_name,
             "changes to setosa": "none" if target_change is None else len(target_change.changes),
             "changes: minimality": None if target_change is None else target_change.minimality.value,
-            "changes: lower bound": None if target_change is None else target_change.lower_bound,
+            "changes: lower bound": None if target_change is None else target_change.cost_lower_bound,
             "sufficient reason": "none" if search_reason is None else ", ".join(search_reason.features),
             "reason: minimality": None if search_reason is None else search_reason.minimality.value,
             "reason: lower bound": None if search_reason is None else search_reason.lower_bound,

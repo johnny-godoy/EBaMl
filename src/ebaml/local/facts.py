@@ -42,7 +42,7 @@ from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
 from ebaml.core.exceptions import OptionRangeError, UnsupportedModelError
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.local.completions import reveal_order, sample_completions
-from ebaml.local.counterfactuals import Totals, choose_counterfactual
+from ebaml.local.counterfactuals import Totals, choose_counterfactuals
 from ebaml.local.fact_features import read_features
 from ebaml.local.fact_types import Contribution, LocalFacts, LocalOptions, Prediction
 from ebaml.local.local_kinds import LocalKind, local_kind
@@ -150,7 +150,7 @@ def compute_local_facts(
         output_kind=kind.output_kind,
     )
     order = reveal_order(features, bounds, z)
-    counterfactual = choose_counterfactual(
+    counterfactuals = choose_counterfactuals(
         features,
         frame,
         Totals(scores, intercepts, z),
@@ -172,7 +172,7 @@ def compute_local_facts(
             key=lambda c: abs(c.score),
             reverse=True,
         ),
-        counterfactual=counterfactual,
+        counterfactuals=counterfactuals,
         sufficient_reason=find_reason(features, bounds, z, options),
         completions=sample_completions(features, order, bounds, options),
         confidence_level=options.confidence_level,

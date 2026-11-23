@@ -125,7 +125,7 @@ def test_matches_brute_force(
     assert facts.sufficient_reason is not None
     assert len(facts.sufficient_reason.features) == sufficient
     # the brute force shows that no smaller set is sufficient, which is what minimum claims
-    assert facts.sufficient_reason.minimality.is_smallest
+    assert facts.sufficient_reason.minimality.is_optimal
 
 
 def test_prediction_matches_model(continuous_ebm: FittedClassifier) -> None:
@@ -271,7 +271,7 @@ def test_multiclass_facts_are_the_smallest_by_brute_force(row: int) -> None:
     assert (None if facts.counterfactual is None else len(facts.counterfactual.changes)) == expected_flip
     assert (None if facts.sufficient_reason is None else len(facts.sufficient_reason.features)) == expected_reason
     if facts.sufficient_reason is not None:
-        assert facts.sufficient_reason.minimality.is_smallest
+        assert facts.sufficient_reason.minimality.is_optimal
 
 
 def test_multiclass_prediction_reports_the_predicted_class() -> None:
@@ -546,7 +546,7 @@ def test_regressor_threshold_matches_brute_force(
     if sufficient is not None:
         assert facts.sufficient_reason is not None
         assert len(facts.sufficient_reason.features) == sufficient
-        assert facts.sufficient_reason.minimality.is_smallest
+        assert facts.sufficient_reason.minimality.is_optimal
 
 
 def _sufficient_sizes(
@@ -624,10 +624,10 @@ def test_regressor_interval_matches_brute_force(
     assert not any(sufficient[chosen - {feature}] for feature in chosen)
     smallest = min(len(subset) for subset, ok in sufficient.items() if ok)
     assert reason.lower_bound <= smallest
-    if reason.minimality.is_smallest:
+    if reason.minimality.is_optimal:
         assert len(chosen) == smallest
     if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
-        assert reason.minimality.is_smallest
+        assert reason.minimality.is_optimal
         assert len(chosen) == smallest
 
 
@@ -723,7 +723,7 @@ def test_the_facts_match_the_oracle_of_the_paper(
         # a tie can give another set of the same size, so the oracle checks the set and not its members
         assert problem.flips([names.index(change.feature) for change in counterfactual.changes])
         assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
-        assert counterfactual.lower_bound == len(counterfactual.changes)
+        assert counterfactual.cost_lower_bound == pytest.approx(len(counterfactual.changes))
 
     reason = facts.sufficient_reason
     assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
@@ -731,7 +731,7 @@ def test_the_facts_match_the_oracle_of_the_paper(
         guaranteed = problem.worst_case_margin([names.index(name) for name in reason.features])
         assert guaranteed > 0
         assert reason.guaranteed_margin == pytest.approx(guaranteed)
-        assert reason.minimality.is_smallest
+        assert reason.minimality.is_optimal
 
 
 def _bin_text(model: SmallModel, feature_index: int, bin_index: int) -> str:
@@ -858,6 +858,46 @@ def test_each_plan_matches_the_oracle(
         assert counterfactual.minimality is (MinimalityStatus.SORTING_PROOF if equal else MinimalityStatus.SOLVER_PROOF)
 
 
+@settings(max_examples=150, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    data=st.data(),
+)
+def test_each_diverse_plan_matches_the_oracle(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    data: st.DataObject,
+) -> None:
+    # contract 1, Theorem 3 of the recourse paper: plan k + 1 is a cheapest plan without the picks of the earlier plans
+    model, limits = case
+    names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
+    costs = data.draw(st.lists(st.integers(min_value=1, max_value=3), min_size=len(names), max_size=len(names)))
+    recourse = RecourseOptions(
+        costs=UserCost(per_feature={name: float(cost) for name, cost in zip(names, costs, strict=True)}),
+        plans=3,
+    )
+    problem = oracle_problem(model, confidence_level=confidence_level, min_support=0.0, limits=limits)
+    _, facts = _small_facts(
+        small_templates,
+        case,
+        confidence_level=confidence_level,
+        min_support=0.0,
+        recourse=recourse,
+    )
+    excluded: set[tuple[int, int]] = set()
+    for plan in facts.counterfactuals:
+        picks = {(names.index(change.feature), change.to_bin) for change in plan.changes}
+        assert not picks & excluded
+        assert plan.cost == problem.cheapest_flip([float(cost) for cost in costs], None, excluded)
+        excluded |= picks
+    # a shorter list means that no further plan exists
+    if len(facts.counterfactuals) < recourse.plans:
+        assert problem.cheapest_flip([float(cost) for cost in costs], None, excluded) is None
+    assert [plan.cost for plan in facts.counterfactuals] == sorted(plan.cost for plan in facts.counterfactuals)
+
+
 @settings(max_examples=100, deadline=None)
 @given(
     case=model_cases(),
@@ -943,8 +983,8 @@ def test_more_confidence_never_makes_a_claim_easier(
         assert len(low.counterfactual.changes) <= len(high.counterfactual.changes)
     if high.sufficient_reason is not None:
         assert low.sufficient_reason is not None
-        assert low.sufficient_reason.minimality.is_smallest
-        assert high.sufficient_reason.minimality.is_smallest
+        assert low.sufficient_reason.minimality.is_optimal
+        assert high.sufficient_reason.minimality.is_optimal
         assert len(low.sufficient_reason.features) <= len(high.sufficient_reason.features)
         # sorting gives the set with the largest guaranteed margin of its size, so two sets of one size compare
         if case[0].kind == "binary" and len(low.sufficient_reason.features) == len(high.sufficient_reason.features):

@@ -10,7 +10,7 @@ from ebaml.core.custom_types import JSONObject
 from ebaml.local import fact_text as local_text
 from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
-from ebaml.local.costs import DataCost, UserCost
+from ebaml.local.costs import CostStrategy, DataCost, UnitCost, UserCost
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
@@ -42,7 +42,7 @@ def test_texts_hide_numbers_from_layperson(continuous_ebm: FittedClassifier) -> 
 
 def test_texts_without_counterfactual_or_sufficient_reason() -> None:
     prediction = local.Prediction(decision=0, output=0.7, lower=0.6, upper=0.8, score=-0.8, score_std=0.1, margin=0.8)
-    facts = local.LocalFacts(prediction, [], None, None, [], 0.95, min_support=0.01, n_samples=10_000)
+    facts = local.LocalFacts(prediction, [], [], None, [], 0.95, min_support=0.01, n_samples=10_000)
     texts = local_text.facts_to_texts(facts, DataScientist())
     # a search that found nothing still names its conditions, because the result holds under them only
     assert orjson.loads(texts.counterfactual) == {
@@ -80,7 +80,7 @@ def _text_facts(
     return local.LocalFacts(
         prediction,
         contributions,
-        None,
+        [],
         None,
         [],
         confidence_level,
@@ -214,18 +214,20 @@ def test_data_scientist_text_of_a_prediction() -> None:
 
 
 def _text_facts_with_everything(confidence_level: float) -> local.LocalFacts:
-    change = local.Change("f0", "1", "[2, 3)", -0.1234)
+    change = local.Change("f0", "1", "[2, 3)", -0.1234, 2)
     steps = [local.CompletionStep([], 0.5), local.CompletionStep(["f0"], 0.12351)]
     return attrs.evolve(
         _text_facts(1.4, [0.6, 0.1], confidence_level),
-        counterfactual=local.Counterfactual(
-            [change],
-            new_decision=1,
-            new_output=0.7,
-            minimality=MinimalityStatus.SORTING_PROOF,
-            lower_bound=1,
-            cost=1.0,
-        ),
+        counterfactuals=[
+            local.Counterfactual(
+                [change],
+                new_decision=1,
+                new_output=0.7,
+                minimality=MinimalityStatus.SORTING_PROOF,
+                cost=1.0,
+                cost_lower_bound=1.0,
+            ),
+        ],
         sufficient_reason=local.SufficientReason(
             ["f0"],
             0.9876,
@@ -302,14 +304,16 @@ def test_counterfactual_text_puts_the_new_class_and_its_probability_together(aud
     # with the probability in a key of its own, a live reply read 0.82 as the probability of the old class
     facts = attrs.evolve(
         _text_facts_with_everything(0.95),
-        counterfactual=local.Counterfactual(
-            [local.Change("f0", "1", "[2, 3)", -0.1)],
-            new_decision="loan approved",
-            new_output=0.82,
-            minimality=MinimalityStatus.SORTING_PROOF,
-            lower_bound=1,
-            cost=1.0,
-        ),
+        counterfactuals=[
+            local.Counterfactual(
+                [local.Change("f0", "1", "[2, 3)", -0.1, 2)],
+                new_decision="loan approved",
+                new_output=0.82,
+                minimality=MinimalityStatus.SORTING_PROOF,
+                cost=1.0,
+                cost_lower_bound=1.0,
+            ),
+        ],
     )
     counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
     after = counterfactual["after_the_changes"]
@@ -356,7 +360,7 @@ def test_a_counterfactual_that_is_not_proved_is_not_called_the_smallest() -> Non
     assert facts.counterfactual is not None
     target = attrs.evolve(
         facts,
-        counterfactual=attrs.evolve(facts.counterfactual, minimality=MinimalityStatus.UNPROVED),
+        counterfactuals=[attrs.evolve(facts.counterfactuals[0], minimality=MinimalityStatus.UNPROVED)],
     )
     assert orjson.loads(local_text.facts_to_texts(facts).counterfactual)["is_smallest_set"] is True
     assert orjson.loads(local_text.facts_to_texts(target).counterfactual)["is_smallest_set"] is False
@@ -383,7 +387,9 @@ def test_only_a_data_scientist_gets_the_lower_bound_of_a_set(audience: Audience,
     assert facts.counterfactual is not None
     unproved = attrs.evolve(
         facts,
-        counterfactual=attrs.evolve(facts.counterfactual, minimality=MinimalityStatus.UNPROVED, lower_bound=0),
+        counterfactuals=[
+            attrs.evolve(facts.counterfactuals[0], minimality=MinimalityStatus.UNPROVED, cost_lower_bound=0.0),
+        ],
         sufficient_reason=local.SufficientReason(
             ["f0", "f1"],
             0.5,
@@ -425,7 +431,7 @@ def test_the_counterfactual_names_the_costs_and_the_cap(audience: Audience) -> N
     # contract 3: with costs, the plan is the cheapest and not the smallest, so the facts name the costs
     recourse = RecourseOptions(costs=UserCost(per_feature={"f0": 2.5}), max_changes=2)
     facts = attrs.evolve(_text_facts_with_everything(0.5), recourse=recourse)
-    facts = attrs.evolve(facts, counterfactual=attrs.evolve(facts.counterfactual, cost=2.5))
+    facts = attrs.evolve(facts, counterfactuals=[attrs.evolve(facts.counterfactuals[0], cost=2.5)])
     counterfactual = orjson.loads(local_text.facts_to_texts(facts, audience).counterfactual)
     assert counterfactual["costs_of_the_changes"] == "each change costs what the caller gave"
     assert counterfactual["total_cost"] == pytest.approx(2.5)
@@ -435,7 +441,7 @@ def test_the_counterfactual_names_the_costs_and_the_cap(audience: Audience) -> N
 def test_the_counterfactual_names_the_costs_when_no_plan_exists() -> None:
     facts = attrs.evolve(
         _text_facts_with_everything(0.5),
-        counterfactual=None,
+        counterfactuals=[],
         recourse=RecourseOptions(costs=DataCost()),
     )
     counterfactual = orjson.loads(local_text.facts_to_texts(facts).counterfactual)
@@ -447,3 +453,21 @@ def test_the_counterfactual_names_the_costs_when_no_plan_exists() -> None:
 def test_the_counterfactual_names_no_cost_with_equal_costs() -> None:
     counterfactual = orjson.loads(local_text.facts_to_texts(_text_facts_with_everything(0.5)).counterfactual)
     assert "costs_of_the_changes" not in counterfactual
+
+
+@pytest.mark.parametrize(("costs", "with_cost"), [(UnitCost(), False), (DataCost(), True)], ids=["unit", "data"])
+def test_the_counterfactual_lists_the_other_plans_with_their_own_claim(costs: CostStrategy, *, with_cost: bool) -> None:
+    facts = _text_facts_with_everything(0.5)
+    first = facts.counterfactuals[0]
+    other = attrs.evolve(first, minimality=MinimalityStatus.UNPROVED, cost=3.0)
+    facts = attrs.evolve(facts, counterfactuals=[first, other], recourse=RecourseOptions(costs=costs, plans=2))
+    counterfactual = orjson.loads(local_text.facts_to_texts(facts).counterfactual)
+    (plan,) = counterfactual["other_plans"]
+    assert plan["number_of_changes"] == 1
+    assert plan["is_cheapest_without_the_changes_of_earlier_plans"] is False
+    assert ("total_cost" in plan) is with_cost
+
+
+def test_the_counterfactual_lists_no_other_plan_for_one_plan() -> None:
+    counterfactual = orjson.loads(local_text.facts_to_texts(_text_facts_with_everything(0.5)).counterfactual)
+    assert "other_plans" not in counterfactual

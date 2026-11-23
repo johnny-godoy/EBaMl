@@ -10,10 +10,10 @@ from collections.abc import Mapping
 import attrs
 import orjson
 
-from ebaml.core.custom_types import JSONMapping, JSONObject
+from ebaml.core.custom_types import JSONMapping, JSONObject, JSONValue
 from ebaml.local.audience import Audience, Layperson
 from ebaml.local.costs import UnitCost
-from ebaml.local.fact_types import LocalFacts
+from ebaml.local.fact_types import Counterfactual, LocalFacts
 from ebaml.local.local_kinds import OutputKind
 
 
@@ -39,6 +39,34 @@ _DECISION_KEYS: Mapping[OutputKind, str] = {
 }
 
 _DEFAULT_AUDIENCE = Layperson()
+
+
+def _changes(plan: Counterfactual, audience: Audience) -> list[JSONValue]:
+    return [{"feature": c.feature, "from": c.from_value, "to": c.to_value} | audience.change(c) for c in plan.changes]
+
+
+def _other_plan(
+    plan: Counterfactual,
+    audience: Audience,
+    *,
+    unit_costs: bool,
+) -> JSONObject:  # nosemgrep: ebaml-return-attrs-not-container -- a fragment of a JSON object
+    """Render a plan after the first: its changes, its cost and whether it is the cheapest after the earlier plans.
+
+    Returns
+    -------
+    JSONObject
+        The keys of the plan.
+
+    """
+    other: JSONObject = {
+        "changes": _changes(plan, audience),
+        "number_of_changes": len(plan.changes),
+        "is_cheapest_without_the_changes_of_earlier_plans": plan.minimality.is_optimal,
+    }
+    if not unit_costs:
+        other["total_cost"] = round(plan.cost, 4)
+    return other
 
 
 def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) -> FactTexts:
@@ -69,14 +97,15 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     prediction |= audience.prediction(p, facts.confidence_level)
 
     cf = facts.counterfactual
+    unit_costs = facts.recourse.costs == UnitCost()
     counterfactual: JSONObject = {"flip_possible": cf is not None}
     if cf is not None:
-        counterfactual["changes"] = [
-            {"feature": c.feature, "from": c.from_value, "to": c.to_value} | audience.change(c) for c in cf.changes
-        ]
+        counterfactual["changes"] = _changes(cf, audience)
         counterfactual["number_of_changes"] = len(cf.changes)
-        counterfactual["is_smallest_set"] = cf.minimality.is_smallest
-        counterfactual |= audience.lower_bound(cf.lower_bound, "changes")
+        counterfactual["is_smallest_set"] = cf.minimality.is_optimal
+        # with unit costs the bound of the cost is a number of changes; with other costs it says nothing about them
+        if unit_costs:
+            counterfactual |= audience.lower_bound(round(cf.cost_lower_bound), "changes")
         # the class after the changes and its probability share one object, so the LLM cannot read the probability
         # as one of the old class
         counterfactual["after_the_changes"] = {decision_key: cf.new_decision} | audience.class_output(
@@ -93,19 +122,23 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     if facts.recourse.allowed:
         counterfactual["allowed_values"] = facts.recourse.describe()
     # with other costs than the default, the plan is the cheapest one and not the smallest, so the facts say so
-    if facts.recourse.costs != UnitCost():
+    if not unit_costs:
         counterfactual["costs_of_the_changes"] = facts.recourse.costs.describe()
         if cf is not None:
             counterfactual["total_cost"] = round(cf.cost, 4)
     if facts.recourse.max_changes is not None:
         counterfactual["max_changes"] = facts.recourse.max_changes
+    if len(facts.counterfactuals) > 1:
+        counterfactual["other_plans"] = [
+            _other_plan(plan, audience, unit_costs=unit_costs) for plan in facts.counterfactuals[1:]
+        ]
 
     all_names = [c.feature for c in facts.contributions]
     sr = facts.sufficient_reason
     sufficient: JSONObject = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
-        sufficient["is_smallest_set"] = sr.minimality.is_smallest
+        sufficient["is_smallest_set"] = sr.minimality.is_optimal
         sufficient |= audience.lower_bound(sr.lower_bound, "features")
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)

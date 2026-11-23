@@ -274,11 +274,11 @@ def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
     assert counterfactual is not None
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert len(counterfactual.changes) >= smallest
-    assert counterfactual.lower_bound <= smallest
-    if counterfactual.minimality.is_smallest:
+    assert counterfactual.cost_lower_bound <= smallest
+    if counterfactual.minimality.is_optimal:
         assert len(counterfactual.changes) == smallest
     if isinstance(search, MipCover) and search.stop is Stop.OPTIMAL:
-        assert counterfactual.minimality.is_smallest
+        assert counterfactual.minimality.is_optimal
         assert len(counterfactual.changes) == smallest
 
 
@@ -313,13 +313,18 @@ def test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest
     totals = counterfactuals_module.Totals(scores, intercepts, 0.0)
     assert _brute_force_target_size(features, scores, 0) == 1
     options = fact_types_module.LocalOptions(search=MipCover(OrToolsBackend(solver)), target_class="c0")
-    counterfactual = counterfactuals_module.choose_counterfactual(features, frame, totals, kind=kind, options=options)
-    assert counterfactual is not None
+    (counterfactual,) = counterfactuals_module.choose_counterfactuals(
+        features,
+        frame,
+        totals,
+        kind=kind,
+        options=options,
+    )
     assert counterfactual.new_decision == "c0"
     assert [(change.feature, change.to_value) for change in counterfactual.changes] == [("f0", "f01")]
     # one change reaches the lower bound of 1, so no proof of the solver is needed
     assert counterfactual.minimality is MinimalityStatus.AT_LOWER_BOUND
-    assert counterfactual.lower_bound == 1
+    assert counterfactual.cost_lower_bound == pytest.approx(1.0)
 
 
 def test_a_target_class_is_none_when_no_choice_of_bins_reaches_it() -> None:
@@ -361,7 +366,7 @@ def test_counterfactual_changes_the_biggest_drop_first() -> None:
         after=probability_after,
     )
     assert counterfactual is not None
-    assert counterfactual.changes == [fact_types_module.Change("f1", "f10", "f11", -3.0)]
+    assert counterfactual.changes == [fact_types_module.Change("f1", "f10", "f11", -3.0, 1)]
     # the new logit is 0.5 + 1.5 - 3 = -1, so the new class (negative) has the probability sigmoid(1)
     assert counterfactual.new_output == pytest.approx(sig(1.0))
 
@@ -376,7 +381,7 @@ def test_counterfactual_of_the_negative_class() -> None:
         after=probability_after,
     )
     assert counterfactual is not None
-    assert counterfactual.changes == [fact_types_module.Change("f1", "f10", "f11", 3.0)]
+    assert counterfactual.changes == [fact_types_module.Change("f1", "f10", "f11", 3.0, 1)]
     assert counterfactual.new_output == pytest.approx(sig(1.0))  # the new logit is +1
 
 
@@ -555,13 +560,13 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     counterfactual = facts.counterfactual
     assert counterfactual is not None
     assert counterfactual.new_decision == 2
-    assert (len(counterfactual.changes), counterfactual.lower_bound, counterfactual.minimality) == (
+    assert (len(counterfactual.changes), counterfactual.cost_lower_bound, counterfactual.minimality) == (
         2,
         lower_bound,
         status,
     )
     expert = orjson.loads(facts_to_texts(facts, DataScientist()).counterfactual)
-    assert expert["is_smallest_set"] is status.is_smallest
+    assert expert["is_smallest_set"] is status.is_optimal
     assert expert["smallest_possible_number_of_changes"] == lower_bound
     # the default counterfactual of the same instance is one margin at a time, so sorting proves it
     default = facts_module.compute_local_facts(
@@ -582,15 +587,14 @@ def test_a_cap_below_the_fewest_changes_proves_that_no_plan_exists() -> None:
     frame = kind.frame(scores, [0.0], intercepts=[-1.0], confidence_level=0.0, decision=None)
     totals = counterfactuals_module.Totals(scores, [-1.0], 0.0)
 
-    def plan(max_changes: int) -> Counterfactual | None:
+    def plans(max_changes: int) -> list[Counterfactual]:
         options = fact_types_module.LocalOptions(recourse=RecourseOptions(max_changes=max_changes))
-        return counterfactuals_module.choose_counterfactual(features, frame, totals, kind=kind, options=options)
+        return counterfactuals_module.choose_counterfactuals(features, frame, totals, kind=kind, options=options)
 
-    two = plan(2)
-    assert two is not None
+    (two,) = plans(2)
     assert len(two.changes) == 2
     assert two.cost == pytest.approx(2.0)
-    assert plan(1) is None
+    assert plans(1) == []
 
 
 def test_equal_costs_other_than_one_keep_the_sorting_search_and_scale_the_cost() -> None:
@@ -626,3 +630,34 @@ def test_a_target_counterfactual_with_costs_reaches_the_target_class(row: int, t
         return
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert counterfactual.cost == sum(names.index(change.feature) + 1.0 for change in counterfactual.changes)
+
+
+def test_an_unproved_plan_with_costs_bounds_its_cost_by_its_size_times_the_cheapest_change() -> None:
+    features = [hand("a", [1.0, 0.0]), hand("b", [1.0, 0.0]), hand("c", [0.5, 0.0])]
+    kind = BinaryLocal(("no", "yes"))
+    scores = [-1.0 + sum(feature.current for feature in features)]
+    frame = kind.frame(scores, [0.0], intercepts=[-1.0], confidence_level=0.0, decision=None)
+    totals = counterfactuals_module.Totals(scores, [-1.0], 0.0)
+    costs = UserCost(per_feature={"a": 2.0, "b": 3.0, "c": 5.0})
+    options = fact_types_module.LocalOptions(search=GreedyCover(), recourse=RecourseOptions(costs=costs))
+    (plan,) = counterfactuals_module.choose_counterfactuals(features, frame, totals, kind=kind, options=options)
+    assert plan.minimality is MinimalityStatus.UNPROVED
+    # the greedy proves nothing about the cost; a plan has at least one change, which costs at least 2
+    assert plan.cost_lower_bound == pytest.approx(2.0)
+
+
+def test_diverse_plans_stop_when_no_further_plan_exists() -> None:
+    # one feature with one other bin: the second plan would need the same pick, which the first plan excludes
+    features = [hand("a", [1.0, -1.0])]
+    kind = BinaryLocal(("no", "yes"))
+    scores = [-0.5 + features[0].current]
+    frame = kind.frame(scores, [0.0], intercepts=[-0.5], confidence_level=0.0, decision=None)
+    totals = counterfactuals_module.Totals(scores, [-0.5], 0.0)
+    options = fact_types_module.LocalOptions(recourse=RecourseOptions(plans=3))
+    plans = counterfactuals_module.choose_counterfactuals(features, frame, totals, kind=kind, options=options)
+    assert [change.to_bin for plan in plans for change in plan.changes] == [1]
+
+
+def test_the_number_of_plans_is_at_least_one() -> None:
+    with pytest.raises(ValueError, match="plans"):
+        RecourseOptions(plans=0)

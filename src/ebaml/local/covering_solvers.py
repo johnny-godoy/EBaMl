@@ -311,7 +311,7 @@ class LocalSearchCover:
     ...     [-1.5, -2.5, -3.5], [[[2.0, 2.0, 0.0]], [[2.0, 0.0, 2.0]], [[1.0, 2.0, 3.0]], [[0.0, 3.0, 3.0]]]
     ... )
     >>> cover = LocalSearchCover().solve(problem, seed=0)
-    >>> [choice.group for choice in cover.choices], cover.minimality.is_smallest
+    >>> [choice.group for choice in cover.choices], cover.minimality.is_optimal
     ([1, 3], True)
 
     """
@@ -377,7 +377,7 @@ class MipCover:
     Examples
     --------
     >>> cover = MipCover().solve(CoveringProblem([-1.0, -1.0], [[[2.0, 0.0]], [[0.0, 2.0]]]), seed=0)
-    >>> [choice.group for choice in cover.choices], cover.minimality.is_smallest
+    >>> [choice.group for choice in cover.choices], cover.minimality.is_optimal
     ([0, 1], True)
 
     """

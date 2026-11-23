@@ -130,10 +130,11 @@
       "feature: <class 'str'>",
       "from_value: <class 'str'>",
       "to_value: <class 'str'>",
-      "score_change: <class 'float'>"
+      "score_change: <class 'float'>",
+      "to_bin: <class 'int'>"
     ],
     "kind": "class",
-    "signature": "(feature: str, from_value: str, to_value: str, score_change: float) -> None"
+    "signature": "(feature: str, from_value: str, to_value: str, score_change: float, to_bin: int) -> None"
   },
   "Choice": {
     "bases": [
@@ -246,11 +247,11 @@
       "new_decision: ClassLabel",
       "new_output: <class 'float'>",
       "minimality: <enum 'MinimalityStatus'>",
-      "lower_bound: <class 'int'>",
-      "cost: <class 'float'>"
+      "cost: <class 'float'>",
+      "cost_lower_bound: <class 'float'>"
     ],
     "kind": "class",
-    "signature": "(changes: list[ebaml.local.fact_types.Change], new_decision: ClassLabel, new_output: float, minimality: ebaml.local.minimality.MinimalityStatus, lower_bound: int, cost: float) -> None"
+    "signature": "(changes: list[ebaml.local.fact_types.Change], new_decision: ClassLabel, new_output: float, minimality: ebaml.local.minimality.MinimalityStatus, cost: float, cost_lower_bound: float) -> None"
   },
   "Cover": {
     "bases": [
@@ -871,7 +872,7 @@
     "fields": [
       "prediction: <class 'ebaml.local.fact_types.Prediction'>",
       "contributions: list[ebaml.local.fact_types.Contribution]",
-      "counterfactual: ebaml.local.fact_types.Counterfactual | None",
+      "counterfactuals: list[ebaml.local.fact_types.Counterfactual]",
       "sufficient_reason: ebaml.local.fact_types.SufficientReason | None",
       "completions: list[ebaml.local.fact_types.CompletionStep]",
       "confidence_level: <class 'float'>",
@@ -880,7 +881,7 @@
       "recourse: <class 'ebaml.local.recourse.RecourseOptions'>"
     ],
     "kind": "class",
-    "signature": "(prediction: ebaml.local.fact_types.Prediction, contributions: list[ebaml.local.fact_types.Contribution], counterfactual: ebaml.local.fact_types.Counterfactual | None, sufficient_reason: ebaml.local.fact_types.SufficientReason | None, completions: list[ebaml.local.fact_types.CompletionStep], confidence_level: float, min_support: float, n_samples: int, recourse: ebaml.local.recourse.RecourseOptions = NOTHING) -> None"
+    "signature": "(prediction: ebaml.local.fact_types.Prediction, contributions: list[ebaml.local.fact_types.Contribution], counterfactuals: list[ebaml.local.fact_types.Counterfactual], sufficient_reason: ebaml.local.fact_types.SufficientReason | None, completions: list[ebaml.local.fact_types.CompletionStep], confidence_level: float, min_support: float, n_samples: int, recourse: ebaml.local.recourse.RecourseOptions = NOTHING) -> None"
   },
   "LocalOptions": {
     "bases": [
@@ -1249,10 +1250,11 @@
       "immutable: tuple[str, ...]",
       "allowed: collections.abc.Mapping[str, AllowedValues]",
       "costs: <class 'ebaml.local.costs.CostStrategy'>",
-      "max_changes: int | None"
+      "max_changes: int | None",
+      "plans: <class 'int'>"
     ],
     "kind": "class",
-    "signature": "(immutable: collections.abc.Collection[str] = NOTHING, allowed=NOTHING, costs: ebaml.local.costs.CostStrategy = NOTHING, max_changes: int | None = None) -> None"
+    "signature": "(immutable: collections.abc.Collection[str] = NOTHING, allowed=NOTHING, costs: ebaml.local.costs.CostStrategy = NOTHING, max_changes: int | None = None, plans: int = 1) -> None"
   },
   "Regressor": {
     "bases": [
