@@ -255,7 +255,9 @@ async def _(confidence_slider, data_file, model_file, open_session, orjson, row_
 @app.cell
 def _(facts, mo):
     prediction = facts["prediction"]
-    changes = facts["counterfactual"]["changes"]
+    # the first plan is the cheapest one; an empty list means that no plan exists
+    plans = facts["counterfactuals"]
+    changes = plans[0]["changes"] if plans else []
     mo.md(f"""
     The model predicts the class **{prediction["decision"]}** with a probability of **{prediction["output"]:.3f}**
     (interval {prediction["lower"]:.3f} to {prediction["upper"]:.3f}).

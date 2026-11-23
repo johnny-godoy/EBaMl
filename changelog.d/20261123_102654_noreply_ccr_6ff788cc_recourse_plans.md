@@ -8,3 +8,4 @@
 - **BREAKING:** `MinimalityStatus.is_smallest` is renamed `is_optimal`, because with costs the claim is the cheapest plan, not the smallest set.
 - **BREAKING:** `Counterfactual.lower_bound` (a number of changes) is replaced by `Counterfactual.cost_lower_bound` (a cost that no plan beats).
 - **BREAKING:** `Change` has the new required field `to_bin`, the index of the new bin.
+- **BREAKING:** The facts of the MCP tool `explain_prediction` hold the list `counterfactuals` in place of `counterfactual`.
