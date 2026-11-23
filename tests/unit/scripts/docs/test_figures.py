@@ -53,8 +53,8 @@ def test_the_applicant_is_denied_with_a_counterfactual_of_one_change_and_a_suffi
     applicant = data.features.row(figures.APPLICANT_ROW, named=True)
     facts = compute_local_facts(figures.fit_loan_model(data), applicant)
     assert facts.prediction.decision == figures.DENIED
-    assert facts.counterfactual is not None
-    assert len(facts.counterfactual.changes) == 1
+    assert facts.counterfactuals
+    assert len(facts.counterfactuals[0].changes) == 1
     assert facts.sufficient_reason is not None
 
 

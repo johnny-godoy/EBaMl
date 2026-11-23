@@ -96,13 +96,14 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     ]
     prediction |= audience.prediction(p, facts.confidence_level)
 
-    cf = facts.counterfactual
+    # the first plan is the cheapest one; the others follow as other_plans
+    cf = facts.counterfactuals[0] if facts.counterfactuals else None
     unit_costs = facts.recourse.costs == UnitCost()
     counterfactual: JSONObject = {"flip_possible": cf is not None}
     if cf is not None:
         counterfactual["changes"] = _changes(cf, audience)
         counterfactual["number_of_changes"] = len(cf.changes)
-        counterfactual["is_smallest_set"] = cf.minimality.is_optimal
+        counterfactual["is_optimal"] = cf.minimality.is_optimal
         # with unit costs the bound of the cost is a number of changes; with other costs it says nothing about them
         if unit_costs:
             counterfactual |= audience.lower_bound(round(cf.cost_lower_bound), "changes")
@@ -138,7 +139,7 @@ def facts_to_texts(facts: LocalFacts, audience: Audience = _DEFAULT_AUDIENCE) ->
     sufficient: JSONObject = {"exists": sr is not None}
     if sr is not None:
         sufficient["features"] = sr.features
-        sufficient["is_smallest_set"] = sr.minimality.is_optimal
+        sufficient["is_optimal"] = sr.minimality.is_optimal
         sufficient |= audience.lower_bound(sr.lower_bound, "features")
         sufficient["features_not_needed"] = [f for f in all_names if f not in sr.features]
         sufficient |= audience.margin(sr, p.output_kind)

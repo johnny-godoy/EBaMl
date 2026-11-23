@@ -261,8 +261,3 @@ class LocalFacts:
     min_support: float
     n_samples: int
     recourse: RecourseOptions = attrs.field(factory=RecourseOptions)
-
-    @property
-    def counterfactual(self) -> Counterfactual | None:
-        """The first plan of ``counterfactuals``: the cheapest one, or ``None`` if no plan exists."""
-        return self.counterfactuals[0] if self.counterfactuals else None
