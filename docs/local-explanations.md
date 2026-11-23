@@ -84,14 +84,14 @@ multiclass classifier, the answer "inside" of an interval) and the counterfactua
 | `AT_LOWER_BOUND` | The set has as many members as the lower bound, so no smaller set exists. The bound rests on the LP solver. |
 | `UNPROVED` | The search found a set, but it did not prove that the set is the smallest. A smaller set can exist. |
 
-`MinimalityStatus.is_optimal` is false only for `UNPROVED`. It means the smallest set, or the cheapest plan when the changes have costs. The prompts read this boolean as `is_smallest_set`.
+`MinimalityStatus.is_optimal` is false only for `UNPROVED`. It means the smallest set, or the cheapest plan when the changes have costs. The prompts read this boolean as `is_optimal`.
 
 ### Counterfactual
 
 For each feature, take its best alternative value: the one that lowers the score in favour of the current prediction
 the most. Sort these drops from largest to smallest and apply them until the prediction flips. Because the effects
 add up independently, the *k* largest drops are the best *k* changes, so the first set that flips is the smallest
-possible. If even changing every feature does not flip it, `facts.counterfactual` is `None`.
+possible. If even changing every feature does not flip it, `facts.counterfactuals` is empty.
 
 ### Sufficient reason
 
@@ -153,13 +153,13 @@ no score, so no claim covers the uncertainty of the model.
 | `prediction.margin` | The log-odds of the predicted class. It is positive for every prediction. | The distance of the value from the threshold, on the side of the decision. |
 | `prediction.threshold` | `0`: the log-odds at which the class changes. | The threshold of the question. |
 | `prediction.output_kind` | `OutputKind.PROBABILITY` | `OutputKind.VALUE` |
-| `counterfactuals` | The plans, cheapest first (see [Several plans](#several-plans)). `counterfactual` is the first one, or `None`. | The same. |
-| `counterfactual.changes` | The changes, as `Change(feature, from_value, to_value, score_change, to_bin)`. | The same. |
-| `counterfactual.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
+| `counterfactuals` | The plans, cheapest first (see [Several plans](#several-plans)). The list is empty when no plan exists. Each `plan` of the list has the fields below. | The same. |
+| `plan.changes` | The changes, as `Change(feature, from_value, to_value, score_change, to_bin)`. | The same. |
+| `plan.new_decision`, `new_output` | The class after the changes, and its probability. | The opposite answer, and the predicted value after the changes. |
 | `sufficient_reason.features` | The features that fix the prediction. | The features that fix the answer. |
 | `sufficient_reason.guaranteed_margin` | The worst case of the log-odds of the predicted class with these features fixed. | The worst case of the distance from the threshold, with these features fixed. |
-| `counterfactual.minimality`, `sufficient_reason.minimality` | A `MinimalityStatus`: `SORTING_PROOF`, `SOLVER_PROOF`, `AT_LOWER_BOUND` or `UNPROVED`. It is always `SORTING_PROOF` for one margin. | The same. It can be `UNPROVED` for the answer "inside" of an interval. |
-| `counterfactual.cost`, `counterfactual.cost_lower_bound` | The cost of the plan, and a cost that no plan beats. With the default costs, the cost is the number of changes. | The same. |
+| `plan.minimality`, `sufficient_reason.minimality` | A `MinimalityStatus`: `SORTING_PROOF`, `SOLVER_PROOF`, `AT_LOWER_BOUND` or `UNPROVED`. It is always `SORTING_PROOF` for one margin. | The same. It can be `UNPROVED` for the answer "inside" of an interval. |
+| `plan.cost`, `plan.cost_lower_bound` | The cost of the plan, and a cost that no plan beats. With the default costs, the cost is the number of changes. | The same. |
 | `sufficient_reason.lower_bound` | No set has fewer members than this number. | The same. |
 | `completions` | One `CompletionStep(fixed, share)` for each step. | The same. |
 
@@ -173,8 +173,8 @@ instance = X.iloc[0].to_dict()
 ```python
 facts = compute_local_facts(ebm, instance)
 print(facts.prediction.decision, round(facts.prediction.output, 2))
-if facts.counterfactual is not None:
-    print(facts.counterfactual.new_decision, [change.feature for change in facts.counterfactual.changes])
+for plan in facts.counterfactuals:
+    print(plan.new_decision, [change.feature for change in plan.changes])
 ```
 
 ## Regressors
@@ -282,7 +282,7 @@ To ask for the changes that lead to another class, pass that class as `target_cl
 
 ```python
 other = next(label for label in multiclass.classes_ if label != facts.prediction.decision)
-print(compute_local_facts(multiclass, instance, LocalOptions(target_class=other)).counterfactual)
+print(compute_local_facts(multiclass, instance, LocalOptions(target_class=other)).counterfactuals)
 ```
 
 A multiclass classifier accepts no `decision`. The [proof page](local-explanations-proof.md) lists the claims that the
@@ -307,8 +307,8 @@ from ebaml import RecourseOptions, ValueRange
 
 recourse = RecourseOptions(immutable=["age"], allowed={"fare": ValueRange(high=300, match="inside")})
 limited = compute_local_facts(ebm, instance, LocalOptions(recourse=recourse))
-if limited.counterfactual is not None:
-    print([change.feature for change in limited.counterfactual.changes])
+for plan in limited.counterfactuals:
+    print([change.feature for change in plan.changes])
 ```
 
 The counterfactual is then the fewest changes among the changes that the limits allow, and it never changes an
@@ -339,8 +339,7 @@ costs, `LocalOptions.search` finds it: `MipCover` proves the cheapest plan unles
 from ebaml import UserCost
 
 costly = RecourseOptions(costs=UserCost(per_feature={"fare": 3.0}), max_changes=2)
-plan = compute_local_facts(ebm, instance, LocalOptions(recourse=costly)).counterfactual
-if plan is not None:
+for plan in compute_local_facts(ebm, instance, LocalOptions(recourse=costly)).counterfactuals:
     print([change.feature for change in plan.changes], plan.cost)
 ```
 
@@ -478,7 +477,7 @@ print(texts.counterfactual)
     {"feature": "sex", "from": "male", "to": "female", "score_change": 2.437}
   ],
   "number_of_changes": 1,
-  "is_smallest_set": true,
+  "is_optimal": true,
   "after_the_changes": {"predicted_class": 1, "probability": 0.589},
   "flip_holds_at_confidence": 0.95,
   "rare_values_left_out": true,
@@ -493,7 +492,7 @@ For a layperson, the same fact has no scores and no confidence level, and the pr
   "flip_possible": true,
   "changes": [{"feature": "sex", "from": "male", "to": "female"}],
   "number_of_changes": 1,
-  "is_smallest_set": true,
+  "is_optimal": true,
   "after_the_changes": {"predicted_class": 1, "likelihood": "about as likely as not"},
   "flip_holds_even_if_the_model_is_somewhat_off": true,
   "rare_values_left_out": true

@@ -67,8 +67,8 @@ def test_counterfactual_really_flips(categorical_ebm: FittedClassifier) -> None:
         row,
         fact_types_module.LocalOptions(confidence_level=0, min_support=0),
     )
-    assert facts.counterfactual is not None
-    changed = {**row, **{c.feature: c.to_value for c in facts.counterfactual.changes}}
+    assert facts.counterfactuals
+    changed = {**row, **{c.feature: c.to_value for c in facts.counterfactuals[0].changes}}
     assert ebm.predict(frame_of_rows([changed]))[0] != ebm.predict(frame_of_rows([row]))[0]
 
 
@@ -110,16 +110,19 @@ def test_multiclass_counterfactual_changes_the_predicted_class(row: int) -> None
         instance,
         fact_types_module.LocalOptions(confidence_level=0.0, min_support=0.0),
     )
-    if facts.counterfactual is None:
+    if not facts.counterfactuals:
         return
     changed = {
         **instance,
-        **{change.feature: float(change.to_value.strip("[)").split(",")[0]) for change in facts.counterfactual.changes},
+        **{
+            change.feature: float(change.to_value.strip("[)").split(",")[0])
+            for change in facts.counterfactuals[0].changes
+        },
     }
     after = model.predict_proba(frame_of_rows([changed]))[0]
-    assert model.classes_[int(np.argmax(after))] == facts.counterfactual.new_decision
-    assert facts.counterfactual.new_decision != facts.prediction.decision
-    assert facts.counterfactual.new_output == pytest.approx(float(after.max()), abs=1e-6)
+    assert model.classes_[int(np.argmax(after))] == facts.counterfactuals[0].new_decision
+    assert facts.counterfactuals[0].new_decision != facts.prediction.decision
+    assert facts.counterfactuals[0].new_output == pytest.approx(float(after.max()), abs=1e-6)
 
 
 def _changed_row(instance: dict[str, FeatureValue], counterfactual: fact_types_module.Counterfactual) -> PandasFrame:
@@ -151,9 +154,9 @@ def test_a_target_counterfactual_reaches_the_target_class(row: int, target: int)
         target_class=int(model.classes_[target]),
     )
     facts = facts_module.compute_local_facts(model, instance, options)
-    if facts.counterfactual is None:
+    if not facts.counterfactuals:
         return
-    counterfactual = facts.counterfactual
+    (counterfactual,) = facts.counterfactuals
     assert counterfactual.new_decision == model.classes_[target]
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert 1 <= len(counterfactual.changes) <= 3
@@ -175,10 +178,10 @@ def test_a_target_counterfactual_changes_no_immutable_feature(row: int, target: 
         recourse=RecourseOptions(immutable=[name]),
     )
     facts = facts_module.compute_local_facts(model, instance, options)
-    if facts.counterfactual is None:
+    if not facts.counterfactuals:
         return
-    assert name not in [change.feature for change in facts.counterfactual.changes]
-    assert model.predict(_changed_row(instance, facts.counterfactual))[0] == model.classes_[target]
+    assert name not in [change.feature for change in facts.counterfactuals[0].changes]
+    assert model.predict(_changed_row(instance, facts.counterfactuals[0]))[0] == model.classes_[target]
 
 
 @settings(max_examples=40, deadline=None)
@@ -193,9 +196,9 @@ def test_a_target_counterfactual_has_no_feature_to_revert(row: int, target: int)
         min_support=0.0,
         target_class=int(model.classes_[target]),
     )
-    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
-    assume(counterfactual is not None)
-    assert counterfactual is not None
+    plans = facts_module.compute_local_facts(model, instance, options).counterfactuals
+    assume(plans)
+    (counterfactual,) = plans
     for change in counterfactual.changes:
         fewer = attrs.evolve(counterfactual, changes=[other for other in counterfactual.changes if other != change])
         assert model.predict(_changed_row(instance, fewer))[0] != model.classes_[target]
@@ -263,15 +266,15 @@ def test_a_target_counterfactual_is_the_smallest_over_every_choice_of_bins(
         target_class=int(model.classes_[target]),
         search=search,
     )
-    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
+    plans = facts_module.compute_local_facts(model, instance, options).counterfactuals
     features = fact_features_module.read_features(model, instance, 0.0)
     logits: np.ndarray = model.decision_function(frame.iloc[[row]])
     scores: list[float] = logits[0].tolist()
     smallest = _brute_force_target_size(features, scores, target)
     if smallest is None:
-        assert counterfactual is None
+        assert plans == []
         return
-    assert counterfactual is not None
+    (counterfactual,) = plans
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert len(counterfactual.changes) >= smallest
     assert counterfactual.cost_lower_bound <= smallest
@@ -338,7 +341,7 @@ def test_a_target_class_is_none_when_no_choice_of_bins_reaches_it() -> None:
         target_class=int(model.classes_[target]),
     )
     facts = facts_module.compute_local_facts(model, instance_of(frame, row), options)
-    assert facts.counterfactual is None
+    assert not facts.counterfactuals
 
 
 def test_a_target_class_that_the_model_does_not_have_is_rejected() -> None:
@@ -517,11 +520,11 @@ def test_regressor_counterfactual_gives_the_new_value(
         row,
         fact_types_module.LocalOptions(confidence_level=0, min_support=0, decision=Threshold(0.5)),
     )
-    assert facts.counterfactual is not None
-    assert facts.counterfactual.new_decision == "at most 0.5"
-    changed = {**row, **{c.feature: c.to_value for c in facts.counterfactual.changes}}
+    assert facts.counterfactuals
+    assert facts.counterfactuals[0].new_decision == "at most 0.5"
+    changed = {**row, **{c.feature: c.to_value for c in facts.counterfactuals[0].changes}}
     new_value = float(ebm.predict(frame_of_rows([changed]))[0])
-    assert facts.counterfactual.new_output == pytest.approx(new_value)
+    assert facts.counterfactuals[0].new_output == pytest.approx(new_value)
     assert new_value <= 0.5
 
 
@@ -557,8 +560,7 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
     ebm = build_ebm(small_templates, TWO_CHANGES_MODEL)
     options = fact_types_module.LocalOptions(confidence_level=0, min_support=0, target_class=2, search=search)
     facts = facts_module.compute_local_facts(ebm, TWO_CHANGES_MODEL.instance, options)
-    counterfactual = facts.counterfactual
-    assert counterfactual is not None
+    (counterfactual,) = facts.counterfactuals
     assert counterfactual.new_decision == 2
     assert (len(counterfactual.changes), counterfactual.cost_lower_bound, counterfactual.minimality) == (
         2,
@@ -566,7 +568,7 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
         status,
     )
     expert = orjson.loads(facts_to_texts(facts, DataScientist()).counterfactual)
-    assert expert["is_smallest_set"] is status.is_optimal
+    assert expert["is_optimal"] is status.is_optimal
     assert expert["smallest_possible_number_of_changes"] == lower_bound
     # the default counterfactual of the same instance is one margin at a time, so sorting proves it
     default = facts_module.compute_local_facts(
@@ -574,8 +576,8 @@ def test_a_counterfactual_of_a_target_class_reports_the_guarantee_of_its_search(
         TWO_CHANGES_MODEL.instance,
         attrs.evolve(options, target_class=None),
     )
-    assert default.counterfactual is not None
-    assert default.counterfactual.minimality is SORTING
+    assert default.counterfactuals
+    assert default.counterfactuals[0].minimality is SORTING
 
 
 def test_a_cap_below_the_fewest_changes_proves_that_no_plan_exists() -> None:
@@ -604,8 +606,7 @@ def test_equal_costs_other_than_one_keep_the_sorting_search_and_scale_the_cost()
         confidence_level=0.0,
         recourse=RecourseOptions(costs=UserCost(default=3.0)),
     )
-    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
-    assert counterfactual is not None
+    (counterfactual,) = facts_module.compute_local_facts(model, instance, options).counterfactuals
     assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
     assert counterfactual.cost == pytest.approx(3.0 * len(counterfactual.changes))
 
@@ -625,9 +626,10 @@ def test_a_target_counterfactual_with_costs_reaches_the_target_class(row: int, t
         target_class=int(model.classes_[target]),
         recourse=RecourseOptions(costs=costs),
     )
-    counterfactual = facts_module.compute_local_facts(model, instance, options).counterfactual
-    if counterfactual is None:
+    plans = facts_module.compute_local_facts(model, instance, options).counterfactuals
+    if not plans:
         return
+    (counterfactual,) = plans
     assert model.predict(_changed_row(instance, counterfactual))[0] == model.classes_[target]
     assert counterfactual.cost == sum(names.index(change.feature) + 1.0 for change in counterfactual.changes)
 

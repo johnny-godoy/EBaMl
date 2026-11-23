@@ -68,7 +68,7 @@ confidence intervals of the EBM. For a data scientist, the facts of the first tw
 --8<-- "docs/generated/sufficient-reason.json"
 ```
 
-`is_smallest_set` says that no smaller set of features works. The [proof of the local
+`is_optimal` says that no smaller set of features works. The [proof of the local
 explanations](local-explanations-proof.md) shows this for the search of the code. The LLM only puts the facts into words.
 For a layperson, the facts have no scores, and the probabilities become words:
 

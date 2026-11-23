@@ -180,7 +180,7 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "ch": "f0"}],
         "number_of_changes": 1,
-        "is_smallest_set": True,
+        "is_optimal": True,
         "lb_changes": 1,
         "after_the_changes": {"predicted_class": 1, "co": 0.7},
         "fl": True,
@@ -189,7 +189,7 @@ def test_a_custom_audience_decides_the_keys_of_every_fact() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
-        "is_smallest_set": True,
+        "is_optimal": True,
         "lb_features": 1,
         "features_not_needed": ["f1"],
         "m": ["f0"],
@@ -244,7 +244,7 @@ def test_layperson_text_of_the_explanations() -> None:
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)"}],
         "number_of_changes": 1,
-        "is_smallest_set": True,
+        "is_optimal": True,
         "after_the_changes": {"predicted_class": 1, "likelihood": "likely"},
         "flip_holds_even_if_the_model_is_somewhat_off": True,
         "rare_values_left_out": True,
@@ -252,7 +252,7 @@ def test_layperson_text_of_the_explanations() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
-        "is_smallest_set": True,
+        "is_optimal": True,
         "features_not_needed": ["f1"],
         "guarantee_holds_even_if_the_model_is_somewhat_off": True,
         "rare_values_left_out": True,
@@ -272,7 +272,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
         "flip_possible": True,
         "changes": [{"feature": "f0", "from": "1", "to": "[2, 3)", "score_change": -0.123}],
         "number_of_changes": 1,
-        "is_smallest_set": True,
+        "is_optimal": True,
         "smallest_possible_number_of_changes": 1,
         "after_the_changes": {"predicted_class": 1, "probability": 0.7},
         "flip_holds_at_confidence": 0.95,
@@ -282,7 +282,7 @@ def test_data_scientist_text_of_the_explanations() -> None:
     assert orjson.loads(texts.sufficient_reason) == {
         "exists": True,
         "features": ["f0"],
-        "is_smallest_set": True,
+        "is_optimal": True,
         "smallest_possible_number_of_features": 1,
         "features_not_needed": ["f1"],
         "guaranteed_margin_logit": 0.988,
@@ -357,13 +357,13 @@ def test_the_conditions_of_the_facts_follow_the_options() -> None:
 
 def test_a_counterfactual_that_is_not_proved_is_not_called_the_smallest() -> None:
     facts = _text_facts_with_everything(0.95)
-    assert facts.counterfactual is not None
+    assert facts.counterfactuals
     target = attrs.evolve(
         facts,
         counterfactuals=[attrs.evolve(facts.counterfactuals[0], minimality=MinimalityStatus.UNPROVED)],
     )
-    assert orjson.loads(local_text.facts_to_texts(facts).counterfactual)["is_smallest_set"] is True
-    assert orjson.loads(local_text.facts_to_texts(target).counterfactual)["is_smallest_set"] is False
+    assert orjson.loads(local_text.facts_to_texts(facts).counterfactual)["is_optimal"] is True
+    assert orjson.loads(local_text.facts_to_texts(target).counterfactual)["is_optimal"] is False
 
 
 def test_a_minimal_set_is_not_called_the_smallest() -> None:
@@ -372,7 +372,7 @@ def test_a_minimal_set_is_not_called_the_smallest() -> None:
         facts,
         sufficient_reason=local.SufficientReason(["f0"], 0.5, minimality=MinimalityStatus.UNPROVED, lower_bound=1),
     )
-    assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_smallest_set"] is False
+    assert orjson.loads(local_text.facts_to_texts(minimal).sufficient_reason)["is_optimal"] is False
 
 
 @pytest.mark.parametrize(
@@ -384,7 +384,7 @@ def test_a_minimal_set_is_not_called_the_smallest() -> None:
 )
 def test_only_a_data_scientist_gets_the_lower_bound_of_a_set(audience: Audience, keys: set[str]) -> None:
     facts = _text_facts_with_everything(0.95)
-    assert facts.counterfactual is not None
+    assert facts.counterfactuals
     unproved = attrs.evolve(
         facts,
         counterfactuals=[

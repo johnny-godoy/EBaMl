@@ -118,10 +118,10 @@ def test_matches_brute_force(
         fact_types_module.LocalOptions(confidence_level=0, min_support=0),
     )
     flip, sufficient = _brute_force(ebm, row)
-    assert (facts.counterfactual is None) == (flip is None)
+    assert (not facts.counterfactuals) == (flip is None)
     if flip is not None:
-        assert facts.counterfactual is not None
-        assert len(facts.counterfactual.changes) == flip
+        assert facts.counterfactuals
+        assert len(facts.counterfactuals[0].changes) == flip
     assert facts.sufficient_reason is not None
     assert len(facts.sufficient_reason.features) == sufficient
     # the brute force shows that no smaller set is sufficient, which is what minimum claims
@@ -147,8 +147,8 @@ def test_confidence_makes_claims_harder(continuous_ebm: FittedClassifier) -> Non
     assert strict.sufficient_reason is None or len(strict.sufficient_reason.features) >= len(
         loose.sufficient_reason.features,
     )
-    assert loose.counterfactual is not None
-    assert strict.counterfactual is None or len(strict.counterfactual.changes) >= len(loose.counterfactual.changes)
+    assert loose.counterfactuals
+    assert not strict.counterfactuals or len(strict.counterfactuals[0].changes) >= len(loose.counterfactuals[0].changes)
 
 
 @pytest.mark.parametrize(
@@ -268,7 +268,7 @@ def test_multiclass_facts_are_the_smallest_by_brute_force(row: int) -> None:
     expected_flip = _brute_force_counterfactual_size(views)
     expected_reason = _brute_force_reason_size(views)
     assert facts.prediction.decision == model.classes_[winner]
-    assert (None if facts.counterfactual is None else len(facts.counterfactual.changes)) == expected_flip
+    assert [len(plan.changes) for plan in facts.counterfactuals] == ([] if expected_flip is None else [expected_flip])
     assert (None if facts.sufficient_reason is None else len(facts.sufficient_reason.features)) == expected_reason
     if facts.sufficient_reason is not None:
         assert facts.sufficient_reason.minimality.is_optimal
@@ -415,13 +415,14 @@ def test_facts_of_a_positive_prediction(monkeypatch: pytest.MonkeyPatch) -> None
         fact_types_module.Contribution("a", "a0", 1.0, 0.3),
         fact_types_module.Contribution("b", "b0", -0.5, 0.4),
     ]
-    assert facts.counterfactual == counterfactuals_module._counterfactual(
+    expected = counterfactuals_module._counterfactual(
         features,
         0.25,
         1,
         Z95,
         after=lambda margin, _replaced: Outcome("no", probability_after(margin, _replaced).output),
     )
+    assert facts.counterfactuals == ([] if expected is None else [expected])
     assert facts.sufficient_reason == sufficient_reasons_module._sufficient_reason(features, 0.25, 1, Z95)
 
 
@@ -441,13 +442,14 @@ def test_facts_of_a_negative_prediction(monkeypatch: pytest.MonkeyPatch) -> None
     assert prediction.margin == pytest.approx(-logit)
     assert prediction.lower == pytest.approx(1 - sig(logit + z * std))
     assert prediction.upper == pytest.approx(1 - sig(logit - z * std))
-    assert facts.counterfactual == counterfactuals_module._counterfactual(
+    expected = counterfactuals_module._counterfactual(
         features,
         -0.25,
         -1,
         z,
         after=lambda margin, _replaced: Outcome("yes", probability_after(margin, _replaced).output),
     )
+    assert facts.counterfactuals == ([] if expected is None else [expected])
 
 
 def test_facts_of_a_prediction_on_the_edge(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -456,9 +458,9 @@ def test_facts_of_a_prediction_on_the_edge(monkeypatch: pytest.MonkeyPatch) -> N
     facts = facts_module.compute_local_facts(_hand_model(0.0), {}, fact_types_module.LocalOptions(confidence_level=0))
     assert (facts.prediction.decision, facts.prediction.output) == ("no", 0.5)
     # the negative class is the prediction, so only b can still move the logit up, and a cannot
-    assert facts.counterfactual is not None
-    assert [change.feature for change in facts.counterfactual.changes] == ["b"]
-    assert facts.counterfactual.new_decision == "yes"
+    assert facts.counterfactuals
+    assert [change.feature for change in facts.counterfactuals[0].changes] == ["b"]
+    assert facts.counterfactuals[0].new_decision == "yes"
 
 
 def test_facts_use_the_confidence_level_as_a_two_sided_interval(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -538,10 +540,10 @@ def test_regressor_threshold_matches_brute_force(
         ),
     )
     flip, sufficient = _brute_force_regressor(ebm, row, lambda value: value > cut)
-    assert (facts.counterfactual is None) == (flip is None)
+    assert (not facts.counterfactuals) == (flip is None)
     if flip is not None:
-        assert facts.counterfactual is not None
-        assert len(facts.counterfactual.changes) == flip
+        assert facts.counterfactuals
+        assert len(facts.counterfactuals[0].changes) == flip
     assert (facts.sufficient_reason is None) == (sufficient is None)
     if sufficient is not None:
         assert facts.sufficient_reason is not None
@@ -608,10 +610,10 @@ def test_regressor_interval_matches_brute_force(
         fact_types_module.LocalOptions(confidence_level=0, min_support=0, decision=interval, search=search),
     )
     flip, _ = _brute_force_regressor(ebm, row, holds)
-    assert (facts.counterfactual is None) == (flip is None)
+    assert (not facts.counterfactuals) == (flip is None)
     if flip is not None:
-        assert facts.counterfactual is not None
-        assert len(facts.counterfactual.changes) == flip
+        assert facts.counterfactuals
+        assert len(facts.counterfactuals[0].changes) == flip
     sufficient = _sufficient_sizes(ebm, row, holds)
     reason = facts.sufficient_reason
     if not sufficient[ALL_FEATURES]:
@@ -717,9 +719,9 @@ def test_the_facts_match_the_oracle_of_the_paper(
     problem = oracle_problem(model, confidence_level=confidence_level, min_support=min_support, limits=limits)
     names = [feature_name(index) for index, _ in enumerate(model.instance_bins)]
 
-    counterfactual = facts.counterfactual
-    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
-    if counterfactual is not None:
+    smallest = problem.smallest_flip()
+    assert [len(plan.changes) for plan in facts.counterfactuals] == ([] if smallest is None else [smallest])
+    for counterfactual in facts.counterfactuals:
         # a tie can give another set of the same size, so the oracle checks the set and not its members
         assert problem.flips([names.index(change.feature) for change in counterfactual.changes])
         assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
@@ -742,7 +744,7 @@ def _bin_text(model: SmallModel, feature_index: int, bin_index: int) -> str:
 
 
 def _flip_size(facts: fact_types_module.LocalFacts) -> float:
-    return math.inf if facts.counterfactual is None else len(facts.counterfactual.changes)
+    return min((len(plan.changes) for plan in facts.counterfactuals), default=math.inf)
 
 
 @settings(max_examples=300, deadline=None)
@@ -793,9 +795,9 @@ def test_the_facts_with_recourse_options_match_the_oracle_of_the_paper(
         min_support=min_support,
         recourse=recourse,
     )
-    counterfactual = facts.counterfactual
-    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
-    if counterfactual is not None:
+    smallest = problem.smallest_flip()
+    assert [len(plan.changes) for plan in facts.counterfactuals] == ([] if smallest is None else [smallest])
+    for counterfactual in facts.counterfactuals:
         changed = [names.index(change.feature) for change in counterfactual.changes]
         assert problem.flips(changed)
         assert counterfactual.minimality is MinimalityStatus.SORTING_PROOF
@@ -841,9 +843,8 @@ def test_each_plan_matches_the_oracle(
         recourse=recourse,
     )
     expected = problem.cheapest_flip([float(cost) for cost in costs], max_changes)
-    counterfactual = facts.counterfactual
-    assert (None if counterfactual is None else counterfactual.cost) == expected
-    if counterfactual is not None:
+    assert [plan.cost for plan in facts.counterfactuals] == ([] if expected is None else [expected])
+    for counterfactual in facts.counterfactuals:
         changed = [names.index(change.feature) for change in counterfactual.changes]
         assert problem.flips(changed)
         assert max_changes is None or len(changed) <= max_changes
@@ -919,8 +920,8 @@ def test_a_lower_cap_never_makes_a_plan_cheaper(
     strict = RecourseOptions(costs=costs, max_changes=max(1, cap - 1))
     _, wide = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=0.0, recourse=loose)
     _, narrow = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=0.0, recourse=strict)
-    wide_cost = math.inf if wide.counterfactual is None else wide.counterfactual.cost
-    narrow_cost = math.inf if narrow.counterfactual is None else narrow.counterfactual.cost
+    wide_cost = min((plan.cost for plan in wide.counterfactuals), default=math.inf)
+    narrow_cost = min((plan.cost for plan in narrow.counterfactuals), default=math.inf)
     assert narrow_cost >= wide_cost
 
 
@@ -978,9 +979,9 @@ def test_more_confidence_never_makes_a_claim_easier(
     assert high.prediction.lower <= low.prediction.lower + TOLERANCE
     assert high.prediction.upper >= low.prediction.upper - TOLERANCE
 
-    if high.counterfactual is not None:
-        assert low.counterfactual is not None
-        assert len(low.counterfactual.changes) <= len(high.counterfactual.changes)
+    if high.counterfactuals:
+        assert low.counterfactuals
+        assert len(low.counterfactuals[0].changes) <= len(high.counterfactuals[0].changes)
     if high.sufficient_reason is not None:
         assert low.sufficient_reason is not None
         assert low.sufficient_reason.minimality.is_optimal
@@ -1021,7 +1022,7 @@ def test_a_change_that_lands_on_a_logit_of_zero_is_not_called_a_flip(
     options = fact_types_module.LocalOptions(confidence_level=0, min_support=0)
     facts = facts_module.compute_local_facts(build_ebm(small_templates, model), model.instance, options)
     assert facts.prediction.margin == pytest.approx(1.0)
-    assert facts.counterfactual is None
+    assert not facts.counterfactuals
     # the worst completion has the margin zero, and a guarantee needs a margin above zero
     assert facts.sufficient_reason is not None
     assert facts.sufficient_reason.features == [feature_name(0)]
@@ -1037,7 +1038,7 @@ def test_a_prediction_on_a_logit_of_zero_has_no_guarantee(small_templates: Templ
     )
     assert facts.prediction.decision == ebm.predict(frame_of_rows([model.instance]))[0] == ebm.classes_[0]
     assert facts.prediction.margin == pytest.approx(0.0)
-    assert facts.counterfactual is None
+    assert not facts.counterfactuals
     assert facts.sufficient_reason is None
 
 
@@ -1055,7 +1056,7 @@ def test_scores_without_deviation_give_the_same_claims_at_every_confidence(
     )
     _, nominal = _small_facts(small_templates, (certain, limits), confidence_level=0.0, min_support=min_support)
     _, strict = _small_facts(small_templates, (certain, limits), confidence_level=0.99, min_support=min_support)
-    assert strict.counterfactual == nominal.counterfactual
+    assert strict.counterfactuals == nominal.counterfactuals
     assert strict.sufficient_reason == nominal.sufficient_reason
     assert strict.prediction.lower == pytest.approx(strict.prediction.output)
     assert strict.prediction.upper == pytest.approx(strict.prediction.output)
@@ -1072,8 +1073,9 @@ def test_a_confidence_level_close_to_one_keeps_the_claims_of_the_paper(
     model, limits = case
     _, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
     problem = oracle_problem(model, confidence_level=confidence_level, min_support=min_support, limits=limits)
-    counterfactual, reason = facts.counterfactual, facts.sufficient_reason
-    assert (None if counterfactual is None else len(counterfactual.changes)) == problem.smallest_flip()
+    reason = facts.sufficient_reason
+    smallest = problem.smallest_flip()
+    assert [len(plan.changes) for plan in facts.counterfactuals] == ([] if smallest is None else [smallest])
     assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
     assert math.isfinite(facts.prediction.lower)
     assert math.isfinite(facts.prediction.upper)
@@ -1193,9 +1195,8 @@ def test_the_changes_of_a_counterfactual_change_the_decision_of_the_fitted_model
     # contract 5: a counterfactual flips the decision of the EBM, with a value inside each new bin
     model, limits = case
     ebm, facts = _small_facts(small_templates, case, confidence_level=confidence_level, min_support=min_support)
-    counterfactual = facts.counterfactual
-    assume(counterfactual is not None)
-    assert counterfactual is not None
+    assume(facts.counterfactuals)
+    (counterfactual,) = facts.counterfactuals
     for change in counterfactual.changes:
         assert change.from_value == next(c.value for c in facts.contributions if c.feature == change.feature)
     changed = model.instance | {
@@ -1291,8 +1292,7 @@ def test_the_facts_align_with_unsorted_categories_and_a_model_with_missing_value
     category_bin = ebm.bins_[0][0][str(instance["size"])]
     category_score = ebm.term_scores_[0][category_bin]
     assert by_feature["size"] == pytest.approx(category_score)
-    counterfactual = facts.counterfactual
-    assert counterfactual is not None
+    (counterfactual,) = facts.counterfactuals
     changed = instance | {change.feature: _value_of_change(change) for change in counterfactual.changes}
     assert ebm.predict(frame_of_rows([changed]))[0] == counterfactual.new_decision != facts.prediction.decision
 

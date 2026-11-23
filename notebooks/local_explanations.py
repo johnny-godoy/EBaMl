@@ -222,8 +222,7 @@ def _(attrs, facts, mo) -> None:
 
 @app.cell
 def _(attrs, facts, mo) -> None:
-    counterfactual = facts.counterfactual
-    if counterfactual is None:
+    if not facts.counterfactuals:
         counterfactual_view = mo.md("""
         ### Counterfactual
 
@@ -231,6 +230,8 @@ def _(attrs, facts, mo) -> None:
         favourable realistic value.
         """)
     else:
+        # one plan by default: the fewest changes
+        (counterfactual,) = facts.counterfactuals
         counterfactual_view = mo.vstack([
             mo.md(f"""
             ### Counterfactual (minimum change required)

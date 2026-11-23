@@ -254,7 +254,6 @@ def _(
 @app.cell
 def _(attrs, facts, instance, mo) -> None:
     prediction = facts.prediction
-    counterfactual = facts.counterfactual
     sufficient = facts.sufficient_reason
     sections = [
         mo.md(
@@ -265,9 +264,11 @@ def _(attrs, facts, instance, mo) -> None:
         ),
         mo.ui.table([attrs.asdict(prediction)], selection=None),
     ]
-    if counterfactual is None:
+    if not facts.counterfactuals:
         sections.append(mo.md("**No counterfactual** at this confidence level."))
     else:
+        # one plan by default: the fewest changes
+        (counterfactual,) = facts.counterfactuals
         sections.extend([
             mo.md(
                 f"The counterfactual changes the decision to **{counterfactual.new_decision}**, with output"
@@ -341,13 +342,14 @@ def _(
             LocalOptions(confidence_level=confidence.value, target_class="setosa", search=solver),
         )
         seconds = time.perf_counter() - start
-        target_change = search_facts.counterfactual
+        # one plan by default; an empty list means that no plan exists
+        target_plans = search_facts.counterfactuals
         search_reason = search_facts.sufficient_reason
         search_rows.append({
             "solver": solver_name,
-            "changes to setosa": "none" if target_change is None else len(target_change.changes),
-            "changes: minimality": None if target_change is None else target_change.minimality.value,
-            "changes: lower bound": None if target_change is None else target_change.cost_lower_bound,
+            "changes to setosa": len(target_plans[0].changes) if target_plans else "none",
+            "changes: minimality": target_plans[0].minimality.value if target_plans else None,
+            "changes: lower bound": target_plans[0].cost_lower_bound if target_plans else None,
             "sufficient reason": "none" if search_reason is None else ", ".join(search_reason.features),
             "reason: minimality": None if search_reason is None else search_reason.minimality.value,
             "reason: lower bound": None if search_reason is None else search_reason.lower_bound,

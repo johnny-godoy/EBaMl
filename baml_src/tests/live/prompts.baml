@@ -86,7 +86,7 @@ function live_data_scientist_guidance() -> string {
 function live_layperson_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "effect": "strongly towards this prediction"}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "effect": "moderately towards this prediction"}, {"feature": "age", "value": "[35, 42)", "effect": "slightly towards this prediction"}], "likelihood": "very likely"}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"predicted_class": "loan approved", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)"}], "number_of_changes": 1, "is_optimal": true, "after_the_changes": {"predicted_class": "loan approved", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": "likely"}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": "almost certain"}], "sample_size": "large"}`,
     }
@@ -95,7 +95,7 @@ function live_layperson_facts() -> LocalFactTexts {
 function live_data_scientist_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "loan denied", "contributions_largest_first": [{"feature": "income", "value": "[1.8e+04, 2.4e+04)", "score": 1.12, "std": 0.15}, {"feature": "debt_ratio", "value": "[0.55, 0.7)", "score": 0.31, "std": 0.08}, {"feature": "age", "value": "[35, 42)", "score": 0.04, "std": 0.03}], "probability": 0.83, "confidence_interval": [0.74, 0.89], "confidence_level": 0.95, "logit": 1.37}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95, "rare_values_left_out": true, "min_support": 0.01}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "number_of_changes": 1, "is_optimal": true, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0.95, "rare_values_left_out": true, "min_support": 0.01}`,
         sufficient_reason: `{"exists": true, "features": ["income", "debt_ratio"], "features_not_needed": ["age"], "guaranteed_margin_logit": 0.42, "guarantee_holds_at_confidence": 0.95, "rare_values_left_out": true, "min_support": 0.01}`,
         completions: `{"steps": [{"known_features": ["income"], "share_with_same_prediction": 0.71}, {"known_features": ["income", "debt_ratio"], "share_with_same_prediction": 1.0}], "number_of_samples": 10000}`,
     }
@@ -105,7 +105,7 @@ function live_data_scientist_facts() -> LocalFactTexts {
 function live_regressor_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"decision": "above 250000", "contributions_largest_first": [{"feature": "living_area", "value": "[160, 190)", "effect": "strongly towards this prediction"}, {"feature": "age_of_house", "value": "[5, 10)", "effect": "slightly towards this prediction"}], "predicted_value": 312000.0}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "living_area", "from": "[160, 190)", "to": "[60, 80)"}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"decision": "at most 250000", "predicted_value": 198000.0}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "living_area", "from": "[160, 190)", "to": "[60, 80)"}], "number_of_changes": 1, "is_optimal": true, "after_the_changes": {"decision": "at most 250000", "predicted_value": 198000.0}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
         sufficient_reason: `{"exists": true, "features": ["living_area"], "features_not_needed": ["age_of_house"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
         completions: `{"steps": [{"known_features": ["living_area"], "share_with_same_prediction": "almost certain"}], "sample_size": "large"}`,
     }
@@ -116,8 +116,8 @@ function live_regressor_facts() -> LocalFactTexts {
 function live_multiclass_facts() -> LocalFactTexts {
     LocalFactTexts {
         prediction: `{"predicted_class": "standard plan", "contributions_largest_first": [{"feature": "monthly_usage", "value": "[20, 30)", "effect": "strongly towards this prediction"}, {"feature": "contract_length", "value": "[1, 2)", "effect": "slightly towards this prediction"}], "likelihood": "likely"}`,
-        counterfactual: `{"flip_possible": true, "changes": [{"feature": "monthly_usage", "from": "[20, 30)", "to": "[90, 100)"}], "number_of_changes": 1, "is_smallest_set": false, "after_the_changes": {"predicted_class": "premium plan", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
-        sufficient_reason: `{"exists": true, "features": ["monthly_usage"], "is_smallest_set": true, "features_not_needed": ["contract_length"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
+        counterfactual: `{"flip_possible": true, "changes": [{"feature": "monthly_usage", "from": "[20, 30)", "to": "[90, 100)"}], "number_of_changes": 1, "is_optimal": false, "after_the_changes": {"predicted_class": "premium plan", "likelihood": "very likely"}, "flip_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
+        sufficient_reason: `{"exists": true, "features": ["monthly_usage"], "is_optimal": true, "features_not_needed": ["contract_length"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
         completions: `{"steps": [{"known_features": ["monthly_usage"], "share_with_same_prediction": "very likely"}], "sample_size": "large"}`,
     }
 }
@@ -222,7 +222,7 @@ testset "Live" {
         let facts = LocalFactTexts {
             prediction: live_regressor_facts().prediction,
             counterfactual: live_regressor_facts().counterfactual,
-            sufficient_reason: `{"exists": true, "features": ["living_area", "age_of_house"], "is_smallest_set": false, "features_not_needed": ["garage"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
+            sufficient_reason: `{"exists": true, "features": ["living_area", "age_of_house"], "is_optimal": false, "features_not_needed": ["garage"], "guarantee_holds_even_if_the_model_is_somewhat_off": true, "rare_values_left_out": true}`,
             completions: live_regressor_facts().completions,
         };
         let text = LocalSufficientReason(
@@ -242,7 +242,7 @@ testset "Live" {
         // with confidence_level=0 and min_support=0 no score moved and no value was left out
         let facts = LocalFactTexts {
             prediction: live_data_scientist_facts().prediction,
-            counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "number_of_changes": 1, "is_smallest_set": true, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0, "rare_values_left_out": false, "min_support": 0}`,
+            counterfactual: `{"flip_possible": true, "changes": [{"feature": "income", "from": "[1.8e+04, 2.4e+04)", "to": "[4.5e+04, 5e+04)", "score_change": -2.91}], "number_of_changes": 1, "is_optimal": true, "after_the_changes": {"predicted_class": "loan approved", "probability": 0.82}, "flip_holds_at_confidence": 0, "rare_values_left_out": false, "min_support": 0}`,
             sufficient_reason: live_data_scientist_facts().sufficient_reason,
             completions: live_data_scientist_facts().completions,
         };
