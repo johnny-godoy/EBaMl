@@ -156,6 +156,16 @@ test "the counterfactual calls a plan the cheapest only under the costs of its k
     assert.is_true(counterfactual.includes("If the facts give \"max_changes\""))
 }
 
+test "the counterfactual presents other plans as alternatives with their own claim" {
+    // Plan k + 1 is the cheapest only without the changes of the earlier plans, never the cheapest overall.
+    let counterfactual = counterfactual_question(3);
+    assert.is_true(counterfactual.includes("If the facts give \"other_plans\""));
+    assert.is_true(
+        counterfactual.includes("\"is_cheapest_without_the_changes_of_earlier_plans\" is true"),
+    );
+    assert.is_true(counterfactual.includes("never call it the cheapest plan overall"))
+}
+
 test "each local function gets its own facts, question and system role" {
     let facts = LocalFactTexts {
         prediction: "PRED-FACT",
