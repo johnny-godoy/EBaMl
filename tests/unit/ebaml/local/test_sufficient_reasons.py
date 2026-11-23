@@ -246,6 +246,6 @@ def test_each_way_to_find_a_sufficient_reason_reports_the_guarantee_that_it_has(
     _, lower_bound, status = expected
     assert reason.guaranteed_margin > 0
     expert = orjson.loads(facts_to_texts(facts, DataScientist()).sufficient_reason)
-    assert expert["is_smallest_set"] is status.is_smallest
+    assert expert["is_smallest_set"] is status.is_optimal
     assert expert["smallest_possible_number_of_features"] == lower_bound
-    assert orjson.loads(facts_to_texts(facts).sufficient_reason)["is_smallest_set"] is status.is_smallest
+    assert orjson.loads(facts_to_texts(facts).sufficient_reason)["is_smallest_set"] is status.is_optimal

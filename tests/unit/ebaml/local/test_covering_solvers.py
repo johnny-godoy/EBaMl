@@ -87,11 +87,11 @@ def test_every_solver_returns_a_sufficient_set_no_smaller_than_the_oracle(
     check_result(problem, result)
     assert len(result.choices) >= smallest
     assert result.lower_bound <= smallest
-    if result.minimality.is_smallest:
+    if result.minimality.is_optimal:
         assert len(result.choices) == smallest
     if isinstance(solver, MipCover) and solver.stop is Stop.OPTIMAL:
         assert len(result.choices) == smallest
-        assert result.minimality.is_smallest
+        assert result.minimality.is_optimal
 
 
 @pytest.mark.parametrize(("seed", "feature_count", "margin_count"), [(0, 60, 3), (1, 100, 6), (2, 150, 9)])
@@ -106,7 +106,7 @@ def test_the_solvers_of_ortools_agree_on_the_size_of_large_problems(
         result = solver.solve(problem, seed=0)
         assert result is not None
         check_result(problem, result)
-        assert result.minimality.is_smallest
+        assert result.minimality.is_optimal
         sizes.add(len(result.choices))
     assert len(sizes) == 1
 
@@ -228,7 +228,7 @@ def test_every_epsilon_failing_the_check_leaves_the_set_of_the_greedy() -> None:
     assert len(backend.calls) == 3
     assert result is not None
     assert result.choices == sorted(greedy_cover(problem) or [])
-    assert not result.minimality.is_smallest
+    assert not result.minimality.is_optimal
 
 
 def test_a_feasible_set_at_the_time_limit_is_returned_without_the_claim() -> None:
@@ -240,21 +240,21 @@ def test_a_feasible_set_at_the_time_limit_is_returned_without_the_claim() -> Non
     assert result is not None
     assert [choice.group for choice in result.choices] == [1, 3]
     assert result.lower_bound == 1
-    assert not result.minimality.is_smallest
+    assert not result.minimality.is_optimal
 
 
 def test_no_solution_at_the_time_limit_keeps_the_set_of_the_greedy() -> None:
     result = MipCover(ScriptedBackend(answer=_ends(ModelStatus.NO_SOLUTION))).solve(GREEDY_IS_NOT_OPTIMAL, seed=0)
     assert result is not None
     assert result.choices == sorted(greedy_cover(GREEDY_IS_NOT_OPTIMAL) or [])
-    assert not result.minimality.is_smallest
+    assert not result.minimality.is_optimal
 
 
 def test_an_infeasible_model_with_the_size_limit_proves_the_set_of_the_greedy() -> None:
     result = MipCover(ScriptedBackend(answer=_ends(ModelStatus.INFEASIBLE))).solve(GREEDY_IS_NOT_OPTIMAL, seed=0)
     assert result is not None
     assert len(result.choices) == len(greedy_cover(GREEDY_IS_NOT_OPTIMAL) or [])
-    assert result.minimality.is_smallest
+    assert result.minimality.is_optimal
 
 
 def test_an_infeasible_model_without_a_greedy_set_proves_that_no_set_exists() -> None:
@@ -271,7 +271,7 @@ def test_the_mip_finds_the_set_that_the_greedy_misses() -> None:
     result = MipCover().solve(GREEDY_FINDS_NOTHING, seed=0)
     assert result is not None
     assert [choice.group for choice in result.choices] == [0, 1]
-    assert result.minimality.is_smallest
+    assert result.minimality.is_optimal
 
 
 @pytest.mark.parametrize("solver", [GreedyCover(bound_backend=None), LocalSearchCover(bound_backend=None)], ids=repr)
@@ -302,7 +302,7 @@ def test_a_greedy_without_the_lp_reports_the_trivial_bound() -> None:
     result = GreedyCover(bound_backend=None).solve(GREEDY_IS_NOT_OPTIMAL, seed=0)
     assert result is not None
     assert result.lower_bound == 1
-    assert not result.minimality.is_smallest
+    assert not result.minimality.is_optimal
 
 
 def test_a_monotone_problem_with_no_set_found_falls_back_to_every_group() -> None:
@@ -329,7 +329,7 @@ def test_the_local_search_finds_the_smallest_set_that_the_greedy_misses() -> Non
     result = LocalSearchCover(bound_backend=None).solve(GREEDY_IS_NOT_OPTIMAL, seed=0)
     assert result is not None
     assert [choice.group for choice in result.choices] == [1, 3]
-    assert not result.minimality.is_smallest
+    assert not result.minimality.is_optimal
 
 
 @pytest.mark.parametrize("seed", [0, 1, 2])
@@ -392,7 +392,7 @@ def test_the_mip_solves_set_cover_through_the_reduction_of_the_proof(
     else:
         assert result is not None
         assert len(result.choices) == smallest
-        assert result.minimality.is_smallest
+        assert result.minimality.is_optimal
 
 
 def test_the_local_search_stops_and_proves_the_set_that_reaches_the_lp_bound() -> None:
@@ -401,7 +401,7 @@ def test_the_local_search_stops_and_proves_the_set_that_reaches_the_lp_bound() -
     assert result is not None
     assert [choice.group for choice in result.choices] == [1, 3]
     assert result.lower_bound == 2
-    assert result.minimality.is_smallest
+    assert result.minimality.is_optimal
 
 
 # one margin that needs 1: the first group gains 2 and costs 5, the second gains 2 and costs 1, the third gains 1 and

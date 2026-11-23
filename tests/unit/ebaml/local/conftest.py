@@ -21,7 +21,7 @@ import functools
 import itertools
 import math
 import statistics
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 
 import attrs
 import numpy as np
@@ -637,11 +637,17 @@ class OracleProblem:
             for margin in self.margins
         )
 
-    def cheapest_flip(self, costs: Sequence[float], max_changes: int | None) -> float | None:
+    def cheapest_flip(
+        self,
+        costs: Sequence[float],
+        max_changes: int | None,
+        excluded: Collection[tuple[int, int]] = (),
+    ) -> float | None:
         """Return the lowest cost of a change that flips the decision, by the definitions of the recourse paper.
 
         Each changed feature moves to an end bin other than the bin of the instance, and costs ``costs[feature]``. The
-        search tries every set of at most ``max_changes`` features and every choice of their end bins.
+        search tries every set of at most ``max_changes`` features and every choice of their end bins, except the
+        excluded pairs of a feature and a bin (the picks of earlier plans, Theorem 3 of the recourse paper).
 
         Returns
         -------
@@ -654,7 +660,11 @@ class OracleProblem:
         for size in range(1, largest + 1):
             for features in itertools.combinations(range(self.feature_count), size):
                 ends = [
-                    [bin_index for bin_index in self.reachable[feature] if bin_index != self.instance_bins[feature]]
+                    [
+                        bin_index
+                        for bin_index in self.reachable[feature]
+                        if bin_index != self.instance_bins[feature] and (feature, bin_index) not in excluded
+                    ]
                     for feature in features
                 ]
                 flips = any(

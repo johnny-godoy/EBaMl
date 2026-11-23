@@ -244,6 +244,10 @@ class RecourseOptions:
     max_changes: int | None
         The most features that the counterfactual may change, or ``None`` for no cap. A cheapest plan without a cap can
         change many cheap features.
+    plans: int
+        How many diverse plans to return, cheapest first. As in GAM Coach, each plan after the first uses no pair of a
+        feature and a bin that an earlier plan uses, so it may move a feature of an earlier plan to another bin. The
+        list is shorter when the search proves that no further plan exists.
 
     Examples
     --------
@@ -260,6 +264,7 @@ class RecourseOptions:
     allowed: Mapping[str, AllowedValues] = attrs.field(factory=dict, converter=dict)
     costs: CostStrategy = attrs.field(factory=UnitCost)
     max_changes: int | None = attrs.field(default=None, validator=attrs.validators.optional(attrs.validators.ge(1)))
+    plans: int = attrs.field(default=1, validator=attrs.validators.ge(1))
 
     def restrict(self, features: Sequence[Feature]) -> list[Feature]:
         """Limit the bins that each feature can end in.

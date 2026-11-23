@@ -7,7 +7,7 @@ import attrs
 import numpy as np
 
 from ebaml.local.costs import check_costs
-from ebaml.local.covering_problem import CoveringProblem
+from ebaml.local.covering_problem import Cover, CoveringProblem
 from ebaml.local.decisions import Margin
 from ebaml.local.fact_features import Feature, bin_label, robust_scores
 from ebaml.local.fact_types import Change, Counterfactual, LocalOptions
@@ -61,14 +61,14 @@ def _counterfactual(
     outcome = after(new_margin, [(f, best) for _, best, f in changes])
     return Counterfactual(
         changes=[
-            Change(f.name, f.label, bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current)
+            Change(f.name, f.label, bin_label(f.graph.x_vals[best]), float(f.scores[best]) - f.current, best)
             for _, best, f in changes
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
         minimality=MinimalityStatus.SORTING_PROOF,  # sorting finds the smallest set of one margin, as the paper proves
-        lower_bound=len(changes),
         cost=float(len(changes)),
+        cost_lower_bound=float(len(changes)),
     )
 
 
@@ -237,14 +237,15 @@ def _target_counterfactual(
                     (feature.outputs(bin_index) - feature.outputs(feature.bin_index))[target]
                     - (feature.outputs(bin_index) - feature.outputs(feature.bin_index))[frame.column],
                 ),
+                bin_index,
             )
             for feature, bin_index in changed
         ],
         new_decision=outcome.decision,
         new_output=outcome.output,
         minimality=cover.minimality,
-        lower_bound=cover.lower_bound,
         cost=problem.cost(cover.choices),
+        cost_lower_bound=_cost_lower_bound(problem, cover),
     )
 
 
@@ -354,14 +355,15 @@ def _cheapest_flip(
                         view.label,
                         bin_label(view.graph.x_vals[bin_index]),
                         float(view.scores[bin_index]) - view.current,
+                        bin_index,
                     )
                     for view, bin_index in changed
                 ],
                 new_decision=outcome.decision,
                 new_output=outcome.output,
                 minimality=cover.minimality,
-                lower_bound=cover.lower_bound,
                 cost=problem.cost(cover.choices),
+                cost_lower_bound=_cost_lower_bound(problem, cover),
             ),
         )
     return min(found, key=lambda counterfactual: counterfactual.cost, default=None)
@@ -389,36 +391,59 @@ def _limits(features: Sequence[Feature], options: LocalOptions) -> _Limits:
     return _Limits(costs, options.recourse.max_changes)
 
 
-def choose_counterfactual(
+def _cost_lower_bound(problem: CoveringProblem, cover: Cover) -> float:
+    """Return a cost that no plan beats: the cost of an optimal plan, else the size bound times the cheapest pick.
+
+    Every plan has at least ``cover.lower_bound`` picks, and each pick costs at least the cheapest alternative.
+
+    Returns
+    -------
+    float
+        The bound.
+
+    """
+    if cover.minimality.is_optimal:
+        return problem.cost(cover.choices)
+    cheapest = min((cost for costs in problem.costs for cost in costs), default=1.0) if problem.costs else 1.0
+    return cover.lower_bound * cheapest
+
+
+def _exclude(features: Sequence[Feature], plan: Counterfactual) -> list[Feature]:
+    """Remove from the reachable bins each pair of a feature and a bin that a plan uses, as the code of GAM Coach does.
+
+    Returns
+    -------
+    list[Feature]
+        The features, whose reachable bins leave out the bins of the plan.
+
+    """
+    used: dict[str, list[int]] = {}
+    for change in plan.changes:
+        used.setdefault(change.feature, []).append(change.to_bin)
+    excluded = []
+    for feature in features:
+        if feature.name not in used:
+            excluded.append(feature)
+            continue
+        reachable = feature.reachable.copy()
+        reachable[used[feature.name]] = False
+        excluded.append(attrs.evolve(feature, reachable=reachable))
+    return excluded
+
+
+def _one_plan(
     features: Sequence[Feature],
     frame: PredictionFrame,
     totals: Totals,
-    *,
     kind: LocalKind,
     options: LocalOptions,
 ) -> Counterfactual | None:
-    """Find the counterfactual that the options ask for: the target class if there is one, else a flip.
-
-    With equal costs, the flip is the fewest changes, which sorting finds exactly. With other costs, it is the cheapest
-    plan, which ``options.search`` finds. ``RecourseOptions.max_changes`` caps the number of changes of both.
-
-    Parameters
-    ----------
-    features : Sequence[Feature]
-        The features.
-    frame : PredictionFrame
-        The prediction.
-    totals : Totals
-        The scores and the intercepts of the instance, and the standard deviations to move the scores by.
-    kind : LocalKind
-        The kind of the model.
-    options : LocalOptions
-        Uses ``target_class``, ``search`` and ``seed``.
+    """Find one plan: the target class if there is one, else a flip, with equal costs or not.
 
     Returns
     -------
     Counterfactual | None
-        The counterfactual, or None if no change gives it.
+        The plan, or None if no plan exists under the options.
 
     """
     limits = _limits(features, options)
@@ -433,4 +458,52 @@ def choose_counterfactual(
             found = None
     else:
         found = _cheapest_flip(features, frame, totals, _Search(options, limits))
-    return None if found is None else attrs.evolve(found, cost=found.cost * limits.unit)
+    if found is None:
+        return None
+    return attrs.evolve(found, cost=found.cost * limits.unit, cost_lower_bound=found.cost_lower_bound * limits.unit)
+
+
+def choose_counterfactuals(
+    features: Sequence[Feature],
+    frame: PredictionFrame,
+    totals: Totals,
+    *,
+    kind: LocalKind,
+    options: LocalOptions,
+) -> list[Counterfactual]:
+    """Find the plans that the options ask for: the target class if there is one, else a flip.
+
+    With equal costs, a plan is the fewest changes, which sorting finds exactly. With other costs, it is the cheapest
+    plan, which ``options.search`` finds. ``RecourseOptions.max_changes`` caps the number of changes. Each plan after
+    the first is the cheapest plan that uses no pair of a feature and a bin of an earlier plan (Theorem 3 of
+    ``proofs/papers/recourse/paper.typ``).
+
+    Parameters
+    ----------
+    features : Sequence[Feature]
+        The features.
+    frame : PredictionFrame
+        The prediction.
+    totals : Totals
+        The scores and the intercepts of the instance, and the standard deviations to move the scores by.
+    kind : LocalKind
+        The kind of the model.
+    options : LocalOptions
+        Uses ``target_class``, ``search``, ``seed`` and ``recourse``.
+
+    Returns
+    -------
+    list[Counterfactual]
+        Up to ``RecourseOptions.plans`` plans, in the order found, so their costs do not go down. The list stops at the
+        first search that proves that no further plan exists.
+
+    """
+    plans: list[Counterfactual] = []
+    current = list(features)
+    for _ in range(options.recourse.plans):
+        plan = _one_plan(current, frame, totals, kind, options)
+        if plan is None:
+            break
+        plans.append(plan)
+        current = _exclude(current, plan)
+    return plans

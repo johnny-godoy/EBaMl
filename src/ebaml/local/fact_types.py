@@ -122,19 +122,36 @@ class Contribution:
 
 @attrs.frozen
 class Change:
-    """One input to change in a counterfactual."""
+    """One input to change in a counterfactual.
+
+    Attributes
+    ----------
+    feature: str
+        The input.
+    from_value: str
+        Its value in the instance.
+    to_value: str
+        The bin that it moves to, as text.
+    score_change: float
+        How much the score of the decision moves.
+    to_bin: int
+        The index of the new bin in the graph of the feature. The diverse plans exclude each pair of an input and a bin
+        that an earlier plan uses.
+
+    """
 
     feature: str
     from_value: str
     to_value: str
     score_change: float
+    to_bin: int
 
 
 @attrs.frozen
 class Counterfactual:
     """A set of changes after which the decision does not hold, at the requested confidence.
 
-    The set is the smallest one only if ``minimality`` says so (``MinimalityStatus.is_smallest``). The default
+    The plan is optimal only if ``minimality`` says so (``MinimalityStatus.is_optimal``). The default
     counterfactual always has that proof. The counterfactual of ``LocalOptions.target_class`` has it only if the search
     proves it: ``GreedyCover``, ``LocalSearchCover`` and a ``MipCover`` that ends at its time limit can return a larger
     set.
@@ -152,12 +169,13 @@ class Counterfactual:
         Why the set is, or is not, known to be the smallest. Sorting proves it for the default counterfactual
         (``SORTING_PROOF``). For a chosen target class, the search proves it (``SOLVER_PROOF``), or the size equals
         ``lower_bound`` (``AT_LOWER_BOUND``), or the search proves nothing (``UNPROVED``).
-    lower_bound: int
-        No set of fewer changes gives the new decision. It equals the number of changes when ``minimality`` is a
-        proof of sorting, or of the solver with equal costs.
     cost: float
         The sum of the costs of the changes under ``RecourseOptions.costs``. With equal costs of 1 it is the number
-        of changes. With other costs, ``minimality`` tells whether the plan is the cheapest one, not the smallest.
+        of changes. ``minimality`` tells whether the plan is optimal: the fewest changes with equal costs, the cheapest
+        plan with other costs.
+    cost_lower_bound: float
+        No plan costs less. It equals ``cost`` when ``minimality.is_optimal`` holds. Otherwise it is the lower bound of
+        the number of changes times the cost of the cheapest single change.
 
     """
 
@@ -165,8 +183,8 @@ class Counterfactual:
     new_decision: ClassLabel
     new_output: float
     minimality: MinimalityStatus
-    lower_bound: int
     cost: float
+    cost_lower_bound: float
 
 
 @attrs.frozen
@@ -213,8 +231,10 @@ class LocalFacts:
         The prediction to explain.
     contributions: list[Contribution]
         The effect of each input, largest first.
-    counterfactual: Counterfactual | None
-        The changes that flip the decision, or ``None`` if the search found none.
+    counterfactuals: list[Counterfactual]
+        The plans that change the decision, cheapest first, as many as ``RecourseOptions.plans`` asks for. Plan
+        ``k + 1`` uses no pair of an input and a bin of an earlier plan. An empty list means that the search proves that
+        no plan exists under the options, and a shorter list that no further plan exists.
     sufficient_reason: SufficientReason | None
         The inputs that fix the decision, or ``None`` if the search found none.
     completions: list[CompletionStep]
@@ -234,10 +254,15 @@ class LocalFacts:
 
     prediction: Prediction
     contributions: list[Contribution]
-    counterfactual: Counterfactual | None
+    counterfactuals: list[Counterfactual]
     sufficient_reason: SufficientReason | None
     completions: list[CompletionStep]
     confidence_level: float
     min_support: float
     n_samples: int
     recourse: RecourseOptions = attrs.field(factory=RecourseOptions)
+
+    @property
+    def counterfactual(self) -> Counterfactual | None:
+        """The first plan of ``counterfactuals``: the cheapest one, or ``None`` if no plan exists."""
+        return self.counterfactuals[0] if self.counterfactuals else None
