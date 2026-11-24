@@ -3,6 +3,7 @@
 import ast
 import io
 import time
+import typing
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar, override
@@ -27,7 +28,12 @@ from ebaml.graphs.token_weights import ModelKey, TokenWeights, WeightsEntry, Wei
 from ebaml.llm import descriptors
 from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
-from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
+from ebaml.llm.requests import (
+    DescribeEBMRequest,
+    DescribeGraphRequest,
+    ExplainInstanceRequest,
+    ProposeDifficultiesRequest,
+)
 from ebaml.llm.token_learning import TokenLearner
 from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
@@ -35,6 +41,7 @@ from ebaml.local.fact_text import FactTexts
 from tests.unit.ebaml.conftest import (
     PARTIAL_KINDS,
     REMOVED_FEATURE,
+    PandasFrame,
     appending,
     fake_model,
     fake_sdk,
@@ -833,13 +840,31 @@ def test_explain_instance_uses_the_default_local_options(monkeypatch: pytest.Mon
 
 # The SDK classes that the faked functions take or return. The fakes build real instances, so these checks compare the
 # classes of the runtime package with the stub that `baml generate` wrote next to it.
-SDK_CLASSES = ["Counted", "TokenUsage", "TokenSample", "LocalExplanationText", "LocalFactTexts", "GraphPromptOptions"]
-FAKED_FUNCTIONS = ["default_graph_options_sync", "describe_graph_cot_sync", "summarize_ebm_sync", "explain_local_sync"]
+SDK_CLASSES = [
+    "Counted",
+    "TokenUsage",
+    "TokenSample",
+    "LocalExplanationText",
+    "LocalFactTexts",
+    "GraphPromptOptions",
+    "DifficultyProposal",
+    "FeatureDifficulty",
+]
+FAKED_FUNCTIONS = [
+    "default_graph_options_sync",
+    "describe_graph_cot_sync",
+    "summarize_ebm_sync",
+    "explain_local_sync",
+    "propose_difficulty_sync",
+]
 
 
 @pytest.mark.parametrize("name", SDK_CLASSES)
 def test_an_sdk_class_has_the_fields_of_the_stub(name: str) -> None:
-    runtime = {field: info.annotation for field, info in getattr(baml_sdk, name).model_fields.items()}
+    # the generated module can define a class before a class that its fields name, so resolve each forward reference
+    sdk_class = getattr(baml_sdk, name)
+    hints = typing.get_type_hints(sdk_class)
+    runtime = {field: hints[field] for field in sdk_class.model_fields}
     stub = sdk_fields(name)
     assert runtime.keys() == stub.keys()
     assert all(same_type(runtime[field], stub[field]) for field in stub)
@@ -1704,3 +1729,32 @@ def test_chat_with_mcp_turns_a_missing_key_into_an_error_with_fix_steps(monkeypa
     monkeypatch.setattr(baml_sdk, "chat_with_mcp_sync", fake_sdk("chat_with_mcp_sync", refuse))
     with pytest.raises(MissingAPIKeyError):
         descriptors.chat_with_mcp("python", [])
+
+
+def test_propose_difficulties_sends_the_inputs_and_reads_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+    continuous_ebm: tuple[ExplainableBoostingClassifier, PandasFrame],
+) -> None:
+    ebm, data = continuous_ebm
+    reply = baml_sdk.DifficultyProposal(
+        difficulties=[
+            baml_sdk.FeatureDifficulty(feature="a", difficulty=baml_sdk.Difficulty.Hard, reason="years"),
+            baml_sdk.FeatureDifficulty(feature="nope", difficulty=baml_sdk.Difficulty.Easy, reason="unknown"),
+        ],
+        usage=baml_sdk.TokenUsage(input_tokens=3, output_tokens=4, samples=[]),
+    )
+    calls: dict[str, Any] = {}
+    monkeypatch.setattr(
+        baml_sdk,
+        "propose_difficulty_sync",
+        fake_sdk("propose_difficulty_sync", recording(calls, reply)),
+    )
+    request = ProposeDifficultiesRequest(ebm, instance_of(data, 0), prompt=PromptOptions(dataset_description="D"))
+    with capture_logs() as logs:
+        proposal = descriptors.propose_difficulties(request)
+    assert calls["features"].splitlines()[0].startswith("- a (continuous), current value")
+    assert calls["opts"].dataset_description == "D"
+    assert [(item.feature, item.multiplier) for item in proposal.difficulties] == [("a", 2.0)]
+    assert proposal.costs.proposed_by_model
+    usage = [(log["what"], log["input_tokens"], log["output_tokens"]) for log in logs if log["event"] == "usage"]
+    assert usage == [("propose_difficulties", 3, 4)]

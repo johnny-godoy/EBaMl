@@ -153,6 +153,8 @@ test "the counterfactual calls a plan the cheapest only under the costs of its k
     assert.is_true(counterfactual.includes("If the facts give \"costs_of_the_changes\""));
     assert.is_true(counterfactual.includes("never call it the fewest changes"));
     assert.is_true(counterfactual.includes("the difficulties are assumptions"));
+    // a difficulty that a language model proposed is a guess, and the answer says so
+    assert.is_true(counterfactual.includes("a language model proposed them"));
     assert.is_true(counterfactual.includes("If the facts give \"max_changes\""))
 }
 

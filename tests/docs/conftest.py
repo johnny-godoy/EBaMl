@@ -49,8 +49,23 @@ def _local_text(*_args: object, **_kwargs: object) -> baml_sdk.LocalExplanationT
     )
 
 
+def _difficulties(*_args: object, **_kwargs: object) -> baml_sdk.DifficultyProposal:
+    ratings = [("fare", baml_sdk.Difficulty.Easy), ("age", baml_sdk.Difficulty.VeryHard)]
+    return baml_sdk.DifficultyProposal(
+        difficulties=[
+            baml_sdk.FeatureDifficulty(feature=name, difficulty=level, reason=FAKE_TEXT) for name, level in ratings
+        ],
+        usage=USAGE,
+    )
+
+
 # the BAML functions that send a request to the LLM. The other functions of baml_sdk run locally, so they stay real.
-LLM_FAKES = {"describe_graph_cot_sync": _counted, "summarize_ebm_sync": _counted, "explain_local_sync": _local_text}
+LLM_FAKES = {
+    "describe_graph_cot_sync": _counted,
+    "summarize_ebm_sync": _counted,
+    "explain_local_sync": _local_text,
+    "propose_difficulty_sync": _difficulties,
+}
 
 
 def training_data() -> tuple[pd.DataFrame, pd.Series]:

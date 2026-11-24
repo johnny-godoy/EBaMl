@@ -129,6 +129,31 @@ function log_reply(reply: string) -> null {
 }
 
 testset "Live" {
+    test "difficulty proposal: one rating for each input, with its exact name, and a past fact is the hardest" {
+        let ratings = ProposeFeatureDifficulty(
+            `
+                - monthly savings (continuous), current value 200
+                - number of past defaults (continuous), current value 2
+            `,
+            default_graph_options(),
+        );
+        log_reply(ratings.to_string());
+        assert.equal(
+            ratings
+                .map((rating) -> {
+                    rating.feature
+                })
+                .sort_by_key((name) -> {
+                    name
+                }),
+            ["monthly savings", "number of past defaults"],
+        );
+        let past = ratings.find((rating) -> {
+            rating.feature == "number of past defaults"
+        });
+        assert.equal(past?.difficulty, Difficulty.VeryHard)
+    }
+
     test "layperson counterfactual: no model numbers, within the sentence limit, names the input" {
         let text = LocalCounterfactual(
             "The model denies loans mainly because of low income and a high debt ratio.",

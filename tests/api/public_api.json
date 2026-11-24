@@ -302,6 +302,10 @@
     "kind": "class",
     "signature": "(*args, **kwargs)"
   },
+  "DIFFICULTY_MULTIPLIERS": {
+    "kind": "mappingproxy",
+    "name": "DIFFICULTY_MULTIPLIERS"
+  },
   "DataCost": {
     "bases": [
       "object"
@@ -370,6 +374,31 @@
     ],
     "kind": "class",
     "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, feature_index: int, num_sentences: int = 7, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, graph: ebaml.llm.options.GraphOptions = NOTHING) -> None"
+  },
+  "Difficulty": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "EASY",
+      "MODERATE",
+      "HARD",
+      "VERY_HARD"
+    ],
+    "signature": "(*values)"
+  },
+  "DifficultyProposal": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "difficulties: list[ebaml.llm.difficulties.FeatureDifficulty]",
+      "costs: <class 'ebaml.local.costs.ScaledCost'>"
+    ],
+    "kind": "class",
+    "signature": "(difficulties: list[ebaml.llm.difficulties.FeatureDifficulty], costs: ebaml.local.costs.ScaledCost) -> None"
   },
   "EBMDescription": {
     "bases": [
@@ -588,6 +617,19 @@
     ],
     "kind": "class",
     "signature": "(prediction: str, counterfactual: str, sufficient_reason: str, completions: str) -> None"
+  },
+  "FeatureDifficulty": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "difficulty: <enum 'Difficulty'>",
+      "multiplier: <class 'float'>",
+      "reason: <class 'str'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, difficulty: ebaml.local.costs.Difficulty, multiplier: float, reason: str) -> None"
   },
   "FeatureProfile": {
     "bases": [
@@ -1172,6 +1214,21 @@
     "kind": "class",
     "signature": "(expert_description: str | None = None, graph_description: str | None = None, dataset_description: str | None = None, task_description: str | None = None) -> None"
   },
+  "ProposeDifficultiesRequest": {
+    "bases": [
+      "_EBMRequest",
+      "object"
+    ],
+    "fields": [
+      "ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor",
+      "prompt: <class 'ebaml.llm.options.PromptOptions'>",
+      "model: ebaml.llm.options.ModelOptions | str | None",
+      "instance: collections.abc.Mapping[str, FeatureValue]",
+      "base: <class 'ebaml.local.costs.CostStrategy'>"
+    ],
+    "kind": "class",
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, instance: collections.abc.Mapping[str, FeatureValue], *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, base: ebaml.local.costs.CostStrategy = NOTHING) -> None"
+  },
   "ProviderUnreachableError": {
     "bases": [
       "LLMRequestError",
@@ -1349,10 +1406,11 @@
     ],
     "fields": [
       "base: <class 'ebaml.local.costs.CostStrategy'>",
-      "multipliers: collections.abc.Mapping[str, float]"
+      "multipliers: collections.abc.Mapping[str, float]",
+      "proposed_by_model: <class 'bool'>"
     ],
     "kind": "class",
-    "signature": "(base: ebaml.local.costs.CostStrategy, multipliers=NOTHING) -> None"
+    "signature": "(base: ebaml.local.costs.CostStrategy, multipliers=NOTHING, *, proposed_by_model: bool = False) -> None"
   },
   "ScopeMetrics": {
     "bases": [
@@ -1696,6 +1754,10 @@
   "points_towards": {
     "kind": "function",
     "signature": "(contribution: ebaml.local.fact_types.Contribution, prediction: ebaml.local.fact_types.Prediction) -> bool"
+  },
+  "propose_difficulties": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.ProposeDifficultiesRequest) -> ebaml.llm.difficulties.DifficultyProposal"
   },
   "resolve_audience": {
     "kind": "function",

@@ -1,8 +1,8 @@
 """Talk 2 EBM in BAML.
 
-Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance`` and
-``LocalExplanation`` and ``EBMDescription`` load on first use, because the module that holds them can run
-``baml generate``.
+Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance``,
+``propose_difficulties``, ``LocalExplanation`` and ``EBMDescription`` load on first use, because the module that holds
+them can run ``baml generate``.
 """
 
 from importlib.metadata import version
@@ -103,8 +103,14 @@ from ebaml.graphs.model_kinds import (
     model_kind,
 )
 from ebaml.graphs.token_budget import check_token_budget
+from ebaml.llm.difficulties import DifficultyProposal, FeatureDifficulty
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
-from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
+from ebaml.llm.requests import (
+    DescribeEBMRequest,
+    DescribeGraphRequest,
+    ExplainInstanceRequest,
+    ProposeDifficultiesRequest,
+)
 from ebaml.local.audience import (
     Audience,
     DataScientist,
@@ -116,7 +122,7 @@ from ebaml.local.audience import (
     sample_size_word,
     strength_word,
 )
-from ebaml.local.costs import CostStrategy, DataCost, ScaledCost, UnitCost, UserCost
+from ebaml.local.costs import DIFFICULTY_MULTIPLIERS, CostStrategy, DataCost, Difficulty, ScaledCost, UnitCost, UserCost
 from ebaml.local.covering_backend import (
     CoveringModel,
     MipBackend,
@@ -151,11 +157,19 @@ from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 
 if TYPE_CHECKING:
-    from ebaml.llm.descriptors import EBMDescription, LocalExplanation, describe_ebm, describe_graph, explain_instance
+    from ebaml.llm.descriptors import (
+        EBMDescription,
+        LocalExplanation,
+        describe_ebm,
+        describe_graph,
+        explain_instance,
+        propose_difficulties,
+    )
 
 __version__: str = version("ebaml")
 
 __all__ = [
+    "DIFFICULTY_MULTIPLIERS",
     "APIKeyRejectedError",
     "AffectedProfile",
     "Align",
@@ -187,6 +201,8 @@ __all__ = [
     "Decision",
     "DescribeEBMRequest",
     "DescribeGraphRequest",
+    "Difficulty",
+    "DifficultyProposal",
     "EBMDescription",
     "EBMGraph",
     "EBMGraphError",
@@ -204,6 +220,7 @@ __all__ = [
     "ExplainInstanceRequest",
     "ExtendRange",
     "FactTexts",
+    "FeatureDifficulty",
     "FeatureProfile",
     "FeatureType",
     "FitLine",
@@ -249,6 +266,7 @@ __all__ = [
     "OutputKind",
     "Prediction",
     "PromptOptions",
+    "ProposeDifficultiesRequest",
     "ProviderUnreachableError",
     "RangeMatch",
     "RateLimitedError",
@@ -304,6 +322,7 @@ __all__ = [
     "load_gamchanger",
     "model_kind",
     "points_towards",
+    "propose_difficulties",
     "resolve_audience",
     "round_value",
     "sample_size_word",
@@ -335,7 +354,14 @@ def __getattr__(name: str) -> object:
         If ``name`` is not a public name that loads on first use.
 
     """
-    lazy_names = {"EBMDescription", "LocalExplanation", "describe_ebm", "describe_graph", "explain_instance"}
+    lazy_names = {
+        "EBMDescription",
+        "LocalExplanation",
+        "describe_ebm",
+        "describe_graph",
+        "explain_instance",
+        "propose_difficulties",
+    }
     if name not in lazy_names:
         msg = f"module {__name__!r} has no attribute {name!r}"
         raise AttributeError(msg)

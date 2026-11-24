@@ -19,10 +19,16 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey
+from ebaml.llm.difficulties import DifficultyProposal, features_text, read_proposal
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.progress_bars import progress
 from ebaml.llm.provider_errors import provider_errors
-from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ExplainInstanceRequest
+from ebaml.llm.requests import (
+    DescribeEBMRequest,
+    DescribeGraphRequest,
+    ExplainInstanceRequest,
+    ProposeDifficultiesRequest,
+)
 from ebaml.llm.retry import ShrinkingGraphCall, call_with_shrinking_graph
 from ebaml.llm.sdk_setup import ensure_sdk
 from ebaml.local.audience import resolve_audience
@@ -705,3 +711,39 @@ def explain_instance(request: ExplainInstanceRequest) -> LocalExplanation:
         output_tokens=result.usage.output_tokens,
     )
     return LocalExplanation(result.counterfactual, result.sufficient_reason, result.completions, facts)
+
+
+def propose_difficulties(request: ProposeDifficultiesRequest) -> DifficultyProposal:
+    """Ask the LLM how hard the change of each input is for the person of an instance, as a cost strategy to check.
+
+    The reply rates each input on the scale of ``Difficulty``, with a reason. The function runs no search: read the
+    proposal, correct it if the LLM is wrong, and pass ``proposal.costs`` to ``RecourseOptions(costs=...)``. The facts
+    then say that a language model proposed the difficulties, because they are assumptions.
+
+    Parameters
+    ----------
+    request: ProposeDifficultiesRequest
+        The EBM, the instance, the base cost strategy, the prompts and the model.
+
+    Returns
+    -------
+    DifficultyProposal
+        The difficulty and the reason of each input that the reply rates, and the ``ScaledCost`` that they give.
+
+    """
+    ebm = request.ebm
+    model_spec = _model_spec(request.model)
+    with provider_errors():
+        result = baml_sdk.propose_difficulty_sync(
+            features=features_text(ebm, request.instance),
+            opts=_prompt_options(request.prompt),
+            model=model_spec,
+        )
+    logger.info(
+        "usage",
+        what="propose_difficulties",
+        input_tokens=result.usage.input_tokens,
+        output_tokens=result.usage.output_tokens,
+    )
+    feature_names = [ebm.feature_names_in_[feature_index] for feature_index in main_effect_features(ebm)]
+    return read_proposal(result.difficulties, feature_names, request.base)
