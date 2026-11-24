@@ -325,8 +325,8 @@ function samples_of(events: ai.events.Event[]) -> TokenSample[] {
 
 // Runs one text-producing LLM function and keeps the provider's token usage. A count that the provider did not report
 // is zero.
-function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -> Counted {
-    let result = ai.Agent.new(client = client).run(spec);
+// The tokens of a run, whatever its output type: the sum that the provider reported for each call, and the samples.
+function usage_of<Out>(result: ai.RunResult<Out>) -> TokenUsage {
     let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: samples_of(result.journal.entries()) };
     for (let entry in result.usage) {
         usage
@@ -339,7 +339,12 @@ function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -
                 },
             );
     }
-    Counted { text: result.value, usage: usage }
+    usage
+}
+
+function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -> Counted {
+    let result = ai.Agent.new(client = client).run(spec);
+    Counted { text: result.value, usage: usage_of(result) }
 }
 
 // Entry points called from Python.
