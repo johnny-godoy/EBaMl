@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.12.3'></a>
+## [0.12.3] - 2026-11-24
+
+### Added
+
+- `RecourseOptions(plans=k)` returns up to `k` diverse plans, cheapest first. As in GAM Coach, each plan after the first uses no pair of a feature and a bin of an earlier plan. The facts list the other plans, and the prompt calls each one the cheapest only without the changes of the earlier plans.
+
+- `propose_difficulties(ProposeDifficultiesRequest(ebm, instance))` asks the LLM how hard the change of each input is, on the scale of `Difficulty`, with a reason for each input. It returns a `DifficultyProposal`, whose `costs` is a `ScaledCost` to pass to `RecourseOptions(costs=...)`. It runs no search, so the caller checks the proposal first.
+- `DIFFICULTY_MULTIPLIERS` gives the cost multiplier of each level: each level costs twice the level below it.
+- `ScaledCost(proposed_by_model=True)` marks difficulties that a language model proposed, and the facts and the explanation then call them guesses to check.
+
+- The MCP tool `explain_prediction` takes the recourse arguments `immutable`, `allowed`, `difficulty`, `cost_strategy` (`unit` or `data`), `difficulty_from_model`, `max_changes` and `plans`, so an agent can ask for plans that a person can carry out.
+- The MCP tool `propose_difficulties` (with `--llm`) asks the LLM how hard each change is, and returns the arguments to pass to `explain_prediction`.
+
+### Changed
+
+- **BREAKING:** The field `LocalFacts.counterfactual` is replaced by the list `LocalFacts.counterfactuals`, which the constructor takes; an empty list means that no plan exists. `LocalFacts.counterfactual` is a read-only property that gives the first plan, or `None`.
+- **BREAKING:** `MinimalityStatus.is_smallest` is renamed `is_optimal`, because with costs the claim is the cheapest plan, not the smallest set.
+- **BREAKING:** `Counterfactual.lower_bound` (a number of changes) is replaced by `Counterfactual.cost_lower_bound` (a cost that no plan beats).
+- **BREAKING:** `Change` has the new required field `to_bin`, the index of the new bin.
+- **BREAKING:** The facts of the MCP tool `explain_prediction` hold the list `counterfactuals` in place of `counterfactual`.
+
+- **BREAKING:** The texts of `facts_to_texts` name the claim of a counterfactual and of a sufficient reason `is_optimal`, the name of the field that they render, in place of `is_smallest_set`. The prompts read the new key.
+
+### Removed
+
+- **BREAKING:** `LocalFacts.counterfactual` is removed. Read the list `LocalFacts.counterfactuals`: it is empty when no plan exists, and its first item is the cheapest plan.
+
 <a id='changelog-0.12.2'></a>
 ## [0.12.2] - 2026-11-22
 
