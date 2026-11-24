@@ -73,9 +73,9 @@ the *gains*.
   claims no ratio for `GreedyCover` and `LocalSearchCover`, and their guarantee is the lower bound.
 - A tie between the two highest classes of a multiclass classifier. The code takes the first class, and the margin is
   then zero. The proof needs a strict winner.
-- The counterfactual with a chosen target class `j`. The Lean model covers "the predicted class is no longer `c`". The
-  code solves the target class as a covering problem over every choice of bins, and the statements about the solvers
-  above apply to it.
+- The reduction, the lower bound and the hardness for the counterfactual with a chosen target class `j`. The Lean model
+  of this page covers "the predicted class is no longer `c`". The [recourse proof](recourse-proof.md) models the target
+  class in Lean, and the statements about the solvers above apply to it on paper only.
 - The running time of the reduction, and the membership of the decision problem in NP. Lean checks that the reduction
   is correct. The paper argues the running time and the membership in a few lines, and it cites Karp for the
   NP-hardness of Set Cover.

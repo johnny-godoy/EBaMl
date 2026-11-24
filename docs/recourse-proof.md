@@ -26,6 +26,9 @@ any number of margins.
   of a binary EBM.
 - **Stricter settings.** A higher confidence level, a smaller allowed set, a new immutable feature, a lower cap and
   more excluded bins never give a cheaper plan, and never make an impossible plan possible.
+- **A chosen class.** The counterfactual of a chosen class of a multiclass classifier is a plan problem with one margin
+  for each rival class. Its valid plans are exactly the changes after which the chosen class beats every rival, so the
+  statements above hold for it.
 - **Diverse plans.** Each plan after the first uses no pair (feature, bin) of an earlier plan, as in the code of GAM
   Coach. Each plan is valid, and the costs of the plans do not go down.
 
@@ -35,7 +38,7 @@ any number of margins.
 - The rule for ties between plans of the same cost. The proof allows any cheapest plan.
 - The link to the code. A unit test compares the cost of each plan with an exhaustive oracle on small models. The code
   has no diverse plans.
-- The counterfactual of a chosen class of a multiclass classifier, and a lower bound from an LP relaxation.
+- A lower bound from an LP relaxation, and the hardness of the counterfactual of a chosen class with unit costs.
 - The running time of the reduction from the knapsack problem. The NP-completeness of the knapsack problem is a
   citation of Karp.
 
