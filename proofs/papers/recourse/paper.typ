@@ -17,7 +17,8 @@ positive cost, after which the decision of an Explainable Boosting Machine (EBM)
 Coach @wang2023. This paper fixes the model of the plans that EBaMl searches for: costs, a cap on the number of
 changes, excluded alternatives and several diverse plans. It proves that an optimum of the integer program is a
 cheapest plan, that the sorting search is exact for unit costs, that sorting fails for other costs, that the weighted
-problem is NP-hard, and that a stricter setting never gives a cheaper plan. Lean 4 @lean4 with Mathlib
+problem is NP-hard, that the counterfactual of a chosen class contains Set Cover, that the lower bound of the cost
+that the code reports holds, and that a stricter setting never gives a cheaper plan. Lean 4 @lean4 with Mathlib
 @mathlib2020 checks every statement. The appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
@@ -46,7 +47,12 @@ plan is valid, and the costs of the plans do not go down (Theorem 3).
 *Claim 6 (a chosen class).* For a multiclass classifier, the counterfactual of a chosen class `target_class` is a
 problem of @sec-plans with one margin for each rival class. Its valid plans are exactly the changes after which the
 chosen class beats every rival under the robust scores, and its smallest plan is the fewest such changes (Lemma 3,
-Theorem 7). So Claims 1, 4 and 5 hold for it.
+Theorem 7). So Claims 1, 4 and 5 hold for it. Every instance of Set Cover is such a counterfactual, with any positive
+costs, so it has the same optimum and the same approximate sets as Set Cover (Theorem 8).
+
+*Claim 7 (lower bound).* `Counterfactual.cost_lower_bound` is at most the cost of every valid plan. It is the number
+of changes that every valid plan needs, times the cheapest cost of an alternative (Lemma 4). For a weighted problem
+the number is $1$ when the plan with no change is not valid (Lemma 5).
 
 = The model <sec-model>
 
@@ -237,19 +243,71 @@ bin $v$ for the rival $j$ that is the term of $v$ minus the term of $c_i$.
     follow from (a) and Lemma 3.])
 ]
 
+#theorem("a chosen class contains Set Cover", [
+  Let a Set Cover instance have the sets $T_i$ over the elements $K$. Build the multiclass classifier with one feature
+  for each set, with the bins `false` (the instance) and `true`, the target class $tau$ and one rival class for each
+  element $k$, no deviation, and the margin of $tau$ against $k$ equal to $-1/2$ plus $1$ for each changed feature $i$
+  with $k in T_i$. Then, for any positive costs, (a) a plan is valid iff its changed features are a cover, and (b)
+  the sets of changes of the valid plans are exactly the covers. So the fewest changes of a chosen class equal the
+  size of a smallest cover, and a $rho$-approximate set of changes is a $rho$-approximate cover.
+], lean: ("proofs/EBaMlProofs/Recourse/TargetHardness.lean", "EBaMlProofs.Recourse.Multiclass.target_valid_iff_cover", "EBaMlProofs.Recourse.Multiclass.target_changed_eq_cover", "EBaMlProofs.Recourse.Multiclass.target_isOptimum_iff", "EBaMlProofs.Recourse.Multiclass.target_isApprox_iff"))
+
+#proof[
+  *ASSUME:* the classifier of the statement. *PROVE:* (a) and (b).
+
+  #step(1, "1", [Each feature has one alternative, the bin `true`, so a changed feature of a plan takes it
+    (`targetBins_cover`).])
+  #step(1, "2", [The margin of $tau$ against $k$ is $-1/2 + sum_(i in S) [k in T_i]$ for the changed set $S$
+    (`rivalMargin_cover`). It is positive iff some $i in S$ has $k in T_i$, by Theorem 8 of @ebamllocal.])
+  #step(1, "3", [(a) holds by $chevron.l 1 chevron.r 2$ and Lemma 3. For (b), the plan that changes exactly the
+    features of a cover is valid by (a).])
+  #step(1, "4", [*Q.E.D.* The optimum and the approximate sets follow, because the two properties of sets are
+    equal.])
+]
+
+The decision problem of Set Cover is NP-complete @karp1972, so the counterfactual of a chosen class is NP-hard for
+the fewest changes and for the cheapest plan. The hardness of approximation that the local-explanations paper carries
+from Set Cover to the sufficient reason (its Corollary 5) carries to this problem by Theorem 8 in the same way.
+
+= The lower bound of the cost <sec-bound>
+
+The code reports `cost_lower_bound` when the search does not prove an optimum (`_cost_lower_bound`). For unit costs,
+the number of changes comes from the linear relaxation, whose bound Lemma 17 of @ebamllocal proves in Lean
+(`Recourse/Bounds.lean`, `lp_lower_bound`). For other costs, `make_weighted_cover` uses the number $1$.
+
+#lemma("the number of changes times the cheapest cost", [
+  Let every valid plan change at least $n$ groups, and let $0 <= w <= w_(i,a)$ for every alternative. Then every valid
+  plan costs at least $n w$.
+], lean: ("proofs/EBaMlProofs/Recourse/Bounds.lean", "EBaMlProofs.Recourse.Problem.card_mul_le_cost", "EBaMlProofs.Recourse.Problem.cost_lower_bound"))
+
+#proof[
+  Each pick of a plan costs at least $w$, so a plan with $m$ picks costs at least $m w >= n w$.
+]
+
+#lemma("one change", [
+  If some margin has $W_k <= 0$, so that the plan with no change is not valid, every valid plan changes at least one
+  group.
+], lean: ("proofs/EBaMlProofs/Recourse/Bounds.lean", "EBaMlProofs.Recourse.Problem.one_le_card"))
+
+#proof[
+  The plan with no change has the margins $W_k$.
+]
+
 = Limits <sec-limits>
 
 - *Floating point and tolerances.* The proofs work over the real numbers. The MIP solver tests each margin against a
   tolerance (`MARGIN_EPSILON`), and its optimum rests on its certificate, which Lean does not check.
 - *Ties.* Two plans can have the same cost. The code then prefers fewer changes and lower feature positions. The
   proofs allow any cheapest plan, and they do not model the tie rule.
-- *The code.* The test `test_each_plan_matches_the_oracle` compares the cost of the code with an exhaustive oracle of
-  this model on small models. It checks the link on some inputs, and it is not a proof. The diverse plans are not in
-  the code.
+- *The code.* Two tests compare the cost of each plan of the code, the diverse plans included, with an exhaustive
+  oracle of this model on small models: `test_each_plan_matches_the_oracle` and
+  `test_each_diverse_plan_matches_the_oracle`. They check the link on some inputs, and they are not a proof.
 - *Several margins.* The abstract results hold for any number of margins. @sec-application covers one margin, and
-  @sec-target covers the margins of a chosen class. The hardness of the chosen class with unit costs is a covering
-  problem of the local-explanations paper, which proves its reduction on paper only.
-- *The lower bound.* The paper proves no bound of an LP relaxation for the weighted problem.
+  @sec-target covers the margins of a chosen class. Theorem 8 checks the reduction from Set Cover in Lean. Lean does
+  not check that the reduction runs in polynomial time, as for Theorem 5.
+- *The lower bound.* Lemmas 4 and 5 hold for any number $n$ that every valid plan needs. The number of the code
+  comes from the optimum of the linear relaxation that GLOP returns (Lemma 17 of @ebamllocal), so it rests on the
+  tolerances of GLOP. The paper proves no bound of a linear relaxation with costs, and the code computes none.
 - *The paper of GAM Coach.* Its appendix A.8 excludes only a whole earlier solution. Its code, which this model
   follows, excludes each pick of an earlier plan, so the plans of this model can differ from those of the appendix.
 - *Running time.* The reduction of Theorem 5 has the size of the instance. Lean does not check the running time, and
@@ -257,7 +315,8 @@ bin $v$ for the rival $j$ that is the term of $v$ minus the term of $c_i$.
 
 = Computer check <sec-computer>
 
-The Lean files are `proofs/EBaMlProofs/Recourse/Plans.lean`, `Counterfactual.lean` and `Target.lean`. `Axioms.lean` prints the axioms
+The Lean files are `proofs/EBaMlProofs/Recourse/Plans.lean`, `Counterfactual.lean`, `Target.lean`,
+`TargetHardness.lean`, `Bounds.lean` and `Reduction.lean`. `Axioms.lean` prints the axioms
 of each main theorem. The appendix gives the commands and the expected output.
 
 = References <sec-references>
@@ -273,7 +332,7 @@ of each main theorem. The appendix gives the commands and the expected output.
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`44773091b13e05f338b7bd0f05f52ddbb0dd12d5`],
+  [Lean sources checked at commit], [`19f6851f899812027abbe1fb3aa2186bfa8b5fd9`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.1`],
@@ -287,7 +346,7 @@ The files in `proofs/EBaMlProofs/Recourse/`, `proofs/lakefile.toml`, `proofs/lea
 ```sh
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout 44773091b13e05f338b7bd0f05f52ddbb0dd12d5
+git checkout 19f6851f899812027abbe1fb3aa2186bfa8b5fd9
 cd proofs
 lake exe cache get
 lake build
@@ -298,30 +357,45 @@ typst compile --root papers papers/recourse/paper.typ
 `error`. The file `Recourse/Axioms.lean` prints these lines:
 
 ```text
-info: EBaMlProofs/Recourse/Axioms.lean:12:0: 'EBaMlProofs.Recourse.Problem.ofPlan_feasible_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:13:0: 'EBaMlProofs.Recourse.Problem.objective_ofPlan' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:14:0: 'EBaMlProofs.Recourse.Problem.toPlan_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:15:0: 'EBaMlProofs.Recourse.Problem.objective_toPlan' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:16:0: 'EBaMlProofs.Recourse.Problem.cheapest_of_optimum' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:17:0: 'EBaMlProofs.Recourse.Problem.cost_le_of_valid_imp' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:18:0: 'EBaMlProofs.Recourse.Problem.valid_of_gain_le' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:19:0: 'EBaMlProofs.Recourse.Problem.valid_of_limits_le' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:20:0: 'EBaMlProofs.Recourse.Problem.valid_excludeUsed_new' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:21:0: 'EBaMlProofs.Recourse.Problem.cost_mono_excludeUsed' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:22:0: 'EBaMlProofs.Recourse.margin_cfProblem' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:23:0: 'EBaMlProofs.Recourse.valid_cfProblem_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:24:0: 'EBaMlProofs.Recourse.sorting_cheapest' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:25:0: 'EBaMlProofs.Recourse.valid_of_higher_confidence' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:26:0: 'EBaMlProofs.Recourse.valid_embed' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:27:0: 'EBaMlProofs.Recourse.cost_embed' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:28:0: 'EBaMlProofs.Recourse.sorting_not_cheapest' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:29:0: 'EBaMlProofs.Recourse.knapsack_canFlipOn_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:30:0: 'EBaMlProofs.Recourse.Multiclass.margin_targetProblem' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:31:0: 'EBaMlProofs.Recourse.Multiclass.valid_targetProblem_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:32:0: 'EBaMlProofs.Recourse.Multiclass.reaches_of_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:33:0: 'EBaMlProofs.Recourse.Multiclass.plan_of_reaching' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:34:0: 'EBaMlProofs.Recourse.Multiclass.exists_plan_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
-info: EBaMlProofs/Recourse/Axioms.lean:35:0: 'EBaMlProofs.Recourse.Multiclass.smallest_plan_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:15:0: 'EBaMlProofs.Recourse.Problem.ofPlan_feasible_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:16:0: 'EBaMlProofs.Recourse.Problem.objective_ofPlan' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:17:0: 'EBaMlProofs.Recourse.Problem.toPlan_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:18:0: 'EBaMlProofs.Recourse.Problem.objective_toPlan' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:19:0: 'EBaMlProofs.Recourse.Problem.cheapest_of_optimum' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:20:0: 'EBaMlProofs.Recourse.Problem.cost_le_of_valid_imp' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:21:0: 'EBaMlProofs.Recourse.Problem.valid_of_gain_le' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:22:0: 'EBaMlProofs.Recourse.Problem.valid_of_limits_le' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:23:0: 'EBaMlProofs.Recourse.Problem.valid_excludeUsed_new' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:24:0: 'EBaMlProofs.Recourse.Problem.cost_mono_excludeUsed' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:25:0: 'EBaMlProofs.Recourse.margin_cfProblem' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:26:0: 'EBaMlProofs.Recourse.valid_cfProblem_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:27:0: 'EBaMlProofs.Recourse.sorting_cheapest' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:28:0: 'EBaMlProofs.Recourse.valid_of_higher_confidence' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:29:0: 'EBaMlProofs.Recourse.valid_embed' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:30:0: 'EBaMlProofs.Recourse.cost_embed' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:31:0: 'EBaMlProofs.Recourse.sorting_not_cheapest' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:32:0: 'EBaMlProofs.Recourse.knapsack_canFlipOn_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:33:0: 'EBaMlProofs.Recourse.Multiclass.margin_targetProblem' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:34:0: 'EBaMlProofs.Recourse.Multiclass.valid_targetProblem_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:35:0: 'EBaMlProofs.Recourse.Multiclass.reaches_of_valid' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:36:0: 'EBaMlProofs.Recourse.Multiclass.plan_of_reaching' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:37:0: 'EBaMlProofs.Recourse.Multiclass.exists_plan_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:38:0: 'EBaMlProofs.Recourse.Multiclass.smallest_plan_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:39:0: 'EBaMlProofs.Recourse.Problem.valid_erase' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:40:0: 'EBaMlProofs.Recourse.Problem.valid_swap' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:41:0: 'EBaMlProofs.Recourse.Problem.exists_kept' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:42:0: 'EBaMlProofs.Recourse.Problem.exists_kept_plan' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:43:0: 'EBaMlProofs.Recourse.Problem.exists_plan_iff_kept' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:44:0: 'EBaMlProofs.Recourse.Problem.smallest_plan_iff_kept' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:45:0: 'EBaMlProofs.Recourse.Problem.lp_lower_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:46:0: 'EBaMlProofs.Recourse.Problem.no_plan_of_relaxation_infeasible' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:47:0: 'EBaMlProofs.Recourse.Problem.card_mul_le_cost' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:48:0: 'EBaMlProofs.Recourse.Problem.cost_lower_bound' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:49:0: 'EBaMlProofs.Recourse.Problem.one_le_card' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:50:0: 'EBaMlProofs.Recourse.Multiclass.target_valid_iff_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:51:0: 'EBaMlProofs.Recourse.Multiclass.target_changed_eq_cover' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:52:0: 'EBaMlProofs.Recourse.Multiclass.target_isOptimum_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: EBaMlProofs/Recourse/Axioms.lean:53:0: 'EBaMlProofs.Recourse.Multiclass.target_isApprox_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 ```
 
 *Statements and Lean names.* `P.` stands for `EBaMlProofs.Recourse.Problem.`, and `R.` for `EBaMlProofs.Recourse.`.
@@ -344,4 +418,8 @@ info: EBaMlProofs/Recourse/Axioms.lean:35:0: 'EBaMlProofs.Recourse.Multiclass.sm
     `R.Multiclass.reaches_of_valid`], [`Target.lean`],
   [Theorem 7], [`R.Multiclass.plan_of_reaching`, `R.Multiclass.exists_plan_iff`, `R.Multiclass.smallest_plan_iff`],
     [`Target.lean`],
+  [Theorem 8], [`R.Multiclass.target_valid_iff_cover`, `R.Multiclass.target_changed_eq_cover`,
+    `R.Multiclass.target_isOptimum_iff`, `R.Multiclass.target_isApprox_iff`], [`TargetHardness.lean`],
+  [Lemma 4], [`P.card_mul_le_cost`, `P.cost_lower_bound`], [`Bounds.lean`],
+  [Lemma 5], [`P.one_le_card`], [`Bounds.lean`],
 )
