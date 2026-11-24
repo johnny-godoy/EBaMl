@@ -93,6 +93,8 @@ jobs:
           if [ "$JOB_STATUS" != success ]; then # the issue lists only the jobs that did not pass
             {
               echo "$MODULE part $PART ($JOB_STATUS)"
+              # no log means that a step before cosmic-ray failed (the setup), so the job says nothing about mutants
+              [ -f /tmp/ci-logs/mutation.log ] || echo "cosmic-ray did not start: a setup step failed, see the job log"
               grep -E "mutation result|time limit|Baseline failed|no such module" /tmp/ci-logs/mutation.log | tail -n 3 || true
             } > mutation-out/status.txt
           fi
