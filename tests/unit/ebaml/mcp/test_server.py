@@ -24,6 +24,7 @@ from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import model_store
 from ebaml.mcp import server as server_module
+from ebaml.mcp.explain_tools import CostStrategyName
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.server import create_server, main
 from tests.unit.ebaml.conftest import (
@@ -33,6 +34,7 @@ from tests.unit.ebaml.conftest import (
     FittedClassifier,
     as_frame,
     instance_of,
+    returning,
     save_model,
 )
 
@@ -223,10 +225,48 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     for label, llm in (("without", None), ("with", options)):
         async with Client(create_server(ModelStore(ebm=ebm), llm)) as session:
             names[label] = {tool.name for tool in (await session.list_tools()).tools}
-    assert names["with"] - names["without"] == {"describe_feature", "describe_model"}
+    assert names["with"] - names["without"] == {"describe_feature", "describe_model", "propose_difficulties"}
     server = create_server(ModelStore(ebm=ebm), options)
     assert await _call(server, "describe_feature", {"feature": "a"}) == (False, "graph a")
     assert await _call(server, "describe_model") == (False, "model text")
+
+
+async def test_explain_prediction_takes_the_recourse_arguments(binary_server: MCPServer) -> None:
+    arguments: dict[str, object] = {
+        "row": 0,
+        "immutable": ["a"],
+        "allowed": {"c": {"levels": ["x", "y"]}},
+        "difficulty": {"b": 3.0},
+        "cost_strategy": "data",
+        "max_changes": 2,
+        "plans": 2,
+    }
+    is_error, text = await _call(binary_server, "explain_prediction", arguments)
+    assert not is_error
+    facts = orjson.loads(text)["facts"]
+    assert facts["recourse"]["immutable"] == ["a"]
+    assert all(change["feature"] != "a" for plan in facts["counterfactuals"] for change in plan["changes"])
+    assert all(len(plan["changes"]) <= 2 for plan in facts["counterfactuals"])
+    counterfactual = orjson.loads(orjson.loads(text)["texts"]["counterfactual"])
+    assert counterfactual["costs_of_the_changes"].endswith("that the user gave")
+
+
+async def test_propose_difficulties_returns_the_advice_of_the_llm(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ebm, _ = continuous_ebm
+    advice = llm_tools_module.DifficultyAdvice([], {"a": 0.5}, CostStrategyName.UNIT)
+    monkeypatch.setattr(server_module.llm_tools, "propose_feature_difficulties", returning(advice))
+    server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
+    is_error, text = await _call(server, "propose_difficulties", {"instance": {"a": 0.0, "b": 0.0, "c": "x"}})
+    assert not is_error
+    assert orjson.loads(text) == {
+        "difficulties": [],
+        "difficulty": {"a": 0.5},
+        "cost_strategy": "unit",
+        "difficulty_from_model": True,
+    }
 
 
 async def test_llm_tools_reach_the_llm_once_through_the_client(

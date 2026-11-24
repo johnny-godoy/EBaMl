@@ -6,11 +6,14 @@ from ebaml.edit.edits import SetScores
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins
 from ebaml.llm.descriptors import EBMDescription
+from ebaml.llm.difficulties import DifficultyProposal, FeatureDifficulty
 from ebaml.llm.options import ModelOptions
-from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
+from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ProposeDifficultiesRequest
+from ebaml.local.costs import DataCost, Difficulty, ScaledCost
 from ebaml.mcp import llm_tools
+from ebaml.mcp.explain_tools import CostStrategyName
 from ebaml.mcp.model_store import ModelStore
-from tests.unit.ebaml.conftest import FittedClassifier
+from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of
 
 LLM: ModelOptions = ModelOptions(provider="ollama", model="llama3")
 
@@ -97,3 +100,24 @@ def test_an_edit_during_the_llm_call_leaves_no_stale_description(
     assert llm_tools.describe_model(store, LLM) == "description 2"
     assert llm_tools.describe_model(store, LLM) == "description 2"
     assert len(calls) == 2
+
+
+def test_propose_feature_difficulties_reads_the_row_and_returns_the_arguments_of_explain_prediction(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ebm, frame = continuous_ebm
+    seen: list[ProposeDifficultiesRequest] = []
+    item = FeatureDifficulty("a", Difficulty.HARD, 2.0, "years")
+
+    def fake_propose(request: ProposeDifficultiesRequest) -> DifficultyProposal:
+        seen.append(request)
+        return DifficultyProposal([item], ScaledCost(request.base, {"a": 2.0}, proposed_by_model=True))
+
+    monkeypatch.setattr(llm_tools, "propose_difficulties", fake_propose)
+    store = ModelStore(ebm=ebm, data=as_frame(frame))
+    advice = llm_tools.propose_feature_difficulties(store, LLM, None, 3, CostStrategyName.DATA)
+    (request,) = seen
+    assert (request.instance, request.model, request.base) == (instance_of(frame, 3), LLM, DataCost())
+    assert advice == llm_tools.DifficultyAdvice([item], {"a": 2.0}, CostStrategyName.DATA)
+    assert advice.difficulty_from_model
