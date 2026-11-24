@@ -73,6 +73,7 @@ The free router picks a model for each request, so the text changes from run to 
 | Model summary (`describe_ebm`) | ✅ | ✅ | ✅ | ⚠️ |
 | Graph text (`EBMGraph`) | ✅ | ✅ | ✅ | ⚠️ |
 | Local explanations (`explain_instance`) | ✅ | ✅ | ✅ | ❌ |
+| Recourse plans (`RecourseOptions`, `propose_difficulties`) | ✅ | ✅ | ✅ | ❌ |
 | MCP server (`ebaml-mcp`) | ✅ | ✅ | ✅ | ⚠️ |
 | Editing (`EditSession`) | ✅ | ✅ | ✅ | ⚠️ |
 
