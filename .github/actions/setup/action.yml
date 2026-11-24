@@ -16,9 +16,23 @@ runs:
       # The installer takes the newest toolchain unless it gets a version. A toolchain newer than the baml-bridge of
       # uv.lock writes a baml_sdk that baml-bridge cannot read (see scripts/release/baml_toolchain.py), so install the version
       # that the lock file pins for baml-bridge.
+      # pkg.boundaryml.com sometimes answers with a server error (HTTP 520), and one such answer fails the job. So try
+      # the install up to 4 times, with a longer wait after each failure.
       run: | # nosemgrep: yaml.github-actions.security.gha-curl-pipe-shell.gha-curl-pipe-shell -- BAML publishes no checksum for its installer, so the version is the only pin
         version="$(python3 scripts/release/baml_toolchain.py)"
-        curl -fsSL https://pkg.boundaryml.com/install.sh | sh -s -- --version "$version"
+        max_attempts=4
+        for attempt in $(seq "$max_attempts"); do
+          if curl -fsSL --retry 3 https://pkg.boundaryml.com/install.sh | sh -s -- --version "$version"; then
+            break
+          fi
+          if [ "$attempt" -eq "$max_attempts" ]; then
+            echo "::error::The BAML toolchain $version did not install after $max_attempts attempts."
+            exit 1
+          fi
+          wait_seconds=$((attempt * 20))
+          echo "The BAML toolchain install failed (attempt $attempt of $max_attempts). Next attempt in $wait_seconds s."
+          sleep "$wait_seconds"
+        done
         echo "$HOME/.baml/bin" >> "$GITHUB_PATH"
     # The project build needs src/baml_sdk, so generate before the sync. Without generation, skip installing the project.
     - name: Generate BAML SDK

@@ -1,10 +1,14 @@
 """Tests for the script that names the BAML toolchain of CI."""
 
+import os
 import re
+import shutil
 import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
+from scripts.fixed_command import CommandResult, run_fixed
 from scripts.release import baml_toolchain
 
 ROOT = Path(__file__).parents[4]
@@ -59,6 +63,64 @@ def test_the_setup_action_installs_the_toolchain_of_the_lock() -> None:
     action = (ROOT / ".github/actions/setup/action.yml").read_text(encoding="utf-8")
     assert "python3 scripts/release/baml_toolchain.py" in action
     assert re.search(r'install\.sh \| sh -s -- --version "\$\{?version\}?"', action)
+
+
+INSTALL_STEP = "Install BAML toolchain"
+
+
+def install_script() -> str:
+    action = yaml.safe_load((ROOT / ".github/actions/setup/action.yml").read_text(encoding="utf-8"))
+    (step,) = [step for step in action["runs"]["steps"] if step.get("name") == INSTALL_STEP]
+    return str(step["run"])
+
+
+def run_install_step(tmp_path: Path, failure_count: int) -> CommandResult:
+    """Run the install step of the setup action with an installer that fails ``failure_count`` times first.
+
+    Returns
+    -------
+    CommandResult
+        The exit code and the output of the step.
+
+    """
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    attempts = tmp_path / "attempts"
+    fakes = {
+        "curl": "#!/bin/bash\necho 'echo install'\n",
+        # the installer counts its attempts and fails as the server error of pkg.boundaryml.com did
+        "sh": (
+            '#!/bin/bash\ncat > /dev/null\necho x >> "$ATTEMPTS"\n'
+            f'[ "$(wc -l < "$ATTEMPTS")" -gt {failure_count} ] || {{ echo "HTTP 520" >&2; exit 7; }}\n'
+        ),
+        "sleep": "#!/bin/bash\nexit 0\n",
+    }
+    for name, text in fakes.items():
+        fake = fake_bin / name
+        fake.write_text(text, encoding="utf-8")
+        fake.chmod(0o755)
+    environment = {
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "HOME": str(tmp_path),
+        "GITHUB_PATH": str(tmp_path / "github_path"),
+        "ATTEMPTS": str(attempts),
+    }
+    bash = shutil.which("bash") or "bash"
+    return run_fixed([bash, "-e", "-o", "pipefail", "-c", install_script()], cwd=ROOT, env=environment)
+
+
+def test_the_setup_action_retries_a_failed_toolchain_install(tmp_path: Path) -> None:
+    # one server error of pkg.boundaryml.com (HTTP 520) failed a whole job of the weekly mutation run
+    result = run_install_step(tmp_path, failure_count=2)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "attempts").read_text(encoding="utf-8").count("x") == 3
+
+
+def test_the_setup_action_fails_when_every_toolchain_install_fails(tmp_path: Path) -> None:
+    result = run_install_step(tmp_path, failure_count=99)
+    assert result.returncode != 0
+    assert "did not install after 4 attempts" in result.stdout
+    assert not (tmp_path / "github_path").exists()
 
 
 def test_the_project_requires_the_baml_bridge_that_the_lock_pins() -> None:
