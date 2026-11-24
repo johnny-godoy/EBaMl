@@ -23,6 +23,7 @@ BASE_TOOLS = {
     "get_model_summary",
     "list_features",
     "get_graph",
+    "get_graph_image",
     "explain_prediction",
     "list_bins",
     "preview_edit",
@@ -42,6 +43,7 @@ READ_ONLY: dict[str, dict[str, object]] = {
     "get_model_summary": {},
     "list_features": {},
     "get_graph": {"feature": "age"},
+    "get_graph_image": {"feature": "age"},
     "explain_prediction": {"row": 0},
     "list_bins": {"feature": "age"},
     "preview_edit": {"edit": {"kind": "Shift", "feature": "age", "selection": {"kind": "WholeGraph"}, "delta": 1.0}},
@@ -123,6 +125,7 @@ async def test_a_read_tool_leaves_the_revision_of_the_session_as_it_is(store: Mo
     ("name", "arguments"),
     [
         ("get_graph", {"feature": "no_such_feature"}),
+        ("get_graph_image", {"feature": "no_such_feature"}),
         ("list_bins", {"feature": "no_such_feature"}),
         ("explain_prediction", {}),
         ("explain_prediction", {"row": 10**9}),

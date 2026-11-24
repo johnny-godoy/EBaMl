@@ -2,12 +2,13 @@
 
 import pytest
 
+from ebaml.core.custom_types import GraphMode
 from ebaml.edit.edits import SetScores
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins
 from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.difficulties import DifficultyProposal, FeatureDifficulty
-from ebaml.llm.options import ModelOptions
+from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ProposeDifficultiesRequest
 from ebaml.local.costs import DataCost, Difficulty, ScaledCost
 from ebaml.mcp import llm_tools
@@ -16,6 +17,43 @@ from ebaml.mcp.model_store import ModelStore
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of
 
 LLM: ModelOptions = ModelOptions(provider="ollama", model="llama3")
+TEXT: GraphOptions = GraphOptions()
+
+
+def test_describe_feature_passes_the_graph_options(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[GraphOptions] = []
+
+    def fake_describe_graph(request: DescribeGraphRequest) -> str:
+        seen.append(request.graph)
+        return "graph text"
+
+    monkeypatch.setattr(llm_tools, "describe_graph", fake_describe_graph)
+    vision = GraphOptions(mode="vision", vision_fallback="text")
+    llm_tools.describe_feature(ModelStore(ebm=continuous_ebm[0]), LLM, "b", vision)
+    assert seen == [vision]
+
+
+def test_describe_model_keeps_one_text_for_each_mode(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[GraphMode] = []
+
+    def fake_describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
+        seen.append(request.graph.mode)
+        return EBMDescription(f"described in {request.graph.mode}", [], [])
+
+    monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
+    store = ModelStore(ebm=continuous_ebm[0])
+    vision = GraphOptions(mode="vision")
+    assert llm_tools.describe_model(store, LLM, TEXT) == "described in text"
+    assert llm_tools.describe_model(store, LLM, vision) == "described in vision"
+    assert llm_tools.describe_model(store, LLM, vision) == "described in vision"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "described in text"
+    assert seen == [GraphMode.TEXT, GraphMode.VISION]
 
 
 def test_describe_feature_passes_the_feature_index_and_the_llm(
@@ -32,7 +70,7 @@ def test_describe_feature_passes_the_feature_index_and_the_llm(
         return "graph text"
 
     monkeypatch.setattr(llm_tools, "describe_graph", fake_describe_graph)
-    assert llm_tools.describe_feature(ModelStore(ebm=ebm), LLM, "b") == "graph text"
+    assert llm_tools.describe_feature(ModelStore(ebm=ebm), LLM, "b", TEXT) == "graph text"
     assert calls == [(1, LLM)]
 
 
@@ -51,10 +89,10 @@ def test_describe_model_computes_the_text_once(
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
     store = ModelStore(ebm=ebm)
-    assert llm_tools.describe_model(store, LLM) == "model text"
-    assert llm_tools.describe_model(store, LLM) == "model text"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "model text"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "model text"
     assert calls == [LLM]
-    assert store.described("original") == "model text"
+    assert store.described("original", GraphMode.TEXT) == "model text"
 
 
 def test_describe_model_never_returns_the_description_of_the_model_before_an_edit(
@@ -70,10 +108,10 @@ def test_describe_model_never_returns_the_description_of_the_model_before_an_edi
         return EBMDescription(f"description {len(scores_seen)}", [], [])
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
-    assert llm_tools.describe_model(store, LLM) == "description 1"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 1"
     store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
-    assert llm_tools.describe_model(store, LLM) == "description 2"
-    assert llm_tools.describe_model(store, LLM) == "description 2"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 2"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 2"
     assert scores_seen[1] == pytest.approx(5.0)
     assert scores_seen[0] != pytest.approx(5.0)
 
@@ -94,11 +132,11 @@ def test_an_edit_during_the_llm_call_leaves_no_stale_description(
         return EBMDescription(f"description {len(calls)}", [], [])
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
-    assert llm_tools.describe_model(store, LLM) == "description 1"
-    assert store.described("original") is None
-    assert store.described(store.editing().revision) is None
-    assert llm_tools.describe_model(store, LLM) == "description 2"
-    assert llm_tools.describe_model(store, LLM) == "description 2"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 1"
+    assert store.described("original", GraphMode.TEXT) is None
+    assert store.described(store.editing().revision, GraphMode.TEXT) is None
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 2"
+    assert llm_tools.describe_model(store, LLM, TEXT) == "description 2"
     assert len(calls) == 2
 
 

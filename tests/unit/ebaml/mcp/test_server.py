@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import base64
 import socket
 import sys
 from pathlib import Path
@@ -14,12 +15,15 @@ import skops.io
 import structlog
 from mcp import Client, StdioServerParameters
 from mcp.server.mcpserver import MCPServer
-from mcp_types import TextContent, TextResourceContents
+from mcp_types import ImageContent, TextContent, TextResourceContents
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import DataFileError, HistoryError
+from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.graph_image import GraphImageOptions, graph_png
+from ebaml.graphs.model_kinds import model_kind
 from ebaml.llm.descriptors import EBMDescription
-from ebaml.llm.options import ModelOptions
+from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import model_store
@@ -212,11 +216,11 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
 ) -> None:
     ebm, _ = continuous_ebm
 
-    def fake_describe_feature(_store: ModelStore, _llm: ModelOptions, feature: str) -> str:
-        return f"graph {feature}"
+    def fake_describe_feature(_store: ModelStore, _llm: ModelOptions, feature: str, graph: GraphOptions) -> str:
+        return f"graph {feature} in {graph.mode} mode, fallback {graph.vision_fallback}"
 
-    def fake_describe_model(_store: ModelStore, _llm: ModelOptions) -> str:
-        return "model text"
+    def fake_describe_model(_store: ModelStore, _llm: ModelOptions, graph: GraphOptions) -> str:
+        return f"model text in {graph.mode} mode, fallback {graph.vision_fallback}"
 
     monkeypatch.setattr(server_module.llm_tools, "describe_feature", fake_describe_feature)
     monkeypatch.setattr(server_module.llm_tools, "describe_model", fake_describe_model)
@@ -227,8 +231,14 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
             names[label] = {tool.name for tool in (await session.list_tools()).tools}
     assert names["with"] - names["without"] == {"describe_feature", "describe_model", "propose_difficulties"}
     server = create_server(ModelStore(ebm=ebm), options)
-    assert await _call(server, "describe_feature", {"feature": "a"}) == (False, "graph a")
-    assert await _call(server, "describe_model") == (False, "model text")
+    assert await _call(server, "describe_feature", {"feature": "a"}) == (False, "graph a in text mode, fallback raise")
+    assert await _call(server, "describe_model") == (False, "model text in text mode, fallback raise")
+    vision: dict[str, object] = {"mode": "vision", "vision_fallback": "text"}
+    assert await _call(server, "describe_feature", {"feature": "a", **vision}) == (
+        False,
+        "graph a in vision mode, fallback text",
+    )
+    assert await _call(server, "describe_model", vision) == (False, "model text in vision mode, fallback text")
 
 
 async def test_explain_prediction_takes_the_recourse_arguments(binary_server: MCPServer) -> None:
@@ -508,7 +518,14 @@ async def test_the_real_command_serves_the_tools_over_stdio(saved_files: tuple[P
         graph = await session.call_tool("get_graph", {"feature": "a"})
         explanation = await session.call_tool("explain_prediction", {"row": 0})
     texts = [result.content[0].text for result in (summary, features, graph, explanation)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
-    assert names == {"get_model_summary", "list_features", "get_graph", "explain_prediction", *EDIT_TOOL_NAMES}
+    assert names == {
+        "get_model_summary",
+        "list_features",
+        "get_graph",
+        "get_graph_image",
+        "explain_prediction",
+        *EDIT_TOOL_NAMES,
+    }
     assert not any(result.is_error for result in (summary, features, graph, explanation))
     assert orjson.loads(texts[0])["kind"] == "BinaryClassifier"
     assert orjson.loads(texts[1])["features"][0]["name"] == "a"
@@ -837,3 +854,62 @@ async def test_the_server_without_output_dir_has_no_save_tool_and_the_command_na
     help_text = capsys.readouterr().out
     assert "--output-dir" in help_text
     assert "--edits" in help_text
+
+
+async def _call_contents(
+    server: MCPServer,
+    name: str,
+    arguments: dict[str, object],
+) -> tuple[bool, list[TextContent | ImageContent]]:
+    async with Client(server) as session:
+        result = await session.call_tool(name, arguments)
+    contents = [content for content in result.content if isinstance(content, TextContent | ImageContent)]
+    assert len(contents) == len(result.content)
+    return result.is_error, contents
+
+
+async def test_get_graph_image_returns_a_note_and_the_png_of_the_graph(
+    binary_server: MCPServer,
+    continuous_ebm: FittedClassifier,
+) -> None:
+    ebm, _ = continuous_ebm
+    is_error, contents = await _call_contents(binary_server, "get_graph_image", {"feature": "a"})
+    note, image = contents
+    assert not is_error
+    assert isinstance(note, TextContent)
+    assert note.text == "Revision original. The head is original, and it holds 0 applied edits."
+    assert isinstance(image, ImageContent)
+    assert image.mime_type == "image/png"
+    expected = graph_png(EBMGraph.from_ebm(ebm, 0), GraphImageOptions(score_axis=model_kind(ebm).score_axis))
+    assert base64.b64decode(image.data) == expected
+
+
+async def test_get_graph_image_of_an_unknown_feature_is_an_error(binary_server: MCPServer) -> None:
+    is_error, contents = await _call_contents(binary_server, "get_graph_image", {"feature": "no_such_feature"})
+    assert is_error
+    assert isinstance(contents[0], TextContent)
+    assert "no_such_feature" in contents[0].text
+
+
+@pytest.mark.parametrize("kind", PARTIAL_KINDS)
+async def test_get_graph_image_names_or_rejects_what_a_partial_model_leaves_out_of_the_image(
+    partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
+    kind: str,
+) -> None:
+    # contract 4: the image of a feature of an interaction names the term, and a feature without a graph has no image
+    interaction_ebm, _ = partial_models[kind, "interaction"]
+    names = list(interaction_ebm.feature_names_in_)
+    term = next(term for term in interaction_ebm.term_features_ if len(term) > 1)
+    server = create_server(ModelStore(ebm=interaction_ebm))
+    _, contents = await _call_contents(server, "get_graph_image", {"feature": names[term[0]]})
+    assert isinstance(contents[0], TextContent)
+    assert " x ".join(names[index] for index in term) in contents[0].text
+    removed_ebm, _ = partial_models[kind, "removed_term"]
+    is_error, removed = await _call_contents(
+        create_server(ModelStore(ebm=removed_ebm)),
+        "get_graph_image",
+        {"feature": REMOVED_FEATURE},
+    )
+    assert is_error
+    assert isinstance(removed[0], TextContent)
+    assert "main-effect term" in removed[0].text

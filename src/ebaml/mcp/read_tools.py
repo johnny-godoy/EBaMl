@@ -1,4 +1,4 @@
-"""The tools that read an EBM: its summary, its features and the text of a graph.
+"""The tools that read an EBM: its summary, its features, and the text and the image of a graph.
 
 Each function calls code of a lower layer and returns an attrs class. The server turns the class into JSON.
 """
@@ -13,6 +13,7 @@ from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_effect_features, main_term
 from ebaml.graphs.token_budget import check_token_budget
+from ebaml.llm.graph_views import image_module
 from ebaml.mcp.model_store import ModelStore
 
 
@@ -182,3 +183,70 @@ def graph_text(  # ruff: ignore[too-many-arguments] -- one argument for each opt
     info = read.info
     note = f"Revision {info.revision}. The head is {info.head}, and it holds {info.edit_count} applied edits."
     return f"{note}\n{text}"
+
+
+@attrs.frozen
+class GraphPicture:
+    """The image of the graph of one feature, with a note on what it shows.
+
+    Attributes
+    ----------
+    note: str
+        The revision that the image reads, the edits that the head holds, and the interaction terms of the feature that
+        the image leaves out.
+    png: bytes
+        The PNG image of the graph.
+
+    """
+
+    note: str
+    png: bytes
+
+
+def graph_picture(
+    store: ModelStore,
+    feature: str,
+    *,
+    revision: str = CURRENT,
+    normalization: Normalization | str = Normalization.NONE,
+) -> GraphPicture:
+    """Draw the graph of a feature as a PNG image, for an agent that reads images.
+
+    Parameters
+    ----------
+    store: ModelStore
+        The session that holds the model and its edits.
+    feature: str
+        The feature whose graph the image shows.
+    revision: str, default="current"
+        The revision to draw, as ``graph_text`` reads it.
+    normalization: Normalization | str, default=Normalization.NONE
+        The shift of the scores, as ``EBMGraph.from_ebm`` reads it.
+
+    Returns
+    -------
+    GraphPicture
+        The note and the image. The image shows the main effect of the feature, with no simplification. It needs the
+        extra ``vision``, and raises ``MissingExtraError`` without it.
+
+    """
+    read = store.read(revision)
+    ebm = read.model
+    feature_index = store.feature_index(feature)
+    graph = EBMGraph.from_ebm(ebm, feature_index, normalization)
+    drawing = image_module()
+    png: bytes = drawing.graph_png(graph, drawing.GraphImageOptions(score_axis=model_kind(ebm).score_axis))
+    names = list(ebm.feature_names_in_)
+    interactions = [
+        " x ".join(names[index] for index in term)
+        for term in ebm.term_features_
+        if len(term) > 1 and feature_index in term
+    ]
+    info = read.info
+    note = f"Revision {info.revision}. The head is {info.head}, and it holds {info.edit_count} applied edits."
+    if interactions:
+        note += (
+            " The image shows the main effect of the feature only. These interaction terms of the feature are not in"
+            f" it: {', '.join(interactions)}."
+        )
+    return GraphPicture(note, png)

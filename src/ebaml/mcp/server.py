@@ -15,20 +15,21 @@ import attrs
 import cyclopts
 import orjson
 import structlog
-from mcp.server.mcpserver import Context, Elicit, MCPServer, Resolve
+from mcp.server.mcpserver import Context, Elicit, Image, MCPServer, Resolve
 from mcp.server.mcpserver.exceptions import ToolError
 
-from ebaml.core.custom_types import FeatureValue, JSONValue, Normalization, Transport
+from ebaml.core.custom_types import FeatureValue, GraphMode, JSONValue, Normalization, Transport, VisionFallback
 from ebaml.core.exceptions import EBaMlError
 from ebaml.edit.constraints import DEFAULT_TOLERANCE
 from ebaml.edit.edit_session import EditSession
-from ebaml.llm.options import ModelOptions
+from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.mcp import edit_tools, effect_tools, explain_tools, llm_tools, read_tools, save_tools
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 
 _INSTRUCTIONS = (
     "This server gives you a fitted Explainable Boosting Machine (EBM), a model that is a sum of one graph per feature."
-    " Start with get_model_summary and list_features. Read a graph with get_graph. Explain one prediction with"
+    " Start with get_model_summary and list_features. Read a graph with get_graph, or look at it with"
+    " get_graph_image if you read images. Explain one prediction with"
     " explain_prediction. Every result of these tools is exact and comes from the model, not from a language model."
     " When the person wants a plan to change a prediction, ask which features they cannot change and which changes"
     " are hard, and pass them to explain_prediction as immutable, allowed and difficulty."
@@ -111,6 +112,7 @@ def create_server(
     """
     server = MCPServer("ebaml", instructions=_INSTRUCTIONS)
     _register_read_tools(server, store)
+    _register_image_tool(server, store)
     _register_explain_tools(server, store)
     _register_bin_tools(server, store)
     _register_constraint_tool(server, store)
@@ -213,6 +215,41 @@ def _register_read_tools(server: MCPServer, store: ModelStore) -> None:
         """
         with _tool_errors():
             return read_tools.graph_text(store, feature)
+
+
+def _register_image_tool(server: MCPServer, store: ModelStore) -> None:
+    """Register the tool that draws a graph as an image, for an agent that reads images.
+
+    Parameters
+    ----------
+    server: MCPServer
+        The server to add it to.
+    store: ModelStore
+        The session.
+
+    """
+
+    @server.tool()
+    def get_graph_image(
+        feature: str,
+        revision: str = "current",
+        normalization: Normalization = Normalization.NONE,
+    ) -> list[str | Image]:
+        """Look at the graph of one feature as a PNG image: the score of the model for each value or interval.
+
+        Use it if you read images: the shape of a graph (a jump, a plateau, a trend) is quicker to see in a picture.
+        Take exact numbers from get_graph, because a picture gives no exact value. A band or error bars show the 95%
+        confidence interval. Give revision to look at the graph as it was at an earlier edit.
+
+        Returns
+        -------
+        list[str | Image]
+            A note with the revision and the interaction terms that the image leaves out, then the image.
+
+        """
+        with _tool_errors():
+            picture = read_tools.graph_picture(store, feature, revision=revision, normalization=normalization)
+            return [picture.note, Image(data=picture.png, format="png")]
 
 
 def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
@@ -588,9 +625,17 @@ def _register_save_tool(server: MCPServer, store: ModelStore) -> None:
 
 def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:
     @server.tool()
-    def describe_feature(feature: str) -> str:
+    def describe_feature(
+        feature: str,
+        mode: GraphMode = GraphMode.TEXT,
+        vision_fallback: VisionFallback = VisionFallback.RAISE,
+    ) -> str:
         """Ask a language model to describe the graph of one feature in words. This costs money and takes seconds.
 
+        mode chooses what the language model gets: ``text`` (the graph text), ``vision`` (an image of the graph) or
+        ``mixed`` (both). An image needs a language model that reads images. vision_fallback chooses what happens if it
+        reads none: ``raise`` gives an error, and ``text`` describes the graph text.
+
         Returns
         -------
         str
@@ -598,13 +643,18 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
 
         """
         with _tool_errors():
-            return llm_tools.describe_feature(store, llm, feature)
+            graph = GraphOptions(mode=mode, vision_fallback=vision_fallback)
+            return llm_tools.describe_feature(store, llm, feature, graph)
 
     @server.tool()
-    def describe_model() -> str:
+    def describe_model(
+        mode: GraphMode = GraphMode.TEXT,
+        vision_fallback: VisionFallback = VisionFallback.RAISE,
+    ) -> str:
         """Ask a language model to describe the whole model in words.
 
-        The first call is slow, and the server keeps the text.
+        The first call is slow, and the server keeps the text of each mode. mode and vision_fallback work as in
+        describe_feature.
 
         Returns
         -------
@@ -613,7 +663,7 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
 
         """
         with _tool_errors():
-            return llm_tools.describe_model(store, llm)
+            return llm_tools.describe_model(store, llm, GraphOptions(mode=mode, vision_fallback=vision_fallback))
 
     @server.tool()
     def propose_difficulties(

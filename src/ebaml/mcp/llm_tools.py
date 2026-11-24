@@ -7,7 +7,7 @@ import attrs
 from ebaml.core.custom_types import FeatureValue
 from ebaml.llm.descriptors import describe_ebm, describe_graph, propose_difficulties
 from ebaml.llm.difficulties import FeatureDifficulty
-from ebaml.llm.options import ModelOptions
+from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ProposeDifficultiesRequest
 from ebaml.mcp.explain_tools import BASE_STRATEGIES, CostStrategyName, instance_values
 from ebaml.mcp.model_store import ModelStore
@@ -36,7 +36,7 @@ class DifficultyAdvice:
     difficulty_from_model: bool = True
 
 
-def describe_feature(store: ModelStore, llm: ModelOptions, feature: str) -> str:
+def describe_feature(store: ModelStore, llm: ModelOptions, feature: str, graph: GraphOptions) -> str:
     """Ask the LLM to describe the graph of one feature.
 
     Parameters
@@ -47,6 +47,8 @@ def describe_feature(store: ModelStore, llm: ModelOptions, feature: str) -> str:
         The LLM.
     feature: str
         The name of the feature.
+    graph: GraphOptions
+        The options of the graph, with the mode and the fallback.
 
     Returns
     -------
@@ -54,11 +56,12 @@ def describe_feature(store: ModelStore, llm: ModelOptions, feature: str) -> str:
         The output of ``describe_graph``.
 
     """
-    return describe_graph(DescribeGraphRequest(store.read().model, store.feature_index(feature), model=llm))
+    request = DescribeGraphRequest(store.read().model, store.feature_index(feature), graph=graph, model=llm)
+    return describe_graph(request)
 
 
-def describe_model(store: ModelStore, llm: ModelOptions) -> str:
-    """Ask the LLM to describe the whole model at the head. The store keeps the text for the revision that it describes.
+def describe_model(store: ModelStore, llm: ModelOptions, graph: GraphOptions) -> str:
+    """Ask the LLM to describe the whole model at the head. The store keeps the text of each mode for the revision.
 
     The LLM call runs on a revision with no lock. If an edit moves the head during the call, the store drops the text,
     so the next call describes the new head.
@@ -69,6 +72,8 @@ def describe_model(store: ModelStore, llm: ModelOptions) -> str:
         The session.
     llm: ModelOptions
         The LLM.
+    graph: GraphOptions
+        The options of the graphs, with the mode and the fallback.
 
     Returns
     -------
@@ -77,11 +82,11 @@ def describe_model(store: ModelStore, llm: ModelOptions) -> str:
 
     """
     read = store.read()
-    kept = store.described(read.info.revision)
+    kept = store.described(read.info.revision, graph.mode)
     if kept is not None:
         return kept
-    text = describe_ebm(DescribeEBMRequest(read.model, model=llm)).text
-    store.keep_description(read.info.revision, text)
+    text = describe_ebm(DescribeEBMRequest(read.model, graph=graph, model=llm)).text
+    store.keep_description(read.info.revision, text, graph.mode)
     return text
 
 
