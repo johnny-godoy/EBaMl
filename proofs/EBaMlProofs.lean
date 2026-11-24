@@ -8,6 +8,7 @@ import EBaMlProofs.LocalExplanations.Axioms
 import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
 import EBaMlProofs.Recourse.Target
+import EBaMlProofs.Recourse.TargetHardness
 import EBaMlProofs.Recourse.Reduction
 import EBaMlProofs.Recourse.Bounds
 import EBaMlProofs.Recourse.Axioms

@@ -1,6 +1,7 @@
 import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
 import EBaMlProofs.Recourse.Target
+import EBaMlProofs.Recourse.TargetHardness
 import EBaMlProofs.Recourse.Reduction
 import EBaMlProofs.Recourse.Bounds
 
@@ -46,3 +47,7 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.Recourse.Problem.card_mul_le_cost
 #print axioms EBaMlProofs.Recourse.Problem.cost_lower_bound
 #print axioms EBaMlProofs.Recourse.Problem.one_le_card
+#print axioms EBaMlProofs.Recourse.Multiclass.target_valid_iff_cover
+#print axioms EBaMlProofs.Recourse.Multiclass.target_changed_eq_cover
+#print axioms EBaMlProofs.Recourse.Multiclass.target_isOptimum_iff
+#print axioms EBaMlProofs.Recourse.Multiclass.target_isApprox_iff
