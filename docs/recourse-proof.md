@@ -28,7 +28,10 @@ any number of margins.
   more excluded bins never give a cheaper plan, and never make an impossible plan possible.
 - **A chosen class.** The counterfactual of a chosen class of a multiclass classifier is a plan problem with one margin
   for each rival class. Its valid plans are exactly the changes after which the chosen class beats every rival, so the
-  statements above hold for it.
+  statements above hold for it. Every instance of Set Cover is such a counterfactual, with any positive costs, so it
+  is NP-hard for the fewest changes and for the cheapest plan, and it has the hardness of approximation of Set Cover.
+- **The lower bound of the cost.** `Counterfactual.cost_lower_bound` is at most the cost of every valid plan. It is a
+  number of changes that every valid plan needs, times the cheapest cost of a change.
 - **Diverse plans.** Each plan after the first uses no pair (feature, bin) of an earlier plan, as in the code of GAM
   Coach. Each plan is valid, and the costs of the plans do not go down.
 
@@ -36,11 +39,12 @@ any number of margins.
 
 - Floating point and the tolerances of the MIP solver. A proved optimum rests on the certificate of the solver.
 - The rule for ties between plans of the same cost. The proof allows any cheapest plan.
-- The link to the code. A unit test compares the cost of each plan with an exhaustive oracle on small models. The code
-  has no diverse plans.
-- A lower bound from an LP relaxation, and the hardness of the counterfactual of a chosen class with unit costs.
-- The running time of the reduction from the knapsack problem. The NP-completeness of the knapsack problem is a
-  citation of Karp.
+- The link to the code. Unit tests compare the cost of each plan, the diverse plans included, with an exhaustive
+  oracle on small models.
+- The number of changes in the lower bound of the cost. It comes from the optimum of a linear relaxation that the LP
+  solver returns, so it rests on the tolerances of that solver.
+- The running time of the reductions from the knapsack problem and from Set Cover. The NP-completeness of both problems
+  is a citation of Karp.
 
 ## How the proof is checked
 

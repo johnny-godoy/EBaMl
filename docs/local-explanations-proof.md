@@ -68,14 +68,15 @@ the *gains*.
 - The certificates of the solvers. An optimal result of HiGHS, SCIP or CP-SAT rests on the solver and on its
   floating-point tolerances. A set whose smallest margin is positive but tiny can be missed, so `minimality` can be wrong
   in that case.
-- The reduction of the problem, the lower bound of the LP and the coverage of the greedy. The paper proves the first
-  two on paper, and Lean checks none of them. The lower bound also depends on the tolerances of the LP solver. EBaMl
-  claims no ratio for `GreedyCover` and `LocalSearchCover`, and their guarantee is the lower bound.
+- The number that the LP solver returns, and the coverage of the greedy. Lean checks the reduction of the problem and
+  the lower bound of the LP for any number that bounds the LP from below. It does not check that the optimum of GLOP
+  is such a number, because that depends on the tolerances of the solver. EBaMl claims no ratio for `GreedyCover` and
+  `LocalSearchCover`, and their guarantee is the lower bound.
 - A tie between the two highest classes of a multiclass classifier. The code takes the first class, and the margin is
   then zero. The proof needs a strict winner.
-- The reduction, the lower bound and the hardness for the counterfactual with a chosen target class `j`. The Lean model
-  of this page covers "the predicted class is no longer `c`". The [recourse proof](recourse-proof.md) models the target
-  class in Lean, and the statements about the solvers above apply to it on paper only.
+- The running time of the reduction for the counterfactual with a chosen target class `j`. The Lean model of this page
+  covers "the predicted class is no longer `c`". The [recourse proof](recourse-proof.md) models the target class in
+  Lean and checks its reduction from Set Cover, and the Lean statements about the solvers apply to it.
 - The running time of the reduction, and the membership of the decision problem in NP. Lean checks that the reduction
   is correct. The paper argues the running time and the membership in a few lines, and it cites Karp for the
   NP-hardness of Set Cover.
