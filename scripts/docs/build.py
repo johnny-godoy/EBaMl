@@ -46,6 +46,7 @@ ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOKS: tuple[Path, ...] = (
     ROOT / "notebooks" / "titanic.py",
     ROOT / "notebooks" / "local_explanations.py",
+    ROOT / "notebooks" / "recourse.py",
     ROOT / "notebooks" / "audiences.py",
     ROOT / "notebooks" / "languages.py",
     ROOT / "notebooks" / "model_providers.py",
