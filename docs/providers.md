@@ -41,17 +41,21 @@ EBaMl splits the shorthand at the first `/`. The text `"openrouter/openai/gpt-4o
 
 The provider is a BAML provider prefix. Set the environment variable of the key in the shell that runs Python.
 
-| Provider | Default key variable | Notes |
-| --- | --- | --- |
-| `openrouter` | `OPENROUTER_API_KEY` | The model name is the OpenRouter name, for example `openai/gpt-4o-mini`. |
-| `openai` | `OPENAI_API_KEY` | |
-| `anthropic` | `ANTHROPIC_API_KEY` | |
-| `google` | `GOOGLE_API_KEY` | The Gemini API. |
-| `ollama` | None | A local server. `base_url` defaults to `http://localhost:11434/v1`. |
-| `openai-generic` | None | Any OpenAI-compatible server. `base_url` is required. Set `api_key_env` if the server needs a key. |
-| `azure` | `AZURE_OPENAI_API_KEY` | The model name is the name of the deployment. Set `base_url` to the deployment, or set `AZURE_OPENAI_ENDPOINT`. |
-| `vertex` | None | Google Cloud credentials (`GOOGLE_APPLICATION_CREDENTIALS` or `gcloud auth`). The project comes from `GOOGLE_CLOUD_PROJECT`. |
-| `bedrock` | None | The AWS credentials of the machine. The region comes from `AWS_REGION`. `api_key_env` has no effect. |
+| Provider | Default key variable | Graph images | Notes |
+| --- | --- | --- | --- |
+| `openrouter` | `OPENROUTER_API_KEY` | OpenAI format | The model name is the OpenRouter name, for example `openai/gpt-4o-mini`. `openrouter/free` routes a request with an image to a free model that reads images. |
+| `openai` | `OPENAI_API_KEY` | OpenAI format | |
+| `anthropic` | `ANTHROPIC_API_KEY` | Anthropic format | |
+| `google` | `GOOGLE_API_KEY` | Gemini format | The Gemini API. |
+| `ollama` | None | OpenAI format | A local server. `base_url` defaults to `http://localhost:11434/v1`. |
+| `openai-generic` | None | OpenAI format | Any OpenAI-compatible server. `base_url` is required. Set `api_key_env` if the server needs a key. |
+| `azure` | `AZURE_OPENAI_API_KEY` | OpenAI format | The model name is the name of the deployment. Set `base_url` to the deployment, or set `AZURE_OPENAI_ENDPOINT`. |
+| `vertex` | None | Gemini format | Google Cloud credentials (`GOOGLE_APPLICATION_CREDENTIALS` or `gcloud auth`). The project comes from `GOOGLE_CLOUD_PROJECT`. |
+| `bedrock` | None | Bedrock format | The AWS credentials of the machine. The region comes from `AWS_REGION`. `api_key_env` has no effect. |
+
+The column "Graph images" gives the format in which each provider gets the PNG of a graph in vision and mixed mode
+([Text, vision and mixed modes](usage.md#text-vision-and-mixed-modes)). The provider takes the image only if the model
+reads images. Set `ModelOptions(vision=False)` for a model that reads no images.
 
 Run `baml describe <client>.new`, for example `baml describe aws.BedrockClient.new`, to see all settings of a client.
 
@@ -66,6 +70,7 @@ Run `baml describe <client>.new`, for example `baml describe aws.BedrockClient.n
 | `temperature` | The sampling temperature. | 0.7 (0.0 in the benchmark). |
 | `max_output_tokens` | The most tokens of one reply. | See below. |
 | `headers` | Headers to add to each request. | None. |
+| `vision` | Whether the model reads images. `False` applies `GraphOptions.vision_fallback` before any request of a call in vision or mixed mode. | `None`: the call sends the image. |
 
 A field that you set wins over the default of the call. The output limit has two defaults:
 
@@ -121,8 +126,9 @@ only when it sends a request.
 - A reasoning model counts its hidden tokens in `max_output_tokens`. Keep the limit large, or the reply can end before
   the answer.
 - Quality, speed and cost depend on the model. Small models can ignore the number of sentences that you ask for.
-- EBaMl sends each graph as text, also to a model that can read images. Graph images for vision models are on the
-  [roadmap](https://github.com/johnny-godoy/EBaMl/blob/main/ROADMAP.md).
+- EBaMl does not read the input of a model from the provider. In vision or mixed mode, EBaMl sends the image unless
+  `ModelOptions(vision=False)` says that the model reads no images, and a model that rejects the image raises
+  `VisionUnsupportedError` or falls back to text.
 
 Every client has the retry policy of the default clients: EBaMl retries a transient failure up to 3 times.
 

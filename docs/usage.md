@@ -49,6 +49,76 @@ multiclass = ExplainableBoostingClassifier(interactions=0).fit(X, y_multiclass)
 print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=GraphOptions(classes=["young", "old"]))))
 ```
 
+## Text, vision and mixed modes
+
+`GraphOptions(mode=...)` sets how each graph reaches the LLM. The mode applies to `describe_graph` and `describe_ebm`.
+
+| Mode | The request sends | Model |
+| --- | --- | --- |
+| `"text"` (default) | The graph text of `EBMGraph.to_text`. | Every model. |
+| `"vision"` | A PNG image of the graph, with no simplification, and no graph text. | A model that reads images. |
+| `"mixed"` | The graph text, and a PNG image of the same simplified graph. | A model that reads images. |
+
+The images need the extra `vision`: `pip install "ebaml[vision]"`. A call in vision or mixed mode without the extra
+raises `MissingExtraError` before any request.
+
+```python
+from ebaml import GraphMode
+
+print(describe_graph(DescribeGraphRequest(ebm, feature_index=0, graph=GraphOptions(mode=GraphMode.VISION))))
+print(describe_graph(DescribeGraphRequest(ebm, feature_index=0, graph=GraphOptions(mode="mixed"))))
+```
+
+A picture gives no exact values. In vision mode, the prompt tells the LLM to call each value that it reads from the
+image an estimate. In mixed mode, the prompt tells the LLM to take every number from the text and to use the image for
+the shape of the graph. Every mode names the interaction terms that the description leaves out.
+
+The image and the text of a graph agree bin for bin. Draw the image yourself with `graph_png` or `graph_svg`.
+`GraphImageOptions` sets the title, the title of the score axis, the feature format and the confidence level.
+
+```python
+from ebaml import EBMGraph, GraphImageOptions, graph_png, model_kind
+
+graph = EBMGraph.from_ebm(ebm, 0)
+png = graph_png(graph, GraphImageOptions(score_axis=model_kind(ebm).score_axis))
+```
+
+### A model that reads no images
+
+`GraphOptions(vision_fallback=...)` sets what a call in vision or mixed mode does when the model reads no images. The
+call knows this in one of two ways: `ModelOptions(vision=False)` says so before any request, or the provider rejects
+the image.
+
+| `vision_fallback` | The call |
+| --- | --- |
+| `"raise"` (default) | Raises `VisionUnsupportedError`. Its message names the model and lists the steps that fix the cause. |
+| `"text"` | Describes each graph from its text, and emits one `VisionFallbackWarning`. |
+
+The default raises, because a caller who asks for an image must not get a description of the text in silence. The
+first model that reads no images decides for the whole call: in `describe_ebm`, the graphs that wait switch to text, or
+send no request with `"raise"`. A rejected request is not retried.
+
+```python
+import warnings
+
+from ebaml import ModelOptions, VisionFallbackWarning, VisionUnsupportedError
+
+text_only = ModelOptions(provider="openai", model="text-only-model", vision=False)
+try:
+    describe_graph(DescribeGraphRequest(ebm, 0, graph=GraphOptions(mode="vision"), model=text_only))
+except VisionUnsupportedError as error:
+    print(error)
+
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always", VisionFallbackWarning)
+    graph = GraphOptions(mode="vision", vision_fallback="text")
+    print(describe_graph(DescribeGraphRequest(ebm, 0, graph=graph, model=text_only)))
+assert [warning.category for warning in caught] == [VisionFallbackWarning]
+```
+
+To turn the warning into an error, call `warnings.simplefilter("error", VisionFallbackWarning)`. The
+[vision notebook](vision-notebook.md) draws the image of each model kind and compares the three modes.
+
 ## Explaining one prediction
 
 ```python
