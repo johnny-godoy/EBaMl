@@ -18,7 +18,7 @@ from typing import Self
 import attrs
 import structlog
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType, GraphMode, VisionFallback
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureType, GraphMode, VisionFallback, coerce_enum
 from ebaml.core.exceptions import VisionFallbackWarning, VisionUnsupportedError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.model_kinds import model_kind
@@ -77,7 +77,7 @@ class ImageSettings:
     ----------
     ebm: ExplainableBoostingModel
         The EBM. Its kind names the score axis.
-    feature_format: FeatureType | str | None
+    feature_format: FeatureType | None
         The feature format of the graph text, so that the image presents the feature in the same way.
     confidence_level: float | None
         The level of the bounds, or ``None`` when the graph text has no bounds.
@@ -85,7 +85,7 @@ class ImageSettings:
     """
 
     ebm: ExplainableBoostingModel
-    feature_format: FeatureType | str | None
+    feature_format: FeatureType | None
     confidence_level: float | None
 
     @classmethod
@@ -105,7 +105,8 @@ class ImageSettings:
             The settings: the bounds only if the text has bounds.
 
         """
-        return cls(ebm, options.feature_format, options.confidence_level if options.confidence_bounds else None)
+        feature_format = None if options.feature_format is None else coerce_enum(FeatureType, options.feature_format)
+        return cls(ebm, feature_format, options.confidence_level if options.confidence_bounds else None)
 
 
 def image_module() -> ModuleType:
@@ -229,9 +230,9 @@ def _fix_steps(model: str) -> str:
     return (
         "To fix it:\n"
         f"  1. Pick a model that reads images in place of {model}. The provider lists the input of each model.\n"
-        '  2. Pass graph=GraphOptions(mode="text") to send each graph as text.\n'
-        '  3. Pass graph=GraphOptions(vision_fallback="text") to send the graphs as text when the model reads no'
-        " images, with a VisionFallbackWarning."
+        "  2. Pass graph=GraphOptions(mode=GraphMode.TEXT) to send each graph as text.\n"
+        "  3. Pass graph=GraphOptions(vision_fallback=VisionFallback.TEXT) to send the graphs as text when the model"
+        " reads no images, with a VisionFallbackWarning."
     )
 
 

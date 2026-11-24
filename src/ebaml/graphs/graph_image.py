@@ -8,6 +8,7 @@ The functions return the image in memory and write no file. The drawing needs ``
 ``vision`` installs. An import of this module without ``matplotlib`` raises ``MissingExtraError``.
 """
 
+import enum
 import io
 import threading
 from collections.abc import Callable, Mapping, Sequence
@@ -48,10 +49,19 @@ _SETTINGS: Mapping[str, str | float | bool] = {
     "svg.hashsalt": "ebaml",
     "text.parse_math": False,
 }
+
+
+class _ImageFormat(enum.StrEnum):
+    """The file formats that the module writes: SVG for the documentation site, PNG for a vision model."""
+
+    SVG = "svg"
+    PNG = "png"
+
+
 # no date and no version of matplotlib in the file, so that the bytes stay the same from run to run
-_METADATA: Mapping[str, Mapping[str, None]] = {
-    "svg": {"Date": None, "Creator": None},
-    "png": {"Software": None},
+_METADATA: Mapping[_ImageFormat, Mapping[str, None]] = {
+    _ImageFormat.SVG: {"Date": None, "Creator": None},
+    _ImageFormat.PNG: {"Software": None},
 }
 # matplotlib keeps its settings in one global object, so one lock keeps two drawings of a thread pool apart
 _LOCK = threading.Lock()
@@ -262,7 +272,7 @@ class GraphImageOptions:
         The title of the score axis, for example ``ModelKind.score_axis``.
     title: str, optional
         The title above the plot. If not provided, the title names the feature.
-    feature_format: FeatureType | str, optional
+    feature_format: FeatureType, optional
         The format of the feature, as ``EBMGraph.to_text`` reads it. If not provided, it is detected from the graph.
     confidence_level: float | None, default=0.95
         The confidence level of the band or the error bars. ``None`` draws no bounds.
@@ -271,7 +281,7 @@ class GraphImageOptions:
 
     score_axis: str = "score"
     title: str | None = None
-    feature_format: FeatureType | str | None = None
+    feature_format: FeatureType | None = None
     confidence_level: float | None = 0.95
 
 
@@ -314,7 +324,7 @@ def graph_figure(graph: EBMGraph, options: GraphImageOptions | None = None) -> F
     return figure
 
 
-def _render(graph: EBMGraph, options: GraphImageOptions | None, file_format: str) -> bytes:
+def _render(graph: EBMGraph, options: GraphImageOptions | None, file_format: _ImageFormat) -> bytes:
     """Draw a graph with the fixed settings, and save it in a file format, in memory.
 
     Parameters
@@ -323,8 +333,8 @@ def _render(graph: EBMGraph, options: GraphImageOptions | None, file_format: str
         The graph.
     options: GraphImageOptions, optional
         The labels, the feature format and the confidence level.
-    file_format: str
-        ``"svg"`` or ``"png"``.
+    file_format: _ImageFormat
+        The file format.
 
     Returns
     -------
@@ -363,7 +373,7 @@ def graph_svg(graph: EBMGraph, options: GraphImageOptions | None = None) -> str:
     True
 
     """
-    return _render(graph, options, "svg").decode()
+    return _render(graph, options, _ImageFormat.SVG).decode()
 
 
 def graph_png(graph: EBMGraph, options: GraphImageOptions | None = None) -> bytes:
@@ -390,4 +400,4 @@ def graph_png(graph: EBMGraph, options: GraphImageOptions | None = None) -> byte
     b'PNG'
 
     """
-    return _render(graph, options, "png")
+    return _render(graph, options, _ImageFormat.PNG)

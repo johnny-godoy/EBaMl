@@ -2,7 +2,7 @@
 
 import pytest
 
-from ebaml.core.custom_types import GraphMode
+from ebaml.core.custom_types import GraphMode, VisionFallback
 from ebaml.edit.edits import SetScores
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins
@@ -31,7 +31,7 @@ def test_describe_feature_passes_the_graph_options(
         return "graph text"
 
     monkeypatch.setattr(llm_tools, "describe_graph", fake_describe_graph)
-    vision = GraphOptions(mode="vision", vision_fallback="text")
+    vision = GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT)
     llm_tools.describe_feature(ModelStore(ebm=continuous_ebm[0]), LLM, "b", vision)
     assert seen == [vision]
 
@@ -48,7 +48,7 @@ def test_describe_model_keeps_one_text_for_each_mode(
 
     monkeypatch.setattr(llm_tools, "describe_ebm", fake_describe_ebm)
     store = ModelStore(ebm=continuous_ebm[0])
-    vision = GraphOptions(mode="vision")
+    vision = GraphOptions(mode=GraphMode.VISION)
     assert llm_tools.describe_model(store, LLM, TEXT) == "described in text"
     assert llm_tools.describe_model(store, LLM, vision) == "described in vision"
     assert llm_tools.describe_model(store, LLM, vision) == "described in vision"

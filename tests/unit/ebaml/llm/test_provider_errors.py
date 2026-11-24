@@ -201,8 +201,8 @@ def test_an_image_that_openrouter_rejects_names_the_model_and_the_fixes() -> Non
         "The openrouter provider rejected the image of the graph: the model openrouter/liquid/lfm-3-1.7b:free reads no"
         " images.\nThe provider said: http 404\n",
     )
-    assert 'graph=GraphOptions(mode="text")' in message
-    assert 'graph=GraphOptions(vision_fallback="text")' in message
+    assert "graph=GraphOptions(mode=GraphMode.TEXT)" in message
+    assert "graph=GraphOptions(vision_fallback=VisionFallback.TEXT)" in message
 
 
 def test_a_rejected_image_names_the_default_model_when_the_call_names_none() -> None:

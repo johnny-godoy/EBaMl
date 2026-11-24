@@ -15,6 +15,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import StepPatch
 
 import ebaml
+from ebaml.core.custom_types import FeatureType
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import EBMGraphShapeError, MissingExtraError
 from ebaml.graphs import graph_image
@@ -268,14 +269,14 @@ def test_bins_that_do_not_touch_are_rejected() -> None:
 
 def test_a_boolean_graph_has_the_keys_that_the_graph_text_writes() -> None:
     graph = EBMGraph("member", "nominal", ["no", "yes"], [0.1, -0.1], [0.0, 0.0])
-    (axes,) = graph_figure(graph, GraphImageOptions(feature_format="boolean")).axes
+    (axes,) = graph_figure(graph, GraphImageOptions(feature_format=FeatureType.BOOLEAN)).axes
     assert [tick.get_text() for tick in axes.get_xticklabels()] == ["False", "True"]
 
 
 def test_a_boolean_format_of_three_bins_is_rejected_as_the_text_rejects_it() -> None:
     graph = EBMGraph("member", "nominal", ["a", "b", "c"], [0.1, 0.0, -0.1], [0.0, 0.0, 0.0])
     with pytest.raises(EBMGraphShapeError, match="exactly two"):
-        graph_png(graph, GraphImageOptions(feature_format="boolean"))
+        graph_png(graph, GraphImageOptions(feature_format=FeatureType.BOOLEAN))
 
 
 def test_a_graph_with_more_classes_than_colors_uses_the_colors_again() -> None:

@@ -7,7 +7,7 @@ import warnings
 import pytest
 from structlog.testing import capture_logs
 
-from ebaml.core.custom_types import GraphMode, VisionFallback
+from ebaml.core.custom_types import FeatureType, GraphMode, VisionFallback
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import MissingExtraError, VisionFallbackWarning, VisionUnsupportedError
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -67,7 +67,10 @@ def test_the_settings_take_the_format_and_the_bounds_of_the_text(
     continuous_ebm: tuple[ExplainableBoostingClassifier, PandasFrame],
 ) -> None:
     ebm = continuous_ebm[0]
-    with_bounds = ImageSettings.from_options(ebm, GraphOptions(feature_format="continuous", confidence_level=0.9))
+    with_bounds = ImageSettings.from_options(
+        ebm,
+        GraphOptions(feature_format=FeatureType.CONTINUOUS, confidence_level=0.9),
+    )
     without = ImageSettings.from_options(ebm, GraphOptions(confidence_bounds=False))
     assert (with_bounds.feature_format, with_bounds.confidence_level) == ("continuous", 0.9)
     assert without.confidence_level is None
@@ -99,9 +102,9 @@ def test_the_error_of_a_rejected_image_names_the_model_quotes_the_provider_and_l
         "The provider said: no images\n"
         "To fix it:\n"
         f"  1. Pick a model that reads images in place of {MODEL}. The provider lists the input of each model.\n"
-        '  2. Pass graph=GraphOptions(mode="text") to send each graph as text.\n'
-        '  3. Pass graph=GraphOptions(vision_fallback="text") to send the graphs as text when the model reads no'
-        " images, with a VisionFallbackWarning."
+        "  2. Pass graph=GraphOptions(mode=GraphMode.TEXT) to send each graph as text.\n"
+        "  3. Pass graph=GraphOptions(vision_fallback=VisionFallback.TEXT) to send the graphs as text when the model"
+        " reads no images, with a VisionFallbackWarning."
     )
 
 

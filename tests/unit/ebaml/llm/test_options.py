@@ -5,6 +5,7 @@ from collections.abc import Callable
 
 import attrs
 import pytest
+from beartype.roar import BeartypeCallHintParamViolation
 
 from ebaml.core.custom_types import GraphMode, VisionFallback
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
@@ -66,19 +67,15 @@ def test_model_options_keep_the_defaults_of_the_call() -> None:
     }
 
 
-def test_graph_options_read_a_string_of_the_mode_and_the_fallback() -> None:
-    options = GraphOptions(mode="mixed", vision_fallback="text")
+def test_graph_options_take_the_members_of_the_mode_and_the_fallback() -> None:
+    options = GraphOptions(mode=GraphMode.MIXED, vision_fallback=VisionFallback.TEXT)
     assert (options.mode, options.vision_fallback) == (GraphMode.MIXED, VisionFallback.TEXT)
 
 
-def test_graph_options_reject_an_unknown_mode_when_they_are_made() -> None:
-    with pytest.raises(InvalidOptionError, match="unknown"):
-        GraphOptions(mode="unknown")
-
-
-def test_graph_options_reject_an_unknown_fallback_when_they_are_made() -> None:
-    with pytest.raises(InvalidOptionError, match="unknown"):
-        GraphOptions(vision_fallback="unknown")
+@pytest.mark.parametrize("field", ["mode", "vision_fallback"])
+def test_graph_options_reject_a_string_for_the_mode_or_the_fallback(field: str) -> None:
+    with pytest.raises(BeartypeCallHintParamViolation, match=field):
+        GraphOptions(**{field: "text"})  # pyrefly: ignore[bad-argument-type] -- the test passes a string on purpose
 
 
 def test_model_options_do_not_share_the_default_headers() -> None:

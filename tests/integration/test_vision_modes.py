@@ -15,8 +15,10 @@ from ebaml import (
     DescribeGraphRequest,
     EBMGraph,
     GraphImageOptions,
+    GraphMode,
     GraphOptions,
     ModelOptions,
+    VisionFallback,
     VisionFallbackWarning,
     VisionUnsupportedError,
     describe_ebm,
@@ -79,7 +81,7 @@ def test_a_request_in_vision_mode_carries_the_png_of_the_graph_as_an_image_part(
     fake_llm: FakeLLM,
 ) -> None:
     _, ebm = binary_data_and_model
-    describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision")))
+    describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION)))
     expected = graph_png(EBMGraph.from_ebm(ebm, 0), GraphImageOptions(score_axis=model_kind(ebm).score_axis))
     (url,) = _image_urls(fake_llm.requests[0])
     assert url == PNG_DATA_URL + base64.b64encode(expected).decode()
@@ -91,7 +93,7 @@ def test_a_request_in_vision_mode_carries_no_graph_text(
     fake_llm: FakeLLM,
 ) -> None:
     _, ebm = binary_data_and_model
-    describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision")))
+    describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION)))
     assert all("Feature Name:" not in request.prompt for request in fake_llm.requests)
 
 
@@ -101,7 +103,7 @@ def test_each_turn_of_the_chain_in_mixed_mode_carries_the_image_and_the_text(
     fake_llm: FakeLLM,
 ) -> None:
     _, ebm = binary_data_and_model
-    describe_graph(_graph(ebm, llm_model, GraphOptions(mode="mixed")))
+    describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.MIXED)))
     assert [(len(_image_urls(request)), "Feature Name:" in request.prompt) for request in fake_llm.requests] == [
         (1, True),
     ] * 3
@@ -124,8 +126,8 @@ def test_a_rejected_image_raises_the_vision_error_with_its_fix_steps(
 ) -> None:
     _, ebm = binary_data_and_model
     fake_llm.handler = _reject_images
-    with pytest.raises(VisionUnsupportedError, match=r'GraphOptions\(mode="text"\)'):
-        describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision")))
+    with pytest.raises(VisionUnsupportedError, match=r"GraphOptions\(mode=GraphMode.TEXT\)"):
+        describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION)))
 
 
 def test_a_rejected_image_is_sent_once_and_not_retried(
@@ -136,7 +138,7 @@ def test_a_rejected_image_is_sent_once_and_not_retried(
     _, ebm = binary_data_and_model
     fake_llm.handler = _reject_images
     with pytest.raises(VisionUnsupportedError):
-        describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision")))
+        describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION)))
     assert len(fake_llm.requests) == 1
 
 
@@ -148,7 +150,7 @@ def test_a_rejected_image_with_the_text_fallback_emits_one_warning(
     _, ebm = binary_data_and_model
     fake_llm.handler = _reject_images
     with pytest.warns(VisionFallbackWarning) as warned:
-        describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision", vision_fallback="text")))
+        describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT)))
     assert len(warned) == 1
 
 
@@ -160,7 +162,7 @@ def test_a_rejected_image_with_the_text_fallback_sends_the_graph_text_without_an
     _, ebm = binary_data_and_model
     fake_llm.handler = _reject_images
     with pytest.warns(VisionFallbackWarning):
-        describe_graph(_graph(ebm, llm_model, GraphOptions(mode="vision", vision_fallback="text")))
+        describe_graph(_graph(ebm, llm_model, GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT)))
     retried = fake_llm.requests[1:]
     assert [(_has_image(request), "Feature Name:" in request.prompt) for request in retried] == [(False, True)] * 3
 
@@ -172,7 +174,7 @@ def test_a_model_that_reads_no_images_by_its_options_gets_no_request_with_the_ra
 ) -> None:
     _, ebm = binary_data_and_model
     with pytest.raises(VisionUnsupportedError):
-        describe_graph(_graph(ebm, attrs.evolve(llm_model, vision=False), GraphOptions(mode="mixed")))
+        describe_graph(_graph(ebm, attrs.evolve(llm_model, vision=False), GraphOptions(mode=GraphMode.MIXED)))
     assert fake_llm.requests == []
 
 
@@ -184,7 +186,11 @@ def test_a_model_that_reads_no_images_by_its_options_gets_only_text_with_the_tex
     _, ebm = binary_data_and_model
     with pytest.warns(VisionFallbackWarning):
         describe_graph(
-            _graph(ebm, attrs.evolve(llm_model, vision=False), GraphOptions(mode="vision", vision_fallback="text")),
+            _graph(
+                ebm,
+                attrs.evolve(llm_model, vision=False),
+                GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT),
+            ),
         )
     assert [_has_image(request) for request in fake_llm.requests] == [False] * 3
 
@@ -200,7 +206,7 @@ def test_one_rejected_image_turns_the_whole_describe_ebm_call_to_text(
         ebm,
         num_sentences=3,
         max_concurrency=1,
-        graph=GraphOptions(mode="vision", vision_fallback="text"),
+        graph=GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT),
         model=llm_model,
     )
     with pytest.warns(VisionFallbackWarning):

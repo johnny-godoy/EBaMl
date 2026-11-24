@@ -725,11 +725,11 @@
     "fields": [
       "score_axis: <class 'str'>",
       "title: str | None",
-      "feature_format: ebaml.core.custom_types.FeatureType | str | None",
+      "feature_format: ebaml.core.custom_types.FeatureType | None",
       "confidence_level: float | None"
     ],
     "kind": "class",
-    "signature": "(*, score_axis: str = 'score', title: str | None = None, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, confidence_level: float | None = 0.95) -> None"
+    "signature": "(*, score_axis: str = 'score', title: str | None = None, feature_format: ebaml.core.custom_types.FeatureType | None = None, confidence_level: float | None = 0.95) -> None"
   },
   "GraphMode": {
     "bases": [
@@ -765,7 +765,7 @@
       "vision_fallback: <enum 'VisionFallback'>"
     ],
     "kind": "class",
-    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None, mode: ebaml.core.custom_types.GraphMode | str = <GraphMode.TEXT: 'text'>, vision_fallback: ebaml.core.custom_types.VisionFallback | str = <VisionFallback.RAISE: 'raise'>) -> None"
+    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None, mode: ebaml.core.custom_types.GraphMode = <GraphMode.TEXT: 'text'>, vision_fallback: ebaml.core.custom_types.VisionFallback = <VisionFallback.RAISE: 'raise'>) -> None"
   },
   "GraphSeries": {
     "bases": [
