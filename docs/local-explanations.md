@@ -347,6 +347,26 @@ The texts for the LLM name the costs, and the explanation calls the plan the che
 never the fewest changes. The [proof of the recourse plans](recourse-proof.md) shows why sorting is exact for equal
 costs only, and why the problem with other costs is NP-hard.
 
+### Difficulties that an LLM proposes
+
+You may not know how hard each change is. `propose_difficulties` asks the LLM to rate each input on the scale of
+`Difficulty`: `EASY`, `MODERATE`, `HARD` and `VERY_HARD`. Each level costs twice the level below it
+(`DIFFICULTY_MULTIPLIERS`). The function runs no search, and it needs an API key. Read the proposal first, because the
+LLM can be wrong. Mark an input that cannot change as `immutable`, not as very hard.
+
+```python
+from ebaml import ProposeDifficultiesRequest, propose_difficulties
+
+proposal = propose_difficulties(ProposeDifficultiesRequest(ebm, instance))
+for item in proposal.difficulties:
+    print(item.feature, item.difficulty, item.reason)
+guided = compute_local_facts(ebm, instance, LocalOptions(recourse=RecourseOptions(costs=proposal.costs)))
+```
+
+`proposal.costs` is a `ScaledCost` on top of `UnitCost()`, or of the strategy that you pass as `base`. An input that the
+reply does not rate keeps the cost of the base. The facts say that a language model proposed the difficulties, and the
+explanation calls them guesses that the reader must check.
+
 ### Several plans
 
 `RecourseOptions(plans=k)` asks for up to `k` plans. As in GAM Coach, each plan after the first is the cheapest plan
