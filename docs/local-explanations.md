@@ -290,6 +290,8 @@ proof covers for a multiclass classifier. On an exact tie between the two highes
 
 ## Recourse limits
 
+The [recourse notebook](recourse-notebook.md) shows each option of this section on one loan applicant.
+
 A counterfactual is a plan for a person, and the person may be unable to make some changes. Pass the limits as
 `LocalOptions(recourse=RecourseOptions(...))`:
 

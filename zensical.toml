@@ -28,6 +28,7 @@ nav = [
     { "All notebooks" = "notebooks.md" },
     { Titanic = "notebook.md" },
     { "Local explanations" = "local-notebook.md" },
+    { Recourse = "recourse-notebook.md" },
     { "Custom audiences" = "audiences-notebook.md" },
     { Languages = "languages-notebook.md" },
     { "Model providers" = "providers-notebook.md" },
