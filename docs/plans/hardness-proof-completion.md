@@ -28,8 +28,8 @@ Kolliopoulos and Young.
   1. Corollary 4: the decision problem is in NP, and the reduction runs in polynomial time.
   2. Corollary 5: the logic that carries the hardness of approximation of Dinur and Steurer to the sufficient reason.
   3. The reading of the size `n` in Corollary 1.5 of Dinur and Steurer as the number of elements.
-  4. The counterfactual of a chosen class, which the code computes in `_target_counterfactual` and which the Lean model
-     does not contain.
+  4. The hardness and the reduction of the counterfactual of a chosen class. `Recourse/Target.lean` models it
+     (`targetProblem`), but proves neither.
   5. A fixed number of margins that is larger than one, about which the paper proves nothing.
   6. The upper bound of the approximation ratio, which the paper cites and the code does not implement.
 - Mathlib has `TM2ComputableInPolyTime` in `Mathlib/Computability/TuringMachine/Computable.lean` and `Encoding` in
@@ -68,18 +68,17 @@ it is large.
      of features) is computable in polynomial time. The second fact is the membership in NP.
    - If a library of polynomial-time reductions exists for Lean 4 and Mathlib at the pinned version, prefer it, and
      ask the user before you add a dependency.
-4. **The counterfactual of a chosen class.** Model `_target_counterfactual` in Lean: the margins of the target class,
-   and the covering problem of `CoveringProblem` with one group for each feature and one alternative for each plausible
-   bin other than the bin of the instance (`_alternatives`). Prove two facts:
+4. **The counterfactual of a chosen class.** `proofs/EBaMlProofs/Recourse/Target.lean` models
+   `_target_counterfactual`: `targetProblem` has one group for each feature, one alternative for each allowed bin other
+   than the bin of the instance, and one margin for each rival class. `smallest_plan_iff` shows that its smallest plan
+   is the fewest changes that reach the class. Build on these definitions, and do not add a second model. Prove two
+   facts:
    - The problem contains the covering problem, so it is NP-hard and has the hardness of Corollary 5. Use the case in
      which each feature has one bin besides the bin of the instance.
    - Lemmas 15 and 16 and Corollary 6 of the paper (the reduction of `reduce_problem`), and Lemma 17 (the lower bound
      of the LP). The paper proves them on paper only. State the counterexample of
      `test_a_target_counterfactual_finds_one_change_where_the_bin_with_the_largest_sum_needs_two` with its numbers,
      and prove with `norm_num` or `decide` that one change is enough there.
-   - The milestone 0.13.0 (`docs/plans/actionable-recourse.md`, proof stage 2) adds the same Lean model of the
-     covering problem. If it is on `main`, build on its definitions. If this stage comes first, the milestone
-     builds on yours. Do not add a second model of the same problem.
 5. **A fixed number of margins.** This is an open question for this project. Find out whether the covering problem
    with two margins is NP-hard, or whether an algorithm in polynomial time solves it. Search the literature on
    covering integer programs with a fixed number of constraints and a cardinality objective. Report the answer to

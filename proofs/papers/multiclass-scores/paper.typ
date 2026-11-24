@@ -223,13 +223,13 @@ its Lean name.
   inset: 5pt,
   [*Item*], [*Value*],
   [Repository], [`https://github.com/johnny-godoy/EBaMl`],
-  [Lean sources checked at commit], [`b6885408e6c0d9b3024a4fd90612c37b091bbdc7`],
+  [Lean sources checked at commit], [`0a7f1bf69d09a7f0681649af0a64c0b3620ed1b6`],
   [Lean], [`leanprover/lean4:v4.35.0` (commit `eb6cafb7290e`)],
   [Mathlib], [tag `v4.35.0` (commit `56a005855ea17e0b0958f73ec801ae140b0a1679`)],
   [Typst], [`0.15.0`],
 )
 
-The files in `proofs/EBaMlProofs/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
+The files in `proofs/EBaMlProofs/MulticlassScores/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
 are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
 `src/ebaml/graphs/ebm_graph.py` and `src/ebaml/graphs/model_kinds.py`. Read the paper together with the version of
 these files at the commit of this paper.
@@ -240,7 +240,7 @@ these files at the commit of this paper.
 # install elan, then restart the shell
 curl https://elan.lean-lang.org/elan-init.sh -sSf | sh
 git clone https://github.com/johnny-godoy/EBaMl && cd EBaMl
-git checkout b6885408e6c0d9b3024a4fd90612c37b091bbdc7
+git checkout 0a7f1bf69d09a7f0681649af0a64c0b3620ed1b6
 cd proofs
 lake exe cache get        # download the compiled Mathlib
 lake build                # check every proof

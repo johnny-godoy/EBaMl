@@ -1157,8 +1157,10 @@ The proof does not cover the following points.
   takes the first class, and its margin against the other is $0$. The proof does not cover this case, and
   `points_towards` reads the direction of a contribution wrongly there. A tie of two floating-point scores has no
   meaning.
-- *The class $j$ as target.* The Lean model covers the counterfactual "the predicted class is no longer $w$". It does
-  not contain a counterfactual that asks for a chosen class $j$, which needs every margin of $j$ at once. The code solves
+- *The class $j$ as target.* The Lean model of this paper covers the counterfactual "the predicted class is no longer
+  $w$". The recourse paper models the counterfactual of a chosen class $j$ in Lean (`Recourse/Target.lean`): its valid
+  plans are exactly the changes that make every margin of $j$ positive. Lean checks neither Lemmas 15 to 17 for it nor
+  the hardness of its gain table. The code solves
   it as a problem of @sec-solvers with one alternative for each plausible bin (`_target_counterfactual`), so the search
   runs over every choice of bins. Lemmas 15 to 17 apply to it. Theorems 4 and 5 model one alternative for each feature
   with gains that are not negative, so they do not apply. The reduction of @sec-hardness applies to its gain table by
@@ -1218,7 +1220,7 @@ the versions, the expected output and a table from each statement to its Lean na
   [Typst], [`0.15.1`],
 )
 
-The files in `proofs/EBaMlProofs/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
+The files in `proofs/EBaMlProofs/LocalExplanations/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
 are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
 `src/ebaml/local/facts.py`, `fact_features.py`, `counterfactuals.py`, `sufficient_reasons.py`,
 `completions.py` and `recourse.py`. Read the paper together with the version of those files at the commit of this paper.
