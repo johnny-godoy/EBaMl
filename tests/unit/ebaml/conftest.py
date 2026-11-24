@@ -595,6 +595,7 @@ class UnknownKind(ModelKind):
 
     outputs = ["x"]  # ruff: ignore[mutable-class-default] -- a test double that overrides an abstract property with a plain value
     score_meaning = "x"
+    score_axis = "x"
 
     @override
     def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:

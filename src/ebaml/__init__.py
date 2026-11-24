@@ -2,9 +2,11 @@
 
 Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance``,
 ``propose_difficulties``, ``LocalExplanation`` and ``EBMDescription`` load on first use, because the module that holds
-them can run ``baml generate``.
+them can run ``baml generate``. The names ``graph_png``, ``graph_svg``, ``graph_figure`` and ``GraphImageOptions``
+load on first use too, because they need the extra ``vision``.
 """
 
+import importlib
 from importlib.metadata import version
 from typing import TYPE_CHECKING, cast
 
@@ -26,6 +28,7 @@ from ebaml.core.exceptions import (
     InvalidOptionError,
     LLMRequestError,
     MissingAPIKeyError,
+    MissingExtraError,
     OptionRangeError,
     ProviderUnreachableError,
     RateLimitedError,
@@ -94,7 +97,7 @@ from ebaml.edit.selections import (
     ValueInterval,
     WholeGraph,
 )
-from ebaml.graphs.ebm_graph import EBMGraph
+from ebaml.graphs.ebm_graph import EBMGraph, GraphSeries
 from ebaml.graphs.model_kinds import (
     BinaryClassifier,
     ModelKind,
@@ -157,6 +160,7 @@ from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 
 if TYPE_CHECKING:
+    from ebaml.graphs.graph_image import GraphImageOptions, graph_figure, graph_png, graph_svg
     from ebaml.llm.descriptors import (
         EBMDescription,
         LocalExplanation,
@@ -227,7 +231,9 @@ __all__ = [
     "FixedScore",
     "GamChangerCommit",
     "GamChangerExport",
+    "GraphImageOptions",
     "GraphOptions",
+    "GraphSeries",
     "GraphTextError",
     "GreedyCover",
     "HistoryEntry",
@@ -251,6 +257,7 @@ __all__ = [
     "MipCover",
     "MissingAPIKeyError",
     "MissingBin",
+    "MissingExtraError",
     "ModelKind",
     "ModelOptions",
     "ModelResult",
@@ -318,6 +325,9 @@ __all__ = [
     "edit_effect",
     "explain_instance",
     "facts_to_texts",
+    "graph_figure",
+    "graph_png",
+    "graph_svg",
     "likelihood_word",
     "load_gamchanger",
     "model_kind",
@@ -333,10 +343,11 @@ __all__ = [
 
 # nosemgrep: ebaml-no-object-type -- PEP 562 returns a function or a class chosen by name, so no single type fits
 def __getattr__(name: str) -> object:
-    """Load a name of ``ebaml.llm.descriptors`` on first use.
+    """Load a name of ``ebaml.llm.descriptors`` or ``ebaml.graphs.graph_image`` on first use.
 
-    That module can run ``baml generate`` when it is imported, so ``import ebaml`` must not load it. The loaded name
-    goes into the module namespace, and the next access skips this function.
+    The first module can run ``baml generate`` when it is imported, and the second needs the extra ``vision``, so
+    ``import ebaml`` must not load them. The loaded name goes into the module namespace, and the next access skips this
+    function.
 
     Parameters
     ----------
@@ -346,7 +357,7 @@ def __getattr__(name: str) -> object:
     Returns
     -------
     object
-        The function or class of ``ebaml.llm.descriptors`` with this name.
+        The function or class with this name.
 
     Raises
     ------
@@ -354,20 +365,23 @@ def __getattr__(name: str) -> object:
         If ``name`` is not a public name that loads on first use.
 
     """
-    lazy_names = {
-        "EBMDescription",
-        "LocalExplanation",
-        "describe_ebm",
-        "describe_graph",
-        "explain_instance",
-        "propose_difficulties",
+    # the names that load on first use, by the module that holds them
+    lazy_modules = {
+        "EBMDescription": "ebaml.llm.descriptors",
+        "LocalExplanation": "ebaml.llm.descriptors",
+        "describe_ebm": "ebaml.llm.descriptors",
+        "describe_graph": "ebaml.llm.descriptors",
+        "explain_instance": "ebaml.llm.descriptors",
+        "propose_difficulties": "ebaml.llm.descriptors",
+        "GraphImageOptions": "ebaml.graphs.graph_image",
+        "graph_figure": "ebaml.graphs.graph_image",
+        "graph_png": "ebaml.graphs.graph_image",
+        "graph_svg": "ebaml.graphs.graph_image",
     }
-    if name not in lazy_names:
+    if name not in lazy_modules:
         msg = f"module {__name__!r} has no attribute {name!r}"
         raise AttributeError(msg)
-    from ebaml.llm import descriptors  # ruff: ignore[import-outside-top-level] -- the import must wait until first use
-
-    value = getattr(descriptors, name)
+    value = getattr(importlib.import_module(lazy_modules[name]), name)
     globals()[name] = value
     return cast(object, value)  # getattr returns Any, and the hint names the real type
 

@@ -37,9 +37,14 @@ def test_the_graph_image_is_a_valid_svg_with_a_title_that_says_the_data_is_synth
     written: dict[str, Path],
 ) -> None:
     svg = written["income-graph.svg"].read_text(encoding="utf-8")
-    assert svg.startswith('<svg xmlns="http://www.w3.org/2000/svg"')
+    assert svg.startswith('<?xml version="1.0"')
     assert svg.rstrip().endswith("</svg>")
     assert ">How income moves the loan decision (synthetic data)</text>" in svg
+
+
+def test_the_graph_image_names_the_score_of_the_granted_class(written: dict[str, Path]) -> None:
+    svg = written["income-graph.svg"].read_text(encoding="utf-8")
+    assert f">change of the log-odds of '{figures.GRANTED}'</text>" in svg
 
 
 def test_the_graph_text_reads_back_as_the_simplified_graph(written: dict[str, Path]) -> None:
@@ -71,8 +76,3 @@ def test_the_data_has_both_decisions_and_stays_the_same_for_one_seed() -> None:
     second = figures.loan_data(row_count=200)
     assert second.features.equals(first.features)
     assert second.target == first.target
-
-
-@pytest.mark.parametrize(("value", "label"), [(45000.0, "45k"), (-1.5, "-1.50"), (0.0, "0.00")])
-def test_an_axis_label_writes_thousands_as_k(value: float, label: str) -> None:
-    assert figures._label(value) == label

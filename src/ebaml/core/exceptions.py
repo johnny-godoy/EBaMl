@@ -99,6 +99,14 @@ class SDKUnavailableError(EBaMlError, ImportError):
     """
 
 
+class MissingExtraError(EBaMlError, ImportError):
+    """Exception raised when a feature needs an optional extra of ``ebaml`` that is not installed.
+
+    The message names the extra and the command that installs it. The error also derives from ``ImportError``, so code
+    that catches the import error of a missing package catches it too.
+    """
+
+
 class LLMRequestError(EBaMlError):
     """Exception raised when the provider of the LLM fails a request.
 

@@ -23,6 +23,7 @@ BUILTIN_BASE = {
     "InvalidOptionError": ValueError,
     "LLMRequestError": None,
     "MissingAPIKeyError": None,
+    "MissingExtraError": ImportError,
     "OptionRangeError": ValueError,
     "ProviderUnreachableError": None,
     "RateLimitedError": None,
