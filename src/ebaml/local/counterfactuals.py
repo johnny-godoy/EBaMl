@@ -394,7 +394,8 @@ def _limits(features: Sequence[Feature], options: LocalOptions) -> _Limits:
 def _cost_lower_bound(problem: CoveringProblem, cover: Cover) -> float:
     """Return a cost that no plan beats: the cost of an optimal plan, else the size bound times the cheapest pick.
 
-    Every plan has at least ``cover.lower_bound`` picks, and each pick costs at least the cheapest alternative.
+    Every plan has at least ``cover.lower_bound`` picks, and each pick costs at least the cheapest alternative. Lemmas 4
+    and 5 of ``proofs/papers/recourse/paper.typ`` prove the bound.
 
     Returns
     -------
