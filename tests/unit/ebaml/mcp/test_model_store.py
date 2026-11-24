@@ -10,6 +10,7 @@ import pytest
 import skops.io
 
 import ebaml
+from ebaml.core.custom_types import GraphMode
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
 from ebaml.core.exceptions import DataFileError, EditError, InvalidInstanceError, UnsupportedModelError
 from ebaml.edit.edit_session import RevisionInfo
@@ -201,8 +202,8 @@ def test_a_model_that_the_edits_do_not_support_has_reads_and_no_session(
         store.read("abc")
     with pytest.raises(UnsupportedModelError, match="no edit session"):
         store.editing()
-    store.keep_description("original", "text")
-    assert store.described("original") == "text"
+    store.keep_description("original", "text", GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == "text"
 
 
 def test_a_multiclass_model_has_an_edit_session(multiclass_ebm: ExplainableBoostingClassifier) -> None:
@@ -213,18 +214,18 @@ def test_the_kept_description_belongs_to_the_revision_that_it_describes(continuo
     """Contract: the store never serves the description of a model that is no longer the head."""
     ebm, _ = continuous_ebm
     store = ModelStore(ebm=ebm)
-    assert store.described("original") is None
-    store.keep_description("original", "words about the original")
-    assert store.described("original") == "words about the original"
+    assert store.described("original", GraphMode.TEXT) is None
+    store.keep_description("original", "words about the original", GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == "words about the original"
     store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
     edit = store.editing().revision
-    assert store.described(edit) is None
-    assert store.described("original") == "words about the original"
-    store.keep_description("original", "a late text of the old head")
-    assert store.described("original") == "words about the original"
-    store.keep_description(edit, "words about the edit")
-    assert store.described(edit) == "words about the edit"
-    assert store.described("original") is None
+    assert store.described(edit, GraphMode.TEXT) is None
+    assert store.described("original", GraphMode.TEXT) == "words about the original"
+    store.keep_description("original", "a late text of the old head", GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == "words about the original"
+    store.keep_description(edit, "words about the edit", GraphMode.TEXT)
+    assert store.described(edit, GraphMode.TEXT) == "words about the edit"
+    assert store.described("original", GraphMode.TEXT) is None
 
 
 _LOADERS = {"joblib.load", "pickle.load", "pickle.loads", "skops.io.load", "skops.io.loads"}
@@ -283,3 +284,12 @@ def test_labels_read_the_label_column_of_the_data_and_name_the_columns_when_it_i
         ModelStore(ebm=ebm, data=as_frame(data), label_column="outcome").labels()
     with pytest.raises(DataFileError, match=r"The columns are \[\]"):
         ModelStore(ebm=ebm, label_column="outcome").labels()
+
+
+def test_the_kept_description_of_one_mode_is_not_the_description_of_another(continuous_ebm: FittedClassifier) -> None:
+    store = ModelStore(ebm=continuous_ebm[0])
+    store.keep_description("original", "words from the text", GraphMode.TEXT)
+    assert store.described("original", GraphMode.VISION) is None
+    store.keep_description("original", "words from the image", GraphMode.VISION)
+    assert store.described("original", GraphMode.TEXT) == "words from the text"
+    assert store.described("original", GraphMode.VISION) == "words from the image"

@@ -117,6 +117,7 @@ reaches the port can read the model and the rows of the data file.
 | `get_model_summary` | optional `revision` | The kind, the outputs or classes, the intercept, the number of features, and the interaction terms that the server skips. |
 | `list_features` | optional `revision` | The name, the type and the importance of each feature, the most important first. |
 | `get_graph` | `feature`, optional `revision`, `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
+| `get_graph_image` | `feature`, optional `revision`, `normalization` | A note with the revision and the interaction terms that the image leaves out, then the PNG image of the graph as MCP image content. It needs the extra `vision`. |
 | `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level`, and the recourse arguments below | The `LocalFacts` and their texts, as JSON. The plans are the list `counterfactuals`, cheapest first. |
 | `list_bins` | `feature`, optional `revision` | The bins of a feature with the number, the edges, the training weight and the score of each bin, and the missing and the unseen bin. |
 | `get_edit_effect` | optional `subgroup_feature`, `subgroup_value`, `revision` | The counts of the rows that the edits change, and with `--labels` the metrics of the original model, the model before the last edit and the current model, in three scopes. It needs `--data`. |
@@ -128,8 +129,8 @@ reaches the port can read the model and the rows of the data file.
 | `checkout_edit` | `revision`, optional `expected_revision` | Sets the model to its state after one commit of the history. |
 | `list_edits` | optional `include_replay_json` | The history as a table of commits, and on request the JSON that `--edits` reads. |
 | `save_model` | `message`, optional `expected_revision` | Saves the edited model and its history after a person confirms. It needs `--output-dir`. |
-| `describe_feature` | `feature` | The words of `describe_graph`. It needs `--llm`. |
-| `describe_model` | none | The words of `describe_ebm` for the current model. The server keeps the text for the revision that it describes. It needs `--llm`. |
+| `describe_feature` | `feature`, optional `mode`, `vision_fallback` | The words of `describe_graph`. `mode` is `text`, `vision` or `mixed`, as in [Text, vision and mixed modes](usage.md#text-vision-and-mixed-modes). It needs `--llm`. |
+| `describe_model` | optional `mode`, `vision_fallback` | The words of `describe_ebm` for the current model. The server keeps the text of each mode for the revision that it describes. It needs `--llm`. |
 | `propose_difficulties` | `instance` or `row`, optional `cost_strategy` | The difficulty, the multiplier and the reason of each input that the LLM proposes, and the arguments `difficulty`, `cost_strategy` and `difficulty_from_model` to pass to `explain_prediction`. It runs no search, and it needs `--llm`. |
 
 The server also serves each graph as the resource `ebm://graphs/{feature}`.

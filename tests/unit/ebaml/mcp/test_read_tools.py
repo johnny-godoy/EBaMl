@@ -1,11 +1,15 @@
 """Tests of the tools that read an EBM."""
 
+from typing import Any
+
 import pytest
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import EditError, InvalidInstanceError
 from ebaml.edit.edit_session import RevisionInfo
-from ebaml.edit.edits import Scale
+from ebaml.edit.edits import Scale, SetScores
+from ebaml.edit.selections import Bins
+from ebaml.mcp import read_tools
 from ebaml.mcp.model_store import ModelStore
 from ebaml.mcp.read_tools import graph_text, list_features, model_summary
 from tests.unit.ebaml.conftest import FittedClassifier
@@ -122,3 +126,35 @@ def test_a_read_of_an_unknown_revision_is_an_error(continuous_ebm: FittedClassif
             read(store, "abc")
     with pytest.raises(EditError, match="no revision 'abc'"):
         graph_text(store, "a", revision="abc")
+
+
+def test_graph_picture_draws_the_graph_of_the_revision(continuous_ebm: FittedClassifier) -> None:
+    ebm, _ = continuous_ebm
+    store = ModelStore(ebm=ebm)
+    original = read_tools.graph_picture(store, "a")
+    store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
+    edited = read_tools.graph_picture(store, "a")
+    assert read_tools.graph_picture(store, "a", revision="original").png == original.png
+    assert edited.png != original.png
+    assert edited.note.startswith(f"Revision {store.editing().revision}.")
+
+
+def test_graph_picture_names_no_interaction_of_a_model_without_one(continuous_ebm: FittedClassifier) -> None:
+    picture = read_tools.graph_picture(ModelStore(ebm=continuous_ebm[0]), "b")
+    assert "interaction" not in picture.note
+    assert picture.png.startswith(b"\x89PNG")
+
+
+def test_graph_picture_names_only_the_interaction_terms_of_its_feature(
+    partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
+) -> None:
+    ebm, _ = partial_models["binary", "interaction"]
+    names = list(ebm.feature_names_in_)
+    term = next(term for term in ebm.term_features_ if len(term) > 1)
+    outside = next(name for index, name in enumerate(names) if index not in term)
+    store = ModelStore(ebm=ebm)
+    pair = " x ".join(names[index] for index in term)
+    assert read_tools.graph_picture(store, names[term[0]]).note.endswith(
+        f"These interaction terms of the feature are not in it: {pair}.",
+    )
+    assert "interaction" not in read_tools.graph_picture(store, outside).note

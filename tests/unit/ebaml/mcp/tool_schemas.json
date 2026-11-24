@@ -151,10 +151,39 @@
       "type": "object"
     },
     "describe_feature": {
+      "$defs": {
+        "GraphMode": {
+          "description": "How a graph reaches the LLM: as text, as an image, or as both.\n\n``TEXT`` works with every model. ``VISION`` and ``MIXED`` need a model that reads images.",
+          "enum": [
+            "text",
+            "vision",
+            "mixed"
+          ],
+          "title": "GraphMode",
+          "type": "string"
+        },
+        "VisionFallback": {
+          "description": "What a call in vision or mixed mode does when the model reads no images.\n\n``RAISE`` raises ``VisionUnsupportedError``. ``TEXT`` sends the graph as text and emits a ``VisionFallbackWarning``.",
+          "enum": [
+            "text",
+            "raise"
+          ],
+          "title": "VisionFallback",
+          "type": "string"
+        }
+      },
       "properties": {
         "feature": {
           "title": "Feature",
           "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/GraphMode",
+          "default": "text"
+        },
+        "vision_fallback": {
+          "$ref": "#/$defs/VisionFallback",
+          "default": "raise"
         }
       },
       "required": [
@@ -164,7 +193,37 @@
       "type": "object"
     },
     "describe_model": {
-      "properties": {},
+      "$defs": {
+        "GraphMode": {
+          "description": "How a graph reaches the LLM: as text, as an image, or as both.\n\n``TEXT`` works with every model. ``VISION`` and ``MIXED`` need a model that reads images.",
+          "enum": [
+            "text",
+            "vision",
+            "mixed"
+          ],
+          "title": "GraphMode",
+          "type": "string"
+        },
+        "VisionFallback": {
+          "description": "What a call in vision or mixed mode does when the model reads no images.\n\n``RAISE`` raises ``VisionUnsupportedError``. ``TEXT`` sends the graph as text and emits a ``VisionFallbackWarning``.",
+          "enum": [
+            "text",
+            "raise"
+          ],
+          "title": "VisionFallback",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/GraphMode",
+          "default": "text"
+        },
+        "vision_fallback": {
+          "$ref": "#/$defs/VisionFallback",
+          "default": "raise"
+        }
+      },
       "title": "describe_modelArguments",
       "type": "object"
     },
@@ -443,6 +502,40 @@
         "feature"
       ],
       "title": "get_graphArguments",
+      "type": "object"
+    },
+    "get_graph_image": {
+      "$defs": {
+        "Normalization": {
+          "description": "Normalization options for EBM graphs.",
+          "enum": [
+            "none",
+            "min_max",
+            "z_score"
+          ],
+          "title": "Normalization",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "feature": {
+          "title": "Feature",
+          "type": "string"
+        },
+        "normalization": {
+          "$ref": "#/$defs/Normalization",
+          "default": "none"
+        },
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feature"
+      ],
+      "title": "get_graph_imageArguments",
       "type": "object"
     },
     "get_model_summary": {
