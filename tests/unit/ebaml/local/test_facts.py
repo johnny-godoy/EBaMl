@@ -9,7 +9,7 @@ from decimal import Decimal
 import attrs
 import numpy as np
 import pytest
-from hypothesis import assume, given, settings
+from hypothesis import assume, given, reject, settings
 from hypothesis import strategies as st
 
 from ebaml.core.custom_types import ClassLabel, FeatureValue
@@ -809,6 +809,48 @@ def test_the_facts_with_recourse_options_match_the_oracle_of_the_paper(
     # the allowed values describe what the person can do, so the sufficient reason ignores them
     reason = facts.sufficient_reason
     assert (None if reason is None else len(reason.features)) == problem.smallest_sufficient()
+
+
+@settings(max_examples=100, deadline=None)
+@given(
+    case=model_cases(),
+    confidence_level=st.sampled_from(CONFIDENCE_LEVELS),
+    min_support=st.sampled_from(MIN_SUPPORTS),
+    data=st.data(),
+)
+def test_recourse_options_change_no_fact_but_the_counterfactual(
+    small_templates: Templates,
+    case: tuple[SmallModel, tuple[float, ...]],
+    confidence_level: float,
+    min_support: float,
+    data: st.DataObject,
+) -> None:
+    # the recourse options describe what the person can do, and the other facts describe what the model does: the
+    # sufficient reason, the completions and the contributions must be the same with and without the options
+    model, limits = case
+    recourse = recourse_from_specs(data.draw(recourse_specs(model.shape)))
+    ebm = build_ebm(small_templates, model)
+
+    def facts_with(options_of_the_person: RecourseOptions) -> fact_types_module.LocalFacts:
+        options = fact_types_module.LocalOptions(
+            confidence_level=confidence_level,
+            min_support=min_support,
+            decision=_decision(limits),
+            n_samples=64,
+            max_steps=2,
+            recourse=options_of_the_person,
+        )
+        return facts_module.compute_local_facts(ebm, model.instance, options)
+
+    try:
+        limited = facts_with(recourse)
+    except RecourseOptionError:
+        reject()  # an allowed range that leaves no plausible bin is an error, which another test covers
+    free = facts_with(RecourseOptions())
+    assert limited.sufficient_reason == free.sufficient_reason
+    assert limited.completions == free.completions
+    assert limited.contributions == free.contributions
+    assert limited.prediction == free.prediction
 
 
 @settings(max_examples=200, deadline=None)
