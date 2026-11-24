@@ -1,5 +1,6 @@
 import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
+import EBaMlProofs.Recourse.Target
 
 /-!
 # Axiom check
@@ -26,3 +27,9 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.Recourse.cost_embed
 #print axioms EBaMlProofs.Recourse.sorting_not_cheapest
 #print axioms EBaMlProofs.Recourse.knapsack_canFlipOn_iff
+#print axioms EBaMlProofs.Recourse.Multiclass.margin_targetProblem
+#print axioms EBaMlProofs.Recourse.Multiclass.valid_targetProblem_iff
+#print axioms EBaMlProofs.Recourse.Multiclass.reaches_of_valid
+#print axioms EBaMlProofs.Recourse.Multiclass.plan_of_reaching
+#print axioms EBaMlProofs.Recourse.Multiclass.exists_plan_iff
+#print axioms EBaMlProofs.Recourse.Multiclass.smallest_plan_iff
