@@ -535,3 +535,120 @@ test "describe_ebm hands the omitted parts to the summary" {
     assert.is_true(result.text.includes("<omitted_parts>"));
     assert.is_true(result.text.includes("age & income") && result.text.includes("zip"))
 }
+
+// Graph modes: text, vision (the image only) and mixed (the text and the image).
+
+const TEST_PNG = "iVBORw0KGgo=";
+
+// The marker of an image part in the body of an OpenAI chat request.
+const IMAGE_PART = "\"type\":\"image_url\"";
+
+// The body of the request of a spec, as an OpenAI chat client writes it. The client sends nothing.
+function request_body(spec: ai.FunctionSpec<string>) -> string {
+    spec.build_request(client = openai.ChatClient.new(model = "m", api_key = "unused")).body
+}
+
+// The number of times `needle` occurs in `text`.
+function count_of(text: string, needle: string) -> int {
+    text.split(needle).length() - 1
+}
+
+test "a request in vision mode carries one image and no graph text" {
+    let body = request_body(GraphFirstPass@spec(null, default_graph_options(), png_base64 = TEST_PNG));
+    assert.equal(count_of(body, IMAGE_PART), 1);
+    assert.is_true(body.includes(`data:image/png;base64,${TEST_PNG}`));
+    assert.is_true(!body.includes("<graph>"));
+    assert.is_true(!body.includes("The graph is a JSON object"))
+}
+
+test "a request in mixed mode carries the image and the graph text" {
+    let body = request_body(GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG));
+    assert.equal(count_of(body, IMAGE_PART), 1);
+    assert.is_true(body.includes("GRAPH-TEXT"));
+    assert.is_true(body.includes("<image_reading>"))
+}
+
+test "a request in text mode carries no image" {
+    let body = request_body(GraphFirstPass@spec("GRAPH-TEXT", default_graph_options()));
+    assert.equal(count_of(body, IMAGE_PART), 0);
+    assert.is_true(!body.includes("<image_reading>"));
+    assert.is_true(body.includes("GRAPH-TEXT"))
+}
+
+test "the image comes before the text that refers to it" {
+    let body = request_body(GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG));
+    assert.is_true(position_of(body, "image_url") < position_of(body, "<graph_format>"))
+}
+
+test "every turn of the chain resends the image in vision mode" {
+    let opts = default_graph_options();
+    let second = request_body(GraphSurprises@spec(null, "FIRST", opts, png_base64 = TEST_PNG));
+    let third = request_body(GraphFinalDescription@spec(null, "FIRST", "SUR", 7, opts, png_base64 = TEST_PNG));
+    assert.equal(count_of(second, IMAGE_PART), 1);
+    assert.equal(count_of(third, IMAGE_PART), 1)
+}
+
+test "the vision prompt calls each value read from the image an estimate" {
+    let msg = describe_graph_msg(null, default_graph_options(), has_image = true);
+    assert.is_true(msg.includes("The image gives no exact values."));
+    assert.is_true(msg.includes("Read each value from the axes as an estimate"));
+    assert.is_true(msg.includes("the confidence interval"))
+}
+
+test "the mixed prompt takes every number from the text and the shape from the image" {
+    let msg = describe_graph_msg("GRAPH-TEXT", default_graph_options(), has_image = true);
+    assert.is_true(
+        msg.includes(
+            "The text holds the exact values, so take every number that you quote from the text.",
+        ),
+    );
+    assert.is_true(msg.includes("Use the image to see the shape of the graph"));
+    assert.is_true(position_of(msg, "</graph>") < position_of(msg, "<image_reading>"))
+}
+
+test "the text prompt says nothing about an image" {
+    let msg = describe_graph_msg("GRAPH-TEXT", default_graph_options());
+    assert.is_true(!msg.includes("image"))
+}
+
+test "the mixed prompt of a multiclass graph says how to read the classes" {
+    let msg = describe_graph_msg("Feature Name: a\nClass: high\nMeans: {}", default_graph_options(), has_image = true);
+    assert.is_true(msg.includes("A graph of a multiclass classifier repeats items 3 to 5"))
+}
+
+test "every mode names the omitted interaction terms in the final turn" {
+    let opts = default_graph_options();
+    let terms = ["a & b"];
+    let text = request_body(GraphFinalDescription@spec("G", "F", "S", 7, opts, omitted_terms = terms));
+    let vision = request_body(
+        GraphFinalDescription@spec(null, "F", "S", 7, opts, omitted_terms = terms, png_base64 = TEST_PNG),
+    );
+    let mixed = request_body(
+        GraphFinalDescription@spec("G", "F", "S", 7, opts, omitted_terms = terms, png_base64 = TEST_PNG),
+    );
+    assert.is_true(text.includes("interaction terms, and no graph description covers them: a & b."));
+    assert.is_true(
+        vision.includes("interaction terms, and no graph description covers them: a & b."),
+    );
+    assert.is_true(
+        mixed.includes("interaction terms, and no graph description covers them: a & b."),
+    )
+}
+
+test "describe_graph_cot rejects a call with neither the text nor the image before any request" {
+    let scripted = ScriptedClient { calls: 0 };
+    let outcome = describe_graph_cot(null, 7, default_graph_options(), client = scripted) catch (e) {
+        baml.errors.InvalidArgument => null,
+    };
+    assert.is_true(outcome == null);
+    assert.equal(scripted.calls, 0)
+}
+
+test "describe_graph_cot in vision mode sends the image in each of the three turns" {
+    let scripted = ScriptedClient { calls: 0 };
+    let result = describe_graph_cot(null, 7, default_graph_options(), client = scripted, png_base64 = TEST_PNG);
+    assert.equal(scripted.calls, 3);
+    let echo = describe_graph_cot(null, 7, default_graph_options(), client = EchoClient {}, png_base64 = TEST_PNG);
+    assert.is_true(echo.text.includes("The image gives no exact values."));
+    assert.is_true(!echo.text.includes("<graph>"))
+}

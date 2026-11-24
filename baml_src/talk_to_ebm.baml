@@ -49,8 +49,21 @@ function multiclass_format(graph: string) -> string {
     ""
 }
 
-function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
-    let msg = `
+// The MIME type of the graph images that Python draws. Every provider of `client_builders` reads PNG.
+const GRAPH_IMAGE_MIME = "image/png";
+
+// The image of the graph for the user message, or an empty string when the request has no image. An empty
+// interpolation adds no part to the message, so a request in text mode has the same body as a request with no image.
+function graph_image_part(png_base64: string?) -> image | string {
+    if (png_base64) {
+        return baml.media.Image.from_base64(png_base64, GRAPH_IMAGE_MIME);
+    };
+    ""
+}
+
+// How to read the graph text, and the text itself.
+function graph_text_msg(graph: string) -> string {
+    `
         <graph_format>
         The graph is a JSON object. Its keys are the x-axis and its values are the y-axis. For a continuous feature, each key is an interval where the function predicts the same value. For a categorical feature, each key is a possible value of the feature.
         The graph contains these items:
@@ -65,7 +78,59 @@ function describe_graph_msg(graph: string, opts: GraphPromptOptions) -> string {
         ${graph}
         </graph>
     `
-        + "\n\n";
+}
+
+// How to read the image of a graph that comes with no text. A picture gives no exact value, so the model must call each
+// value that it reads an estimate: the description must not claim more precision than the input has.
+function graph_image_msg() -> string {
+    `
+        <graph_format>
+        The image above is the graph of one feature of the model. The title and the x-axis name the feature, and the y-axis shows the score of the feature, its effect on the prediction. A dashed line marks a score of zero.
+        For a continuous feature, a step line shows the score of each interval of the feature, and a shaded band shows the confidence interval. For a categorical or boolean feature, a bar shows the score of each value, and error bars show the confidence interval. The caption under the plot gives the level of the confidence interval. A graph without a caption has no confidence interval.
+        If the graph has a legend of classes, the model is a multiclass classifier, and each class has its own series. In every bin, the scores have the same mean over all the classes of the model, so only the differences between the classes change the predicted probabilities. Compare the classes with each other within each bin.
+        The image gives no exact values. Read each value from the axes as an estimate, and say that it is an estimate when you quote it, for example "about 0.4", because the reader must not take a value read from a picture as exact.
+        </graph_format>
+    `
+}
+
+// How to use the image of a graph that comes with its text. The text holds the exact values, so every number of the
+// description comes from the text, and the image serves for the shape only.
+function graph_text_and_image_msg(graph: string) -> string {
+    graph_text_msg(graph)
+        + "
+
+"
+        + `
+            <image_reading>
+            The image above shows the same graph as the text in <graph>. The text holds the exact values, so take every number that you quote from the text. Use the image to see the shape of the graph: its trends, jumps, plateaus and the width of the confidence interval.
+            </image_reading>
+        `
+}
+
+// The graph part of the user message: the text, the reading of the image, or both. A request needs the text or the
+// image, because a description of a graph that the model did not get would be made up.
+function graph_content_msg(
+    graph: string?,
+    has_image: bool,
+) -> string throws baml.errors.InvalidArgument {
+    if (graph == null) {
+        if (!has_image) {
+            throw baml.errors.InvalidArgument { message: "a graph request needs the graph text, the graph image or both" };
+        };
+        return graph_image_msg();
+    };
+    if (has_image) {
+        return graph_text_and_image_msg(graph);
+    };
+    graph_text_msg(graph)
+}
+
+function describe_graph_msg(
+    graph: string?,
+    opts: GraphPromptOptions,
+    has_image: bool = false,
+) -> string throws baml.errors.InvalidArgument {
+    let msg = graph_content_msg(graph, has_image) + "\n\n";
     if (opts.graph_description.length() > 0) {
         msg = msg + `<graph_description>\n${opts.graph_description}\n</graph_description>\n\n`;
     };
@@ -152,24 +217,37 @@ function final_description_request(num_sentences: int, omitted_terms: string[] =
 }
 
 // describe_graph_cot, turn 1: system + describe_graph prompt.
-function GraphFirstPass(graph: string, opts: GraphPromptOptions) -> string {
+// `graph` is the graph text and `png_base64` the image of the same graph. Text mode passes the text, vision mode the
+// image, and mixed mode both. The image comes first in the user message, before the text that refers to it.
+function GraphFirstPass(
+    graph: string?,
+    opts: GraphPromptOptions,
+    png_base64: string? = null,
+) -> string {
     client: RouterLong
     prompt: `
         ${role("system")}
         ${graph_system_msg(opts.expert_description)}
         ${role("user")}
-        ${describe_graph_msg(graph, opts)}
+        ${graph_image_part(png_base64)}
+        ${describe_graph_msg(graph, opts, has_image = png_base64 != null)}
     `
 }
 
 // Turn 2: surprising regions. `first_pass` is the assistant reply from turn 1.
-function GraphSurprises(graph: string, first_pass: string, opts: GraphPromptOptions) -> string {
+function GraphSurprises(
+    graph: string?,
+    first_pass: string,
+    opts: GraphPromptOptions,
+    png_base64: string? = null,
+) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${graph_system_msg(opts.expert_description)}
         ${role("user")}
-        ${describe_graph_msg(graph, opts)}
+        ${graph_image_part(png_base64)}
+        ${describe_graph_msg(graph, opts, has_image = png_base64 != null)}
         ${role("assistant")}
         ${first_pass}
         ${role("user")}
@@ -179,19 +257,21 @@ function GraphSurprises(graph: string, first_pass: string, opts: GraphPromptOpti
 
 // Turn 3: brief final description.
 function GraphFinalDescription(
-    graph: string,
+    graph: string?,
     first_pass: string,
     surprises: string,
     num_sentences: int,
     opts: GraphPromptOptions,
     omitted_terms: string[] = [],
+    png_base64: string? = null,
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${graph_system_msg(opts.expert_description)}
         ${role("user")}
-        ${describe_graph_msg(graph, opts)}
+        ${graph_image_part(png_base64)}
+        ${describe_graph_msg(graph, opts, has_image = png_base64 != null)}
         ${role("assistant")}
         ${first_pass}
         ${role("user")}
@@ -379,21 +459,33 @@ function sample_graph_tokens(
     samples
 }
 
+// `graph` is the graph text and `png_base64` the PNG image of the same graph, in base64. Pass one or both.
 function describe_graph_cot(
-    graph: string,
+    graph: string?,
     num_sentences: int,
     opts: GraphPromptOptions,
     client: ai.Client? = null,
     model: ModelSpec? = null,
     omitted_terms: string[] = [],
+    png_base64: string? = null,
 ) -> Counted {
+    //# Check that the model gets a graph before the first paid call
+    graph_content_msg(graph, png_base64 != null);
     //# Three sequential assistant turns, each seeing the previous replies
     let long = select_client(client, model, long_defaults());
     let short = select_client(client, model, short_defaults());
-    let first_pass = run_counted(GraphFirstPass@spec(graph, opts), client = long);
-    let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts), client = short);
+    let first_pass = run_counted(GraphFirstPass@spec(graph, opts, png_base64 = png_base64), client = long);
+    let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts, png_base64 = png_base64), client = short);
     let final = run_counted(
-        GraphFinalDescription@spec(graph, first_pass.text, surprises.text, num_sentences, opts, omitted_terms = omitted_terms),
+        GraphFinalDescription@spec(
+            graph,
+            first_pass.text,
+            surprises.text,
+            num_sentences,
+            opts,
+            omitted_terms = omitted_terms,
+            png_base64 = png_base64,
+        ),
         client = short,
     );
     Counted {
