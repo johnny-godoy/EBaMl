@@ -67,7 +67,6 @@
       "type": "object"
     },
     "check_constraints": {
-      "type": "object",
       "$defs": {
         "JSONValue": {
           "anyOf": [
@@ -123,7 +122,8 @@
       "required": [
         "constraints"
       ],
-      "title": "check_constraintsArguments"
+      "title": "check_constraintsArguments",
+      "type": "object"
     },
     "checkout_edit": {
       "properties": {
@@ -170,6 +170,40 @@
     },
     "explain_prediction": {
       "$defs": {
+        "AllowedValuesArgument": {
+          "description": "The allowed values of one feature, as a tool takes them.\n\nGive ``levels`` for a nominal or ordinal feature. Give ``low``, ``high`` or both, and ``match``, for a continuous\nfeature. A missing end has no limit.",
+          "properties": {
+            "high": {
+              "title": "High",
+              "type": "number"
+            },
+            "levels": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Levels",
+              "type": "array"
+            },
+            "low": {
+              "title": "Low",
+              "type": "number"
+            },
+            "match": {
+              "$ref": "#/$defs/RangeMatch"
+            }
+          },
+          "title": "AllowedValuesArgument",
+          "type": "object"
+        },
+        "CostStrategyName": {
+          "description": "The base cost strategy that a tool takes by name, under the difficulties of an agent.",
+          "enum": [
+            "unit",
+            "data"
+          ],
+          "title": "CostStrategyName",
+          "type": "string"
+        },
         "FeatureValue": {
           "anyOf": [
             {
@@ -182,13 +216,69 @@
               "type": "null"
             }
           ]
+        },
+        "RangeMatch": {
+          "description": "Which bins of a continuous feature a ``ValueRange`` allows.\n\nAn EBM groups the values of a continuous feature in bins, so a range of values and a bin can overlap in part.\n\nAttributes\n----------\nOVERLAP\n    A bin is allowed when some of its values are in the range. Use it when the person can reach any value in the\n    range, so a bin with one reachable value is a real option.\nINSIDE\n    A bin is allowed only when all of its values are in the range. Use it when every value of the chosen bin must\n    be reachable, for example when the plan must hold for the whole bin.",
+          "enum": [
+            "overlap",
+            "inside"
+          ],
+          "title": "RangeMatch",
+          "type": "string"
         }
       },
       "properties": {
+        "allowed": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/AllowedValuesArgument"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowed"
+        },
         "confidence_level": {
           "default": 0.95,
           "title": "Confidence Level",
           "type": "number"
+        },
+        "cost_strategy": {
+          "$ref": "#/$defs/CostStrategyName",
+          "default": "unit"
+        },
+        "difficulty": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Difficulty"
+        },
+        "difficulty_from_model": {
+          "default": false,
+          "title": "Difficulty From Model",
+          "type": "boolean"
+        },
+        "immutable": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Immutable",
+          "type": "array"
         },
         "instance": {
           "anyOf": [
@@ -204,6 +294,23 @@
           ],
           "default": null,
           "title": "Instance"
+        },
+        "max_changes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Changes"
+        },
+        "plans": {
+          "default": 1,
+          "title": "Plans",
+          "type": "integer"
         },
         "revision": {
           "default": "current",
@@ -227,7 +334,6 @@
       "type": "object"
     },
     "get_affected_profile": {
-      "type": "object",
       "properties": {
         "revision": {
           "default": "current",
@@ -235,11 +341,16 @@
           "type": "string"
         }
       },
-      "title": "get_affected_profileArguments"
+      "title": "get_affected_profileArguments",
+      "type": "object"
     },
     "get_edit_effect": {
-      "type": "object",
       "properties": {
+        "revision": {
+          "default": "current",
+          "title": "Revision",
+          "type": "string"
+        },
         "subgroup_feature": {
           "anyOf": [
             {
@@ -266,14 +377,10 @@
           ],
           "default": null,
           "title": "Subgroup Value"
-        },
-        "revision": {
-          "default": "current",
-          "title": "Revision",
-          "type": "string"
         }
       },
-      "title": "get_edit_effectArguments"
+      "title": "get_edit_effectArguments",
+      "type": "object"
     },
     "get_graph": {
       "$defs": {
@@ -438,6 +545,67 @@
         "edit"
       ],
       "title": "preview_editArguments",
+      "type": "object"
+    },
+    "propose_difficulties": {
+      "$defs": {
+        "CostStrategyName": {
+          "description": "The base cost strategy that a tool takes by name, under the difficulties of an agent.",
+          "enum": [
+            "unit",
+            "data"
+          ],
+          "title": "CostStrategyName",
+          "type": "string"
+        },
+        "FeatureValue": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "properties": {
+        "cost_strategy": {
+          "$ref": "#/$defs/CostStrategyName",
+          "default": "unit"
+        },
+        "instance": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/FeatureValue"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Instance"
+        },
+        "row": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row"
+        }
+      },
+      "title": "propose_difficultiesArguments",
       "type": "object"
     },
     "redo_edit": {

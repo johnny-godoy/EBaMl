@@ -10,10 +10,18 @@ from ebaml.edit.edit_session import RevisionInfo
 from ebaml.edit.edits import SetScores
 from ebaml.edit.selections import WholeGraph
 from ebaml.local.audience import DataScientist
+from ebaml.local.costs import DataCost, ScaledCost, UnitCost
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
-from ebaml.mcp.explain_tools import PredictionExplanation, PredictionRequest, explain_prediction
+from ebaml.local.recourse import Levels, RangeMatch, ValueRange
+from ebaml.mcp.explain_tools import (
+    PredictionExplanation,
+    PredictionRequest,
+    RecourseArguments,
+    explain_prediction,
+    recourse_options,
+)
 from ebaml.mcp.model_store import ModelStore
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame, instance_of
 
@@ -100,3 +108,35 @@ def test_the_explanation_uses_the_edited_copy_and_a_revision_explains_an_earlier
     assert _explain(store, revision=head, instance=instance) == edited
     with pytest.raises(EditError, match="no revision 'abc'"):
         _explain(store, revision="abc", instance=instance)
+
+
+def test_the_recourse_arguments_become_the_recourse_options() -> None:
+    arguments = RecourseArguments(
+        immutable=["b"],
+        allowed={"a": {"low": -1.0, "match": RangeMatch.INSIDE}, "c": {"levels": ["x"]}},
+        difficulty={"a": 2.0},
+        cost_strategy="data",
+        difficulty_from_model=True,
+        max_changes=2,
+        plans=3,
+    )
+    options = recourse_options(arguments)
+    assert options.immutable == ("b",)
+    assert options.allowed == {"a": ValueRange(low=-1.0, match="inside"), "c": Levels(["x"])}
+    assert options.costs == ScaledCost(DataCost(), {"a": 2.0}, proposed_by_model=True)
+    assert (options.max_changes, options.plans) == (2, 3)
+
+
+def test_no_difficulty_keeps_the_base_strategy() -> None:
+    assert recourse_options(RecourseArguments()).costs == UnitCost()
+    assert recourse_options(RecourseArguments(cost_strategy="data")).costs == DataCost()
+
+
+def test_the_recourse_options_reach_the_facts(continuous_ebm: FittedClassifier) -> None:
+    ebm, frame = continuous_ebm
+    store = ModelStore(ebm=ebm, data=as_frame(frame))
+    recourse = recourse_options(RecourseArguments(immutable=["a"], plans=2))
+    explanation = _explain(store, row=0, recourse=recourse)
+    assert explanation.facts.recourse == recourse
+    changed = {change.feature for plan in explanation.facts.counterfactuals for change in plan.changes}
+    assert "a" not in changed

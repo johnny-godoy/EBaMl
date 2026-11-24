@@ -35,7 +35,7 @@ BASE_TOOLS = {
     "get_edit_effect",
     "get_affected_profile",
 }
-LLM_TOOLS = {"describe_feature", "describe_model"}
+LLM_TOOLS = {"describe_feature", "describe_model", "propose_difficulties"}
 SAVE_TOOLS = {"save_model"}
 # the tools that must leave the session as it is
 READ_ONLY: dict[str, dict[str, object]] = {
@@ -90,7 +90,20 @@ async def test_each_tool_has_a_description_and_an_object_schema(store: ModelStor
 
 
 def test_each_tool_name_is_snake_case_and_starts_with_a_verb_of_the_set() -> None:
-    verbs = {"get", "list", "check", "explain", "preview", "apply", "undo", "redo", "checkout", "save", "describe"}
+    verbs = {
+        "get",
+        "list",
+        "check",
+        "explain",
+        "preview",
+        "apply",
+        "undo",
+        "redo",
+        "checkout",
+        "save",
+        "describe",
+        "propose",
+    }
     for name in BASE_TOOLS | SAVE_TOOLS | LLM_TOOLS:
         assert name == name.lower()
         assert name.split("_")[0] in verbs, f"{name} does not start with an approved verb"

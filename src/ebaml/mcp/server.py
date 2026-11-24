@@ -30,6 +30,8 @@ _INSTRUCTIONS = (
     "This server gives you a fitted Explainable Boosting Machine (EBM), a model that is a sum of one graph per feature."
     " Start with get_model_summary and list_features. Read a graph with get_graph. Explain one prediction with"
     " explain_prediction. Every result of these tools is exact and comes from the model, not from a language model."
+    " When the person wants a plan to change a prediction, ask which features they cannot change and which changes"
+    " are hard, and pass them to explain_prediction as immutable, allowed and difficulty."
     " You can also edit the model so that it meets a business requirement of the person. An edit changes real"
     " predictions, so apply only what the person asked for. Work in this order: read the graph with get_graph and"
     " list_bins, call preview_edit, read the report and the effect on the data, call apply_edit with the reason, and"
@@ -226,11 +228,18 @@ def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
     """
 
     @server.tool()
-    def explain_prediction(
+    def explain_prediction(  # ruff: ignore[too-many-arguments, too-many-positional-arguments] -- an MCP tool takes its arguments as named JSON fields
         instance: Mapping[str, FeatureValue] | None = None,
         row: int | None = None,
         confidence_level: float = 0.95,
         revision: str = "current",
+        immutable: Sequence[str] = (),
+        allowed: Mapping[str, explain_tools.AllowedValuesArgument] | None = None,
+        difficulty: Mapping[str, float] | None = None,
+        cost_strategy: explain_tools.CostStrategyName = explain_tools.CostStrategyName.UNIT,
+        difficulty_from_model: bool = False,  # ruff: ignore[boolean-type-hint-positional-argument, boolean-default-value-positional-argument] -- an MCP tool takes a JSON boolean by name
+        max_changes: int | None = None,
+        plans: int = 1,
     ) -> str:
         """Explain one prediction of a classifier or a regressor with exact facts.
 
@@ -239,21 +248,37 @@ def _register_explain_tools(server: MCPServer, store: ModelStore) -> None:
         server loaded. The explanation uses the model at revision, which is the current model with all edits by
         default.
 
+        The counterfactual is a plan that the person can carry out. immutable names the features that it must not
+        change. allowed gives the values that some features may take: {"levels": [...]} for a category, or {"low",
+        "high", "match": "overlap" | "inside"} for a number. difficulty multiplies the cost of the changes of some
+        features (2 is twice as hard) on top of cost_strategy: "unit" (every change costs 1) or "data" (the distance
+        in the training data). Set difficulty_from_model when propose_difficulties gave the difficulty, so that the
+        texts call it a guess. max_changes caps the changes of a plan, and plans asks for several diverse plans.
+
         Returns
         -------
         str
             JSON with the session (the revision that the call read), the facts and their texts. The facts have the
-            counterfactual (changes that flip the prediction, the fewest ones when ``minimality`` proves it), the
-            sufficient reason (the features that fix the prediction) and the share of completions with the same
-            prediction.
+            plans (``counterfactuals``, cheapest first, each with its cost and its ``minimality``), the sufficient
+            reason (the features that fix the prediction) and the share of completions with the same prediction.
 
         """
         with _tool_errors():
+            arguments = explain_tools.RecourseArguments(
+                immutable=immutable,
+                allowed=allowed or {},
+                difficulty=difficulty or {},
+                cost_strategy=cost_strategy,
+                difficulty_from_model=difficulty_from_model,
+                max_changes=max_changes,
+                plans=plans,
+            )
             request = explain_tools.PredictionRequest(
                 instance=instance,
                 row=row,
                 confidence_level=confidence_level,
                 revision=revision,
+                recourse=explain_tools.recourse_options(arguments),
             )
             explanation = explain_tools.explain_prediction(store, request)
             return _json(attrs.asdict(explanation))
@@ -589,6 +614,29 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
         """
         with _tool_errors():
             return llm_tools.describe_model(store, llm)
+
+    @server.tool()
+    def propose_difficulties(
+        instance: Mapping[str, FeatureValue] | None = None,
+        row: int | None = None,
+        cost_strategy: explain_tools.CostStrategyName = explain_tools.CostStrategyName.UNIT,
+    ) -> str:
+        """Ask a language model how hard the change of each input is for the person, with a reason for each input.
+
+        Use it when the person cannot say which changes are easy. Show the proposal to the person and let them
+        correct it, because the model can be wrong, and mark an input that cannot change as immutable instead. The
+        call costs money and runs no search.
+
+        Returns
+        -------
+        str
+            JSON with the difficulty, the multiplier and the reason of each input, and the arguments difficulty,
+            cost_strategy and difficulty_from_model to pass to explain_prediction.
+
+        """
+        with _tool_errors():
+            advice = llm_tools.propose_feature_difficulties(store, llm, instance, row, cost_strategy)
+            return _json(attrs.asdict(advice))
 
 
 app: cyclopts.App = cyclopts.App(
