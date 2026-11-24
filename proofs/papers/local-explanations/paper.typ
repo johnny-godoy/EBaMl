@@ -26,7 +26,7 @@ The counterfactual of two margins is the smaller of two exact answers. The suffi
 covering problem. The code solves it with a MIP solver, a local search or a greedy, and the paper states what a result proves. A multiclass classifier has one margin for each rival
 class, so it uses the same results. The sufficient reason of several margins is NP-hard, because it contains Set Cover, and it has the same hardness of
 approximation.
-A Lean 4 file @lean4 checks every statement except two facts about running time and the statements about the
+A Lean 4 file @lean4 checks every statement except two facts about running time and the certificates of the
 solvers (@sec-solvers, @sec-limits), and the appendix tells the reader how to repeat the check.
 
 = Claims and scope <sec-claims>
@@ -882,8 +882,10 @@ smallest cover.
 
 = Solvers, the greedy and the lower bound <sec-solvers>
 
-This section states what the solvers of `covering_solvers.py` prove. Lean checks none of its statements. The proofs
-are on paper only, and @sec-limits lists this fact.
+This section states what the solvers of `covering_solvers.py` prove. Lean checks Lemmas 15 to 17 and Corollary 6 in
+`proofs/EBaMlProofs/Recourse/Reduction.lean` and `Bounds.lean`, on the groups of alternatives of the recourse paper
+(`Recourse.Problem`), which allow gains of any sign and positive costs. The covering problem of this section is the
+case with no cap and no exclusion. Lean does not check what a MIP or LP solver returns (@sec-limits).
 
 *The problem of the code.* `CoveringProblem` extends the problem of @sec-covering. The features are _groups_, and each
 group has a finite list of _alternatives_ $a$ with a gain $h_(k,a)$ for each margin $k$. A gain can be negative. A
@@ -896,7 +898,7 @@ $s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alte
 #lemma("an alternative with no positive gain", [
   Let the alternative $a$ have $h_(k,a) <= 0$ for each margin $k$. If a sufficient set of picks contains $a$, then the
   set without $a$ is sufficient and has one pick fewer.
-])
+], lean: ("proofs/EBaMlProofs/Recourse/Reduction.lean", "EBaMlProofs.Recourse.Problem.valid_erase"))
 
 #proof[
   Each margin of the set without $a$ is the margin of the set plus $-h_(k,a) >= 0$, so it stays positive.
@@ -905,7 +907,7 @@ $s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alte
 #lemma("a dominated alternative", [
   Let $a$ and $b$ be two alternatives of one group with $h_(k,a) <= h_(k,b)$ for each margin $k$. If a sufficient set of
   picks contains $a$, then the set with $b$ in place of $a$ is sufficient and has the same size.
-])
+], lean: ("proofs/EBaMlProofs/Recourse/Reduction.lean", "EBaMlProofs.Recourse.Problem.valid_swap"))
 
 #proof[
   The set picks at most one alternative of the group, so it does not contain $b$, and the swap keeps one pick in the
@@ -916,7 +918,7 @@ $s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alte
   Let `reduce_problem` remove each alternative with no positive gain, and each alternative $a$ that another alternative
   $b$ of its group dominates, where $b$ has a larger gain for some margin or $b$ comes first. Then the smallest size of a
   sufficient set is the same before and after the removal, and a sufficient set exists before iff one exists after.
-])
+], lean: ("proofs/EBaMlProofs/Recourse/Reduction.lean", "EBaMlProofs.Recourse.Problem.exists_kept", "EBaMlProofs.Recourse.Problem.exists_kept_plan", "EBaMlProofs.Recourse.Problem.exists_plan_iff_kept", "EBaMlProofs.Recourse.Problem.smallest_plan_iff_kept"))
 
 #proof[
   *ASSUME:* a sufficient set $F$ of the problem. *PROVE:* a sufficient set of the reduced problem with at most $|F|$
@@ -925,8 +927,10 @@ $s_(j,i)(v) - z sigma_(j,i)(v) - s_(j,i)(c_i)$ for each margin of $j$, as `_alte
   #step(1, "1", [Remove from $F$ each alternative with no positive gain. The set stays sufficient, and it does not grow,
     by Lemma 15.])
   #step(1, "2", [The relation "$b$ dominates $a$" of the statement is a strict order on the useful alternatives of a
-    group, so each removed alternative $a$ has a dominating alternative that is not removed: a maximal one above $a$.
-    Swap each such $a$ for it. The set stays sufficient, and its size stays, by Lemma 16.])
+    group (`dominates_irrefl`, `dominates_trans`), so each removed alternative $a$ has a dominating alternative that
+    is not removed: a maximal one above $a$. Lean finds it by induction on the number of useful alternatives that
+    dominate $a$, which falls at each step (`exists_kept`). Swap each such $a$ for it. The set stays sufficient, and
+    its size stays, by Lemma 16.])
   #step(1, "3", [*Q.E.D.* The result uses only the alternatives that stay.])
 ]
 
@@ -938,8 +942,9 @@ problem. The test `test_the_reduction_keeps_two_groups_with_equal_gains` is this
 #lemma("the lower bound of the LP", [
   Let $L$ be the optimum of the linear program that minimizes $sum_a x_a$ over $0 <= x_a <= 1$, with
   $sum_(a in g) x_a <= 1$ for each group $g$ and $sum_a h_(k,a) x_a >= -W_k$ for each margin $k$. Then each
-  sufficient set of picks has at least $ceil(L)$ picks.
-])
+  sufficient set of picks has at least $ceil(L)$ picks. If the linear program has no feasible point, no set is
+  sufficient.
+], lean: ("proofs/EBaMlProofs/Recourse/Bounds.lean", "EBaMlProofs.Recourse.Problem.lp_lower_bound", "EBaMlProofs.Recourse.Problem.no_plan_of_relaxation_infeasible"))
 
 #proof[
   Let $F$ be a sufficient set of picks, and let $x_a = 1$ for $a in F$ and $x_a = 0$ otherwise. Then $x$ meets each
@@ -1147,7 +1152,8 @@ The proof does not cover the following points.
 - *The solvers.* A proved optimum rests on the certificate of HiGHS, SCIP or CP-SAT, which Lean does not check, and on
   their floating-point tolerances. A set whose smallest margin is positive but below $epsilon$ times the size of its
   numbers can be missed, so the status `minimality` can be wrong in that case (@sec-solvers). The lower bound depends on the
-  tolerances of GLOP. Lemmas 15 to 17 and Corollary 6 are proved on paper, and Lean checks none of them.
+  tolerances of GLOP. Lean checks Lemmas 15 to 17 and Corollary 6 over the real numbers, for any number $L$ that
+  bounds the linear program from below, but not that the number of GLOP is such a bound.
 - *The statement `card_search_space`.* Theorem 5 keeps the bound $2^n$ of a search by size. No function of the code
   searches by size, so this part describes the oracle of the tests only.
 - *The confidence of a decision with several margins.* Each margin moves by $z$ deviations against its own claim, as in
@@ -1159,12 +1165,13 @@ The proof does not cover the following points.
   meaning.
 - *The class $j$ as target.* The Lean model of this paper covers the counterfactual "the predicted class is no longer
   $w$". The recourse paper models the counterfactual of a chosen class $j$ in Lean (`Recourse/Target.lean`): its valid
-  plans are exactly the changes that make every margin of $j$ positive. Lean checks neither Lemmas 15 to 17 for it nor
-  the hardness of its gain table. The code solves
+  plans are exactly the changes that make every margin of $j$ positive. Its problem is a `Recourse.Problem`, so the
+  Lean statements of Lemmas 15 to 17 and Corollary 6 apply to it, and Theorem 8 of the recourse paper checks the
+  reduction from Set Cover to it (`Recourse/TargetHardness.lean`). The code solves
   it as a problem of @sec-solvers with one alternative for each plausible bin (`_target_counterfactual`), so the search
   runs over every choice of bins. Lemmas 15 to 17 apply to it. Theorems 4 and 5 model one alternative for each feature
-  with gains that are not negative, so they do not apply. The reduction of @sec-hardness applies to its gain table by
-  the same argument.
+  with gains that are not negative, so they do not apply. Lean does not check that its reduction runs in polynomial
+  time, as for Corollary 4.
 - *The probability of the new class.* `Counterfactual.new_output` of a multiclass classifier is the softmax probability
   from the mean scores after the change. It is a report and not an optimality claim, as for a binary classifier.
 - *The correlation between classes.* Lemma 12 shows an upper bound for the deviation of a margin. The code uses the
@@ -1189,8 +1196,9 @@ holds the model and the two theorems, the file `EBaMlProofs/LocalExplanations/Co
 margins, the file `EBaMlProofs/LocalExplanations/Regressor.lean` holds the shift and the answer "inside", and the file
 `EBaMlProofs/LocalExplanations/Multiclass.lean` holds the models of the rivals, and the file
 `EBaMlProofs/LocalExplanations/Hardness.lean` holds the reduction from Set Cover. The file `EBaMlProofs/LocalExplanations/Axioms.lean` prints the
-axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`. The statements of @sec-solvers
-have no Lean file.
+axioms of the main theorems. The proof has no `sorry`, no `admit` and no new `axiom`. The files
+`EBaMlProofs/Recourse/Reduction.lean` and `EBaMlProofs/Recourse/Bounds.lean` hold the statements of @sec-solvers,
+and `EBaMlProofs/Recourse/Axioms.lean` prints their axioms.
 
 A continuous integration job runs `lake build` when the Lean files or the pins change. A reader can also run the check
 by hand. @sec-appendix gives the exact commands,
@@ -1221,7 +1229,9 @@ the versions, the expected output and a table from each statement to its Lean na
 )
 
 The files in `proofs/EBaMlProofs/LocalExplanations/`, `proofs/lakefile.toml`, `proofs/lean-toolchain` and `proofs/lake-manifest.json`
-are the same at the commit above and at the commit of this paper. The functions of @sec-model are in
+are the same at the commit above and at the commit of this paper. The Lean files of Lemmas 15 to 17 and Corollary 6,
+`proofs/EBaMlProofs/Recourse/Reduction.lean` and `Bounds.lean`, were checked at the commit
+`19f6851f899812027abbe1fb3aa2186bfa8b5fd9`, and the recourse paper prints their axioms. The functions of @sec-model are in
 `src/ebaml/local/facts.py`, `fact_features.py`, `counterfactuals.py`, `sufficient_reasons.py`,
 `completions.py` and `recourse.py`. Read the paper together with the version of those files at the commit of this paper.
 
@@ -1315,6 +1325,7 @@ stands for a Lean namespace:
 - `MC.` stands for `EBaMlProofs.LocalExplanations.Multiclass.`
 - `LE.` stands for `EBaMlProofs.LocalExplanations.`
 - `HD.` stands for `EBaMlProofs.LocalExplanations.Hardness.`
+- `RP.` stands for `EBaMlProofs.Recourse.Problem.`, in `proofs/EBaMlProofs/Recourse/`
 
 #table(
   columns: (auto, 1fr, auto),
@@ -1360,10 +1371,10 @@ stands for a Lean namespace:
   [Theorem 9 (multiclass)], [`HD.multiclass`, `HD.sufficient_reason_iff_cover`], [`Hardness.lean`],
   [Theorem 10 (approximation ratio)], [`HD.SetCover.isOptimum_iff`, `HD.SetCover.isApprox_iff`, `HD.multiclass_isOptimum_iff`, `HD.multiclass_isApprox_iff`], [`Hardness.lean`],
   [Corollary 5 (same hardness)], [Not checked in Lean (@sec-limits)], [none],
-  [Lemma 15 (no positive gain)], [Not checked in Lean (@sec-solvers)], [none],
-  [Lemma 16 (a dominated alternative)], [Not checked in Lean (@sec-solvers)], [none],
-  [Corollary 6 (the reduction of the code)], [Not checked in Lean (@sec-solvers)], [none],
-  [Lemma 17 (the lower bound of the LP)], [Not checked in Lean (@sec-solvers)], [none],
+  [Lemma 15 (no positive gain)], [`RP.valid_erase`], [`Recourse/Reduction.lean`],
+  [Lemma 16 (a dominated alternative)], [`RP.valid_swap`], [`Recourse/Reduction.lean`],
+  [Corollary 6 (the reduction of the code)], [`RP.exists_kept`, `RP.exists_kept_plan`, `RP.exists_plan_iff_kept`, `RP.smallest_plan_iff_kept`], [`Recourse/Reduction.lean`],
+  [Lemma 17 (the lower bound of the LP)], [`RP.lp_lower_bound`, `RP.no_plan_of_relaxation_infeasible`], [`Recourse/Bounds.lean`],
   [Definition 2 (allowed bins)], [`Model.bins`, `Model.dropOn`, `Model.IsLowest`, `Model.AdmissibleOn`,
     `Model.CanFlipOn`, `Model.exists_isLowest`], [`Model.lean`],
   [Lemma 18 (best change over allowed bins)], [`Model.robustMargin_geOn`, `Model.robustMargin_lowest`,
