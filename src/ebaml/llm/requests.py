@@ -12,6 +12,7 @@ import attrs
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local.audience import Audience
+from ebaml.local.costs import CostStrategy, UnitCost
 from ebaml.local.fact_types import LocalOptions
 
 
@@ -122,3 +123,21 @@ class ExplainInstanceRequest(_EBMRequest):
     num_sentences: int = 5
     language: str = attrs.field(default="English", kw_only=True)
     local: LocalOptions = attrs.field(factory=LocalOptions, kw_only=True)
+
+
+@attrs.frozen
+class ProposeDifficultiesRequest(_EBMRequest):
+    """The input of ``propose_difficulties``.
+
+    Attributes
+    ----------
+    instance: Mapping[str, FeatureValue]
+        The value of every feature, by feature name. The prompt shows the current value of each input.
+    base: CostStrategy
+        The strategy whose costs the proposed multipliers scale: ``UnitCost()`` (the default) or ``DataCost()``. The
+        prompt reads ``expert_description`` and ``dataset_description`` of ``prompt``.
+
+    """
+
+    instance: Mapping[str, FeatureValue]
+    base: CostStrategy = attrs.field(factory=UnitCost, kw_only=True)

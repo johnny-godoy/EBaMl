@@ -23,6 +23,7 @@ CALLED = frozenset({
     "default_graph_options_sync",
     "describe_graph_cot_sync",
     "explain_local_sync",
+    "propose_difficulty_sync",
     "sample_graph_tokens_sync",
     "summarize_ebm_sync",
     "supported_providers_sync",

@@ -7,7 +7,16 @@ import pytest
 
 from ebaml.core.exceptions import RecourseOptionError
 from ebaml.graphs.ebm_graph import EBMGraph
-from ebaml.local.costs import CostStrategy, DataCost, ScaledCost, UnitCost, UserCost, check_costs
+from ebaml.local.costs import (
+    DIFFICULTY_MULTIPLIERS,
+    CostStrategy,
+    DataCost,
+    Difficulty,
+    ScaledCost,
+    UnitCost,
+    UserCost,
+    check_costs,
+)
 from ebaml.local.fact_features import Feature
 
 # a continuous feature with the bin centers 5, 15, 25 and 35, the instance in the second bin
@@ -68,7 +77,18 @@ def test_user_cost_takes_a_bin_then_a_feature_then_the_default() -> None:
 def test_scaled_cost_multiplies_the_base_costs_of_some_features() -> None:
     strategy = ScaledCost(UnitCost(), {"f": 4.0})
     assert strategy.costs([_nominal([1.0] * 3), _nominal([1.0] * 3, name="g")]) == [[4.0] * 3, [1.0] * 3]
-    assert strategy.describe() == "every change costs the same, times a difficulty for some inputs"
+    assert strategy.describe() == "every change costs the same, times a difficulty for some inputs that the user gave"
+
+
+def test_scaled_cost_says_when_a_language_model_proposed_the_difficulties() -> None:
+    # contract 3: a difficulty that an LLM proposed is an assumption, so the facts name its source
+    strategy = ScaledCost(UnitCost(), {"f": 2.0}, proposed_by_model=True)
+    assert strategy.describe().endswith("that a language model proposed")
+
+
+def test_each_difficulty_costs_twice_the_level_below_it() -> None:
+    multipliers = [DIFFICULTY_MULTIPLIERS[level] for level in Difficulty]
+    assert multipliers == [0.5, 1.0, 2.0, 4.0]
 
 
 @pytest.mark.parametrize("cost", [0.0, -1.0, math.inf, math.nan])

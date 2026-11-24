@@ -9,7 +9,9 @@ The ideas come from GAM Coach (Wang et al., CHI 2023, arXiv:2302.14165). Every c
 positive, so a free change cannot pad a plan. ``check_costs`` checks it.
 """
 
+import enum
 import math
+import types
 import typing
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
@@ -275,6 +277,25 @@ class UserCost:
         return "each change costs what the caller gave"
 
 
+class Difficulty(enum.StrEnum):
+    """How hard the change of one input is for a person, on the scale of ``propose_difficulties``.
+
+    ``DIFFICULTY_MULTIPLIERS`` turns each level into the multiplier of a ``ScaledCost``. The names are those of the
+    BAML enum ``Difficulty`` in ``baml_src/recourse.baml``.
+    """
+
+    EASY = "Easy"
+    MODERATE = "Moderate"
+    HARD = "Hard"
+    VERY_HARD = "VeryHard"
+
+
+# each level doubles the cost of the level below it, so a hard change counts as four easy ones
+DIFFICULTY_MULTIPLIERS: Mapping[Difficulty, float] = types.MappingProxyType(
+    {Difficulty.EASY: 0.5, Difficulty.MODERATE: 1.0, Difficulty.HARD: 2.0, Difficulty.VERY_HARD: 4.0},
+)
+
+
 @attrs.frozen
 class ScaledCost:
     """A difficulty multiplier for some features, on top of another strategy.
@@ -288,17 +309,21 @@ class ScaledCost:
         The strategy whose costs the multipliers scale.
     multipliers: Mapping[str, float]
         The multiplier of each feature, by name. A feature with no entry keeps the cost of ``base``.
+    proposed_by_model: bool
+        True when a language model proposed the multipliers (``propose_difficulties``). The facts then say so, because
+        such a difficulty is an assumption that the user must check.
 
     Examples
     --------
     >>> from ebaml import ScaledCost, UnitCost
     >>> ScaledCost(UnitCost(), {"income": 2.0}).describe()
-    'every change costs the same, times a difficulty for some inputs'
+    'every change costs the same, times a difficulty for some inputs that the user gave'
 
     """
 
     base: CostStrategy
     multipliers: Mapping[str, float] = attrs.field(factory=dict, converter=dict)
+    proposed_by_model: bool = attrs.field(default=False, kw_only=True)
 
     def costs(self, features: Sequence[Feature]) -> list[list[float]]:
         """Give each bin the cost of ``base`` times the multiplier of its feature.
@@ -325,10 +350,11 @@ class ScaledCost:
         Returns
         -------
         str
-            The words of ``base`` and of the multipliers.
+            The words of ``base`` and of the multipliers, with who gave them.
 
         """
-        return f"{self.base.describe()}, times a difficulty for some inputs"
+        source = "that a language model proposed" if self.proposed_by_model else "that the user gave"
+        return f"{self.base.describe()}, times a difficulty for some inputs {source}"
 
 
 def check_costs(features: Sequence[Feature], costs: Sequence[Sequence[float]]) -> None:
