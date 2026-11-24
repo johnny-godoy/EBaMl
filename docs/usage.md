@@ -51,13 +51,14 @@ print(describe_graph(DescribeGraphRequest(multiclass, feature_index=0, graph=Gra
 
 ## Text, vision and mixed modes
 
-`GraphOptions(mode=...)` sets how each graph reaches the LLM. The mode applies to `describe_graph` and `describe_ebm`.
+`GraphOptions(mode=...)` sets how each graph reaches the LLM. The mode is a member of `GraphMode`, and it applies to
+`describe_graph` and `describe_ebm`.
 
 | Mode | The request sends | Model |
 | --- | --- | --- |
-| `"text"` (default) | The graph text of `EBMGraph.to_text`. | Every model. |
-| `"vision"` | A PNG image of the graph, with no simplification, and no graph text. | A model that reads images. |
-| `"mixed"` | The graph text, and a PNG image of the same simplified graph. | A model that reads images. |
+| `GraphMode.TEXT` (default) | The graph text of `EBMGraph.to_text`. | Every model. |
+| `GraphMode.VISION` | A PNG image of the graph, with no simplification, and no graph text. | A model that reads images. |
+| `GraphMode.MIXED` | The graph text, and a PNG image of the same simplified graph. | A model that reads images. |
 
 The images need the extra `vision`: `pip install "ebaml[vision]"`. A call in vision or mixed mode without the extra
 raises `MissingExtraError` before any request.
@@ -66,7 +67,7 @@ raises `MissingExtraError` before any request.
 from ebaml import GraphMode
 
 print(describe_graph(DescribeGraphRequest(ebm, feature_index=0, graph=GraphOptions(mode=GraphMode.VISION))))
-print(describe_graph(DescribeGraphRequest(ebm, feature_index=0, graph=GraphOptions(mode="mixed"))))
+print(describe_graph(DescribeGraphRequest(ebm, feature_index=0, graph=GraphOptions(mode=GraphMode.MIXED))))
 ```
 
 A picture gives no exact values. In vision mode, the prompt tells the LLM to call each value that it reads from the
@@ -85,33 +86,34 @@ png = graph_png(graph, GraphImageOptions(score_axis=model_kind(ebm).score_axis))
 
 ### A model that reads no images
 
-`GraphOptions(vision_fallback=...)` sets what a call in vision or mixed mode does when the model reads no images. The
+`GraphOptions(vision_fallback=...)` takes a member of `VisionFallback`. It sets what a call in vision or mixed mode
+does when the model reads no images. The
 call knows this in one of two ways: `ModelOptions(vision=False)` says so before any request, or the provider rejects
 the image.
 
 | `vision_fallback` | The call |
 | --- | --- |
-| `"raise"` (default) | Raises `VisionUnsupportedError`. Its message names the model and lists the steps that fix the cause. |
-| `"text"` | Describes each graph from its text, and emits one `VisionFallbackWarning`. |
+| `VisionFallback.RAISE` (default) | Raises `VisionUnsupportedError`. Its message names the model and lists the steps that fix the cause. |
+| `VisionFallback.TEXT` | Describes each graph from its text, and emits one `VisionFallbackWarning`. |
 
 The default raises, because a caller who asks for an image must not get a description of the text in silence. The
 first model that reads no images decides for the whole call: in `describe_ebm`, the graphs that wait switch to text, or
-send no request with `"raise"`. A rejected request is not retried.
+send no request with `VisionFallback.RAISE`. A rejected request is not retried.
 
 ```python
 import warnings
 
-from ebaml import ModelOptions, VisionFallbackWarning, VisionUnsupportedError
+from ebaml import ModelOptions, VisionFallback, VisionFallbackWarning, VisionUnsupportedError
 
 text_only = ModelOptions(provider="openai", model="text-only-model", vision=False)
 try:
-    describe_graph(DescribeGraphRequest(ebm, 0, graph=GraphOptions(mode="vision"), model=text_only))
+    describe_graph(DescribeGraphRequest(ebm, 0, graph=GraphOptions(mode=GraphMode.VISION), model=text_only))
 except VisionUnsupportedError as error:
     print(error)
 
 with warnings.catch_warnings(record=True) as caught:
     warnings.simplefilter("always", VisionFallbackWarning)
-    graph = GraphOptions(mode="vision", vision_fallback="text")
+    graph = GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT)
     print(describe_graph(DescribeGraphRequest(ebm, 0, graph=graph, model=text_only)))
 assert [warning.category for warning in caught] == [VisionFallbackWarning]
 ```
@@ -168,9 +170,9 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `APIKeyRejectedError` | no | A provider answers a request with "unauthorized" or "forbidden". |
 | `RateLimitedError` | no | A provider limits the rate of the requests. |
 | `ProviderUnreachableError` | no | A request does not reach the provider. |
-| `VisionUnsupportedError` | no | A call in vision or mixed mode reaches a model that reads no images, and `vision_fallback` is `"raise"`. |
+| `VisionUnsupportedError` | no | A call in vision or mixed mode reaches a model that reads no images, and `vision_fallback` is `VisionFallback.RAISE`. |
 
-`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. The five provider errors derive from `LLMRequestError`. A call with `vision_fallback="text"` emits a `VisionFallbackWarning` (a `UserWarning`) in place of `VisionUnsupportedError`. `ebaml` exports all of these classes.
+`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. The five provider errors derive from `LLMRequestError`. A call with `vision_fallback=VisionFallback.TEXT` emits a `VisionFallbackWarning` (a `UserWarning`) in place of `VisionUnsupportedError`. `ebaml` exports all of these classes.
 
 ## Behaviour
 

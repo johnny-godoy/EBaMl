@@ -208,7 +208,7 @@ def graph_picture(
     feature: str,
     *,
     revision: str = CURRENT,
-    normalization: Normalization | str = Normalization.NONE,
+    normalization: Normalization = Normalization.NONE,
 ) -> GraphPicture:
     """Draw the graph of a feature as a PNG image, for an agent that reads images.
 
@@ -220,7 +220,7 @@ def graph_picture(
         The feature whose graph the image shows.
     revision: str, default="current"
         The revision to draw, as ``graph_text`` reads it.
-    normalization: Normalization | str, default=Normalization.NONE
+    normalization: Normalization, default=Normalization.NONE
         The shift of the scores, as ``EBMGraph.from_ebm`` reads it.
 
     Returns

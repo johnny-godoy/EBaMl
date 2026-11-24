@@ -10,17 +10,9 @@ from collections.abc import Mapping, Sequence
 
 import attrs
 
-from ebaml.core.custom_types import AxisPrecision, FeatureType, GraphMode, Normalization, VisionFallback, coerce_enum
+from ebaml.core.custom_types import AxisPrecision, FeatureType, GraphMode, Normalization, VisionFallback
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
 from ebaml.llm.token_learning import TokenLearner
-
-
-def _graph_mode(value: GraphMode | str) -> GraphMode:
-    return coerce_enum(GraphMode, value)
-
-
-def _vision_fallback(value: VisionFallback | str) -> VisionFallback:
-    return coerce_enum(VisionFallback, value)
 
 
 @attrs.frozen
@@ -54,13 +46,13 @@ class GraphOptions:
     token_learner: TokenLearner | None
         The token estimators of the budget check, and the weights that they learn from the calls. ``None`` checks the
         budget with the default weights and learns nothing. A request with an image teaches the weights nothing.
-    mode: GraphMode | str
-        How each graph reaches the LLM. ``"text"`` sends the graph text, and works with every model. ``"vision"``
-        sends an image of the graph only, drawn with no simplification. ``"mixed"`` sends the graph text and an image
-        of the same simplified graph. An image needs the extra ``vision``.
-    vision_fallback: VisionFallback | str
-        What a call in vision or mixed mode does when the model reads no images. ``"raise"`` raises
-        ``VisionUnsupportedError``. ``"text"`` describes the graphs from their text and emits one
+    mode: GraphMode
+        How each graph reaches the LLM. ``GraphMode.TEXT`` sends the graph text, and works with every model.
+        ``GraphMode.VISION`` sends an image of the graph only, drawn with no simplification. ``GraphMode.MIXED`` sends
+        the graph text and an image of the same simplified graph. An image needs the extra ``vision``.
+    vision_fallback: VisionFallback
+        What a call in vision or mixed mode does when the model reads no images. ``VisionFallback.RAISE`` raises
+        ``VisionUnsupportedError``. ``VisionFallback.TEXT`` describes the graphs from their text and emits one
         ``VisionFallbackWarning``. Text mode ignores it.
 
     """
@@ -77,8 +69,8 @@ class GraphOptions:
     max_tokens: int = 3000
     overbudget_percent: int = 50
     token_learner: TokenLearner | None = None
-    mode: GraphMode = attrs.field(default=GraphMode.TEXT, converter=_graph_mode)
-    vision_fallback: VisionFallback = attrs.field(default=VisionFallback.RAISE, converter=_vision_fallback)
+    mode: GraphMode = GraphMode.TEXT
+    vision_fallback: VisionFallback = VisionFallback.RAISE
 
 
 @attrs.frozen

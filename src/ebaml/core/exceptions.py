@@ -143,7 +143,7 @@ class VisionFallbackWarning(EBaMlError, UserWarning):  # ruff: ignore[error-suff
     """Warning emitted when a call in vision or mixed mode sends the graphs as text, because the model reads no images.
 
     A call emits it once, however many graphs it describes. Turn it into an error with
-    ``warnings.simplefilter("error", VisionFallbackWarning)``, or pass ``vision_fallback="raise"``.
+    ``warnings.simplefilter("error", VisionFallbackWarning)``, or pass ``vision_fallback=VisionFallback.RAISE``.
     """
 
 

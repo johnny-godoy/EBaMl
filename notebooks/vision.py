@@ -19,9 +19,10 @@ def _():
         DescribeGraphRequest,
         EBMGraph,
         GraphImageOptions,
+        GraphMode,
         GraphOptions,
-        InvalidOptionError,
         ModelOptions,
+        VisionFallback,
         VisionFallbackWarning,
         VisionUnsupportedError,
         check_token_budget,
@@ -39,13 +40,14 @@ def _():
         ExplainableBoostingRegressor,
         graph_png,
         GraphImageOptions,
+        GraphMode,
         GraphOptions,
-        InvalidOptionError,
         load_iris,
         mo,
         model_kind,
         ModelOptions,
         pl,
+        VisionFallback,
         VisionFallbackWarning,
         VisionUnsupportedError,
         warnings,
@@ -168,25 +170,15 @@ def _(mo) -> None:
 
     | Mode | The request sends |
     | --- | --- |
-    | `text` | The graph text. |
-    | `vision` | The image of the graph, with no text. The prompt asks the LLM to call each value an estimate. |
-    | `mixed` | The text and the image. The prompt takes every number from the text and the shape from the image. |
-
-    A mode that is not one of the three fails at once, before any request:
+    | `GraphMode.TEXT` | The graph text. |
+    | `GraphMode.VISION` | The image of the graph, with no text. The prompt asks the LLM for estimates. |
+    | `GraphMode.MIXED` | The text and the image. The numbers come from the text, and the shape from the image. |
     """)
 
 
 @app.cell
-def _(GraphOptions, InvalidOptionError, mo) -> None:
-    try:
-        GraphOptions(mode="picture")
-    except InvalidOptionError as mode_error:
-        mo.output.replace(mo.callout(mo.md(f"`InvalidOptionError`: {mode_error}"), kind="warn"))
-
-
-@app.cell
-def _(mo):
-    mode_buttons = {mode: mo.ui.run_button(label=f"Describe in {mode} mode") for mode in ("text", "vision", "mixed")}
+def _(GraphMode, mo):
+    mode_buttons = {mode: mo.ui.run_button(label=f"Describe in {mode} mode") for mode in GraphMode}
     mo.hstack(list(mode_buttons.values()), justify="start")
     return (mode_buttons,)
 
@@ -215,14 +207,16 @@ def _(mo) -> None:
     ## A model that reads no images
 
     `ModelOptions(vision=False)` says that a model reads no images. `GraphOptions(vision_fallback=...)` chooses what a
-    call in vision or mixed mode does then. With `"raise"`, the default, the call raises `VisionUnsupportedError` before
-    any request. Its message lists the steps that fix the cause. The cell sends no request.
+    call in vision or mixed mode does then. With `VisionFallback.RAISE`, the default, the call raises
+    `VisionUnsupportedError` before any request. Its message lists the steps that fix the cause. The cell sends no
+    request.
     """)
 
 
 @app.cell
 def _(
     DescribeGraphRequest,
+    GraphMode,
     GraphOptions,
     ModelOptions,
     VisionUnsupportedError,
@@ -234,7 +228,12 @@ def _(
     text_only = ModelOptions(provider="openrouter", model="liquid/lfm-3-1.7b:free", vision=False)
     try:
         describe_graph(
-            DescribeGraphRequest(models["binary"], petal_index, graph=GraphOptions(mode="vision"), model=text_only),
+            DescribeGraphRequest(
+                models["binary"],
+                petal_index,
+                graph=GraphOptions(mode=GraphMode.VISION),
+                model=text_only,
+            ),
         )
     except VisionUnsupportedError as vision_error:
         mo.output.replace(mo.callout(mo.md(f"`VisionUnsupportedError`:\n\n```\n{vision_error}\n```"), kind="danger"))
@@ -244,7 +243,7 @@ def _(
 @app.cell
 def _(mo) -> None:
     mo.md(r"""
-    With `vision_fallback="text"`, the call describes the graph from its text and emits one `VisionFallbackWarning`.
+    With `VisionFallback.TEXT`, the call describes the graph from its text and emits one `VisionFallbackWarning`.
     A provider that rejects the image gives the same two behaviors, and the rejected request is not retried. The button
     sends the call to the text-only model.
     """)
@@ -260,7 +259,9 @@ def _(mo):
 @app.cell
 def _(
     DescribeGraphRequest,
+    GraphMode,
     GraphOptions,
+    VisionFallback,
     VisionFallbackWarning,
     describe_graph,
     fallback_button,
@@ -271,7 +272,7 @@ def _(
     warnings,
 ) -> None:
     mo.stop(not fallback_button.value, mo.md("Press the button to send the call with the text fallback."))
-    fallback = GraphOptions(mode="vision", vision_fallback="text")
+    fallback = GraphOptions(mode=GraphMode.VISION, vision_fallback=VisionFallback.TEXT)
     with warnings.catch_warnings(record=True) as caught, mo.status.spinner("Asking the LLM (three turns)..."):
         warnings.simplefilter("always", VisionFallbackWarning)
         fallback_text = describe_graph(
