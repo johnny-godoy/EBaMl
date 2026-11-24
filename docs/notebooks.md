@@ -15,6 +15,7 @@ notebook never sends a request by accident. The default model needs `OPENROUTER_
 | --- | --- |
 | [Titanic](notebook.md) | An EBM of the Titanic data: the description of a graph and of the whole model, and the graph and text API (`from_ebm`, `simplify`, `to_text`, `from_text`). |
 | [Local explanations](local-notebook.md) | One passenger at a time: the facts with no API key, the confidence slider, a check of the guarantees against random completions, and the text for each audience. |
+| [Recourse](recourse-notebook.md) | Recourse plans for one loan applicant: immutable features, allowed values, one section for each cost strategy, several diverse plans, and the difficulties that an LLM proposes. |
 | [Custom audiences](audiences-notebook.md) | Six audiences for the local explanations: subclasses of `Layperson`, and an `Audience` with its own rules. |
 | [Languages](languages-notebook.md) | The local explanations in several languages with `language=`. The facts do not depend on the language. |
 | [Model providers](providers-notebook.md) | The same request to OpenRouter, OpenAI, Anthropic, Ollama and a gateway with an OpenAI-compatible API, and the errors for an unknown provider and a missing key. |
