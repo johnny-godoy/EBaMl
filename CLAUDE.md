@@ -104,7 +104,7 @@ Rules in `.claude/rules/` load automatically. Follow them, and keep these points
   has no users yet (`.claude/rules/writing-style.md`).
 - Rename a name everywhere in the same change, including prompt keys, BAML tests and MCP output. Keep no alias or
   convenience property of the old name to shrink a diff, and give a value that crosses into a prompt the name of its
-  Python field (`.claude/rules/renames.md`). Semgrep and `tests/contract/test_fact_keys.py` enforce part of it.
+  Python field (`.claude/rules/renames.md`). `tests/contract/test_fact_keys.py` enforces the keys of the prompts.
 - Give every variable, parameter and coefficient a descriptive name (`word_weight`, not `alpha`; `bin_index`, not `i`). See
   `.claude/rules/naming.md`.
 - Write documentation in ASD-STE100 style, and write LLM prompts to Anthropic's prompting guide. See

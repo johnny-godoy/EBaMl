@@ -573,25 +573,3 @@ def takes_long_path(path: str | os.PathLike[str]) -> str:
 # ok: ebaml-use-pathlike-alias
 def takes_path_alias(path: PathLike) -> str:
     return str(path)
-
-
-class Plans:
-    """A holder of a list, for the rule ebaml-no-first-item-alias."""
-
-    def __init__(self, plans: list[int]) -> None:
-        self.plans = plans
-
-    # ruleid: ebaml-no-first-item-alias
-    @property
-    def plan(self) -> int | None:
-        return self.plans[0] if self.plans else None
-
-    # ruleid: ebaml-no-first-item-alias
-    @property
-    def first(self) -> int | None:
-        return next(iter(self.plans), None)
-
-    # ok: ebaml-no-first-item-alias
-    @property
-    def plan_count(self) -> int:
-        return len(self.plans)

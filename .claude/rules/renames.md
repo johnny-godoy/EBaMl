@@ -32,10 +32,9 @@ translate between them, and the two drift apart.
 
 | Guard | What it catches |
 | --- | --- |
-| The semgrep rule `ebaml-no-first-item-alias` in `semgrep/ebaml.yml` | A property in `src/ebaml/` that returns the first item of a list field, or None. |
 | `test_each_key_that_a_prompt_reads_is_a_key_of_the_facts` in `tests/contract/test_fact_keys.py` | A key that `baml_src/local_explanations.baml` quotes but that the facts no longer emit. |
 | `test_each_claim_key_has_the_name_of_the_field_that_it_renders` in the same file | A claim key of the facts that is not the name of the `MinimalityStatus` property that it renders. |
 | `tests/api/public_api.json` | Every new public member. Review the diff of the snapshot for an alias. |
 
-No tool sees every alias. Before you finish a rename, search for the old name (`rg -n "<old name>"`) over the whole
-repository, and read each match.
+No tool sees every alias, and a pattern rule for one kind of alias would only repeat the last mistake. Before you
+finish a rename, search for the old name (`rg -n "<old name>"`) over the whole repository, and read each match.
