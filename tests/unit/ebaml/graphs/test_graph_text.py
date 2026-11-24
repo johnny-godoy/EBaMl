@@ -4,7 +4,7 @@ import orjson
 import pytest
 
 from ebaml.core.exceptions import GraphTextError
-from ebaml.graphs.graph_text import parse_graph_text, parse_str_tuple_to_float_tuple, xy_to_json
+from ebaml.graphs.graph_text import confidence_factor, parse_graph_text, parse_str_tuple_to_float_tuple, xy_to_json
 
 
 def test_xy_to_jsoncontinuous() -> None:
@@ -94,3 +94,18 @@ def test_parse_graph_text_rejects_a_series_before_the_first_class() -> None:
     text = HEADER + series('{"(0, 1)": 0.5}') + series('{"(0, 1)": 0.5}', "a")
     with pytest.raises(GraphTextError, match="a series before its first 'Class' line"):
         parse_graph_text(text)
+
+
+@pytest.mark.parametrize(("level", "factor"), [(0.95, 1.959964), (0.9, 1.644854), (0.5, 0.674490)])
+def test_the_confidence_factor_is_the_normal_quantile_of_the_level(level: float, factor: float) -> None:
+    assert confidence_factor(level) == pytest.approx(factor, abs=1e-6)
+
+
+def test_the_parser_reads_the_standard_deviation_back_from_bounds_of_any_level() -> None:
+    text = (
+        "Feature Name: a\nFeature Type: continuous\n"
+        'Means: {"(0, 1)": 0.5}\n'
+        'Lower Bounds (80%-Confidence Interval): {"(0, 1)": 0.0}\n'
+        'Upper Bounds (80%-Confidence Interval): {"(0, 1)": 1.0}\n'
+    )
+    assert parse_graph_text(text).stds == [pytest.approx(0.5 / confidence_factor(0.8))]

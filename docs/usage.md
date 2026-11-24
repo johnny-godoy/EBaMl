@@ -98,8 +98,9 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `APIKeyRejectedError` | no | A provider answers a request with "unauthorized" or "forbidden". |
 | `RateLimitedError` | no | A provider limits the rate of the requests. |
 | `ProviderUnreachableError` | no | A request does not reach the provider. |
+| `VisionUnsupportedError` | no | A call in vision or mixed mode reaches a model that reads no images, and `vision_fallback` is `"raise"`. |
 
-`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. The four provider errors derive from `LLMRequestError`. `ebaml` exports all of these classes.
+`EBMGraphShapeError`, `EBMGraphTokenLimitError` and `EBMGraphSimplificationError` derive from `EBMGraphError`. The five provider errors derive from `LLMRequestError`. A call with `vision_fallback="text"` emits a `VisionFallbackWarning` (a `UserWarning`) in place of `VisionUnsupportedError`. `ebaml` exports all of these classes.
 
 ## Behaviour
 

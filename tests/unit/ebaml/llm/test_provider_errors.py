@@ -10,6 +10,7 @@ from ebaml.core.exceptions import (
     MissingAPIKeyError,
     ProviderUnreachableError,
     RateLimitedError,
+    VisionUnsupportedError,
 )
 from ebaml.llm.provider_errors import provider_errors, translate_provider_error
 
@@ -173,3 +174,74 @@ def test_the_context_passes_other_exceptions_unchanged() -> None:
 def test_the_context_returns_normally_without_an_error() -> None:
     with provider_errors():
         pass
+
+
+# the body of the live OpenRouter answer to an image for a text-only model
+OPENROUTER_NO_IMAGES = (
+    '{"error":{"message":"No endpoints found that support image input","code":404,'
+    '"metadata":{"failed_routing_step":"Filter by Image Support"}}}'
+)
+
+
+def rejected_image(raw_body: str = OPENROUTER_NO_IMAGES, status_code: int = 404) -> BamlError:
+    value = baml_sdk.ai.errors.InvalidRequest(
+        provider="openrouter",
+        detail=f"http {status_code}",
+        status_code=status_code,
+        raw_body=raw_body,
+    )
+    return BamlError(value, class_name="ai.errors.InvalidRequest")
+
+
+def test_an_image_that_openrouter_rejects_names_the_model_and_the_fixes() -> None:
+    explained = translate_provider_error(rejected_image(), "openrouter/liquid/lfm-3-1.7b:free")
+    assert isinstance(explained, VisionUnsupportedError)
+    message = str(explained)
+    assert message.startswith(
+        "The openrouter provider rejected the image of the graph: the model openrouter/liquid/lfm-3-1.7b:free reads no"
+        " images.\nThe provider said: http 404\n",
+    )
+    assert 'graph=GraphOptions(mode="text")' in message
+    assert 'graph=GraphOptions(vision_fallback="text")' in message
+
+
+def test_a_rejected_image_names_the_default_model_when_the_call_names_none() -> None:
+    assert "the model openrouter/openrouter/free reads no images" in str(translate_provider_error(rejected_image()))
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Invalid content type. image_url is only supported by certain models.",
+        "llama3 does not support images",
+        "The model is not a multimodal model",
+        "no endpoint SUPPORTS IMAGE INPUT",
+    ],
+)
+def test_the_documented_answers_of_other_providers_are_rejected_images(said: str) -> None:
+    value = baml_sdk.ai.errors.ProviderError(provider="openai", message=said, status_code=400)
+    explained = translate_provider_error(BamlError(value, class_name="ai.errors.ProviderError"))
+    assert isinstance(explained, VisionUnsupportedError)
+
+
+def test_a_rejected_request_about_something_else_is_not_a_rejected_image() -> None:
+    assert translate_provider_error(rejected_image(raw_body='{"error":{"message":"No endpoints found"}}')) is None
+
+
+def test_an_image_phrase_in_another_kind_of_error_is_not_a_rejected_image() -> None:
+    value = baml_sdk.ai.errors.NetworkFailure(provider="openrouter", detail="does not support images")
+    explained = translate_provider_error(BamlError(value, class_name="ai.errors.NetworkFailure"))
+    assert not isinstance(explained, VisionUnsupportedError)
+
+
+def test_a_rejected_image_with_an_unauthorized_status_is_still_a_rejected_image() -> None:
+    assert isinstance(translate_provider_error(rejected_image(status_code=403)), VisionUnsupportedError)
+
+
+def test_provider_errors_raise_the_vision_error_with_the_model_of_the_call() -> None:
+    with (
+        pytest.raises(VisionUnsupportedError, match="the model openai/text-only reads no images") as raised,
+        provider_errors("openai/text-only"),
+    ):
+        raise rejected_image()
+    assert isinstance(raised.value.__cause__, BamlError)

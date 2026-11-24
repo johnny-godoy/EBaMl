@@ -19,6 +19,8 @@ from ebaml.core.exceptions import (
     ProviderUnreachableError,
     RateLimitedError,
 )
+from ebaml.llm.graph_views import rejected_image_error
+from ebaml.llm.options import DEFAULT_MODEL
 
 _UNAUTHORIZED = frozenset({401, 403})
 _RATE_LIMITED = 429
@@ -30,6 +32,19 @@ _KEY_PAGES: Mapping[str, str] = {
     "anthropic": "https://console.anthropic.com/settings/keys",
 }
 _VARIABLE = re.compile(r"\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b")
+# What a provider says when a model reads no images. OpenRouter answers HTTP 404 with "No endpoints found that
+# support image input" (seen in a live request of 2026-11). The other phrases are the documented answers of OpenAI
+# ("image_url is only supported by certain models"), of Ollama ("does not support images") and of vLLM ("is not a
+# multimodal model"). No live request has shown them.
+_IMAGE_REJECTED = re.compile(
+    r"support(?:s)? image input"
+    r"|image_url is only supported"
+    r"|does not support image"
+    r"|not a multimodal model",
+    re.IGNORECASE,
+)
+# the BAML error classes of a request that the provider rejects; a rejected request is not retried
+_REJECTED_CLASSES = frozenset({"ai.errors.InvalidRequest", "ai.errors.ProviderError"})
 
 
 # nosemgrep: ebaml-no-object-type -- the BAML runtime record has no static type; each caller narrows the value
@@ -89,6 +104,26 @@ def _said(error: BamlError) -> str:
         if isinstance(text, str) and text.strip():
             return f"The provider said: {text.strip()[:_QUOTE_CHARACTERS]}\n"
     return ""
+
+
+def _rejects_images(error: BamlError) -> bool:
+    """Tell whether the provider rejected a request because the model reads no images.
+
+    Parameters
+    ----------
+    error : BamlError
+        The error of the BAML runtime.
+
+    Returns
+    -------
+    bool
+        True for a rejected request whose text says that the model takes no image input.
+
+    """
+    if error.class_name not in _REJECTED_CLASSES:
+        return False
+    texts = (_field(error, name) for name in ("detail", "message", "raw_body"))
+    return any(isinstance(text, str) and _IMAGE_REJECTED.search(text) for text in texts)
 
 
 def _missing_key(error: BamlError) -> LLMRequestError:
@@ -256,13 +291,15 @@ _TRANSLATORS: Mapping[str, Callable[[BamlError], LLMRequestError | None]] = {
 }
 
 
-def translate_provider_error(error: BamlError) -> LLMRequestError | None:
+def translate_provider_error(error: BamlError, model: str = DEFAULT_MODEL) -> LLMRequestError | None:
     """Explain an error of the BAML runtime, if the user can fix its cause.
 
     Parameters
     ----------
     error : BamlError
         The error of the BAML runtime.
+    model : str, default=DEFAULT_MODEL
+        The model of the request, as ``provider/model``, for the message of a rejected image.
 
     Returns
     -------
@@ -271,15 +308,22 @@ def translate_provider_error(error: BamlError) -> LLMRequestError | None:
         bug).
 
     """
+    if _rejects_images(error):
+        return rejected_image_error(_provider(error), model, _said(error))
     translator = _TRANSLATORS.get(error.class_name or "")
     return translator(error) if translator is not None else None
 
 
 @contextlib.contextmanager
-def provider_errors() -> Generator[None]:
+def provider_errors(model: str = DEFAULT_MODEL) -> Generator[None]:
     """Raise ``LLMRequestError`` instead of the ``BamlError`` for a failure that the user can fix.
 
     Any other ``BamlError`` passes unchanged. The ``BamlError`` is the ``__cause__`` of the new error.
+
+    Parameters
+    ----------
+    model : str, default=DEFAULT_MODEL
+        The model of the requests, as ``provider/model``, for the message of a rejected image.
 
     Yields
     ------
@@ -297,7 +341,7 @@ def provider_errors() -> Generator[None]:
     try:
         yield
     except BamlError as error:
-        explained = translate_provider_error(error)
+        explained = translate_provider_error(error, model)
         if explained is None:
             raise
         raise explained from error

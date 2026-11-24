@@ -18,8 +18,9 @@ import ebaml
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import EBMGraphShapeError, MissingExtraError
 from ebaml.graphs import graph_image
-from ebaml.graphs.ebm_graph import EBMGraph, confidence_factor
+from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.graph_image import GraphImageOptions, graph_figure, graph_png, graph_svg
+from ebaml.graphs.graph_text import confidence_factor
 from ebaml.graphs.model_kinds import model_kind
 
 INF = float("inf")

@@ -1,13 +1,12 @@
 """Graphs for EBM models."""
 
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Protocol, Self, cast, runtime_checkable
 
 import attrs
 import numpy as np
 import numpy.typing as npt
-import scipy
 from interpret.glassbox._ebm._utils import convert_to_intervals  # ruff: ignore[import-private-name] -- interpret has no public convert_to_intervals
 
 from ebaml.core.custom_types import (
@@ -28,7 +27,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
     UnsupportedModelError,
 )
-from ebaml.graphs.graph_text import parse_graph_text, xy_to_json
+from ebaml.graphs.graph_text import confidence_factor, parse_graph_text, xy_to_json
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_term
 
@@ -97,29 +96,27 @@ _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
 BOOLEAN_KEYS = ["False", "True"]
 
 
-def confidence_factor(confidence_level: float) -> float:
-    """Find the number of standard deviations between a score and the bounds of its confidence interval.
-
-    The bounds use the normal approximation. The graph text and the graph image both call this function, so their
-    bounds agree.
+def _rendered[G](text: str, graph: G, on_render: Callable[[G], None] | None) -> str:
+    """Tell the caller which graph a text renders, and return the text.
 
     Parameters
     ----------
-    confidence_level: float
-        The confidence level of the bounds, for example 0.95.
+    text: str
+        The text of the graph.
+    graph: G
+        The graph that the text renders.
+    on_render: Callable[[G], None] | None
+        Called with ``graph``, or ``None`` for no call.
 
     Returns
     -------
-    float
-        The factor: the bounds are the score plus and minus the factor times the standard deviation.
-
-    Examples
-    --------
-    >>> round(confidence_factor(0.95), 3)
-    1.96
+    str
+        The text.
 
     """
-    return float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
+    if on_render is not None:
+        on_render(graph)
+    return text
 
 
 def _is_boolean(x_vals: XValues) -> bool:
@@ -647,6 +644,7 @@ class EBMGraph:
         max_tokens: int = 3000,
         overbudget_percent: int = 50,
         check_budget: BudgetCheck | None = None,
+        on_render: Callable[[Self], None] | None = None,
     ) -> str:
         """Convert the graph to text. This is the text that we then pass to the LLM.
 
@@ -684,6 +682,9 @@ class EBMGraph:
             example ``ebaml.graphs.token_budget.check_token_budget``. If not provided, the text is not checked: the
             function writes it once, at the first simplification level, and ``max_tokens`` and ``overbudget_percent``
             have no effect.
+        on_render: Callable[[EBMGraph], None], optional
+            Called once with the graph that the returned text renders: the graph after the simplification. An image of
+            that graph agrees with the text bin for bin.
 
         Returns
         -------
@@ -726,7 +727,7 @@ class EBMGraph:
                 prompt = description_text + prompt
 
             if check_budget is None:
-                return prompt
+                return _rendered(prompt, simplified_graph, on_render)
 
             # estimate the number of tokens; the provider error is the real limit
             budget = check_budget(
@@ -736,7 +737,7 @@ class EBMGraph:
             )
             match budget.status:
                 case BudgetLevel.OK:
-                    return prompt
+                    return _rendered(prompt, simplified_graph, on_render)
                 case BudgetLevel.WARN:
                     warnings.warn(
                         f"The graph for feature {self.feature_name} is estimated at {budget.estimated_tokens} tokens,"
@@ -745,7 +746,7 @@ class EBMGraph:
                         # skip this file and the frame that beartype adds, so the warning points at the caller
                         skip_file_prefixes=(__file__, "<@beartype"),
                     )
-                    return prompt
+                    return _rendered(prompt, simplified_graph, on_render)
                 case _:
                     # the status is "over": obviously over budget
                     if not simplifiable:

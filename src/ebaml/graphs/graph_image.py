@@ -18,7 +18,8 @@ import numpy.typing as npt
 
 from ebaml.core.custom_types import FeatureType, XValues
 from ebaml.core.exceptions import EBMGraphShapeError, MissingExtraError
-from ebaml.graphs.ebm_graph import BOOLEAN_KEYS, EBMGraph, confidence_factor
+from ebaml.graphs.ebm_graph import BOOLEAN_KEYS, EBMGraph
+from ebaml.graphs.graph_text import confidence_factor
 
 try:
     from matplotlib import rc_context, style

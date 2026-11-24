@@ -6,6 +6,7 @@ from collections.abc import Callable
 import attrs
 import pytest
 
+from ebaml.core.custom_types import GraphMode, VisionFallback
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
@@ -18,15 +19,23 @@ def _defaults(function: Callable[..., object], names: set[str]) -> dict[str, obj
 
 def test_graph_options_default_to_the_defaults_of_the_graph_methods() -> None:
     from_ebm = _defaults(EBMGraph.from_ebm, {"normalization", "use_feature_bounds", "classes"})
-    to_text = _defaults(EBMGraph.to_text, set(attrs.fields_dict(GraphOptions)) - set(from_ebm) - {"token_learner"})
-    # the token learner is not an option of a graph method: it chooses the estimator of the budget check
-    assert attrs.asdict(GraphOptions(), recurse=False) == {**from_ebm, **to_text, "token_learner": None}
+    call_options = {"token_learner", "mode", "vision_fallback"}
+    to_text = _defaults(EBMGraph.to_text, set(attrs.fields_dict(GraphOptions)) - set(from_ebm) - call_options)
+    # the token learner, the mode and the fallback are not options of a graph method: they choose how the call sends
+    # the graph, and text mode with a fallback that raises sends what a call with no options sends
+    assert attrs.asdict(GraphOptions(), recurse=False) == {
+        **from_ebm,
+        **to_text,
+        "token_learner": None,
+        "mode": GraphMode.TEXT,
+        "vision_fallback": VisionFallback.RAISE,
+    }
 
 
 def test_graph_options_cover_the_options_of_the_graph_methods() -> None:
-    to_text = set(inspect.signature(EBMGraph.to_text).parameters) - {"self", "check_budget"}
+    to_text = set(inspect.signature(EBMGraph.to_text).parameters) - {"self", "check_budget", "on_render"}
     from_ebm = set(inspect.signature(EBMGraph.from_ebm).parameters) - {"cls", "ebm", "feature_index"}
-    assert set(attrs.fields_dict(GraphOptions)) - {"token_learner"} == to_text | from_ebm
+    assert set(attrs.fields_dict(GraphOptions)) - {"token_learner", "mode", "vision_fallback"} == to_text | from_ebm
 
 
 def test_prompt_options_keep_the_baml_defaults() -> None:
@@ -53,7 +62,23 @@ def test_model_options_keep_the_defaults_of_the_call() -> None:
         "temperature": None,
         "max_output_tokens": None,
         "headers": {},
+        "vision": None,
     }
+
+
+def test_graph_options_read_a_string_of_the_mode_and_the_fallback() -> None:
+    options = GraphOptions(mode="mixed", vision_fallback="text")
+    assert (options.mode, options.vision_fallback) == (GraphMode.MIXED, VisionFallback.TEXT)
+
+
+def test_graph_options_reject_an_unknown_mode_when_they_are_made() -> None:
+    with pytest.raises(InvalidOptionError, match="unknown"):
+        GraphOptions(mode="unknown")
+
+
+def test_graph_options_reject_an_unknown_fallback_when_they_are_made() -> None:
+    with pytest.raises(InvalidOptionError, match="unknown"):
+        GraphOptions(vision_fallback="unknown")
 
 
 def test_model_options_do_not_share_the_default_headers() -> None:
