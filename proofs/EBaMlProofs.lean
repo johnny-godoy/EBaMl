@@ -9,6 +9,7 @@ import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
 import EBaMlProofs.Recourse.Target
 import EBaMlProofs.Recourse.Reduction
+import EBaMlProofs.Recourse.Bounds
 import EBaMlProofs.Recourse.Axioms
 import EBaMlProofs.MulticlassScores.Softmax
 import EBaMlProofs.MulticlassScores.Model

@@ -2,6 +2,7 @@ import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
 import EBaMlProofs.Recourse.Target
 import EBaMlProofs.Recourse.Reduction
+import EBaMlProofs.Recourse.Bounds
 
 /-!
 # Axiom check
@@ -40,3 +41,8 @@ The expected output for each is only `propext`, `Classical.choice` and `Quot.sou
 #print axioms EBaMlProofs.Recourse.Problem.exists_kept_plan
 #print axioms EBaMlProofs.Recourse.Problem.exists_plan_iff_kept
 #print axioms EBaMlProofs.Recourse.Problem.smallest_plan_iff_kept
+#print axioms EBaMlProofs.Recourse.Problem.lp_lower_bound
+#print axioms EBaMlProofs.Recourse.Problem.no_plan_of_relaxation_infeasible
+#print axioms EBaMlProofs.Recourse.Problem.card_mul_le_cost
+#print axioms EBaMlProofs.Recourse.Problem.cost_lower_bound
+#print axioms EBaMlProofs.Recourse.Problem.one_le_card
