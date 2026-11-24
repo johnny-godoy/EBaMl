@@ -20,8 +20,8 @@ The page below is the notebook with the output of its cells, exported when the d
 uv run marimo edit notebooks/local_explanations.py
 ```
 
-New to the package? Start with the [Titanic notebook](notebook.md), which makes the global explanation this notebook
-builds on. The [guide](local-explanations.md) explains the ideas.
+New to the package? Start with the [global explanations notebook](global-notebook.md), which makes the global
+explanation this notebook builds on. The [guide](local-explanations.md) explains the ideas.
 
 <p><a href="notebooks/local_explanations.html">Open the notebook in its own page</a></p>
 

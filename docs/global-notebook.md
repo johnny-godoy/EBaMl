@@ -1,9 +1,9 @@
 ---
-title: Titanic notebook
+title: Global explanations notebook
 description: A marimo notebook that trains an EBM on the Titanic data and asks an LLM to describe a graph and the model.
 ---
 
-# Notebook
+# Global explanations notebook
 
 A [marimo](https://marimo.io) notebook that trains an EBM on the Titanic data, asks the LLM to describe a graph and the
 whole model, and walks through the graph and text API. It follows TalkToEBM's *Spaceship Titanic* notebook.
@@ -14,14 +14,14 @@ LLM wait for a button press, so they show their idle state here. To run them wit
 open the notebook. [Choosing the model](providers.md) explains how to use another model:
 
 ```bash
-uv run marimo edit notebooks/titanic.py
+uv run marimo edit notebooks/global_explanations.py
 ```
 
-<p><a href="notebooks/titanic.html">Open the notebook in its own page</a></p>
+<p><a href="notebooks/global_explanations.html">Open the notebook in its own page</a></p>
 
 <iframe
-  src="notebooks/titanic.html"
-  title="The Titanic notebook, exported from marimo"
+  src="notebooks/global_explanations.html"
+  title="The global explanations notebook, exported from marimo"
   loading="lazy"
   style="width: 100%; height: 80vh; border: 1px solid var(--md-default-fg-color--lighter);"
 ></iframe>

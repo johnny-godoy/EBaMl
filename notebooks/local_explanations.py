@@ -59,8 +59,8 @@ def _(mo) -> None:
     # Explain one prediction of an EBM
 
     The global explanation of an Explainable Boosting Machine (EBM) says how the model works *in general*: see
-    `titanic.py` for how to ask an LLM for it. This notebook is about the *local* question: **why did the model predict
-    this for this passenger?**
+    `global_explanations.py` for how to ask an LLM for it. This notebook is about the *local* question: **why did the
+    model predict this for this passenger?**
 
     The answer has two parts, and the split is the point of the design:
 
@@ -115,9 +115,9 @@ def _(mo) -> None:
     mo.md(r"""
     ## Load the data and train an EBM
 
-    The same Titanic model as in `titanic.py`. Local explanations need *every* input of the passenger, so the passengers
-    to explain are the ones with no missing value. The EBM itself is trained on all the rows. It has to be a binary
-    classifier without pairwise interactions (`interactions=0`).
+    The same Titanic model as in `global_explanations.py`. Local explanations need *every* input of the passenger, so
+    the passengers to explain are the ones with no missing value. The EBM itself is trained on all the rows. It has to
+    be a binary classifier without pairwise interactions (`interactions=0`).
     """)
 
 

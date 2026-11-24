@@ -44,7 +44,7 @@ logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 ROOT = Path(__file__).resolve().parents[2]
 NOTEBOOKS: tuple[Path, ...] = (
-    ROOT / "notebooks" / "titanic.py",
+    ROOT / "notebooks" / "global_explanations.py",
     ROOT / "notebooks" / "local_explanations.py",
     ROOT / "notebooks" / "recourse.py",
     ROOT / "notebooks" / "audiences.py",

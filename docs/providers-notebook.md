@@ -22,7 +22,7 @@ uv run marimo edit notebooks/model_providers.py
 ```
 
 [Choosing the model](providers.md) lists all providers and options. To see the model argument at work in a longer
-example, see the [Titanic notebook](notebook.md).
+example, see the [global explanations notebook](global-notebook.md).
 
 <p><a href="notebooks/model_providers.html">Open the notebook in its own page</a></p>
 

@@ -1,4 +1,4 @@
-"""A marimo notebook that talks to an EBM about the Titanic, like TalkToEBM's example notebook."""
+"""A marimo notebook of global explanations: it talks to an EBM about the Titanic, like TalkToEBM's example notebook."""
 
 import marimo
 
