@@ -718,6 +718,19 @@
     "kind": "class",
     "signature": "(path: pathlib._local.Path, commit_count: int, sample_count: int, synthetic_samples: bool, left_out: tuple[str, ...]) -> None"
   },
+  "GraphImageOptions": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "score_axis: <class 'str'>",
+      "title: str | None",
+      "feature_format: ebaml.core.custom_types.FeatureType | str | None",
+      "confidence_level: float | None"
+    ],
+    "kind": "class",
+    "signature": "(*, score_axis: str = 'score', title: str | None = None, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, confidence_level: float | None = 0.95) -> None"
+  },
   "GraphOptions": {
     "bases": [
       "object"
@@ -738,6 +751,18 @@
     ],
     "kind": "class",
     "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None) -> None"
+  },
+  "GraphSeries": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "label: str | None",
+      "scores: NDArray[numpy.float64]",
+      "stds: NDArray[numpy.float64]"
+    ],
+    "kind": "class",
+    "signature": "(label: str | None, scores: NDArray[numpy.float64], stds: NDArray[numpy.float64]) -> None"
   },
   "GraphTextError": {
     "bases": [
@@ -1022,6 +1047,17 @@
     "fields": [],
     "kind": "class",
     "signature": "() -> None"
+  },
+  "MissingExtraError": {
+    "bases": [
+      "EBaMlError",
+      "ImportError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
   },
   "ModelKind": {
     "bases": [
@@ -1738,6 +1774,18 @@
   "facts_to_texts": {
     "kind": "function",
     "signature": "(facts: ebaml.local.fact_types.LocalFacts, audience: ebaml.local.audience.Audience = <ebaml.local.audience.Layperson object>) -> ebaml.local.fact_text.FactTexts"
+  },
+  "graph_figure": {
+    "kind": "function",
+    "signature": "(graph: ebaml.graphs.ebm_graph.EBMGraph, options: ebaml.graphs.graph_image.GraphImageOptions | None = None) -> matplotlib.figure.Figure"
+  },
+  "graph_png": {
+    "kind": "function",
+    "signature": "(graph: ebaml.graphs.ebm_graph.EBMGraph, options: ebaml.graphs.graph_image.GraphImageOptions | None = None) -> bytes"
+  },
+  "graph_svg": {
+    "kind": "function",
+    "signature": "(graph: ebaml.graphs.ebm_graph.EBMGraph, options: ebaml.graphs.graph_image.GraphImageOptions | None = None) -> str"
   },
   "likelihood_word": {
     "kind": "function",

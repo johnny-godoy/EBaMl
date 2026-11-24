@@ -53,6 +53,10 @@ mcp = [
     # ebaml.mcp reads the CSV file of --data with polars
     "polars>=2.1.0",
 ]
+# The images of the graphs for vision models. Only ebaml.graphs.graph_image imports matplotlib.
+vision = [
+    "matplotlib>=3.11.2",
+]
 
 [project.scripts]
 ebaml-chat = "ebaml.mcp.chat:main"

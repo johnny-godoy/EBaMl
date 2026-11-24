@@ -94,7 +94,32 @@ class BudgetCheck(Protocol):
 _SIMPLIFIABLE = {FeatureType.CONTINUOUS}
 
 # we assume that the left key (the lower number, typically -1 or 0), is 'False'
-_BOOLEAN_KEYS = ["False", "True"]
+BOOLEAN_KEYS = ["False", "True"]
+
+
+def confidence_factor(confidence_level: float) -> float:
+    """Find the number of standard deviations between a score and the bounds of its confidence interval.
+
+    The bounds use the normal approximation. The graph text and the graph image both call this function, so their
+    bounds agree.
+
+    Parameters
+    ----------
+    confidence_level: float
+        The confidence level of the bounds, for example 0.95.
+
+    Returns
+    -------
+    float
+        The factor: the bounds are the score plus and minus the factor times the standard deviation.
+
+    Examples
+    --------
+    >>> round(confidence_factor(0.95), 3)
+    1.96
+
+    """
+    return float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
 
 
 def _is_boolean(x_vals: XValues) -> bool:
@@ -260,8 +285,19 @@ def _select_outputs(
 
 
 @attrs.frozen
-class _Series:
-    """The scores of one output of a graph, with the name of its class (``None`` for a graph with one output)."""
+class GraphSeries:
+    """The scores of one output of a graph, with the name of its class (``None`` for a graph with one output).
+
+    Attributes
+    ----------
+    label: str | None
+        The class of the series, or ``None`` for a graph with one output.
+    scores: npt.NDArray[np.float64]
+        The score of each bin.
+    stds: npt.NDArray[np.float64]
+        The standard deviation of the score of each bin.
+
+    """
 
     label: str | None
     scores: npt.NDArray[np.float64]
@@ -448,8 +484,11 @@ class EBMGraph:
             self.classes,
         )
 
-    def _resolve_format(self, feature_format: FeatureType | str | None) -> FeatureType:
-        """Determine the feature format to present, auto-detecting it when it is not given.
+    def resolve_format(self, feature_format: FeatureType | str | None) -> FeatureType:
+        """Find the feature format to present, and detect it when it is not given.
+
+        A graph whose x-axis values are ``False`` and ``True`` is boolean. A nominal feature is categorical. A boolean
+        format needs exactly two x-axis values, and raises an ``EBMGraphShapeError`` otherwise.
 
         Parameters
         ----------
@@ -468,7 +507,9 @@ class EBMGraph:
         if feature_format is None:
             feature_format = self.feature_type
         feature_format = coerce_enum(FeatureType, feature_format)
-        return _FORMAT_ALIASES.get(feature_format, feature_format)
+        feature_format = _FORMAT_ALIASES.get(feature_format, feature_format)
+        self._check_boolean_bins(feature_format)
+        return feature_format
 
     def _check_boolean_bins(self, feature_format: FeatureType) -> None:
         """Check that a graph that is presented as boolean has exactly two x-axis values.
@@ -494,12 +535,12 @@ class EBMGraph:
                 )
                 raise EBMGraphShapeError(msg)
 
-    def _series(self) -> list[_Series]:
+    def series(self) -> list[GraphSeries]:
         """Split the scores into one series for each output of the graph.
 
         Returns
         -------
-        list[_Series]
+        list[GraphSeries]
             One series for a graph with one output, else one series per class.
 
         Raises
@@ -520,8 +561,8 @@ class EBMGraph:
             )
             raise EBMGraphShapeError(msg)
         if not self.classes:
-            return [_Series(None, scores, stds)]
-        return [_Series(label, scores[:, column], stds[:, column]) for column, label in enumerate(self.classes)]
+            return [GraphSeries(None, scores, stds)]
+        return [GraphSeries(label, scores[:, column], stds[:, column]) for column, label in enumerate(self.classes)]
 
     def to_body_text(
         self,
@@ -573,19 +614,19 @@ class EBMGraph:
         # formatting for boolean features
         match feature_format:
             case FeatureType.BOOLEAN:
-                x_vals = _BOOLEAN_KEYS
+                x_vals = BOOLEAN_KEYS
             case _:
                 pass
 
         prompt = f"Feature Name: {self.feature_name}\n"
         prompt += f"Feature Type: {feature_format}\n"
-        for series in self._series():
+        for series in self.series():
             if series.label is not None:
                 prompt += f"Class: {series.label}\n"
             prompt += f"Means: {xy_to_json(x_vals, np.round(series.scores, y_axis_precision).astype(str))}\n"
             if confidence_bounds:
                 # confidence bounds via normal approximation
-                factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
+                factor = confidence_factor(confidence_level)
                 for label, sign in (("Lower", -1), ("Upper", 1)):
                     bounds = series.scores + sign * factor * series.stds
                     prompt += (
@@ -658,10 +699,9 @@ class EBMGraph:
 
         """
         # check the shape before the simplification, which would hide or garble a shape that does not fit the classes
-        self._series()
-        feature_format = self._resolve_format(feature_format)
+        self.series()
+        feature_format = self.resolve_format(feature_format)
         description_text = _describe_format(feature_format) + (_MULTICLASS_DESCRIPTION if self.classes else "")
-        self._check_boolean_bins(feature_format)
         simplifiable = feature_format in _SIMPLIFIABLE
         # the precision is fixed by the full graph, so that every simplification level is rounded alike
         if y_axis_precision in {None, "auto"}:

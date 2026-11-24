@@ -12,7 +12,7 @@ from ebaml.core.ebm_classes import (
     ExplainableBoostingRegressor,
 )
 from ebaml.core.exceptions import UnsupportedModelError
-from ebaml.graphs.model_kinds import BinaryClassifier, MulticlassClassifier, Regressor, model_kind
+from ebaml.graphs.model_kinds import BinaryClassifier, ModelKind, MulticlassClassifier, Regressor, model_kind
 from tests.unit.ebaml.conftest import fake_model
 
 
@@ -62,6 +62,18 @@ def test_multiclass_predicts_the_softmax_of_the_last_axis() -> None:
 def test_softmax_ignores_a_constant_over_the_classes(scores: np.ndarray, shift: np.ndarray) -> None:
     kind = MulticlassClassifier(("a", "b", "c"))
     assert kind.predict(scores + shift) == pytest.approx(kind.predict(scores), abs=1e-9)
+
+
+@pytest.mark.parametrize(
+    ("kind", "axis"),
+    [
+        (BinaryClassifier(("no", "yes")), "change of the log-odds of 'yes'"),
+        (MulticlassClassifier(("a", "b", "c")), "score of each class (log-odds)"),
+        (Regressor(), "change of the predicted value"),
+    ],
+)
+def test_each_kind_names_the_score_axis_of_a_graph_image(kind: ModelKind, axis: str) -> None:
+    assert kind.score_axis == axis
 
 
 def test_regressor_predicts_the_scores() -> None:

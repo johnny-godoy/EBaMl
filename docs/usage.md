@@ -87,11 +87,12 @@ of `ebaml` apart from the errors of other code. Each error for a bad value also 
 | `UnsupportedModelError` | yes | A local explanation gets an EBM with interactions, or one that is not a classifier or a regressor. A graph gets `classes`, and the model has one output. `model_kind` gets an EBM that is not fitted. |
 | `GraphTextError` | yes | `EBMGraph.from_text` cannot read the text of a graph. |
 | `EBMGraphError` | no | The base class of the errors of a graph. |
-| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. |
+| `EBMGraphShapeError` | yes | The bins of a graph do not fit its scores, the scores and the standard deviations have different shapes, or a boolean format gets more than two bins. A graph image gets continuous bins that do not touch. |
 | `EBMGraphTokenLimitError` | no | The text of a graph is over the token budget, and its format cannot be simplified. |
 | `EBMGraphSimplificationError` | no | The text of a graph is still over the token budget at the largest simplification. |
 | `TokenFitError` | yes | The token weights cannot be fitted from an empty list of samples, or a weight is negative or not finite. |
 | `SDKUnavailableError` | no | `baml_sdk` is missing, and `ebaml` cannot run `baml generate`. The error also derives from `ImportError`. |
+| `MissingExtraError` | no | A feature needs an extra that is not installed, for example a graph image without the extra `vision`. The error also derives from `ImportError`. |
 | `LLMRequestError` | no | The base class of the errors of a provider. Its message lists the steps that fix the cause. |
 | `MissingAPIKeyError` | no | A provider needs an API key and the environment has none. |
 | `APIKeyRejectedError` | no | A provider answers a request with "unauthorized" or "forbidden". |

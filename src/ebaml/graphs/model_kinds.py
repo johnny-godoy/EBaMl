@@ -33,6 +33,11 @@ class ModelKind(abc.ABC):
     def score_meaning(self) -> str:
         """What a score of a graph means, as a sentence for the prompts."""
 
+    @property
+    @abc.abstractmethod
+    def score_axis(self) -> str:
+        """The title of the score axis of a graph image, in a few words."""
+
     @abc.abstractmethod
     def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:
         """Convert the sum of the scores and the intercept to the output of the model.
@@ -77,6 +82,11 @@ class BinaryClassifier(ModelKind):
     def score_meaning(self) -> str:
         return f"A score is the change of the log-odds of the class {self.classes[1]!r}."
 
+    @property
+    @override
+    def score_axis(self) -> str:
+        return f"change of the log-odds of {self.classes[1]!r}"
+
     @override
     def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:
         return np.asarray(scipy.special.expit(np.asarray(scores, dtype=float)), dtype=np.float64)
@@ -116,6 +126,11 @@ class MulticlassClassifier(ModelKind):
             " predicted probabilities."
         )
 
+    @property
+    @override
+    def score_axis(self) -> str:
+        return "score of each class (log-odds)"
+
     @override
     def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:
         return np.asarray(scipy.special.softmax(np.asarray(scores, dtype=float), axis=-1), dtype=np.float64)
@@ -143,6 +158,11 @@ class Regressor(ModelKind):
     @override
     def score_meaning(self) -> str:
         return "A score is the change of the predicted value, in the units of the target."
+
+    @property
+    @override
+    def score_axis(self) -> str:
+        return "change of the predicted value"
 
     @override
     def predict(self, scores: npt.ArrayLike) -> npt.NDArray[np.float64]:

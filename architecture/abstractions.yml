@@ -50,6 +50,14 @@ capabilities:
     keywords: [graph, text, render, json]
     status: active
 
+  - id: graph-image-rendering
+    responsibility: Draw the graph of a feature as an SVG or PNG image
+    owner: ebaml.graphs
+    symbol: ebaml.graphs.graph_image:graph_figure
+    consumers: [ebaml.llm, ebaml.mcp]
+    keywords: [graph, image, render, png, svg, vision, plot]
+    status: active
+
   - id: term-lookup
     responsibility: Find the term of a feature in the term attributes of an EBM
     owner: ebaml.graphs
