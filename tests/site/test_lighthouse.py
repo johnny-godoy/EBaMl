@@ -23,7 +23,7 @@ from tests.site.conftest import Site, node_tool
 PERFORMANCE_BUDGETS = {
     "": 0.6,
     "usage/": 0.7,
-    "notebook/": 0.35,
+    "global-notebook/": 0.35,
     "api/": 0.35,
 }
 FULL_SCORE_CATEGORIES = ("accessibility", "best-practices", "seo")
