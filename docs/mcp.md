@@ -117,7 +117,7 @@ reaches the port can read the model and the rows of the data file.
 | `get_model_summary` | optional `revision` | The kind, the outputs or classes, the intercept, the number of features, and the interaction terms that the server skips. |
 | `list_features` | optional `revision` | The name, the type and the importance of each feature, the most important first. |
 | `get_graph` | `feature`, optional `revision`, `normalization`, `x_axis_precision`, `y_axis_precision`, `max_tokens` | The graph text of `EBMGraph.to_text`. |
-| `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level` | The `LocalFacts` and their texts, as JSON. |
+| `explain_prediction` | `instance` or `row`, optional `revision`, `confidence_level`, and the recourse arguments below | The `LocalFacts` and their texts, as JSON. The plans are the list `counterfactuals`, cheapest first. |
 | `list_bins` | `feature`, optional `revision` | The bins of a feature with the number, the edges, the training weight and the score of each bin, and the missing and the unseen bin. |
 | `get_edit_effect` | optional `subgroup_feature`, `subgroup_value`, `revision` | The counts of the rows that the edits change, and with `--labels` the metrics of the original model, the model before the last edit and the current model, in three scopes. It needs `--data`. |
 | `get_affected_profile` | optional `revision` | For each other feature, the mix of its bins among the rows that the last edit changes and among all rows, with the l1 distance. It needs `--data`. |
@@ -130,8 +130,22 @@ reaches the port can read the model and the rows of the data file.
 | `save_model` | `message`, optional `expected_revision` | Saves the edited model and its history after a person confirms. It needs `--output-dir`. |
 | `describe_feature` | `feature` | The words of `describe_graph`. It needs `--llm`. |
 | `describe_model` | none | The words of `describe_ebm` for the current model. The server keeps the text for the revision that it describes. It needs `--llm`. |
+| `propose_difficulties` | `instance` or `row`, optional `cost_strategy` | The difficulty, the multiplier and the reason of each input that the LLM proposes, and the arguments `difficulty`, `cost_strategy` and `difficulty_from_model` to pass to `explain_prediction`. It runs no search, and it needs `--llm`. |
 
 The server also serves each graph as the resource `ebm://graphs/{feature}`.
+
+The recourse arguments of `explain_prediction` make the counterfactual a plan that the person can carry out
+([Recourse limits](local-explanations.md#recourse-limits)):
+
+| Argument | Meaning |
+| --- | --- |
+| `immutable` | The features that the plan must not change. |
+| `allowed` | For some features, the values that the plan may use: `{"levels": [...]}` for a category, or `{"low": ..., "high": ..., "match": "overlap"}` for a number. `match` is `overlap` or `inside`. |
+| `difficulty` | A cost multiplier for some features: `2` makes a change twice as hard. |
+| `cost_strategy` | The base cost under the multipliers: `unit` (every change costs 1, the default) or `data` (the distance in the training data). |
+| `difficulty_from_model` | `true` when `propose_difficulties` gave the difficulties. The texts then call them guesses to check. |
+| `max_changes` | The most changes of a plan. |
+| `plans` | How many diverse plans to return. |
 
 `explain_prediction` works for classifiers and regressors without interactions. For other models, it returns an error
 with the reason. A package error is a tool error with its message.
