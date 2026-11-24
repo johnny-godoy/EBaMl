@@ -7,6 +7,7 @@ import EBaMlProofs.LocalExplanations.Hardness
 import EBaMlProofs.LocalExplanations.Axioms
 import EBaMlProofs.Recourse.Plans
 import EBaMlProofs.Recourse.Counterfactual
+import EBaMlProofs.Recourse.Target
 import EBaMlProofs.Recourse.Axioms
 import EBaMlProofs.MulticlassScores.Softmax
 import EBaMlProofs.MulticlassScores.Model
