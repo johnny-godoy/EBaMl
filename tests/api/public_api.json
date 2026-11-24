@@ -731,6 +731,19 @@
     "kind": "class",
     "signature": "(*, score_axis: str = 'score', title: str | None = None, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, confidence_level: float | None = 0.95) -> None"
   },
+  "GraphMode": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "TEXT",
+      "VISION",
+      "MIXED"
+    ],
+    "signature": "(*values)"
+  },
   "GraphOptions": {
     "bases": [
       "object"
@@ -747,10 +760,12 @@
       "confidence_level: <class 'float'>",
       "max_tokens: <class 'int'>",
       "overbudget_percent: <class 'int'>",
-      "token_learner: ebaml.llm.token_learning.TokenLearner | None"
+      "token_learner: ebaml.llm.token_learning.TokenLearner | None",
+      "mode: <enum 'GraphMode'>",
+      "vision_fallback: <enum 'VisionFallback'>"
     ],
     "kind": "class",
-    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None) -> None"
+    "signature": "(normalization: ebaml.core.custom_types.Normalization | str = <Normalization.NONE: 'none'>, use_feature_bounds: bool = True, classes: collections.abc.Sequence[str] | None = None, include_description: bool = True, feature_format: ebaml.core.custom_types.FeatureType | str | None = None, x_axis_precision: int | None = None, y_axis_precision: AxisPrecision = None, confidence_bounds: bool = True, confidence_level: float = 0.95, max_tokens: int = 3000, overbudget_percent: int = 50, token_learner: ebaml.llm.token_learning.TokenLearner | None = None, mode: ebaml.core.custom_types.GraphMode | str = <GraphMode.TEXT: 'text'>, vision_fallback: ebaml.core.custom_types.VisionFallback | str = <VisionFallback.RAISE: 'raise'>) -> None"
   },
   "GraphSeries": {
     "bases": [
@@ -1077,10 +1092,11 @@
       "base_url: str | None",
       "temperature: float | None",
       "max_output_tokens: int | None",
-      "headers: collections.abc.Mapping[str, str]"
+      "headers: collections.abc.Mapping[str, str]",
+      "vision: bool | None"
     ],
     "kind": "class",
-    "signature": "(provider: str, model: str, api_key_env: str | None = None, base_url: str | None = None, temperature: float | None = None, max_output_tokens: int | None = None, headers: collections.abc.Mapping[str, str] = NOTHING) -> None"
+    "signature": "(provider: str, model: str, api_key_env: str | None = None, base_url: str | None = None, temperature: float | None = None, max_output_tokens: int | None = None, headers: collections.abc.Mapping[str, str] = NOTHING, vision: bool | None = None) -> None"
   },
   "ModelResult": {
     "bases": [
@@ -1709,6 +1725,41 @@
     ],
     "kind": "class",
     "signature": "(constraint: ebaml.edit.constraints.Constraint, description: str, bins: tuple[str, ...], excess: float, repair: ebaml.edit.edits.Edit, terms: tuple[str, ...] = ()) -> None"
+  },
+  "VisionFallback": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "TEXT",
+      "RAISE"
+    ],
+    "signature": "(*values)"
+  },
+  "VisionFallbackWarning": {
+    "bases": [
+      "EBaMlError",
+      "UserWarning",
+      "Warning",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
+  },
+  "VisionUnsupportedError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
   },
   "WholeGraph": {
     "bases": [

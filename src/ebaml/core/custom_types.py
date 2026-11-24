@@ -67,6 +67,27 @@ class FeatureType(enum.StrEnum):
     BOOLEAN = "boolean"
 
 
+class GraphMode(enum.StrEnum):
+    """How a graph reaches the LLM: as text, as an image, or as both.
+
+    ``TEXT`` works with every model. ``VISION`` and ``MIXED`` need a model that reads images.
+    """
+
+    TEXT = "text"
+    VISION = "vision"
+    MIXED = "mixed"
+
+
+class VisionFallback(enum.StrEnum):
+    """What a call in vision or mixed mode does when the model reads no images.
+
+    ``RAISE`` raises ``VisionUnsupportedError``. ``TEXT`` sends the graph as text and emits a ``VisionFallbackWarning``.
+    """
+
+    TEXT = "text"
+    RAISE = "raise"
+
+
 class MonotoneDirection(enum.StrEnum):
     """The direction of a monotone graph."""
 

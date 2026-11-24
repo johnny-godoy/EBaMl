@@ -131,6 +131,22 @@ class ProviderUnreachableError(LLMRequestError):
     """Exception raised when a request does not reach the provider."""
 
 
+class VisionUnsupportedError(LLMRequestError):
+    """Exception raised when a call in vision or mixed mode reaches a model that reads no images.
+
+    The model either rejects the image, or ``ModelOptions(vision=False)`` says that it reads no images. The message
+    names the model and lists the steps that fix the cause. A rejected request is not retried.
+    """
+
+
+class VisionFallbackWarning(EBaMlError, UserWarning):  # ruff: ignore[error-suffix-on-exception-name] -- a warning class takes the suffix Warning, as UserWarning does
+    """Warning emitted when a call in vision or mixed mode sends the graphs as text, because the model reads no images.
+
+    A call emits it once, however many graphs it describes. Turn it into an error with
+    ``warnings.simplefilter("error", VisionFallbackWarning)``, or pass ``vision_fallback="raise"``.
+    """
+
+
 class TokenFitError(EBaMlError, ValueError):
     """Exception raised when the token weights cannot be fitted or read, for example from an empty list of samples."""
 

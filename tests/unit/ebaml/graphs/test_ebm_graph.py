@@ -1048,3 +1048,35 @@ def test_a_graph_keeps_its_feature_type_as_a_member_of_the_enum() -> None:
     assert cat_graph().feature_type is FeatureType.NOMINAL
     with pytest.raises(InvalidOptionError, match="Invalid option: sideways"):
         EBMGraph("age", "sideways", [(0.0, 1.0)], [1.0], [0.1])
+
+
+def test_to_text_tells_on_render_the_simplified_graph_that_the_text_renders() -> None:
+    graph = cont_graph(scores=(1.0, 1.0, 5.0))
+    shown: list[EBMGraph] = []
+    text = graph.to_text(on_render=shown.append)
+    # the first level merges the two bins with equal scores, as the text does
+    (rendered,) = shown
+    assert rendered.x_vals == [(0.0, 2.0), (2.0, 3.0)]
+    assert rendered.to_text() == text
+
+
+def test_to_text_tells_on_render_the_graph_of_the_level_that_fits_the_budget() -> None:
+    shown: list[EBMGraph] = []
+    graph = cont_graph(scores=(1.0, 1.001, 5.0))
+    text = graph.to_text(check_budget=checker("over", "ok"), on_render=shown.append)
+    (rendered,) = shown
+    assert len(rendered.x_vals) == 2
+    assert rendered.to_text() == text
+
+
+@pytest.mark.parametrize("status", ["ok", "warn"])
+def test_to_text_tells_on_render_once_for_a_text_within_the_tolerance(status: Status) -> None:
+    shown: list[EBMGraph] = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        cont_graph().to_text(check_budget=checker(status), on_render=shown.append)
+    assert len(shown) == 1
+
+
+def test_to_text_without_on_render_returns_the_same_text() -> None:
+    assert cont_graph().to_text() == cont_graph().to_text(on_render=lambda _graph: None)

@@ -14,12 +14,14 @@ import structlog
 from baml_bridge.errors import BamlError
 
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.core.exceptions import InvalidOptionError
+from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, VisionUnsupportedError
 from ebaml.graphs.ebm_graph import EBMGraph
-from ebaml.graphs.terms import main_effect_features, main_term
+from ebaml.graphs.terms import main_effect_features
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey
 from ebaml.llm.difficulties import DifficultyProposal, features_text, read_proposal
+from ebaml.llm.graph_views import GraphView, ImageSettings, RenderedGraph, VisionSwitch, graph_view, shrinks_with_text
+from ebaml.llm.model_parts import feature_importances_text, features_without_graph, skipped_interactions
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.llm.progress_bars import progress
 from ebaml.llm.provider_errors import provider_errors
@@ -46,81 +48,6 @@ logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 _GRAPH_SENTENCES = 7
 # the default of the option argument, as a module-level value that nothing changes: the option class is frozen
 _DEFAULT_PROMPT_OPTIONS = PromptOptions()
-
-
-def _feature_importances_to_text(ebm: ExplainableBoostingModel) -> str:
-    """Convert the importances of the main-effect terms of an EBM to text, one line per feature.
-
-    Parameters
-    ----------
-    ebm : ExplainableBoostingModel
-        The EBM model.
-
-    Returns
-    -------
-        str: Textual representation of the feature importances.
-
-    """
-    # the importances are kept by term, and term i is not always feature i
-    importances = ebm.term_importances()
-    return "\n".join(
-        f"{ebm.feature_names_in_[feature_idx]}: {importances[main_term(ebm, feature_idx)]:.2f}"
-        for feature_idx in main_effect_features(ebm)
-    )
-
-
-def _skipped_interactions(ebm: ExplainableBoostingModel, described: Collection[int]) -> list[str]:
-    """Name the interaction terms of the described features, which the descriptions skip, and log a warning.
-
-    The names go to the prompt, so that the text of the description says what it leaves out. The warning tells the
-    program the same.
-
-    Parameters
-    ----------
-    ebm : ExplainableBoostingModel
-        The EBM.
-    described : Collection[int]
-        The indices of the features that the call describes.
-
-    Returns
-    -------
-    list[str]
-        The names of the skipped terms, in the order of the model.
-
-    """
-    skipped = [
-        name
-        for name, features in zip(ebm.term_names_, ebm.term_features_, strict=True)
-        if (
-            len(features) > 1  # pragma: no mutate -- a term of zero features does not exist
-            and any(feature in described for feature in features)
-        )
-    ]
-    if skipped:
-        logger.warning("interactions_skipped", terms=skipped, reason="the descriptions cover the main effects only")
-    return skipped
-
-
-def _features_without_graph(ebm: ExplainableBoostingModel, described: Collection[int]) -> list[str]:
-    """Name the features that have no main-effect term, which the descriptions skip, and log a warning.
-
-    Parameters
-    ----------
-    ebm : ExplainableBoostingModel
-        The EBM.
-    described : Collection[int]
-        The indices of the features that have a graph.
-
-    Returns
-    -------
-    list[str]
-        The names of the features that ``exclude`` or ``remove_terms`` left without a graph.
-
-    """
-    skipped = [name for index, name in enumerate(ebm.feature_names_in_) if index not in described]
-    if skipped:
-        logger.warning("features_skipped", features=skipped, reason="the features have no main-effect term")
-    return skipped
 
 
 def _prompt_options(prompt: PromptOptions) -> baml_sdk.GraphPromptOptions:
@@ -213,13 +140,13 @@ def _estimator(options: GraphOptions, model: baml_sdk.ModelSpec | None) -> Token
     return options.token_learner.estimator_for(None if model is None else ModelKey(model.provider, model.model))
 
 
-def _graph_text(
+def _render_graph(
     ebm: ExplainableBoostingModel,
     feature_index: int,
     options: GraphOptions,
     model: baml_sdk.ModelSpec | None,
-) -> str:
-    """Convert an EBM graph to text, with the token budget check.
+) -> RenderedGraph:
+    """Extract an EBM graph and convert it to text, with the token budget check.
 
     Parameters
     ----------
@@ -234,8 +161,8 @@ def _graph_text(
 
     Returns
     -------
-    str
-        The textual representation of the EBM graph.
+    RenderedGraph
+        The extracted graph, the simplified graph that the text renders, and the text.
 
     """
     graph = EBMGraph.from_ebm(
@@ -245,7 +172,8 @@ def _graph_text(
         use_feature_bounds=options.use_feature_bounds,
         classes=options.classes,
     )
-    return graph.to_text(
+    shown: list[EBMGraph] = []
+    text = graph.to_text(
         include_description=options.include_description,
         feature_format=options.feature_format,
         x_axis_precision=options.x_axis_precision,
@@ -255,7 +183,10 @@ def _graph_text(
         max_tokens=options.max_tokens,
         overbudget_percent=options.overbudget_percent,
         check_budget=_estimator(options, model) or check_token_budget,
+        on_render=shown.append,
     )
+    (shown_graph,) = shown
+    return RenderedGraph(extracted=graph, shown=shown_graph, text=text)
 
 
 def _is_truncated(error: BamlError) -> bool:
@@ -321,36 +252,117 @@ class _Described:
     truncated_attempts: int
 
 
-@attrs.frozen
+@attrs.frozen(kw_only=True)
 class _GraphJob:
-    """The settings that every graph of one call shares."""
+    """The settings that every graph of one call shares, and the graph mode that its requests share."""
 
     ebm: ExplainableBoostingModel
     num_sentences: int
     graph_options: GraphOptions
     prompt_options: baml_sdk.GraphPromptOptions
     model: baml_sdk.ModelSpec | None
+    switch: VisionSwitch
+    image: ImageSettings
     omitted_terms: Sequence[str] = ()
 
 
-def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _Described:
+def _ask_for_view(job: _GraphJob, graph: RenderedGraph, sent: list[GraphView]) -> baml_sdk.Counted:
+    """Send the three turns of the description of one graph in the mode of the call.
+
+    If the model rejects the image, the switch of the call raises ``VisionUnsupportedError``, or turns the call to text
+    mode, and the function asks again with the text.
+
+    Parameters
+    ----------
+    job: _GraphJob
+        The settings and the switch of the call.
+    graph: RenderedGraph
+        The graph and its text.
+    sent: list[GraphView]
+        The views of the requests that succeeded. The function appends the view that it sent.
+
+    Returns
+    -------
+    baml_sdk.Counted
+        The description and its token usage.
+
+    Raises
+    ------
+    VisionUnsupportedError
+        If the model rejects the image and the fallback is ``VisionFallback.RAISE``, or if a request with no image
+        fails with this error.
+
+    """
+    view = graph_view(job.switch.next_mode(), graph, job.image)
+    try:
+        with provider_errors(job.switch.model):
+            counted = baml_sdk.describe_graph_cot_sync(
+                graph=view.text,
+                num_sentences=job.num_sentences,
+                opts=job.prompt_options,
+                model=job.model,
+                omitted_terms=list(job.omitted_terms),
+                png_base64=view.png_base64,
+            )
+    except VisionUnsupportedError as error:
+        if view.png_base64 is None:
+            # a request with no image cannot fail for its image, so the cause is elsewhere and text mode cannot help
+            raise
+        job.switch.fall_back(error)
+        return _ask_for_view(job, graph, sent)
+    sent.append(view)
+    return counted
+
+
+def _rebuild(job: _GraphJob, feature_index: int, budget: int) -> RenderedGraph:
+    """Render a graph again for a smaller token budget, after a reply that ``max_tokens`` cut off.
+
+    Parameters
+    ----------
+    job: _GraphJob
+        The settings and the switch of the call.
+    feature_index: int
+        The index of the feature.
+    budget: int
+        The token budget of the text.
+
+    Returns
+    -------
+    RenderedGraph
+        The graph with a shorter text.
+
+    Raises
+    ------
+    EBMGraphSimplificationError
+        If the mode of the call sends no text. A smaller text would not change the request, so the retry stops.
+
+    """
+    if not shrinks_with_text(job.switch.mode):
+        msg = f'A request in "{job.switch.mode}" mode sends no graph text, so a smaller text cannot shorten it.'
+        raise EBMGraphSimplificationError(msg)
+    options = attrs.evolve(job.graph_options, max_tokens=budget, overbudget_percent=0)
+    return _render_graph(job.ebm, feature_index, options, job.model)
+
+
+def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: RenderedGraph) -> _Described:
     """Describe one graph with the LLM, simplifying the graph further whenever the reply is cut off by ``max_tokens``.
 
     A failure that the user can fix raises an ``LLMRequestError`` (see ``ebaml.llm.provider_errors``). Any other failure
     raises the ``BamlError`` of the LLM call. A reply cut off by ``max_tokens`` is retried first, as
-    ``ebaml.llm.retry.call_with_shrinking_graph`` says.
+    ``ebaml.llm.retry.call_with_shrinking_graph`` says. A model that rejects the image raises
+    ``VisionUnsupportedError``, or the call turns to text mode, as ``GraphOptions.vision_fallback`` says.
 
     Parameters
     ----------
     job: _GraphJob
         The EBM, the number of sentences, the options of the graph text (a retry changes ``max_tokens`` and
         ``overbudget_percent``), the prompt options as made by ``_prompt_options``, the model of the requests as
-        made by ``_model_spec`` (``None`` selects the default clients), and the interaction terms that the description
-        must name as left out.
+        made by ``_model_spec`` (``None`` selects the default clients), the switch of the graph mode, the settings of
+        the images, and the interaction terms that the description must name as left out.
     feature_index: int
         The index of the feature to describe.
-    graph: str
-        The text of the graph, as made by ``_graph_text``.
+    graph: RenderedGraph
+        The graph and its text, as made by ``_render_graph``.
 
     Returns
     -------
@@ -363,39 +375,23 @@ def _describe_graph_counted(job: _GraphJob, feature_index: int, graph: str) -> _
     graph_options = job.graph_options
     estimator = _estimator(graph_options, job.model)
     estimate = estimate_tokens if estimator is None else estimator.estimate
-    sent: list[str] = []
-
-    def ask(text: str) -> baml_sdk.Counted:
-        sent.append(text)
-        return baml_sdk.describe_graph_cot_sync(
-            graph=text,
-            num_sentences=job.num_sentences,
-            opts=job.prompt_options,
-            model=job.model,
-            omitted_terms=list(job.omitted_terms),
-        )
-
-    with provider_errors():
-        counted = call_with_shrinking_graph(
-            ShrinkingGraphCall(
-                call=ask,
-                graph=graph,
-                error_type=BamlError,
-                is_truncated=_is_truncated,
-                estimate_tokens=estimate,
-                rebuild=lambda budget: _graph_text(
-                    job.ebm,
-                    feature_index,
-                    attrs.evolve(graph_options, max_tokens=budget, overbudget_percent=0),
-                    job.model,
-                ),
-                on_truncated=truncated.append,
-                label=job.ebm.feature_names_in_[feature_index],
-            ),
-        )
-    if graph_options.token_learner is not None:
-        # the last text that the call sent is the one that the successful attempt used
-        graph_options.token_learner.observe(counted.usage.samples, sent[-1])
+    sent: list[GraphView] = []
+    counted = call_with_shrinking_graph(
+        ShrinkingGraphCall(
+            call=functools.partial(_ask_for_view, job, sent=sent),
+            graph=graph,
+            error_type=BamlError,
+            is_truncated=_is_truncated,
+            estimate_tokens=lambda rendered: estimate(rendered.text),
+            rebuild=lambda budget: _rebuild(job, feature_index, budget),
+            on_truncated=truncated.append,
+            label=job.ebm.feature_names_in_[feature_index],
+        ),
+    )
+    # the last view is the one of the successful attempt; a request with an image teaches the text weights nothing
+    last = sent[-1]
+    if graph_options.token_learner is not None and last.png_base64 is None and last.text is not None:
+        graph_options.token_learner.observe(counted.usage.samples, last.text)
     return _Described(counted, len(truncated))
 
 
@@ -421,18 +417,21 @@ def describe_graph(request: DescribeGraphRequest) -> str:
     """
     ebm = request.ebm
     feature_index = request.feature_index
-    omitted_terms = _skipped_interactions(ebm, {feature_index})
+    omitted_terms = skipped_interactions(ebm, {feature_index})
     model_spec = _model_spec(request.model)
-    graph_text = _graph_text(ebm, feature_index, request.graph, model_spec)
+    switch = VisionSwitch.for_call(request.graph, request.model)
+    rendered = _render_graph(ebm, feature_index, request.graph, model_spec)
     job = _GraphJob(
-        ebm,
-        request.num_sentences,
-        request.graph,
-        _prompt_options(request.prompt),
-        model_spec,
-        omitted_terms,
+        ebm=ebm,
+        num_sentences=request.num_sentences,
+        graph_options=request.graph,
+        prompt_options=_prompt_options(request.prompt),
+        model=model_spec,
+        switch=switch,
+        image=ImageSettings.from_options(ebm, request.graph),
+        omitted_terms=omitted_terms,
     )
-    described = _describe_graph_counted(job, feature_index, graph_text)
+    described = _describe_graph_counted(job, feature_index, rendered)
     return _log_usage(
         f"describe_graph({ebm.feature_names_in_[feature_index]})",
         described.counted,
@@ -510,9 +509,9 @@ def chat_with_mcp(
 
 
 def _describe_graphs(
-    describe: Callable[[int, str], _Described],
+    describe: Callable[[int, RenderedGraph], _Described],
     features: Collection[int],
-    graph_texts: Collection[str],
+    graphs: Collection[RenderedGraph],
     max_concurrency: int,
     finish_step: Callable[[], None],
 ) -> list[_Described]:
@@ -524,12 +523,12 @@ def _describe_graphs(
 
     Parameters
     ----------
-    describe: Callable[[int, str], _Described]
-        Describes one graph from the index of its feature and its text.
+    describe: Callable[[int, RenderedGraph], _Described]
+        Describes one graph from the index of its feature and the graph with its text.
     features: Collection[int]
         The indices of the features to describe.
-    graph_texts: Collection[str]
-        The text of the graph of each feature, in the order of ``features``.
+    graphs: Collection[RenderedGraph]
+        The graph of each feature with its text, in the order of ``features``.
     max_concurrency: int
         The maximum number of graphs that the function describes at the same time.
     finish_step: Callable[[], None]
@@ -543,8 +542,7 @@ def _describe_graphs(
     """
     with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
         futures: list[Future[_Described]] = [
-            pool.submit(describe, feature_index, graph_text)
-            for feature_index, graph_text in zip(features, graph_texts, strict=True)
+            pool.submit(describe, feature_index, graph) for feature_index, graph in zip(features, graphs, strict=True)
         ]
         try:
             for finished in as_completed(futures):
@@ -612,19 +610,27 @@ def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
     ebm = request.ebm
     features = main_effect_features(ebm)
     feature_names = [ebm.feature_names_in_[feature_index] for feature_index in features]
-    omitted_terms = _skipped_interactions(ebm, features)
-    omitted_features = _features_without_graph(ebm, features)
-    feature_importances = _feature_importances_to_text(ebm)
+    omitted_terms = skipped_interactions(ebm, features)
+    omitted_features = features_without_graph(ebm, features)
+    feature_importances = feature_importances_text(ebm)
     model_spec = _model_spec(request.model)
-    graph_texts = [_graph_text(ebm, feature_index, request.graph, model_spec) for feature_index in features]
+    graphs = [_render_graph(ebm, feature_index, request.graph, model_spec) for feature_index in features]
     opts = _prompt_options(request.prompt)
-    job = _GraphJob(ebm, _GRAPH_SENTENCES, request.graph, opts, model_spec)
+    job = _GraphJob(
+        ebm=ebm,
+        num_sentences=_GRAPH_SENTENCES,
+        graph_options=request.graph,
+        prompt_options=opts,
+        model=model_spec,
+        switch=VisionSwitch.for_call(request.graph, request.model),
+        image=ImageSettings.from_options(ebm, request.graph),
+    )
 
     with progress(len(features) + 1, "describe_ebm", enabled=request.progress_bar) as finish_step:
         described = _describe_graphs(
             functools.partial(_describe_graph_counted, job),
             features,
-            graph_texts,
+            graphs,
             request.max_concurrency,
             finish_step,
         )
@@ -636,7 +642,7 @@ def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
                 strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
             )
         )
-        with provider_errors():
+        with provider_errors(job.switch.model):
             summary = baml_sdk.summarize_ebm_sync(
                 feature_importances=feature_importances,
                 graph_descriptions=graph_descriptions,

@@ -47,6 +47,31 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
     return "{" + ", ".join(f"{orjson.dumps(key).decode()}: {y}" for key, y in zip(keys, y_vals, strict=True)) + "}"
 
 
+def confidence_factor(confidence_level: float) -> float:
+    """Find the number of standard deviations between a score and the bounds of its confidence interval.
+
+    The bounds use the normal approximation. The graph text and the graph image both call this function, so their
+    bounds agree.
+
+    Parameters
+    ----------
+    confidence_level: float
+        The confidence level of the bounds, for example 0.95.
+
+    Returns
+    -------
+    float
+        The factor: the bounds are the score plus and minus the factor times the standard deviation.
+
+    Examples
+    --------
+    >>> round(confidence_factor(0.95), 3)
+    1.96
+
+    """
+    return float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
+
+
 # nosemgrep: ebaml-return-attrs-not-container -- an interval is a homogeneous pair, like EBMGraph.x_vals
 def parse_str_tuple_to_float_tuple(str_tuple: str) -> Interval:
     """Parse a string tuple to a float tuple.
@@ -180,7 +205,7 @@ def _parse_series(text: str) -> _Series:
         msg = "The means and the confidence bounds of the graph text do not have the same intervals."
         raise GraphTextError(msg)
     confidence_level = float(lower_match.group(1)) / 100
-    factor = scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1]
+    factor = confidence_factor(confidence_level)
     return _Series(
         intervals=list(means),
         scores=list(means.values()),

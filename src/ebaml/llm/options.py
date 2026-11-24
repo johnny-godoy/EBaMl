@@ -10,14 +10,22 @@ from collections.abc import Mapping, Sequence
 
 import attrs
 
-from ebaml.core.custom_types import AxisPrecision, FeatureType, Normalization
+from ebaml.core.custom_types import AxisPrecision, FeatureType, GraphMode, Normalization, VisionFallback, coerce_enum
 from ebaml.core.exceptions import InvalidOptionError, OptionRangeError
 from ebaml.llm.token_learning import TokenLearner
 
 
+def _graph_mode(value: GraphMode | str) -> GraphMode:
+    return coerce_enum(GraphMode, value)
+
+
+def _vision_fallback(value: VisionFallback | str) -> VisionFallback:
+    return coerce_enum(VisionFallback, value)
+
+
 @attrs.frozen
 class GraphOptions:
-    """Options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``, and the token learner of the budget check.
+    """Options of ``EBMGraph.from_ebm`` and ``EBMGraph.to_text``, the graph mode, and the token learner.
 
     Attributes
     ----------
@@ -45,7 +53,15 @@ class GraphOptions:
         See ``EBMGraph.to_text``.
     token_learner: TokenLearner | None
         The token estimators of the budget check, and the weights that they learn from the calls. ``None`` checks the
-        budget with the default weights and learns nothing.
+        budget with the default weights and learns nothing. A request with an image teaches the weights nothing.
+    mode: GraphMode | str
+        How each graph reaches the LLM. ``"text"`` sends the graph text, and works with every model. ``"vision"``
+        sends an image of the graph only, drawn with no simplification. ``"mixed"`` sends the graph text and an image
+        of the same simplified graph. An image needs the extra ``vision``.
+    vision_fallback: VisionFallback | str
+        What a call in vision or mixed mode does when the model reads no images. ``"raise"`` raises
+        ``VisionUnsupportedError``. ``"text"`` describes the graphs from their text and emits one
+        ``VisionFallbackWarning``. Text mode ignores it.
 
     """
 
@@ -61,6 +77,8 @@ class GraphOptions:
     max_tokens: int = 3000
     overbudget_percent: int = 50
     token_learner: TokenLearner | None = None
+    mode: GraphMode = attrs.field(default=GraphMode.TEXT, converter=_graph_mode)
+    vision_fallback: VisionFallback = attrs.field(default=VisionFallback.RAISE, converter=_vision_fallback)
 
 
 @attrs.frozen
@@ -84,6 +102,10 @@ class PromptOptions:
     graph_description: str | None = None
     dataset_description: str | None = None
     task_description: str | None = None
+
+
+# the model of the default clients of the BAML code, as provider/model
+DEFAULT_MODEL = "openrouter/openrouter/free"
 
 
 # nosemgrep: ebaml-no-object-type -- attrs passes the instance and the field; the validator reads only the value
@@ -125,6 +147,10 @@ class ModelOptions:
         12000, or 16000 for the first turn of a conversation and for the benchmark.
     headers: Mapping[str, str]
         Headers to add to each request.
+    vision: bool | None
+        Whether the model reads images. ``False`` applies ``GraphOptions.vision_fallback`` before any request of a call
+        in vision or mixed mode. ``True`` and ``None`` send the image, and a model that rejects it raises
+        ``VisionUnsupportedError`` or falls back to text, as ``vision_fallback`` says.
 
     """
 
@@ -135,6 +161,7 @@ class ModelOptions:
     temperature: float | None = attrs.field(default=None, validator=_check_temperature)
     max_output_tokens: int | None = attrs.field(default=None, validator=_check_max_output_tokens)
     headers: Mapping[str, str] = attrs.field(factory=dict)
+    vision: bool | None = None
 
     @classmethod
     def parse(cls, value: "ModelOptions | str") -> "ModelOptions":

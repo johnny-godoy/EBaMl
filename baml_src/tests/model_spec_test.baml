@@ -146,3 +146,50 @@ test "an Azure client without base_url names the deployment after the model" {
     let azure = build_azure(spec_for("azure"), short_defaults());
     assert.equal(azure.deployment_id, "m")
 }
+
+// The part of a request body that carries the PNG "iVBORw0KGgo=", in the format that each provider documents: an
+// OpenAI image_url with a data URL, an Anthropic base64 image source, a Gemini inlineData part and a Bedrock image block.
+function image_wire_formats() -> map<string, string> {
+    let openai = "\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}";
+    let gemini = "\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"iVBORw0KGgo=\"}";
+    {
+        "openai": openai,
+        "openai-generic": openai,
+        "azure": openai,
+        "openrouter": openai,
+        "ollama": openai,
+        "anthropic": "\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgo=\"}",
+        "google": gemini,
+        "vertex": gemini,
+        "bedrock": "\"image\":{\"format\":\"png\",\"source\":{\"bytes\":\"iVBORw0KGgo=\"}}",
+    }
+}
+
+// The client of a provider, built without the network. Azure needs its resource at render time, which a test sets in
+// place of the AZURE_OPENAI_ENDPOINT variable; openai-generic needs an address.
+function offline_client(provider: string) -> ai.Client {
+    match (provider) {
+        "azure" => {
+            openai.AzureClient.new(
+                model = "m",
+                resource_name = "resource",
+                deployment_id = "m",
+                api_key = "unused",
+            )
+        },
+        "openai-generic" => {
+            build_openai_generic(ModelSpec { ...spec_for(provider), base_url: "http://localhost:1" }, short_defaults())
+        },
+        _ => build_client(spec_for(provider), short_defaults()),
+    }
+}
+
+test "the image of a graph reaches each provider in the format that the provider documents" {
+    let formats = image_wire_formats();
+    assert.equal(formats.keys().length(), client_builders().keys().length());
+    for (let provider in client_builders().keys()) {
+        let spec = GraphFirstPass@spec(null, default_graph_options(), png_base64 = "iVBORw0KGgo=");
+        let body = spec.build_request(client = offline_client(provider)).body;
+        assert.is_true(body.includes(formats[provider]));
+    }
+}

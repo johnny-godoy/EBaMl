@@ -28,9 +28,18 @@ def _setting(line: str, pattern: str) -> str:
     return found.group(1)
 
 
+# The fields that Python reads before any request and that never reach BAML: `vision` decides whether a call sends an
+# image, so the client that BAML builds does not need it.
+PYTHON_ONLY_FIELDS = {"vision"}
+
+
 def test_each_field_of_the_model_options_has_a_field_of_the_spec_and_the_other_way_round() -> None:
     options = {field.name for field in attrs.fields(ModelOptions)}
-    assert options == set(sdk_fields("ModelSpec"))
+    assert options - PYTHON_ONLY_FIELDS == set(sdk_fields("ModelSpec"))
+
+
+def test_a_python_only_field_has_no_field_of_the_spec() -> None:
+    assert not PYTHON_ONLY_FIELDS & set(sdk_fields("ModelSpec"))
 
 
 @pytest.mark.parametrize("client", sorted(DEFAULTS))

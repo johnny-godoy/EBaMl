@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, cast
 
 # The hook module must load first, or the modules that load before it stay unchecked.
 import ebaml.core.beartype_hook  # ruff: ignore[unused-import] -- the import installs the beartype hook as a side effect
-from ebaml.core.custom_types import FeatureType, Normalization
+from ebaml.core.custom_types import FeatureType, GraphMode, Normalization, VisionFallback
 from ebaml.core.exceptions import (
     APIKeyRejectedError,
     DataFileError,
@@ -40,6 +40,8 @@ from ebaml.core.exceptions import (
     TokenFitError,
     UnreviewedEditError,
     UnsupportedModelError,
+    VisionFallbackWarning,
+    VisionUnsupportedError,
 )
 from ebaml.edit.bin_edits import ExtendRange, Rebin, SplitBin
 from ebaml.edit.constraints import (
@@ -232,6 +234,7 @@ __all__ = [
     "GamChangerCommit",
     "GamChangerExport",
     "GraphImageOptions",
+    "GraphMode",
     "GraphOptions",
     "GraphSeries",
     "GraphTextError",
@@ -312,6 +315,9 @@ __all__ = [
     "ValueInterval",
     "ValueRange",
     "Violation",
+    "VisionFallback",
+    "VisionFallbackWarning",
+    "VisionUnsupportedError",
     "WholeGraph",
     "ZeroTerm",
     "__version__",

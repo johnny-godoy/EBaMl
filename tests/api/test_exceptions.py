@@ -35,6 +35,8 @@ BUILTIN_BASE = {
     "TokenFitError": ValueError,
     "UnreviewedEditError": None,
     "UnsupportedModelError": ValueError,
+    "VisionFallbackWarning": UserWarning,
+    "VisionUnsupportedError": None,
 }
 
 
@@ -82,6 +84,7 @@ def test_the_errors_of_the_provider_share_one_base_class() -> None:
         "APIKeyRejectedError",
         "RateLimitedError",
         "ProviderUnreachableError",
+        "VisionUnsupportedError",
     }
 
 

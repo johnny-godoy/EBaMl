@@ -19,23 +19,25 @@ MAX_TRUNCATION_RETRIES = 4
 
 
 @attrs.frozen
-class ShrinkingGraphCall[R, E: Exception]:
+class ShrinkingGraphCall[R, E: Exception, G]:
     """The call and the services that ``call_with_shrinking_graph`` needs.
+
+    ``G`` is the type of the graph that a call sends: its text, or the text with the graph that it renders.
 
     Attributes
     ----------
-    call: Callable[[str], R]
-        Sends the graph text to the LLM and returns the reply.
-    graph: str
-        The text of the graph for the first call.
+    call: Callable[[G], R]
+        Sends the graph to the LLM and returns the reply.
+    graph: G
+        The graph for the first call.
     error_type: type[E]
         The class of the error that ``call`` raises when the LLM call fails.
     is_truncated: Callable[[E], bool]
         Tells whether an error means that the reply hit the ``max_tokens`` limit.
-    estimate_tokens: Callable[[str], int]
-        Estimates the number of tokens of a text.
-    rebuild: Callable[[int], str]
-        Returns the graph text again for a token budget. It raises ``EBMGraphSimplificationError`` or
+    estimate_tokens: Callable[[G], int]
+        Estimates the number of tokens of the text of a graph.
+    rebuild: Callable[[int], G]
+        Returns the graph again for a token budget. It raises ``EBMGraphSimplificationError`` or
         ``EBMGraphTokenLimitError`` when the graph cannot fit.
     on_truncated: Callable[[E], None]
         Called with the error of each attempt that was cut off, the last one included, before the retry or the raise.
@@ -45,17 +47,17 @@ class ShrinkingGraphCall[R, E: Exception]:
 
     """
 
-    call: Callable[[str], R]
-    graph: str
+    call: Callable[[G], R]
+    graph: G
     error_type: type[E]
     is_truncated: Callable[[E], bool]
-    estimate_tokens: Callable[[str], int]
-    rebuild: Callable[[int], str]
+    estimate_tokens: Callable[[G], int]
+    rebuild: Callable[[int], G]
     on_truncated: Callable[[E], None]
     label: str
 
 
-def call_with_shrinking_graph[R, E: Exception](request: ShrinkingGraphCall[R, E]) -> R:
+def call_with_shrinking_graph[R, E: Exception, G](request: ShrinkingGraphCall[R, E, G]) -> R:
     """Call the LLM with a graph text. If the reply is cut off, ask again with a smaller graph, up to 4 times.
 
     Each retry asks ``request.rebuild`` for a graph of 75% of the previous estimated size. The function raises the
@@ -63,8 +65,8 @@ def call_with_shrinking_graph[R, E: Exception](request: ShrinkingGraphCall[R, E]
 
     Parameters
     ----------
-    request: ShrinkingGraphCall[R, E]
-        The call, the first graph text, and the services that the retry uses.
+    request: ShrinkingGraphCall[R, E, G]
+        The call, the first graph, and the services that the retry uses.
 
     Returns
     -------
