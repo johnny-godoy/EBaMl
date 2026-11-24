@@ -34,6 +34,7 @@ nav = [
     { "Model providers" = "providers-notebook.md" },
     { Multiclass = "multiclass-notebook.md" },
     { "Model kinds" = "model-kinds-notebook.md" },
+    { "Vision models" = "vision-notebook.md" },
     { "Model editing" = "editing-notebook.md" },
     { "MCP server" = "mcp-notebook.md" },
     { "BAML agent" = "baml-agent-notebook.md" },

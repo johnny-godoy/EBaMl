@@ -21,6 +21,7 @@ notebook never sends a request by accident. The default model needs `OPENROUTER_
 | [Model providers](providers-notebook.md) | The same request to OpenRouter, OpenAI, Anthropic, Ollama and a gateway with an OpenAI-compatible API, and the errors for an unknown provider and a missing key. |
 | [Multiclass](multiclass-notebook.md) | An EBM of the iris data with three classes: one series for each class, the centring that keeps the predictions, and the `classes` and `normalization` options. |
 | [Model kinds](model-kinds-notebook.md) | A binary classifier, a multiclass classifier and a regressor side by side: the graph text and the fields of the local explanations. |
+| [Vision models](vision-notebook.md) | The image of the graph of each model kind, the text, vision and mixed modes of `describe_graph`, and the two fallback behaviors for a model that reads no images. |
 | [Model editing](editing-notebook.md) | `EditSession`: smooth a jump, flatten a dip, make a range monotone and neutralize a category, with the report of each edit. |
 | [MCP server](mcp-notebook.md) | The real `ebaml-mcp` server and a client: read a graph, explain a row, edit the model and save it after a confirmation. |
 | [BAML agent](baml-agent-notebook.md) | The BAML agent of the `baml` command, which answers one question with the tools of the server. |
