@@ -35,8 +35,8 @@ changes a fact is a bug.
 - CI runners are noisy: the same job varies by 10 % or more. An absolute time threshold on a pull request fails at
   random.
 - The milestones 0.13.0 and 0.14.0 come first. 0.13.0 adds recourse plans to the local explanations: cost strategies
-  and a weighted search through the MIP (`docs/plans/actionable-recourse.md`). 0.14.0 adds `--mode text|vision|mixed`
-  to `benchmark/run.py` (`docs/plans/vision-graphs.md`). Read both on `main` before you start: the restructured
+  and a weighted search through the MIP (`src/ebaml/local/counterfactuals.py`). 0.14.0 adds `--mode text|vision|mixed`
+  to `benchmark/run.py` (`docs/plans/vision-graphs.md`). Read the recourse code and the vision plan on `main` before you start: the restructured
   command keeps `--mode`, and the workloads cover the recourse search.
 </context>
 
