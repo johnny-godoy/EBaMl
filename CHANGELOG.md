@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.13.0'></a>
+## [0.13.0] - 2026-11-24
+
+### Changed
+
+- The recourse proof covers the counterfactual of a chosen class of a multiclass classifier. Lean shows that its plans are exactly the changes that make the chosen class win, so the guarantees of the costs, the cap and the diverse plans hold for it.
+
 <a id='changelog-0.12.3'></a>
 ## [0.12.3] - 2026-11-24
 
