@@ -475,8 +475,9 @@ class EBMGraph:
             self.feature_type,
             [(x_vals[group[0]][0], x_vals[group[-1]][1]) for group in groups],
             scores[firsts].tolist(),
-            # the largest std of a merged bin, so the confidence bands of the simplified graph cover the original graph
-            # as well as its confidence bands
+            # the largest std of a merged bin, so no bin of the run gets a narrower confidence band than it has in the
+            # original graph. The band is centred on the score of the first bin, so it does not always cover the bands
+            # of the other bins of the run.
             np.maximum.reduceat(stds, firsts, axis=0).tolist(),
             self.classes,
         )
@@ -669,7 +670,8 @@ class EBMGraph:
         confidence_bounds: bool, default=True
             Whether to include confidence bounds.
         confidence_level: float, default=0.95
-            The desired confidence level of the bounds.
+            The desired confidence level of the bounds, between 0 and 1, both excluded. ``confidence_factor`` raises
+            ``OptionRangeError`` for another level when ``confidence_bounds`` is True.
         max_tokens: int, default=3000
             The token budget of the text of the graph. The token count is a rough estimate
             (there is no tokenizer before the LLM call), so exceeding the budget only emits a warning.

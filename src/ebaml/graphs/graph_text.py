@@ -1,5 +1,6 @@
 """Helpers for the textual representation of EBM graphs: the JSON lines, and how to read a graph text back."""
 
+import math
 import re
 from collections.abc import Iterable, Sequence
 
@@ -8,14 +9,14 @@ import orjson
 import scipy
 
 from ebaml.core.custom_types import FeatureType, Interval, normalize_feature_type
-from ebaml.core.exceptions import GraphTextError, InvalidOptionError
+from ebaml.core.exceptions import GraphTextError, InvalidOptionError, OptionRangeError
 
 # the lines of the textual representation of a graph, as written by ``EBMGraph.to_text``
 _NAME_LINE = re.compile(r"^[ \t]*Feature Name: (.*)$", re.MULTILINE)
 _TYPE_LINE = re.compile(r"^[ \t]*Feature Type: (.*)$", re.MULTILINE)
 _MEANS_LINE = re.compile(r"^[ \t]*Means: (.*)$", re.MULTILINE)
 _LOWER_LINE = re.compile(r"^[ \t]*Lower Bounds \((\d+(?:\.\d+)?)%-Confidence Interval\): (.*)$", re.MULTILINE)
-_UPPER_LINE = re.compile(r"^[ \t]*Upper Bounds \(\d+(?:\.\d+)?%-Confidence Interval\): (.*)$", re.MULTILINE)
+_UPPER_LINE = re.compile(r"^[ \t]*Upper Bounds \((\d+(?:\.\d+)?)%-Confidence Interval\): (.*)$", re.MULTILINE)
 _CLASS_LINE = re.compile(r"^[ \t]*Class: (.*)$", re.MULTILINE)
 
 
@@ -63,12 +64,21 @@ def confidence_factor(confidence_level: float) -> float:
     float
         The factor: the bounds are the score plus and minus the factor times the standard deviation.
 
+    Raises
+    ------
+    OptionRangeError
+        If the confidence level is not between 0 and 1, both excluded. At 1 the bounds are infinite, which is not
+        valid JSON, and at 0 they equal the score, so the text cannot give the standard deviation back.
+
     Examples
     --------
     >>> round(confidence_factor(0.95), 3)
     1.96
 
     """
+    if not 0 < confidence_level < 1:
+        msg = f"confidence_level must be between 0 and 1, both excluded. Got {confidence_level}."
+        raise OptionRangeError(msg)
     return float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
 
 
@@ -194,18 +204,26 @@ def _parse_series(text: str) -> _Series:
     Raises
     ------
     GraphTextError
-        If a line is missing, is not valid JSON, or the means and the bounds do not share the same intervals.
+        If a line is missing, is not valid JSON, the means and the bounds do not share the same intervals, or the
+        bounds do not share one confidence level between 0% and 100%, both excluded.
 
     """
     means = _load_line(_search_line(_MEANS_LINE, text, "Means").group(1), "Means")
     lower_match = _search_line(_LOWER_LINE, text, "Lower Bounds")
     lower = _load_line(lower_match.group(2), "Lower Bounds")
-    upper = _load_line(_search_line(_UPPER_LINE, text, "Upper Bounds").group(1), "Upper Bounds")
+    upper_match = _search_line(_UPPER_LINE, text, "Upper Bounds")
+    upper = _load_line(upper_match.group(2), "Upper Bounds")
     if not means.keys() == lower.keys() == upper.keys():
         msg = "The means and the confidence bounds of the graph text do not have the same intervals."
         raise GraphTextError(msg)
-    confidence_level = float(lower_match.group(1)) / 100
-    factor = confidence_factor(confidence_level)
+    if not math.isclose(float(lower_match.group(1)), float(upper_match.group(1))):
+        msg = "The lower and the upper bounds of the graph text do not have the same confidence level."
+        raise GraphTextError(msg)
+    try:
+        factor = confidence_factor(float(lower_match.group(1)) / 100)
+    except OptionRangeError as error:
+        msg = f"The confidence level of the graph text is {lower_match.group(1)}%, not between 0% and 100%."
+        raise GraphTextError(msg) from error
     return _Series(
         intervals=list(means),
         scores=list(means.values()),
@@ -251,7 +269,8 @@ def parse_graph_text(text: str) -> ParsedGraph:
     ------
     GraphTextError
         If a line of the graph is missing, is not valid JSON, the means and the bounds do not share the same
-        intervals, or a multiclass text has a series before its first ``Class:`` line.
+        intervals or one confidence level between 0% and 100%, or a multiclass text has a series before its first
+        ``Class:`` line.
     InvalidOptionError
         If the feature type is not continuous.
 

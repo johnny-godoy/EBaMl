@@ -3,7 +3,7 @@
 import orjson
 import pytest
 
-from ebaml.core.exceptions import GraphTextError
+from ebaml.core.exceptions import GraphTextError, OptionRangeError
 from ebaml.graphs.graph_text import confidence_factor, parse_graph_text, parse_str_tuple_to_float_tuple, xy_to_json
 
 
@@ -109,3 +109,31 @@ def test_the_parser_reads_the_standard_deviation_back_from_bounds_of_any_level()
         'Upper Bounds (80%-Confidence Interval): {"(0, 1)": 1.0}\n'
     )
     assert parse_graph_text(text).stds == [pytest.approx(0.5 / confidence_factor(0.8))]
+
+
+@pytest.mark.parametrize("level", [0.0, 1.0, 95.0, -0.5])
+def test_the_confidence_factor_rejects_a_level_outside_the_open_unit_interval(level: float) -> None:
+    # a level of 1 wrote infinite bounds (invalid JSON), and a level of 0 made the parser divide by zero
+    with pytest.raises(OptionRangeError, match="between 0 and 1"):
+        confidence_factor(level)
+
+
+def bounds_text(lower_level: str, upper_level: str) -> str:
+    return (
+        "Feature Name: a\nFeature Type: continuous\n"
+        'Means: {"(0, 1)": 0.5}\n'
+        f'Lower Bounds ({lower_level}%-Confidence Interval): {{"(0, 1)": 0.5}}\n'
+        f'Upper Bounds ({upper_level}%-Confidence Interval): {{"(0, 1)": 0.5}}\n'
+    )
+
+
+def test_the_parser_rejects_bounds_of_a_zero_confidence_level() -> None:
+    # the parser divided by a factor of 0 and raised ZeroDivisionError
+    with pytest.raises(GraphTextError, match="not between 0% and 100%"):
+        parse_graph_text(bounds_text("0", "0"))
+
+
+def test_the_parser_rejects_bounds_of_two_confidence_levels() -> None:
+    # the parser read the level of the lower bounds only, so the standard deviations came from the wrong factor
+    with pytest.raises(GraphTextError, match="same confidence level"):
+        parse_graph_text(bounds_text("80", "95"))
