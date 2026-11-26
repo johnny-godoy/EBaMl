@@ -71,7 +71,7 @@ def test_a_call_without_the_model_fails_with_a_usage_error_and_not_a_traceback(
 
 def test_the_benchmark_script_lists_its_flags(capsys: pytest.CaptureFixture[str]) -> None:
     benchmark_app(["--help"])
-    assert _flags(capsys.readouterr().out) == {"--task", "--limit", "--model", "--output", "--progress"}
+    assert _flags(capsys.readouterr().out) == {"--task", "--limit", "--model", "--mode", "--output", "--progress"}
 
 
 def test_the_chat_and_server_commands_print_the_version(capsys: pytest.CaptureFixture[str]) -> None:

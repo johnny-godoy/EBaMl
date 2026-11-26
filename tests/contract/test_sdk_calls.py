@@ -18,6 +18,7 @@ SOURCES: list[Path] = sorted([*(ROOT / "src" / "ebaml").rglob("*.py"), *(ROOT / 
 # call of the sources needs a row here, so that a reviewer sees each new crossing of the boundary. The benchmark
 # passes answer_benchmark_question on as a value, so it is a reference and no call.
 CALLED = frozenset({
+    "answer_benchmark_question_sync",
     "chat_with_mcp_sync",
     "check_model_sync",
     "default_graph_options_sync",
@@ -28,7 +29,6 @@ CALLED = frozenset({
     "summarize_ebm_sync",
     "supported_providers_sync",
 })
-REFERENCED_ONLY = frozenset({"answer_benchmark_question_sync"})
 
 
 class _Call(ast.NodeVisitor):
@@ -73,7 +73,6 @@ CLASS_CALLS: list[tuple[str, ast.Call]] = [(name, call) for name, call in SCAN.c
 
 def test_the_sources_call_exactly_the_functions_of_the_table() -> None:
     assert {name for name, _ in FUNCTION_CALLS} == CALLED
-    assert SCAN.references >= REFERENCED_ONLY
 
 
 def test_every_name_of_baml_sdk_that_the_sources_use_exists_in_the_generated_stub() -> None:
