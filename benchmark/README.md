@@ -25,6 +25,7 @@ uv run python benchmark/run.py                       # every task
 uv run python benchmark/run.py --task jumps --limit 5 --output results.json
 uv run python benchmark/run.py --model anthropic/claude-haiku-4-5   # needs ANTHROPIC_API_KEY
 uv run python benchmark/run.py --no-progress                       # no progress bar on the error stream
+uv run python benchmark/run.py --mode vision --model openrouter/google/gemma-4-31b-it:free   # images, see below
 ```
 
 Questions are asked one at a time (free models are rate limited), two LLM turns each, at temperature 0: the model
@@ -33,6 +34,23 @@ reasons step by step, then states its final answer in the format of the task. Th
 README section "Choosing the model" lists the prefixes and the key variable of each one.
 
 `--output` saves every prompt, response and verdict. Token usage is the one the provider reports.
+
+## Graph modes
+
+`--mode` sets how each graph reaches the model, as `GraphOptions(mode=...)` does for `describe_graph`:
+
+| Mode | The request sends |
+| --- | --- |
+| `text` (default) | The question as the data file holds it. |
+| `vision` | The question with the values of the graph replaced by a note, and the PNG image of the graph. |
+| `mixed` | The question as it is, and the PNG image of the graph. |
+
+The image needs the extra `vision` and a model that reads images. It has the confidence band of the question if the
+question has bounds. The questions of the function recognition tasks write their graph as `Graph: {...}` with no bounds,
+and the other tasks write the graph text of `EBMGraph.to_text`.
+
+The scorer compares exact values. A value that the model reads from an image is an estimate, so `read-value`, `jumps`
+and `wide-confidence` are hard in vision mode by design: they measure how far an image alone takes the model.
 
 ## Scoring
 
