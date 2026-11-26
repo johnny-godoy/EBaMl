@@ -36,7 +36,8 @@ changes a fact is a bug.
   random.
 - The milestones 0.13.0 and 0.14.0 come first. 0.13.0 adds recourse plans to the local explanations: cost strategies
   and a weighted search through the MIP (`src/ebaml/local/counterfactuals.py`). 0.14.0 adds `--mode text|vision|mixed`
-  to `benchmark/run.py` (`docs/plans/vision-graphs.md`). Read the recourse code and the vision plan on `main` before you start: the restructured
+  to `benchmark/run.py`, with the image of each question built in that script. Read the recourse code and the code of
+  the graph modes (`benchmark/run.py`, `ebaml.llm.graph_views`) on `main` before you start: the restructured
   command keeps `--mode`, and the workloads cover the recourse search.
 </context>
 
