@@ -1080,3 +1080,14 @@ def test_to_text_tells_on_render_once_for_a_text_within_the_tolerance(status: St
 
 def test_to_text_without_on_render_returns_the_same_text() -> None:
     assert cont_graph().to_text() == cont_graph().to_text(on_render=lambda _graph: None)
+
+
+@pytest.mark.parametrize("level", [1.0, 0.0])
+def test_to_text_rejects_a_confidence_level_that_gives_no_readable_bounds(level: float) -> None:
+    # a level of 1 wrote infinite bounds, which are not valid JSON, and a level of 0 wrote bounds equal to the means
+    with pytest.raises(OptionRangeError, match="between 0 and 1"):
+        cont_graph().to_text(confidence_level=level)
+
+
+def test_to_text_ignores_the_confidence_level_without_bounds() -> None:
+    assert "Bounds" not in cont_graph().to_text(confidence_bounds=False, confidence_level=1.0)
