@@ -6,10 +6,12 @@ reads the proposal, corrects it, and passes its ``costs`` to ``RecourseOptions``
 an assumption, so the ``ScaledCost`` records its source and the facts say so.
 """
 
-from collections.abc import Mapping, Sequence
+import re
+from collections.abc import Collection, Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
 import attrs
+import orjson
 import structlog
 
 from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
@@ -94,15 +96,62 @@ def features_text(ebm: ExplainableBoostingModel, instance: Mapping[str, FeatureV
     Returns
     -------
     str
-        The lines, such as ``- income (continuous), current value 40``.
+        The lines, such as ``- "income" (continuous), current value 40``.
 
     """
     lines = []
     for feature_index in main_effect_features(ebm):
         name = ebm.feature_names_in_[feature_index]
-        feature_type = EBMGraph.from_ebm(ebm, feature_index).feature_type.value
-        lines.append(f"- {name} ({feature_type}), current value {instance[name]}")
+        # the name is a JSON string, so that the model sees where a name with spaces or brackets ends
+        quoted = orjson.dumps(name).decode()
+        lines.append(f"- {quoted} ({_feature_type(ebm, feature_index)}), current value {instance[name]}")
     return "\n".join(lines)
+
+
+def _feature_type(ebm: ExplainableBoostingModel, feature_index: int) -> str:
+    """Name the type of an input, as the graph of the input gives it.
+
+    Parameters
+    ----------
+    ebm: ExplainableBoostingModel
+        The EBM.
+    feature_index: int
+        The index of the input.
+
+    Returns
+    -------
+    str
+        The type, such as ``continuous`` or ``nominal``.
+
+    """
+    return EBMGraph.from_ebm(ebm, feature_index).feature_type.value
+
+
+# a name that a reply copied with the quotes or the type of its line of the prompt: '"income" (continuous)'
+_ECHOED_NAME = re.compile(r'^"?(?P<name>.*?)"?(?: \([a-z]+\))?$')
+
+
+def _known_name(feature: str, known: Collection[str]) -> str:
+    """Find the input that a rating names, also when the reply copied the quotes or the type of the line.
+
+    Parameters
+    ----------
+    feature: str
+        The name in the rating.
+    known: Collection[str]
+        The inputs of the model.
+
+    Returns
+    -------
+    str
+        The input, or ``feature`` unchanged if no input has that name.
+
+    """
+    if feature in known:
+        return feature
+    match = _ECHOED_NAME.match(feature)
+    bare = feature if match is None else match.group("name")
+    return bare if bare in known else feature
 
 
 def read_proposal(
@@ -111,6 +160,8 @@ def read_proposal(
     base: CostStrategy,
 ) -> DifficultyProposal:
     """Turn the ratings of the reply into a proposal, and drop each rating of a name that the model does not have.
+
+    A rating that copies the quotes or the type of its line of the prompt (``"income" (continuous)``) rates that input.
 
     Parameters
     ----------
@@ -130,7 +181,7 @@ def read_proposal(
     known = set(feature_names)
     difficulties: list[FeatureDifficulty] = []
     for rating in ratings:
-        feature = rating.feature
+        feature = _known_name(rating.feature, known)
         if feature not in known or feature in {item.feature for item in difficulties}:
             # a name that the model lacks cannot get a cost, and a second rating of a name would hide the first
             logger.warning("difficulty_dropped", feature=feature, known=feature in known)

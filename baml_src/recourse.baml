@@ -10,7 +10,9 @@ enum Difficulty {
 }
 
 class FeatureDifficulty {
-    feature: string @description("The name of the input, exactly as the list of inputs gives it."),
+    feature: string @description(
+        "The name of the input: the text between the quotes in the list of inputs, without the quotes and without the type.",
+    ),
     difficulty: Difficulty,
     reason: string @description("One sentence: why a person finds this change easy or hard."),
 }
@@ -42,7 +44,8 @@ function difficulty_user_msg(features: string, dataset_description: string) -> s
         - Moderate: a change that takes planning, money or some months.
         - Hard: a change that takes years, large costs or the help of other people.
         - VeryHard: a change that is possible only in rare cases, such as a long history or a fact of the past.
-        Rate every input in the list once, and use its name exactly as the list gives it, because a program matches the names.
+        Each line of the list gives the name of an input in quotes, then its type in brackets, then its current value.
+        Rate every input in the list once, and give its name exactly as the text between the quotes, without the quotes and without the type, because a program matches the names.
         Judge the effort of the change for a person, not how much the change helps the prediction, because a separate exact computation finds the changes that help.
         If an input cannot change at all, rate it VeryHard and say in the reason that the user should mark it as immutable, because the user decides what is impossible.
         Give one sentence of reason for each rating, because the user reads your proposal and corrects it before any plan is computed.
@@ -50,13 +53,13 @@ function difficulty_user_msg(features: string, dataset_description: string) -> s
 
         <examples>
         <example>
-        Input: savings (continuous), current value 1200. Rating: Easy. Reason: A person can add to their savings within weeks.
+        Input: "savings" (continuous), current value 1200. Name: savings. Rating: Easy. Reason: A person can add to their savings within weeks.
         </example>
         <example>
-        Input: education (nominal), current value "high school". Rating: Hard. Reason: A new degree takes years of study.
+        Input: "education" (nominal), current value high school. Name: education. Rating: Hard. Reason: A new degree takes years of study.
         </example>
         <example>
-        Input: number of past defaults (continuous), current value 2. Rating: VeryHard. Reason: The past cannot change, so the user should mark this input as immutable.
+        Input: "number of past defaults" (continuous), current value 2. Name: number of past defaults. Rating: VeryHard. Reason: The past cannot change, so the user should mark this input as immutable.
         </example>
         </examples>
     `

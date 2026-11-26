@@ -4,9 +4,11 @@ import attrs
 import pytest
 import structlog.testing
 
+from ebaml.core.ebm_classes import ExplainableBoostingClassifier
+from ebaml.llm import difficulties
 from ebaml.llm.difficulties import Rating, features_text, read_proposal
 from ebaml.local.costs import DataCost, Difficulty, UnitCost
-from tests.unit.ebaml.conftest import FittedClassifier, instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, fake_model, instance_of
 
 
 @attrs.frozen
@@ -28,9 +30,35 @@ def test_the_text_names_each_input_with_its_type_and_its_current_value(
     lines = features_text(ebm, instance).splitlines()
     assert len(lines) == len(ebm.feature_names_in_)
     for line, name in zip(lines, ebm.feature_names_in_, strict=True):
-        assert line.startswith(f"- {name} (")
+        assert line.startswith(f'- "{name}" (')
         assert line.endswith(f"current value {instance[name]}")
     assert {line.split("(")[1].split(")")[0] for line in lines} >= {"continuous", "nominal"}
+
+
+def continuous_type(_ebm: ExplainableBoostingClassifier, _feature_index: int) -> str:
+    return "continuous"
+
+
+def test_the_text_quotes_a_name_as_json_so_that_its_end_is_clear() -> None:
+    ebm = fake_model(feature_names_in_=['savings "net"'], term_features_=[(0,)])
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(difficulties, "_feature_type", continuous_type)
+        assert features_text(ebm, {'savings "net"': 1.0}) == '- "savings \\"net\\"" (continuous), current value 1.0'
+
+
+@pytest.mark.parametrize(
+    "echoed",
+    ["monthly savings (continuous)", '"monthly savings"', '"monthly savings" (continuous)'],
+)
+def test_a_rating_that_echoes_the_quotes_or_the_type_of_its_input_keeps_its_cost(echoed: str) -> None:
+    # a live model returned "monthly savings (continuous)", and the proposal dropped every rating
+    proposal = read_proposal([_Rating(echoed, "Easy", "cheap")], ["monthly savings", "age"], DataCost())
+    assert [item.feature for item in proposal.difficulties] == ["monthly savings"]
+
+
+def test_a_name_with_a_bracket_of_its_own_is_matched_as_it_is() -> None:
+    proposal = read_proposal([_Rating("size (m2)", "Hard", "r")], ["size (m2)"], DataCost())
+    assert [item.feature for item in proposal.difficulties] == ["size (m2)"]
 
 
 def test_each_rating_of_a_known_input_becomes_its_multiplier() -> None:

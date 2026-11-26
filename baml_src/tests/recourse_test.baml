@@ -24,8 +24,8 @@ class ReplyClient {
 }
 
 const INPUTS = `
-    - income (continuous), current value 40
-    - age (continuous), current value 35
+    - "income" (continuous), current value 40
+    - "age" (continuous), current value 35
 `;
 
 test "propose_difficulty parses one rating for each input and counts the tokens" {
@@ -44,7 +44,7 @@ test "propose_difficulty parses one rating for each input and counts the tokens"
 
 test "the difficulty prompt holds the data before the instructions and the scale" {
     let prompt = ProposeFeatureDifficulty@spec(INPUTS, default_graph_options()).prompt().text();
-    assert.is_true(prompt.includes("income (continuous), current value 40"));
+    assert.is_true(prompt.includes("\"income\" (continuous), current value 40"));
     assert.is_true(position_of(prompt, "<inputs>") < position_of(prompt, "<instructions>"));
     for (let level in ["- Easy:", "- Moderate:", "- Hard:", "- VeryHard:"]) {
         assert.is_true(prompt.includes(level));
@@ -58,6 +58,26 @@ test "the difficulty prompt rates the effort for the person and leaves immutabil
     let prompt = ProposeFeatureDifficulty@spec(INPUTS, default_graph_options()).prompt().text();
     assert.is_true(prompt.includes("not how much the change helps the prediction"));
     assert.is_true(prompt.includes("the user should mark it as immutable"));
-    assert.is_true(prompt.includes("use its name exactly as the list gives it"));
+    assert.is_true(
+        prompt.includes(
+            "give its name exactly as the text between the quotes, without the quotes and without the type",
+        ),
+    );
     assert.is_true(prompt.includes("corrects it before any plan is computed"))
+}
+
+test "the difficulty prompt asks for the name between the quotes, with no type, in the instructions and the examples" {
+    // A live model copied "monthly savings (continuous)" from a list with no quotes, and the program matched no name.
+    let prompt = ProposeFeatureDifficulty@spec(INPUTS, default_graph_options()).prompt().text();
+    assert.is_true(
+        prompt.includes("gives the name of an input in quotes, then its type in brackets"),
+    );
+    assert.is_true(
+        prompt.includes("Input: \"savings\" (continuous), current value 1200. Name: savings."),
+    );
+    assert.is_true(
+        prompt.includes(
+            "the text between the quotes in the list of inputs, without the quotes and without the type",
+        ),
+    )
 }

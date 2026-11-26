@@ -1765,7 +1765,7 @@ def test_propose_difficulties_sends_the_inputs_and_reads_the_reply(
     request = ProposeDifficultiesRequest(ebm, instance_of(data, 0), prompt=PromptOptions(dataset_description="D"))
     with capture_logs() as logs:
         proposal = descriptors.propose_difficulties(request)
-    assert calls["features"].splitlines()[0].startswith("- a (continuous), current value")
+    assert calls["features"].splitlines()[0].startswith('- "a" (continuous), current value')
     assert calls["opts"].dataset_description == "D"
     assert [(item.feature, item.multiplier) for item in proposal.difficulties] == [("a", 2.0)]
     assert proposal.costs.proposed_by_model

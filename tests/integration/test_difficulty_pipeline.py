@@ -23,7 +23,7 @@ def test_one_request_carries_every_input_with_its_current_value(
     fake_llm.handler = lambda _request: Reply(text=orjson.dumps(RATINGS).decode())
     propose_difficulties(ProposeDifficultiesRequest(ebm, INSTANCE, model=llm_model))
     (prompt,) = fake_llm.prompts
-    assert all(f"- {name} (continuous), current value {value}" in prompt for name, value in INSTANCE.items())
+    assert all(f'- "{name}" (continuous), current value {value}' in prompt for name, value in INSTANCE.items())
 
 
 def test_the_reply_becomes_a_scaled_cost_that_a_language_model_proposed(
