@@ -6,8 +6,9 @@ them can run ``baml generate``. The names ``graph_png``, ``graph_svg``, ``graph_
 load on first use too, because they need the extra ``vision``.
 """
 
-import importlib
+from collections.abc import Callable
 from importlib.metadata import version
+from types import ModuleType
 from typing import TYPE_CHECKING, cast
 
 # The hook module must load first, or the modules that load before it stay unchecked.
@@ -371,23 +372,35 @@ def __getattr__(name: str) -> object:
         If ``name`` is not a public name that loads on first use.
 
     """
-    # the names that load on first use, by the module that holds them
-    lazy_modules = {
-        "EBMDescription": "ebaml.llm.descriptors",
-        "LocalExplanation": "ebaml.llm.descriptors",
-        "describe_ebm": "ebaml.llm.descriptors",
-        "describe_graph": "ebaml.llm.descriptors",
-        "explain_instance": "ebaml.llm.descriptors",
-        "propose_difficulties": "ebaml.llm.descriptors",
-        "GraphImageOptions": "ebaml.graphs.graph_image",
-        "graph_figure": "ebaml.graphs.graph_image",
-        "graph_png": "ebaml.graphs.graph_image",
-        "graph_svg": "ebaml.graphs.graph_image",
+
+    # each loader imports its module by a literal name, so that no input can choose the module to import
+    def load_descriptors() -> ModuleType:
+        from ebaml.llm import descriptors  # ruff: ignore[import-outside-top-level] -- the import must wait until first use
+
+        return descriptors
+
+    def load_graph_image() -> ModuleType:
+        from ebaml.graphs import graph_image  # ruff: ignore[import-outside-top-level] -- the import must wait until first use
+
+        return graph_image
+
+    # the names that load on first use, by the loader of the module that holds them
+    loaders: dict[str, Callable[[], ModuleType]] = {
+        "EBMDescription": load_descriptors,
+        "LocalExplanation": load_descriptors,
+        "describe_ebm": load_descriptors,
+        "describe_graph": load_descriptors,
+        "explain_instance": load_descriptors,
+        "propose_difficulties": load_descriptors,
+        "GraphImageOptions": load_graph_image,
+        "graph_figure": load_graph_image,
+        "graph_png": load_graph_image,
+        "graph_svg": load_graph_image,
     }
-    if name not in lazy_modules:
+    if name not in loaders:
         msg = f"module {__name__!r} has no attribute {name!r}"
         raise AttributeError(msg)
-    value = getattr(importlib.import_module(lazy_modules[name]), name)
+    value = getattr(loaders[name](), name)
     globals()[name] = value
     return cast(object, value)  # getattr returns Any, and the hint names the real type
 
