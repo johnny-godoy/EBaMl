@@ -298,4 +298,4 @@ def test_an_import_without_matplotlib_names_the_extra(monkeypatch: pytest.Monkey
     monkeypatch.setitem(sys.modules, "matplotlib", None)
     monkeypatch.delitem(sys.modules, graph_image.__name__)
     with pytest.raises(MissingExtraError, match=re.escape('pip install "ebaml[vision]"')):
-        importlib.import_module(graph_image.__name__)
+        importlib.import_module("ebaml.graphs.graph_image")
