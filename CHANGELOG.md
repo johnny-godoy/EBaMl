@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.14.0'></a>
+## [0.14.0] - 2026-11-26
+
+### Added
+
+- `benchmark/run.py --mode text|vision|mixed` asks the TalkToEBM questions with the graph as text, as an image, or as both, so the accuracy of the graph modes can be measured. The BAML function `answer_benchmark_question` takes the PNG image of the graph in base64 (`png_base64`).
+
+### Fixed
+
+- `benchmark/run.py` counts an answer that runs out of the token limit as wrong and goes on, instead of stopping the run and losing every result.
+- `propose_difficulties` keeps the rating of an input when the model copies the type of the input with its name ("income (continuous)"). The prompt writes each name in quotes and asks for the text between the quotes, and the reader also accepts a name with its quotes or its type. Such a reply lost every rating.
+
 <a id='changelog-0.13.1'></a>
 ## [0.13.1] - 2026-11-26
 
