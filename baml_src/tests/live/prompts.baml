@@ -27,6 +27,16 @@ function ties_figure_to_denial(text: string, figure: string) -> bool {
 }
 
 testset "PromptChecks" {
+    test "decimals_of: lists the decimal numbers with their sign, and no whole number" {
+        assert.equal(decimals_of("about 0.8 at age 30, and -0.6 after 50"), ["0.8", "-0.6"])
+    }
+
+    test "marks_numbers_as_estimates: a number read from a picture needs a word of estimate" {
+        assert.is_true(!marks_numbers_as_estimates("The score is 0.8 for young people."));
+        assert.is_true(marks_numbers_as_estimates("The score is roughly 0.8 for young people."));
+        assert.is_true(marks_numbers_as_estimates("The score falls with age."))
+    }
+
     test "count_sentences: the period of a decimal does not end a sentence" {
         assert.equal(count_sentences("The debt ratio is 0.62. Income is low."), 2)
     }
@@ -126,6 +136,28 @@ function live_multiclass_facts() -> LocalFactTexts {
 // whether the model or the check is wrong.
 function log_reply(reply: string) -> null {
     log.info({ "reply": reply }, event_name = "live_reply")
+}
+
+// The age graph of the vision tests: its text, and its PNG in baml_src/tests/live/age_graph.png. The PNG is the image
+// that `graph_png` draws of this graph, with the score axis "change of the log-odds of default".
+const LIVE_AGE_GRAPH_TEXT = "Feature Name: age\nFeature Type: continuous\nMeans: {\"(18.0, 30.0)\": 0.8, \"(30.0, 50.0)\": 0.0, \"(50.0, 90.0)\": -0.6}\nLower Bounds (95%-Confidence Interval): {\"(18.0, 30.0)\": 0.702, \"(30.0, 50.0)\": -0.098, \"(50.0, 90.0)\": -0.796}\nUpper Bounds (95%-Confidence Interval): {\"(18.0, 30.0)\": 0.898, \"(30.0, 50.0)\": 0.098, \"(50.0, 90.0)\": -0.404}";
+
+function live_age_graph_png() -> string {
+    baml.media.Image.from_file("baml_src/tests/live/age_graph.png", "image/png").base64()
+}
+
+// The decimal numbers of `text`, such as "0.8" or "-0.6".
+function decimals_of(text: string) -> string[] {
+    baml.regex.new("-?\\d+\\.\\d+").match_all(text).map((found) -> {
+        found.text
+    })
+}
+
+// True when `text` quotes no decimal number, or marks its numbers as estimates. A value read from a picture is an
+// estimate, so a description of an image must not state one as exact.
+function marks_numbers_as_estimates(text: string) -> bool {
+    let estimate = baml.regex.new("(?i)\\b(about|approximately|around|roughly|nearly|estimated?|close to)\\b|~");
+    decimals_of(text).length() == 0 || estimate.has_match(text)
 }
 
 testset "Live" {
@@ -370,5 +402,38 @@ testset "Live" {
         // tests check the answers; this test checks only that the final turn is the bare answer.
         let answer = result.text.trim().to_lower_case();
         assert.is_true(baml.regex.new("^\\W*(yes|no)\\W*$").has_match(answer))
+    }
+
+    test "describe_graph_cot in vision mode: names the feature and calls the values that it reads estimates" {
+        let result = describe_graph_cot(null, 3, default_graph_options(), png_base64 = live_age_graph_png());
+        log_reply(result.text);
+        assert.is_true(result.text.to_lower_case().includes("age"));
+        assert.is_true(count_sentences(result.text) <= 4);
+        assert.is_true(marks_numbers_as_estimates(result.text))
+    }
+
+    test "describe_graph_cot in mixed mode: every decimal number of the reply comes from the graph text" {
+        let result = describe_graph_cot(LIVE_AGE_GRAPH_TEXT, 3, default_graph_options(), png_base64 = live_age_graph_png());
+        log_reply(result.text);
+        assert.is_true(result.text.to_lower_case().includes("age"));
+        assert.is_true(
+            decimals_of(result.text).every((number) -> {
+                LIVE_AGE_GRAPH_TEXT.includes(number)
+            }),
+        )
+    }
+
+    test "answer_benchmark_question in vision mode: the final turn follows the requested format" {
+        let question = "Below is the graph of a generalized additive model (GAM).\n\nFeature Name: age\nThe values of the graph are not in this text. The image above shows the graph: read the values from its axes.\n\nYour task is to determine if the graph is\na) monotone increasing\nb) monotone decreasing\nc) not monotone.\n\nWhat is the correct answer? Think step by step.";
+        let result = answer_benchmark_question(
+            question,
+            "'Increasing', 'Decreasing' or 'Not monotone'",
+            png_base64 = live_age_graph_png(),
+        );
+        log_reply(result.text);
+        let answer = result.text.trim().to_lower_case();
+        assert.is_true(
+            baml.regex.new("^\\W*(increasing|decreasing|not monotone)\\W*$").has_match(answer),
+        )
     }
 }
