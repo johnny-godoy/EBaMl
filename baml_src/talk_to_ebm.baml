@@ -586,22 +586,31 @@ function describe_ebm(
 // Benchmark (benchmark/): the questions end with "Think step by step.", so turn 1 reasons freely and turn 2
 // extracts the final answer in the format the scorer parses.
 
-function BenchmarkReasoning(question: string) -> string {
+// `png_base64` is the PNG image of the graph of the question, in base64, for the vision and mixed modes of the
+// benchmark. The image comes first in the user message, before the question that refers to it.
+function BenchmarkReasoning(question: string, png_base64: string? = null) -> string {
     client: RouterBenchmark
     prompt: `
         ${role("system")}
         ${graph_system_msg("an expert statistician and data scientist")}
         ${role("user")}
+        ${graph_image_part(png_base64)}
         ${question}
     `
 }
 
-function BenchmarkAnswer(question: string, reasoning: string, answer_format: string) -> string {
+function BenchmarkAnswer(
+    question: string,
+    reasoning: string,
+    answer_format: string,
+    png_base64: string? = null,
+) -> string {
     client: RouterBenchmark
     prompt: `
         ${role("system")}
         ${graph_system_msg("an expert statistician and data scientist")}
         ${role("user")}
+        ${graph_image_part(png_base64)}
         ${question}
         ${role("assistant")}
         ${reasoning}
@@ -612,14 +621,19 @@ function BenchmarkAnswer(question: string, reasoning: string, answer_format: str
     `
 }
 
+// `png_base64` is the PNG image of the graph of the question, or null in text mode. Both turns send it.
 function answer_benchmark_question(
     question: string,
     answer_format: string,
     client: ai.Client? = null,
     model: ModelSpec? = null,
+    png_base64: string? = null,
 ) -> Counted {
     let selected = select_client(client, model, benchmark_defaults());
-    let reasoning = run_counted(BenchmarkReasoning@spec(question), client = selected);
-    let answer = run_counted(BenchmarkAnswer@spec(question, reasoning.text, answer_format), client = selected);
+    let reasoning = run_counted(BenchmarkReasoning@spec(question, png_base64 = png_base64), client = selected);
+    let answer = run_counted(
+        BenchmarkAnswer@spec(question, reasoning.text, answer_format, png_base64 = png_base64),
+        client = selected,
+    );
     Counted { text: answer.text, usage: add_usage(reasoning.usage, answer.usage) }
 }

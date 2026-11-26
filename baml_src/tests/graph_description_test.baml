@@ -652,3 +652,21 @@ test "describe_graph_cot in vision mode sends the image in each of the three tur
     assert.is_true(echo.text.includes("The image gives no exact values."));
     assert.is_true(!echo.text.includes("<graph>"))
 }
+
+test "both turns of a benchmark question carry the image of its graph, before the question" {
+    let reasoning = request_body(BenchmarkReasoning@spec("QUESTION", png_base64 = TEST_PNG));
+    let answer = request_body(BenchmarkAnswer@spec("QUESTION", "REASONING", "'a' or 'b'", png_base64 = TEST_PNG));
+    assert.equal(count_of(reasoning, IMAGE_PART), 1);
+    assert.equal(count_of(answer, IMAGE_PART), 1);
+    assert.is_true(position_of(reasoning, "image_url") < position_of(reasoning, "QUESTION"))
+}
+
+test "a benchmark question in text mode carries no image" {
+    assert.equal(count_of(request_body(BenchmarkReasoning@spec("QUESTION")), IMAGE_PART), 0);
+    assert.equal(count_of(request_body(BenchmarkAnswer@spec("QUESTION", "R", "F")), IMAGE_PART), 0)
+}
+
+test "answer_benchmark_question sends the image in both turns" {
+    let echo = answer_benchmark_question("QUESTION", "'a' or 'b'", client = EchoClient {}, png_base64 = TEST_PNG);
+    assert.is_true(echo.text.includes("Summarize your response"))
+}
