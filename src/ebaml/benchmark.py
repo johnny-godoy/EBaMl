@@ -78,8 +78,11 @@ _INTERVAL_PATTERN = re.compile(rf"\(\s*({_NUMBER})\s*,\s*({_NUMBER})\s*\)")
 _THOUSANDS_SEPARATOR = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 # "a)", wherever it is, or a bare "a" at the start of the answer
 _CHOICE_PATTERNS = (re.compile(r"\b([a-e])\)"), re.compile(r"^\W*([a-e])\b"))
-# "not monotone" goes first: it contains none of the others, but an answer may well say "not increasing"
-_MONOTONICITY_LABELS = ("not monotone", "increasing", "decreasing")
+# "Not monotonic", "non-monotone" and "neither increasing nor decreasing" all say "not monotone". The pattern goes
+# first, because such an answer also holds the word "increasing" or "decreasing".
+_NOT_MONOTONE_PATTERN = re.compile(r"\b(?:not|non)[\s-]*monoton|\bneither\s+(?:increasing|decreasing)\b")
+_NOT_MONOTONE = "not monotone"
+_DIRECTION_LABELS = ("increasing", "decreasing")
 
 
 def _parse_choice(text: str) -> Answer | None:
@@ -109,7 +112,7 @@ def _parse_monotonicity(text: str) -> Answer | None:
     Parameters
     ----------
     text: str
-        The answer, such as ``Increasing``, ``monotone decreasing`` or ``Not monotone.``.
+        The answer, such as ``Increasing``, ``monotone decreasing``, ``Not monotone.`` or ``Non-monotonic``.
 
     Returns
     -------
@@ -118,7 +121,9 @@ def _parse_monotonicity(text: str) -> Answer | None:
 
     """
     lowered = text.lower()
-    return next((label for label in _MONOTONICITY_LABELS if label in lowered), None)
+    if _NOT_MONOTONE_PATTERN.search(lowered):
+        return _NOT_MONOTONE
+    return next((label for label in _DIRECTION_LABELS if label in lowered), None)
 
 
 def _parse_number(text: str) -> Answer | None:
