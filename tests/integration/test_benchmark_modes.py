@@ -12,8 +12,8 @@ from benchmark.run import DATA_DIR, ModeAsker, question_graph, question_view
 
 import baml_sdk
 from ebaml import GraphImageOptions, GraphMode, ModelOptions, graph_png
-from ebaml.benchmark import Task, load_questions
-from tests.conftest import FakeLLM, RecordedRequest
+from ebaml.benchmark import Task, load_questions, run_task
+from tests.conftest import FakeLLM, RecordedRequest, Reply
 
 # one question in the format of EBMGraph.to_text, with bounds, and one in the "Graph: {...}" format, with no bounds
 JUMPS: str = load_questions(Task.JUMPS, DATA_DIR)[0].prompt
@@ -108,3 +108,15 @@ def test_the_graph_of_the_graph_format_has_the_values_of_the_question() -> None:
     graph = question_graph(FUNCTION)
     assert list(graph.scores) == list(values.values())
     assert graph.x_vals[0] == tuple(float(end) for end in next(iter(values))[1:-1].split(","))
+
+
+def test_an_answer_that_runs_out_of_tokens_counts_as_wrong_and_the_run_goes_on(
+    llm_model: ModelOptions,
+    fake_llm: FakeLLM,
+) -> None:
+    # a reasoning model can use up the token limit; the run stopped at the first such answer, and lost every result
+    fake_llm.handler = lambda _request: Reply(text="", finish_reason="length")
+    questions = load_questions(Task.MONOTONICITY, DATA_DIR)[:2]
+    result = run_task(Task.MONOTONICITY, questions, ModeAsker(GraphMode.TEXT, _spec(llm_model)))
+    assert [outcome.correct for outcome in result.outcomes] == [False, False]
+    assert [outcome.response for outcome in result.outcomes] == ["", ""]

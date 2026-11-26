@@ -22,6 +22,7 @@ from typing import Annotated
 import attrs
 import cyclopts
 import orjson
+import structlog
 from baml_bridge.errors import BamlError
 
 import baml_sdk
@@ -32,6 +33,7 @@ from ebaml.graphs.graph_text import parse_str_tuple_to_float_tuple
 from ebaml.llm.options import ModelOptions
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
+logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 # the lines of a question that hold the values of its graph: from the feature name to the last line of values
 _DATA_BLOCK = re.compile(
     r"^Feature Name: (?P<name>.*)\n(?:Feature Type: .*\n)?(?:(?:Graph|Means|Lower Bounds|Upper Bounds)\b.*(?:\n|$))+",
@@ -248,16 +250,31 @@ class ModeAsker:
         Returns
         -------
         baml_sdk.Counted
-            The answer and its token usage.
+            The answer and its token usage. A reply that the token limit cuts off is an empty answer, which the scorer
+            counts as wrong, as the live benchmark tests do. Its usage is zero, because the error carries no count.
+
+        Raises
+        ------
+        BamlError
+            If the request fails for another reason than the token limit.
 
         """
         view = question_view(question, self.mode)
-        return baml_sdk.answer_benchmark_question_sync(
-            question=view.question,
-            answer_format=answer_format,
-            model=self.model,
-            png_base64=view.png_base64,
-        )
+        try:
+            return baml_sdk.answer_benchmark_question_sync(
+                question=view.question,
+                answer_format=answer_format,
+                model=self.model,
+                png_base64=view.png_base64,
+            )
+        except BamlError as error:
+            if (
+                error.class_name != "ai.errors.FinishReasonError"
+                or getattr(error.value, "finish_reason", None) != "MaxTokens"
+            ):
+                raise
+            logger.warning("answer_cut_off", mode=str(self.mode))
+            return baml_sdk.Counted(text="", usage=baml_sdk.TokenUsage(input_tokens=0, output_tokens=0, samples=[]))
 
 
 app: cyclopts.App = cyclopts.App(name="run.py", help=__doc__.splitlines()[0], result_action="return_value")
