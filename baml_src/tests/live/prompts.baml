@@ -164,8 +164,8 @@ testset "Live" {
     test "difficulty proposal: one rating for each input, with its exact name, and a past fact is the hardest" {
         let ratings = ProposeFeatureDifficulty(
             `
-                - monthly savings (continuous), current value 200
-                - number of past defaults (continuous), current value 2
+                - "monthly savings" (continuous), current value 200
+                - "number of past defaults" (continuous), current value 2
             `,
             default_graph_options(),
         );
