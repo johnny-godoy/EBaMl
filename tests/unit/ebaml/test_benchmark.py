@@ -109,6 +109,12 @@ def test_parse_choice(text: str, expected: str | None) -> None:
         ("not monotone: it is not increasing", "not monotone"),
         ("a) monotone increasing", "increasing"),
         ("I cannot tell", None),
+        # these answers said "not monotone" in other words, and the parser read no label or "increasing"
+        ("Not monotonic.", "not monotone"),
+        ("**Non-monotone**", "not monotone"),
+        ("non monotonic", "not monotone"),
+        ("Neither increasing nor decreasing", "not monotone"),
+        ("It is neither decreasing nor increasing.", "not monotone"),
     ],
 )
 def test_parse_monotonicity(text: str, expected: str | None) -> None:
