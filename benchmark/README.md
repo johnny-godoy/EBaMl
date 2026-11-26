@@ -58,6 +58,39 @@ TalkToEBM's notebooks print each answer next to the solution and leave the compa
 `ebaml.benchmark.is_correct` parses both and compares the values, so `(a)` matches `a)`, `0.50` matches `0.5` and
 `Not monotone.` matches `Not monotone`, but `0.51` does not match `0.5`. An answer that cannot be parsed is wrong.
 
+## Results of the graph modes
+
+One run on 2026-11-26, with the model `openrouter/nvidia/nemotron-3.5-super-vl:free`, a free model that reads images.
+Each mode asked the first 10 questions of each task (`--limit 10`), at temperature 0. The table gives the number of
+correct answers out of 10.
+
+| Task | `text` | `vision` | `mixed` |
+| --- | :---: | :---: | :---: |
+| `function-recognition` | 10 | 10 | 10 |
+| `function-recognition-hard` | 10 | 10 | 10 |
+| `jumps` | 10 | 2 | 10 |
+| `monotonicity` | 10 | 9 | 10 |
+| `read-value` | 10 | 0 | 10 |
+| `wide-confidence` | 10 | 2 | 10 |
+| All tasks | 60 | 33 | 60 |
+
+- Vision mode is as accurate as the text on the tasks about the shape of a graph: the function and the monotonicity.
+- Vision mode fails the tasks that need an exact value. Its answers are close estimates, for example `0.022` for the
+  solution `0.02253`, and the scorer counts only an exact value as correct.
+- Mixed mode is as accurate as text mode on these questions. The text alone already answers every question, so the
+  run shows no gain from the image.
+- A request in vision mode has fewer input tokens: about 13,000 for 10 questions of a task, against 30,000 to 90,000 in
+  text mode. The image costs fewer tokens than the values of a long graph.
+- 3 answers of vision mode ran out of the token limit, and the scorer counted them as wrong.
+
+The sample is small: 10 questions for each task, one model and one run. The results do not show that one mode is better
+for other models or other questions. Run the command again with a larger `--limit` before you choose a mode on these
+numbers:
+
+```bash
+uv run python benchmark/run.py --limit 10 --mode vision --model openrouter/nvidia/nemotron-3.5-super-vl:free
+```
+
 ## Left out
 
 - The notebooks (`benchmark/notebooks/`) that generated the questions from an `all_graphs.pkl`, which is not in the
