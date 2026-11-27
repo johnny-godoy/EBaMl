@@ -245,6 +245,30 @@ capabilities:
     keywords: [cost, strategy, recourse, difficulty, counterfactual, plan]
     status: active
 
+  - id: llm-sdk-step
+    responsibility: Name one call of a baml_sdk function as a step that a generator pipeline yields to its driver
+    owner: ebaml.llm
+    symbol: ebaml.llm.sdk_steps:SDKCall
+    consumers: [ebaml.llm]
+    keywords: [sdk, call, step, pipeline, generator, baml]
+    status: active
+
+  - id: llm-pipeline-driver
+    responsibility: Run the steps of a generator pipeline with the sync or the async functions of baml_sdk
+    owner: ebaml.llm
+    symbol: ebaml.llm.sdk_steps:Driver
+    consumers: [ebaml.llm]
+    keywords: [driver, pipeline, sync, async, run, step]
+    status: active
+
+  - id: llm-pipeline-run
+    responsibility: Move a generator pipeline from step to step with the reply or the error of each step
+    owner: ebaml.llm
+    symbol: ebaml.llm.sdk_steps:PipelineRun
+    consumers: [ebaml.llm]
+    keywords: [pipeline, run, send, throw, generator, step]
+    status: active
+
 # Approved overlaps of two contracts. Add an entry only for a pair that scripts.architecture.contract_overlap reports, and
 # write why the two contracts stay apart (for example, a consumer defines its own Protocol to keep the import direction).
 exceptions: []
