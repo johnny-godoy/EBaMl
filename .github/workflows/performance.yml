@@ -1,0 +1,119 @@
+name: Performance
+
+# The performance benchmark (benchmark/performance/). It sends no real request: the LLM calls go to a local fake server.
+#
+# On a pull request, the job measures the base and the head in the same job, on the same runner, with the workloads of
+# the head, and compares the median time of each workload. A CI runner changes its speed from one job to the next, so
+# the job never compares with an absolute time. It fails only when a workload is more than 25 % slower and more than
+# 2 ms slower. A comment on the pull request shows the table of the changes.
+#
+# The base runs in the environment of the head, with the source of the base first on PYTHONPATH. So the comparison
+# measures the change of the code of EBaMl, and not a change of the versions of its dependencies.
+#
+# The weekly run measures main and keeps the summary as an artifact for 90 days. benchmark/performance/README.md says
+# how to calibrate the threshold from these runs.
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "baml_src/**"
+      - "baml.toml"
+      - "benchmark/**"
+      - "tests/conftest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/performance.yml"
+  schedule:
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: performance-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  OPENROUTER_API_KEY: unused # the benchmark sends no real request; the key is only read when a request is sent
+  PERF: /tmp/performance
+
+jobs:
+  performance:
+    name: performance
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write # the comment with the table of the changes
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the base commit of the pull request must exist locally
+      - uses: ./.github/actions/setup
+      - name: Cache the fitted models and the Titanic data
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            benchmark/performance/.models
+            ~/scikit_learn_data
+          key: performance-models-${{ hashFiles('benchmark/performance/models.py', 'uv.lock') }}
+      - name: Measure the head
+        run: |
+          mkdir -p "$PERF"
+          uv run python benchmark/run.py performance --output "$PERF/head.json" --no-progress
+      - name: Check out the base and generate its BAML SDK
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add /tmp/base "$BASE_SHA"
+          (cd /tmp/base && baml generate)
+      - name: Measure the base with the workloads of the head
+        if: github.event_name == 'pull_request'
+        run: |
+          PYTHONPATH=/tmp/base/src uv run --no-sync python benchmark/run.py performance \
+            --output "$PERF/base.json" --no-progress
+      - name: Compare the base with the head
+        id: compare
+        if: github.event_name == 'pull_request'
+        run: |
+          if uv run python benchmark/run.py performance compare "$PERF/base.json" "$PERF/head.json" \
+            --markdown "$PERF/report.md" --gate; then
+            echo "slower=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "slower=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$PERF/report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Show the comparison on the pull request
+        # A pull request from a fork has a token with no write access, so the table stays in the run summary.
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker="<!-- performance-report -->"
+          { echo "$marker"; cat "$PERF/report.md"; } > "$PERF/comment.md"
+          existing=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+            --jq "[.[] | select(.body | startswith(\"$marker\")) | .id] | first // empty")
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F "body=@$PERF/comment.md" > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F "body=@$PERF/comment.md" > /dev/null
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: performance-${{ github.event_name }}-${{ github.sha }}
+          path: ${{ env.PERF }}
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Fail if a workload is slower
+        if: steps.compare.outputs.slower == 'true'
+        run: |
+          echo "::error::A workload of the performance benchmark is more than 25 % slower. See the comparison in the run summary."
+          exit 1
