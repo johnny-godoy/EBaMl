@@ -197,3 +197,8 @@ def test_a_table_keeps_the_density_of_prose_of_each_entry_when_it_is_written_and
         ModelKey("p", "m"),
     ).prose_bytes_per_token == pytest.approx(4.38)
     assert WeightsTable.from_bytes(table.to_bytes()).default.prose_bytes_per_token == pytest.approx(4.0)
+
+
+@given(text=st.text() | st.text(alphabet='0123456789 .,:-()[]{}"abcxyz\n'))
+def test_the_digit_count_equals_the_count_of_str_isdigit_over_each_character(text: str) -> None:
+    assert TextFeatures.of(text).digits == sum(char.isdigit() for char in text)
