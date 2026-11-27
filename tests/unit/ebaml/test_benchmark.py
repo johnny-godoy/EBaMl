@@ -30,7 +30,7 @@ from ebaml.benchmark import (
 )
 from tests.unit.ebaml.conftest import call_mismatches, protocol_mismatches, same_type, sdk_fields, sdk_signature
 
-DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "data"
+DATA_DIR = Path(__file__).resolve().parents[3] / "benchmark" / "accuracy" / "data"
 
 
 @attrs.frozen
