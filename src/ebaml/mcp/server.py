@@ -653,19 +653,21 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
     ) -> str:
         """Ask a language model to describe the whole model in words.
 
-        The first call is slow, and the server keeps the text of each mode. mode and vision_fallback work as in
+        The first call is slow, and the server keeps the result of each mode. mode and vision_fallback work as in
         describe_feature. If the description of some features failed, for example after a rate limit, the text covers
-        the other features and ends with a line "failed_features:" that names each failed feature and its error. Call
-        the tool again to describe them.
+        the other features, and failed_features names each failed feature with its error. Call the tool again to
+        describe them.
 
         Returns
         -------
         str
-            The description, and the failed features if any.
+            JSON with the description in text, the interaction terms and the features that it leaves out in
+            skipped_terms and skipped_features, and the features that failed in failed_features.
 
         """
         with _tool_errors():
-            return await llm_tools.describe_model(store, llm, GraphOptions(mode=mode, vision_fallback=vision_fallback))
+            graph = GraphOptions(mode=mode, vision_fallback=vision_fallback)
+            return _json(attrs.asdict(await llm_tools.describe_model(store, llm, graph)))
 
     @server.tool()
     async def propose_difficulties(

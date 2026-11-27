@@ -52,10 +52,10 @@ def test_describe_model_keeps_one_text_for_each_mode(
     monkeypatch.setattr(llm_tools, "describe_ebm_async", awaiting(fake_describe_ebm))
     store = ModelStore(ebm=continuous_ebm[0])
     vision = GraphOptions(mode=GraphMode.VISION)
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "described in text"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, vision)) == "described in vision"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, vision)) == "described in vision"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "described in text"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "described in text"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, vision)).text == "described in vision"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, vision)).text == "described in vision"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "described in text"
     assert seen == [GraphMode.TEXT, GraphMode.VISION]
 
 
@@ -92,10 +92,10 @@ def test_describe_model_computes_the_text_once(
 
     monkeypatch.setattr(llm_tools, "describe_ebm_async", awaiting(fake_describe_ebm))
     store = ModelStore(ebm=ebm)
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "model text"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "model text"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "model text"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "model text"
     assert calls == [LLM]
-    assert store.described("original", GraphMode.TEXT) == "model text"
+    assert store.described("original", GraphMode.TEXT) == EBMDescription("model text", [], [])
 
 
 def test_describe_model_never_returns_the_description_of_the_model_before_an_edit(
@@ -111,10 +111,10 @@ def test_describe_model_never_returns_the_description_of_the_model_before_an_edi
         return EBMDescription(f"description {len(scores_seen)}", [], [])
 
     monkeypatch.setattr(llm_tools, "describe_ebm_async", awaiting(fake_describe_ebm))
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 1"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 1"
     store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 2"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 2"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 2"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 2"
     assert scores_seen[1] == pytest.approx(5.0)
     assert scores_seen[0] != pytest.approx(5.0)
 
@@ -135,11 +135,11 @@ def test_an_edit_during_the_llm_call_leaves_no_stale_description(
         return EBMDescription(f"description {len(calls)}", [], [])
 
     monkeypatch.setattr(llm_tools, "describe_ebm_async", awaiting(fake_describe_ebm))
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 1"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 1"
     assert store.described("original", GraphMode.TEXT) is None
     assert store.described(store.editing().revision, GraphMode.TEXT) is None
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 2"
-    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)) == "description 2"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 2"
+    assert asyncio.run(llm_tools.describe_model(store, LLM, TEXT)).text == "description 2"
     assert len(calls) == 2
 
 
@@ -164,7 +164,7 @@ def test_propose_feature_difficulties_reads_the_row_and_returns_the_arguments_of
     assert advice.difficulty_from_model
 
 
-def test_describe_model_names_each_failed_feature_and_keeps_no_partial_text(
+def test_describe_model_names_each_failed_feature_and_keeps_no_partial_result(
     continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -177,8 +177,14 @@ def test_describe_model_names_each_failed_feature_and_keeps_no_partial_text(
 
     monkeypatch.setattr(llm_tools, "describe_ebm_async", awaiting(fake_describe_ebm))
     store = ModelStore(ebm=continuous_ebm[0])
-    text = asyncio.run(llm_tools.describe_model(store, LLM, TEXT))
-    assert text == "partial text\n\nfailed_features: b (The provider limited the rate.)"
+    described = asyncio.run(llm_tools.describe_model(store, LLM, TEXT))
+    message = "The provider limited the rate.\nTo fix it:\n  1. Wait."
+    assert described == llm_tools.ModelDescription(
+        "partial text",
+        [],
+        [],
+        [llm_tools.FailedFeature("b", "RateLimitedError", message)],
+    )
     asyncio.run(llm_tools.describe_model(store, LLM, TEXT))
     # the store keeps no partial text, so the second call asks again
     assert calls == [0, 1]
