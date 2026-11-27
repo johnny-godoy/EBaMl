@@ -1,5 +1,6 @@
 """The LLM tools of the MCP server, through an in-memory client, the real describe functions and a local LLM server."""
 
+import orjson
 import pytest
 from mcp import Client
 from mcp_types import TextContent
@@ -66,6 +67,18 @@ async def test_describe_model_asks_once_and_keeps_the_text_for_the_revision(
     assert first == second
     assert sent > 0
     assert len(fake_llm.requests) == sent, "the second call must send no request"
+
+
+async def test_describe_model_names_a_feature_that_the_provider_rate_limits(
+    served: tuple[ModelStore, ModelOptions],
+    fake_llm: FakeLLM,
+) -> None:
+    store, llm = served
+    fake_llm.handler = lambda request: Reply(status=429) if "Feature Name: fare" in request.prompt else Reply()
+    is_error, text = await _call(store, llm, "describe_model", {})
+    assert not is_error, text
+    failed = orjson.loads(text)["failed_features"]
+    assert [(failure["feature"], failure["error_type"]) for failure in failed] == [("fare", "RateLimitedError")]
 
 
 async def test_an_edit_makes_the_server_describe_the_new_head_again(

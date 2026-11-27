@@ -21,6 +21,7 @@ from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, Fram
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import DataFileError, EditError, InvalidInstanceError, UnsupportedModelError
 from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession, RevisionInfo
+from ebaml.llm.ebm_description import EBMDescription
 
 
 @attrs.frozen(eq=False)
@@ -42,10 +43,10 @@ class RevisionRead:
 
 @attrs.frozen
 class _Described:
-    """The text of ``describe_ebm`` and the revision that it describes."""
+    """The result of ``describe_ebm`` and the revision that it describes."""
 
     revision: str
-    text: str
+    description: EBMDescription
 
 
 def _start_session(ebm: ExplainableBoostingModel) -> EditSession | None:
@@ -177,7 +178,7 @@ class ModelStore:
             raise UnsupportedModelError(msg)
         return self.session
 
-    def described(self, revision: str, mode: GraphMode) -> str | None:
+    def described(self, revision: str, mode: GraphMode) -> EBMDescription | None:
         """Give the kept description of the model if it describes this revision in this graph mode.
 
         Parameters
@@ -189,14 +190,14 @@ class ModelStore:
 
         Returns
         -------
-        str | None
-            The output of ``describe_ebm``, or ``None`` if the store keeps none for this revision.
+        EBMDescription | None
+            The result of ``describe_ebm``, or ``None`` if the store keeps none for this revision.
 
         """
         kept = self._described.get(mode)
-        return kept.text if kept is not None and kept.revision == revision else None
+        return kept.description if kept is not None and kept.revision == revision else None
 
-    def keep_description(self, revision: str, text: str, mode: GraphMode) -> None:
+    def keep_description(self, revision: str, description: EBMDescription, mode: GraphMode) -> None:
         """Keep the description of a revision, but only if the head is still this revision.
 
         An edit during the slow LLM call moves the head. The description then describes a model that is no longer the
@@ -205,16 +206,16 @@ class ModelStore:
         Parameters
         ----------
         revision: str
-            The fixed name of the revision that the text describes.
-        text: str
-            The output of ``describe_ebm``.
+            The fixed name of the revision that the description describes.
+        description: EBMDescription
+            The result of ``describe_ebm``.
         mode: GraphMode
             How the graphs reached the LLM.
 
         """
         head = ORIGINAL if self.session is None else self.session.revision
         if head == revision:
-            self._described[mode] = _Described(revision, text)
+            self._described[mode] = _Described(revision, description)
 
     def feature_index(self, feature: str) -> int:
         """Find the index of a feature by its name.

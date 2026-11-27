@@ -4,16 +4,82 @@ Each tool awaits the async form of its LLM call, so the server serves other tool
 """
 
 from collections.abc import Mapping
+from typing import Self
 
 import attrs
 
 from ebaml.core.custom_types import FeatureValue
 from ebaml.llm.async_descriptors import describe_ebm_async, describe_graph_async, propose_difficulties_async
 from ebaml.llm.difficulties import FeatureDifficulty
+from ebaml.llm.ebm_description import EBMDescription
 from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ProposeDifficultiesRequest
 from ebaml.mcp.explain_tools import BASE_STRATEGIES, CostStrategyName, instance_values
 from ebaml.mcp.model_store import ModelStore
+
+
+@attrs.frozen
+class FailedFeature:
+    """A feature whose description failed, as the output of ``describe_model`` names it.
+
+    Attributes
+    ----------
+    feature: str
+        The name of the feature.
+    error_type: str
+        The class of the error, for example ``RateLimitedError``.
+    message: str
+        The message of the error, with the steps that fix it.
+
+    """
+
+    feature: str
+    error_type: str
+    message: str
+
+
+@attrs.frozen
+class ModelDescription:
+    """The output of ``describe_model``: the description of the model and the parts that it does not cover.
+
+    Attributes
+    ----------
+    text: str
+        The description.
+    skipped_terms: list[str]
+        The interaction terms that the description leaves out.
+    skipped_features: list[str]
+        The features that have no graph, so the description leaves them out.
+    failed_features: list[FailedFeature]
+        The features whose description failed. Call the tool again to describe them.
+
+    """
+
+    text: str
+    skipped_terms: list[str]
+    skipped_features: list[str]
+    failed_features: list[FailedFeature]
+
+    @classmethod
+    def of(cls, description: EBMDescription) -> Self:
+        """Build the output from the result of ``describe_ebm``.
+
+        Parameters
+        ----------
+        description: EBMDescription
+            The result.
+
+        Returns
+        -------
+        Self
+            The output, with the class and the message of each error.
+
+        """
+        failed = [
+            FailedFeature(failure.feature, type(failure.error).__name__, str(failure.error))
+            for failure in description.failed_features
+        ]
+        return cls(description.text, description.skipped_terms, description.skipped_features, failed)
 
 
 @attrs.frozen
@@ -63,13 +129,12 @@ async def describe_feature(store: ModelStore, llm: ModelOptions, feature: str, g
     return await describe_graph_async(request)
 
 
-async def describe_model(store: ModelStore, llm: ModelOptions, graph: GraphOptions) -> str:
-    """Ask the LLM to describe the whole model at the head. The store keeps the text of each mode for the revision.
+async def describe_model(store: ModelStore, llm: ModelOptions, graph: GraphOptions) -> ModelDescription:
+    """Ask the LLM to describe the whole model at the head. The store keeps the result of each mode for the revision.
 
-    The LLM call runs on a revision with no lock. If an edit moves the head during the call, the store drops the text,
-    so the next call describes the new head. If the description of some features failed, the text ends with a
-    ``failed_features`` line that names each of them with the first line of its error. The store keeps no such text,
-    so the next call asks again.
+    The LLM call runs on a revision with no lock. If an edit moves the head during the call, the store drops the result,
+    so the next call describes the new head. The store keeps no result with failed features, so the next call asks
+    again.
 
     Parameters
     ----------
@@ -82,22 +147,17 @@ async def describe_model(store: ModelStore, llm: ModelOptions, graph: GraphOptio
 
     Returns
     -------
-    str
-        The text of ``describe_ebm``, and the ``failed_features`` line if a feature failed.
+    ModelDescription
+        The description, the parts that it leaves out, and the features that failed.
 
     """
     read = store.read()
-    kept = store.described(read.info.revision, graph.mode)
-    if kept is not None:
-        return kept
-    description = await describe_ebm_async(DescribeEBMRequest(read.model, graph=graph, model=llm))
-    if description.failed_features:
-        failed = "; ".join(
-            f"{failure.feature} ({str(failure.error).splitlines()[0]})" for failure in description.failed_features
-        )
-        return f"{description.text}\n\nfailed_features: {failed}"
-    store.keep_description(read.info.revision, description.text, graph.mode)
-    return description.text
+    description = store.described(read.info.revision, graph.mode)
+    if description is None:
+        description = await describe_ebm_async(DescribeEBMRequest(read.model, graph=graph, model=llm))
+        if not description.failed_features:
+            store.keep_description(read.info.revision, description, graph.mode)
+    return ModelDescription.of(description)
 
 
 async def propose_feature_difficulties(

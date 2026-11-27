@@ -18,11 +18,11 @@ from mcp.server.mcpserver import MCPServer
 from mcp_types import ImageContent, TextContent, TextResourceContents
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
-from ebaml.core.exceptions import DataFileError, HistoryError
+from ebaml.core.exceptions import DataFileError, HistoryError, RateLimitedError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.graph_image import GraphImageOptions, graph_png
 from ebaml.graphs.model_kinds import model_kind
-from ebaml.llm.ebm_description import EBMDescription
+from ebaml.llm.ebm_description import EBMDescription, FeatureFailure
 from ebaml.llm.options import GraphOptions, ModelOptions
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools as llm_tools_module
@@ -211,6 +211,13 @@ async def test_a_model_with_an_interaction_names_it_and_the_tools_skip_it(
     assert "no feature 'p x q'" in interaction_graph[1]
 
 
+def _described_text(result: tuple[bool, str]) -> str:
+    is_error, output = result
+    assert not is_error
+    text: str = orjson.loads(output)["text"]
+    return text
+
+
 async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     continuous_ebm: FittedClassifier,
     monkeypatch: pytest.MonkeyPatch,
@@ -220,8 +227,17 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     def fake_describe_feature(_store: ModelStore, _llm: ModelOptions, feature: str, graph: GraphOptions) -> str:
         return f"graph {feature} in {graph.mode} mode, fallback {graph.vision_fallback}"
 
-    def fake_describe_model(_store: ModelStore, _llm: ModelOptions, graph: GraphOptions) -> str:
-        return f"model text in {graph.mode} mode, fallback {graph.vision_fallback}"
+    def fake_describe_model(
+        _store: ModelStore,
+        _llm: ModelOptions,
+        graph: GraphOptions,
+    ) -> llm_tools_module.ModelDescription:
+        return llm_tools_module.ModelDescription(
+            f"model text in {graph.mode} mode, fallback {graph.vision_fallback}",
+            [],
+            [],
+            [],
+        )
 
     monkeypatch.setattr(server_module.llm_tools, "describe_feature", awaiting(fake_describe_feature))
     monkeypatch.setattr(server_module.llm_tools, "describe_model", awaiting(fake_describe_model))
@@ -233,13 +249,13 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     assert names["with"] - names["without"] == {"describe_feature", "describe_model", "propose_difficulties"}
     server = create_server(ModelStore(ebm=ebm), options)
     assert await _call(server, "describe_feature", {"feature": "a"}) == (False, "graph a in text mode, fallback raise")
-    assert await _call(server, "describe_model") == (False, "model text in text mode, fallback raise")
+    assert _described_text(await _call(server, "describe_model")) == "model text in text mode, fallback raise"
     vision: dict[str, object] = {"mode": "vision", "vision_fallback": "text"}
     assert await _call(server, "describe_feature", {"feature": "a", **vision}) == (
         False,
         "graph a in vision mode, fallback text",
     )
-    assert await _call(server, "describe_model", vision) == (False, "model text in vision mode, fallback text")
+    assert _described_text(await _call(server, "describe_model", vision)) == "model text in vision mode, fallback text"
 
 
 async def test_two_llm_tool_calls_run_at_the_same_time(
@@ -345,10 +361,35 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
         first = await session.call_tool("describe_model", {})
         second = await session.call_tool("describe_model", {})
     texts = [result.content[0].text for result in (feature, first, second)]  # pyrefly: ignore[missing-attribute] -- the tools return text content
-    assert texts == ["words about feature 1", "words about the model, call 1", "words about the model, call 1"]
+    assert texts[0] == "words about feature 1"
+    assert [orjson.loads(text)["text"] for text in texts[1:]] == ["words about the model, call 1"] * 2
     assert missing.is_error
     assert graph_calls == [(1, options)]
     assert model_calls == [options]
+
+
+async def test_describe_model_gives_json_with_the_failed_features(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # contract 4: the tool names each part of the model that the description does not cover
+    failure = FeatureFailure("b", RateLimitedError("The provider limited the rate."))
+
+    def fake_describe_ebm(_request: DescribeEBMRequest) -> EBMDescription:
+        return EBMDescription("partial", ["a x b"], [], failed_features=[failure])
+
+    monkeypatch.setattr(llm_tools_module, "describe_ebm_async", awaiting(fake_describe_ebm))
+    server = create_server(ModelStore(ebm=continuous_ebm[0]), ModelOptions(provider="ollama", model="llama3"))
+    is_error, output = await _call(server, "describe_model")
+    assert not is_error
+    assert orjson.loads(output) == {
+        "text": "partial",
+        "skipped_terms": ["a x b"],
+        "skipped_features": [],
+        "failed_features": [
+            {"feature": "b", "error_type": "RateLimitedError", "message": "The provider limited the rate."},
+        ],
+    }
 
 
 async def test_tool_schemas_match_the_snapshot(

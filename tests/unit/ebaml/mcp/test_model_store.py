@@ -17,6 +17,7 @@ from ebaml.edit.edit_session import RevisionInfo
 from ebaml.edit.edits import SetScores
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins
+from ebaml.llm.ebm_description import EBMDescription
 from ebaml.mcp.model_store import ModelStore, load_data, load_model
 from tests.unit.ebaml.conftest import FittedClassifier, as_frame, save_model
 
@@ -202,8 +203,12 @@ def test_a_model_that_the_edits_do_not_support_has_reads_and_no_session(
         store.read("abc")
     with pytest.raises(UnsupportedModelError, match="no edit session"):
         store.editing()
-    store.keep_description("original", "text", GraphMode.TEXT)
-    assert store.described("original", GraphMode.TEXT) == "text"
+    store.keep_description("original", _described("text"), GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == _described("text")
+
+
+def _described(text: str) -> EBMDescription:
+    return EBMDescription(text, [], [])
 
 
 def test_a_multiclass_model_has_an_edit_session(multiclass_ebm: ExplainableBoostingClassifier) -> None:
@@ -215,16 +220,16 @@ def test_the_kept_description_belongs_to_the_revision_that_it_describes(continuo
     ebm, _ = continuous_ebm
     store = ModelStore(ebm=ebm)
     assert store.described("original", GraphMode.TEXT) is None
-    store.keep_description("original", "words about the original", GraphMode.TEXT)
-    assert store.described("original", GraphMode.TEXT) == "words about the original"
+    store.keep_description("original", _described("words about the original"), GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == _described("words about the original")
     store.editing().apply(SetScores("a", Bins(0, 1), 5.0), "Raise the lowest bins")
     edit = store.editing().revision
     assert store.described(edit, GraphMode.TEXT) is None
-    assert store.described("original", GraphMode.TEXT) == "words about the original"
-    store.keep_description("original", "a late text of the old head", GraphMode.TEXT)
-    assert store.described("original", GraphMode.TEXT) == "words about the original"
-    store.keep_description(edit, "words about the edit", GraphMode.TEXT)
-    assert store.described(edit, GraphMode.TEXT) == "words about the edit"
+    assert store.described("original", GraphMode.TEXT) == _described("words about the original")
+    store.keep_description("original", _described("a late text of the old head"), GraphMode.TEXT)
+    assert store.described("original", GraphMode.TEXT) == _described("words about the original")
+    store.keep_description(edit, _described("words about the edit"), GraphMode.TEXT)
+    assert store.described(edit, GraphMode.TEXT) == _described("words about the edit")
     assert store.described("original", GraphMode.TEXT) is None
 
 
@@ -288,8 +293,8 @@ def test_labels_read_the_label_column_of_the_data_and_name_the_columns_when_it_i
 
 def test_the_kept_description_of_one_mode_is_not_the_description_of_another(continuous_ebm: FittedClassifier) -> None:
     store = ModelStore(ebm=continuous_ebm[0])
-    store.keep_description("original", "words from the text", GraphMode.TEXT)
+    store.keep_description("original", _described("words from the text"), GraphMode.TEXT)
     assert store.described("original", GraphMode.VISION) is None
-    store.keep_description("original", "words from the image", GraphMode.VISION)
-    assert store.described("original", GraphMode.TEXT) == "words from the text"
-    assert store.described("original", GraphMode.VISION) == "words from the image"
+    store.keep_description("original", _described("words from the image"), GraphMode.VISION)
+    assert store.described("original", GraphMode.TEXT) == _described("words from the text")
+    assert store.described("original", GraphMode.VISION) == _described("words from the image")

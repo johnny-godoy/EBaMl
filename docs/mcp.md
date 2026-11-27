@@ -130,7 +130,7 @@ reaches the port can read the model and the rows of the data file.
 | `list_edits` | optional `include_replay_json` | The history as a table of commits, and on request the JSON that `--edits` reads. |
 | `save_model` | `message`, optional `expected_revision` | Saves the edited model and its history after a person confirms. It needs `--output-dir`. |
 | `describe_feature` | `feature`, optional `mode`, `vision_fallback` | The words of `describe_graph`. `mode` is `text`, `vision` or `mixed`, as in [Text, vision and mixed modes](usage.md#text-vision-and-mixed-modes). It needs `--llm`. |
-| `describe_model` | optional `mode`, `vision_fallback` | The words of `describe_ebm` for the current model. The server keeps the text of each mode for the revision that it describes. If the request of some features failed, the text ends with a line `failed_features:` that names each of them with its error, and the server keeps no text. It needs `--llm`. |
+| `describe_model` | optional `mode`, `vision_fallback` | JSON: the words of `describe_ebm` for the current model in `text`, the parts that it leaves out in `skipped_terms` and `skipped_features`, and in `failed_features` each feature whose request failed, with `error_type` and `message`. The server keeps the result of each mode for the revision that it describes, but not a result with failed features. It needs `--llm`. |
 | `propose_difficulties` | `instance` or `row`, optional `cost_strategy` | The difficulty, the multiplier and the reason of each input that the LLM proposes, and the arguments `difficulty`, `cost_strategy` and `difficulty_from_model` to pass to `explain_prediction`. It runs no search, and it needs `--llm`. |
 
 The server also serves each graph as the resource `ebm://graphs/{feature}`.
@@ -563,7 +563,7 @@ interval that stays below zero. As age increases, the effect gradually rises, cr
 between ages 46-47. ...
 ```
 
-The first call of `describe_model` describes the whole model and takes longer. The server keeps the text, so the next
+The first call of `describe_model` describes the whole model and takes longer. The server keeps the result, so the next
 calls return it at once and send no request.
 
 The LLM tools await the [async form](async.md) of their LLM call. The server therefore answers other tool calls, and
