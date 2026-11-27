@@ -1,11 +1,12 @@
 """Talk 2 EBM in BAML.
 
 Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance``,
-``propose_difficulties``, ``LocalExplanation`` and ``EBMDescription`` load on first use, because the module that holds
-them can run ``baml generate``. The names ``graph_png``, ``graph_svg``, ``graph_figure`` and ``GraphImageOptions``
-load on first use too, because they need the extra ``vision``.
+``propose_difficulties``, ``LocalExplanation`` and ``EBMDescription`` load on first use, because the modules that hold
+them import the BAML runtime and can run ``baml generate``. The names ``graph_png``, ``graph_svg``, ``graph_figure``
+and ``GraphImageOptions`` load on first use too, because they need the extra ``vision``.
 """
 
+import importlib
 from collections.abc import Callable
 from importlib.metadata import version
 from types import ModuleType
@@ -165,13 +166,12 @@ from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 if TYPE_CHECKING:
     from ebaml.graphs.graph_image import GraphImageOptions, graph_figure, graph_png, graph_svg
     from ebaml.llm.descriptors import (
-        EBMDescription,
-        LocalExplanation,
         describe_ebm,
         describe_graph,
         explain_instance,
         propose_difficulties,
     )
+    from ebaml.llm.pipelines import EBMDescription, LocalExplanation
 
 __version__: str = version("ebaml")
 
@@ -350,11 +350,11 @@ __all__ = [
 
 # nosemgrep: ebaml-no-object-type -- PEP 562 returns a function or a class chosen by name, so no single type fits
 def __getattr__(name: str) -> object:
-    """Load a name of ``ebaml.llm.descriptors`` or ``ebaml.graphs.graph_image`` on first use.
+    """Load a name of ``ebaml.llm.descriptors``, ``ebaml.llm.pipelines`` or ``ebaml.graphs.graph_image`` on first use.
 
-    The first module can run ``baml generate`` when it is imported, and the second needs the extra ``vision``, so
-    ``import ebaml`` must not load them. The loaded name goes into the module namespace, and the next access skips this
-    function.
+    The first module can run ``baml generate`` when it is imported, the second imports the BAML runtime, and the third
+    needs the extra ``vision``, so ``import ebaml`` must not load them. The loaded name goes into the module namespace,
+    and the next access skips this function.
 
     Parameters
     ----------
@@ -375,19 +375,18 @@ def __getattr__(name: str) -> object:
 
     # each loader imports its module by a literal name, so that no input can choose the module to import
     def load_descriptors() -> ModuleType:
-        from ebaml.llm import descriptors  # ruff: ignore[import-outside-top-level] -- the import must wait until first use
+        return importlib.import_module("ebaml.llm.descriptors")
 
-        return descriptors
+    def load_pipelines() -> ModuleType:
+        return importlib.import_module("ebaml.llm.pipelines")
 
     def load_graph_image() -> ModuleType:
-        from ebaml.graphs import graph_image  # ruff: ignore[import-outside-top-level] -- the import must wait until first use
-
-        return graph_image
+        return importlib.import_module("ebaml.graphs.graph_image")
 
     # the names that load on first use, by the loader of the module that holds them
     loaders: dict[str, Callable[[], ModuleType]] = {
-        "EBMDescription": load_descriptors,
-        "LocalExplanation": load_descriptors,
+        "EBMDescription": load_pipelines,
+        "LocalExplanation": load_pipelines,
         "describe_ebm": load_descriptors,
         "describe_graph": load_descriptors,
         "explain_instance": load_descriptors,

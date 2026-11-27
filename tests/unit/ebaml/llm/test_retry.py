@@ -1,6 +1,6 @@
 """Tests for the truncation retry policy."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from typing import Any
 
 import pytest
@@ -29,9 +29,26 @@ def _run(
     estimate: Callable[[str], int] = len,
     on_truncated: Callable[[CutOffError], None] = lambda _error: None,
 ) -> str:
-    return retry.call_with_shrinking_graph(
+    def stepless(graph: str) -> Generator[None, None, str]:
+        """Answer at once, with no step for a driver.
+
+        Returns
+        -------
+        str
+            The reply of ``call``.
+
+        Yields
+        ------
+        None
+            Nothing: the call yields from an empty tuple and returns.
+
+        """
+        yield from ()
+        return call(graph)
+
+    pipeline = retry.call_with_shrinking_graph(
         retry.ShrinkingGraphCall(
-            call=call,
+            call=stepless,
             graph=graph,
             error_type=CutOffError,
             is_truncated=_is_cut_off,
@@ -41,6 +58,10 @@ def _run(
             label="f0",
         ),
     )
+    with pytest.raises(StopIteration) as stopped:
+        next(pipeline)
+    reply: str = stopped.value.value
+    return reply
 
 
 def test_returns_the_first_reply_without_a_rebuild() -> None:

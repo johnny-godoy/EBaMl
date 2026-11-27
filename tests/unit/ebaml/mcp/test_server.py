@@ -22,8 +22,8 @@ from ebaml.core.exceptions import DataFileError, HistoryError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.graph_image import GraphImageOptions, graph_png
 from ebaml.graphs.model_kinds import model_kind
-from ebaml.llm.descriptors import EBMDescription
 from ebaml.llm.options import GraphOptions, ModelOptions
+from ebaml.llm.pipelines import EBMDescription
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest
 from ebaml.mcp import llm_tools as llm_tools_module
 from ebaml.mcp import model_store

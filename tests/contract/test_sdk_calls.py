@@ -1,7 +1,9 @@
 """Each call of ``ebaml`` into ``baml_sdk``, read from the source, against the stub that ``baml generate`` wrote.
 
 The unit tests check each fake against the stub, so a fake cannot drift. These tests check the real call sites, so a
-call cannot drift from the stub either, even on a branch that no unit test runs.
+call cannot drift from the stub either, even on a branch that no unit test runs. A call site is a direct call such as
+``baml_sdk.chat_with_mcp_sync(...)``, or a step of a pipeline, ``SDKCall("describe_graph_cot", {...})``, which the sync
+driver runs as a call of ``baml_sdk.describe_graph_cot_sync``.
 """
 
 import ast
@@ -45,6 +47,11 @@ class _Call(ast.NodeVisitor):
     @override
     def visit_Call(self, node: ast.Call) -> None:
         function = node.func
+        match node:
+            case ast.Call(func=ast.Name(id="SDKCall"), args=[ast.Constant(value=str(name)), ast.Dict() as arguments]):
+                self.calls.append((f"{name}_sync", _step_call(node, arguments)))
+            case _:
+                pass
         if (
             isinstance(function, ast.Attribute)
             and isinstance(function.value, ast.Name)
@@ -52,6 +59,23 @@ class _Call(ast.NodeVisitor):
         ):
             self.calls.append((function.attr, node))
         self.generic_visit(node)
+
+
+def _step_call(node: ast.Call, arguments: ast.Dict) -> ast.Call:
+    """Rewrite a step ``SDKCall(name, {"key": value})`` as the call ``name(key=value)`` that a driver makes.
+
+    Returns
+    -------
+    ast.Call
+        The call, at the line of the step.
+
+    """
+    keywords = [
+        ast.keyword(arg=key.value, value=value)
+        for key, value in zip(arguments.keys, arguments.values, strict=True)
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    ]
+    return ast.Call(func=node.func, args=[], keywords=keywords, lineno=node.lineno, col_offset=node.col_offset)
 
 
 def _scan() -> _Call:

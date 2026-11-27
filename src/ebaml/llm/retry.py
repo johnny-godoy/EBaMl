@@ -1,10 +1,12 @@
 """Retry an LLM call with a smaller graph when the reply is cut off.
 
 This module holds the policy only. It imports no LLM client, so the caller passes the call, the truncation test, the
-token estimate and the graph rebuild. ``ebaml.llm.descriptors`` passes the real ``baml_sdk`` functions.
+token estimate and the graph rebuild. The call is a generator pipeline (``ebaml.llm.pipelines``): it yields the steps
+of the request, and a driver runs them. So one retry serves the sync and the async forms.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from typing import Any
 
 import attrs
 import structlog
@@ -19,15 +21,16 @@ MAX_TRUNCATION_RETRIES = 4
 
 
 @attrs.frozen
-class ShrinkingGraphCall[R, E: Exception, G]:
+class ShrinkingGraphCall[S, R, E: Exception, G]:
     """The call and the services that ``call_with_shrinking_graph`` needs.
 
-    ``G`` is the type of the graph that a call sends: its text, or the text with the graph that it renders.
+    ``G`` is the type of the graph that a call sends: its text, or the text with the graph that it renders. ``S`` is the
+    type of the steps that the call yields to its driver.
 
     Attributes
     ----------
-    call: Callable[[G], R]
-        Sends the graph to the LLM and returns the reply.
+    call: Callable[[G], Generator[S, Any, R]]
+        Returns the pipeline that sends the graph to the LLM. The pipeline returns the reply.
     graph: G
         The graph for the first call.
     error_type: type[E]
@@ -47,7 +50,8 @@ class ShrinkingGraphCall[R, E: Exception, G]:
 
     """
 
-    call: Callable[[G], R]
+    # the driver sends each reply of a step into the pipeline, and the type of a reply depends on the step
+    call: Callable[[G], Generator[S, Any, R]]
     graph: G
     error_type: type[E]
     is_truncated: Callable[[E], bool]
@@ -57,7 +61,9 @@ class ShrinkingGraphCall[R, E: Exception, G]:
     label: str
 
 
-def call_with_shrinking_graph[R, E: Exception, G](request: ShrinkingGraphCall[R, E, G]) -> R:
+def call_with_shrinking_graph[S, R, E: Exception, G](
+    request: ShrinkingGraphCall[S, R, E, G],
+) -> Generator[S, Any, R]:
     """Call the LLM with a graph text. If the reply is cut off, ask again with a smaller graph, up to 4 times.
 
     Each retry asks ``request.rebuild`` for a graph of 75% of the previous estimated size. The function raises the
@@ -65,7 +71,7 @@ def call_with_shrinking_graph[R, E: Exception, G](request: ShrinkingGraphCall[R,
 
     Parameters
     ----------
-    request: ShrinkingGraphCall[R, E, G]
+    request: ShrinkingGraphCall[S, R, E, G]
         The call, the first graph, and the services that the retry uses.
 
     Returns
@@ -73,12 +79,17 @@ def call_with_shrinking_graph[R, E: Exception, G](request: ShrinkingGraphCall[R,
     R
         The reply of the first call that succeeds.
 
+    Yields
+    ------
+    S
+        The steps of each call, for the driver of the pipeline.
+
     """
     graph = request.graph
     retries_left = MAX_TRUNCATION_RETRIES
     while True:
         try:
-            return request.call(graph)
+            return (yield from request.call(graph))
         except request.error_type as error:
             if not request.is_truncated(error):
                 raise

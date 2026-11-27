@@ -1808,7 +1808,7 @@
   },
   "describe_ebm": {
     "kind": "function",
-    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.descriptors.EBMDescription"
+    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.pipelines.EBMDescription"
   },
   "describe_graph": {
     "kind": "function",
@@ -1820,7 +1820,7 @@
   },
   "explain_instance": {
     "kind": "function",
-    "signature": "(request: ebaml.llm.requests.ExplainInstanceRequest) -> ebaml.llm.descriptors.LocalExplanation"
+    "signature": "(request: ebaml.llm.requests.ExplainInstanceRequest) -> ebaml.llm.pipelines.LocalExplanation"
   },
   "facts_to_texts": {
     "kind": "function",
