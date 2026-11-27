@@ -37,6 +37,7 @@ from tests.unit.ebaml.conftest import (
     REMOVED_FEATURE,
     FittedClassifier,
     as_frame,
+    awaiting,
     instance_of,
     returning,
     save_model,
@@ -222,8 +223,8 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
     def fake_describe_model(_store: ModelStore, _llm: ModelOptions, graph: GraphOptions) -> str:
         return f"model text in {graph.mode} mode, fallback {graph.vision_fallback}"
 
-    monkeypatch.setattr(server_module.llm_tools, "describe_feature", fake_describe_feature)
-    monkeypatch.setattr(server_module.llm_tools, "describe_model", fake_describe_model)
+    monkeypatch.setattr(server_module.llm_tools, "describe_feature", awaiting(fake_describe_feature))
+    monkeypatch.setattr(server_module.llm_tools, "describe_model", awaiting(fake_describe_model))
     options = ModelOptions(provider="ollama", model="llama3")
     names = {}
     for label, llm in (("without", None), ("with", options)):
@@ -239,6 +240,40 @@ async def test_llm_tools_exist_only_with_an_llm_and_call_the_llm_tools(
         "graph a in vision mode, fallback text",
     )
     assert await _call(server, "describe_model", vision) == (False, "model text in vision mode, fallback text")
+
+
+async def test_two_llm_tool_calls_run_at_the_same_time(
+    continuous_ebm: FittedClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # each fake waits until both calls have started, so a server that ran the calls one after the other would hang
+    started: list[int] = []
+    both_started = anyio.Event()
+
+    async def fake_describe_graph_async(request: DescribeGraphRequest) -> str:
+        started.append(request.feature_index)
+        if len(started) == 2:
+            both_started.set()
+        with anyio.fail_after(10):
+            await both_started.wait()
+        return f"feature {request.feature_index}"
+
+    monkeypatch.setattr(llm_tools_module, "describe_graph_async", fake_describe_graph_async)
+    server = create_server(ModelStore(ebm=continuous_ebm[0]), ModelOptions(provider="ollama", model="llama3"))
+    texts: dict[str, str] = {}
+
+    async with Client(server) as session:
+
+        async def call(feature: str) -> None:
+            result = await session.call_tool("describe_feature", {"feature": feature})
+            content = result.content[0]
+            assert isinstance(content, TextContent)
+            texts[feature] = content.text
+
+        async with anyio.create_task_group() as group:
+            group.start_soon(call, "a")
+            group.start_soon(call, "b")
+    assert texts == {"a": "feature 0", "b": "feature 1"}
 
 
 async def test_explain_prediction_takes_the_recourse_arguments(binary_server: MCPServer) -> None:
@@ -267,7 +302,7 @@ async def test_propose_difficulties_returns_the_advice_of_the_llm(
 ) -> None:
     ebm, _ = continuous_ebm
     advice = llm_tools_module.DifficultyAdvice([], {"a": 0.5}, CostStrategyName.UNIT)
-    monkeypatch.setattr(server_module.llm_tools, "propose_feature_difficulties", returning(advice))
+    monkeypatch.setattr(server_module.llm_tools, "propose_feature_difficulties", awaiting(returning(advice)))
     server = create_server(ModelStore(ebm=ebm), ModelOptions(provider="ollama", model="llama3"))
     is_error, text = await _call(server, "propose_difficulties", {"instance": {"a": 0.0, "b": 0.0, "c": "x"}})
     assert not is_error
@@ -301,8 +336,8 @@ async def test_llm_tools_reach_the_llm_once_through_the_client(
         model_calls.append(request.model)
         return EBMDescription(f"words about the model, call {len(model_calls)}", [], [])
 
-    monkeypatch.setattr(llm_tools_module, "describe_graph", fake_describe_graph)
-    monkeypatch.setattr(llm_tools_module, "describe_ebm", fake_describe_ebm)
+    monkeypatch.setattr(llm_tools_module, "describe_graph_async", awaiting(fake_describe_graph))
+    monkeypatch.setattr(llm_tools_module, "describe_ebm_async", awaiting(fake_describe_ebm))
     server = create_server(ModelStore(ebm=ebm), options)
     async with Client(server) as session:
         feature = await session.call_tool("describe_feature", {"feature": "b"})
