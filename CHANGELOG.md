@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.15.0'></a>
+## [0.15.0] - 2026-11-27
+
+### Added
+
+- `describe_graph_async`, `describe_ebm_async`, `explain_instance_async` and `propose_difficulties_async` await the LLM requests, so an application that runs an event loop serves other work while the LLM answers. Each takes the request of its sync twin and gives the same result.
+- `LLMReplyError` is the error of a reply that stays cut off by `max_tokens` after the retries, or does not parse. `describe_ebm` reports it for the feature of that reply.
+- `LLMRequestError.affects_every_request` says whether an error stops `describe_ebm` at once (a missing or rejected key, an unreachable provider, a model that reads no images) or concerns one feature (a rate limit, an unreadable reply).
+
+### Changed
+
+- **BREAKING:** `describe_ebm` keeps the descriptions of the other features when the request of one feature fails. `EBMDescription.failed_features` names each feature that failed, with its error, and the summary says that it does not cover them. If every feature fails, `describe_ebm` raises the error of the first feature.
+
+- The LLM tools of `ebaml-mcp` (`describe_feature`, `describe_model`, `propose_difficulties`) await the async form of their LLM call, so the server answers other tool calls and runs several LLM calls at the same time.
+- **BREAKING:** `describe_model` of `ebaml-mcp` returns JSON: the description in `text`, the parts that it leaves out in `skipped_terms` and `skipped_features`, and each feature whose description failed in `failed_features`, with its `error_type` and `message`. The server keeps no result with failed features, so the next call asks again.
+
 <a id='changelog-0.14.1'></a>
 ## [0.14.1] - 2026-11-27
 
