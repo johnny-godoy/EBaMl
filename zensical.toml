@@ -23,6 +23,7 @@ nav = [
   { "Local explanations" = "local-explanations.md" },
   { "Editing a model" = "editing.md" },
   { "Choosing the model" = "providers.md" },
+  { "Async API" = "async.md" },
   { "MCP server" = "mcp.md" },
   { Notebooks = [
     { "All notebooks" = "notebooks.md" },
@@ -39,6 +40,7 @@ nav = [
     { "MCP server" = "mcp-notebook.md" },
     { "BAML agent" = "baml-agent-notebook.md" },
     { "Chat" = "chat-notebook.md" },
+    { "Async API" = "async-notebook.md" },
   ] },
   { Proofs = [
     { "Local explanations" = "local-explanations-proof.md" },

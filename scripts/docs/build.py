@@ -57,6 +57,7 @@ NOTEBOOKS: tuple[Path, ...] = (
     ROOT / "notebooks" / "mcp_server.py",
     ROOT / "notebooks" / "baml_agent.py",
     ROOT / "notebooks" / "chat.py",
+    ROOT / "notebooks" / "async_explanations.py",
 )
 EXPORT_DIR = ROOT / "docs" / "notebooks"
 # the notebooks run the package, so a change to any module makes the output stale

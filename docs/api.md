@@ -10,6 +10,14 @@ Import every public name from `ebaml`, for example `from ebaml import describe_e
 
 ::: ebaml.llm.descriptors
 
+## Describing graphs and models in an event loop
+
+::: ebaml.llm.async_descriptors
+
+## Results of the LLM calls
+
+::: ebaml.llm.pipelines
+
 ## Options
 
 ::: ebaml.llm.options

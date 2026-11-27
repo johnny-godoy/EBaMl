@@ -543,7 +543,7 @@ The fields `language`, `local`, `prompt` and `model` are keyword-only. `local` i
 | `prompt.expert_description`, `prompt.dataset_description` | see `default_graph_options` | Used in the prompts. A dataset description helps. |
 
 `explain_instance` takes `model=` like `describe_ebm`: see [Choosing the model](providers.md). Token usage of the three calls is logged at `INFO` on the
-`ebaml.llm.descriptors` logger as `usage`.
+`ebaml.llm.pipelines` logger as `usage`.
 
 To compute the facts alone, with no LLM and no key, call `compute_local_facts(ebm, instance, LocalOptions(...))`.
 
