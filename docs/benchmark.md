@@ -1,5 +1,6 @@
 ---
-description: "The benchmark of EBaMl: the tasks of TalkToEBM, how to run them and how to read the accuracy."
+title: Benchmarks
+description: "The benchmarks of EBaMl: the accuracy of the LLM answers and the performance of the code, behind one command."
 ---
 
 --8<-- "benchmark/README.md"

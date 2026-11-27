@@ -21,7 +21,7 @@ of a change, and [Releasing](releasing.md) explains the release workflow.
 | `src/ebaml/edit/` | Model editing: the selections of bins, the edits, the report, and the session with its history. It calls no LLM. |
 | `src/ebaml/mcp/`, `baml_src/mcp_agent.baml` | The MCP server (`ebaml-mcp`), the agent that reads it through its tools, and the terminal chat (`ebaml-chat`). |
 | `baml.toml` | Generator config for the Python SDK. |
-| `src/ebaml/benchmark.py`, `benchmark/` | The benchmark: loading, answer parsing and scoring, and the data and runner (see [Benchmark](benchmark.md)). |
+| `src/ebaml/benchmark.py`, `benchmark/` | The benchmarks: the accuracy tasks with their loading, answer parsing and scoring, and the performance workloads (see [Benchmarks](benchmark.md)). |
 | `notebooks/` | Example notebooks, written with marimo. |
 | `docs/`, `zensical.toml` | The documentation, built with Zensical (see [the commands](#commands) below). |
 | `tests/unit/` | Python unit tests (100% coverage required). `scripts/llm/openrouter.py` is the optional live test. |

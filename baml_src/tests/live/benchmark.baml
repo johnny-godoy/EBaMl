@@ -1,6 +1,6 @@
-// Live benchmark tests: a fixed sample of the questions in benchmark/data/, asked through answer_benchmark_question.
+// Live benchmark tests: a fixed sample of the questions in benchmark/accuracy/data/, asked through answer_benchmark_question.
 // Each question has one correct answer, so a failure means a wrong answer, not a strict check. The full benchmark
-// (benchmark/run.py) measures the accuracy over every question; these tests only catch a prompt change that breaks
+// (benchmark/run.py accuracy) measures the accuracy over every question; these tests only catch a prompt change that breaks
 // the answers. The selector root::Live also matches the testset "LiveBenchmark", so offline runs exclude these tests
 // and live runs include them. `baml test` runs from the repository root, and the paths of the data files are relative
 // to it.
@@ -11,7 +11,7 @@
 
 // The questions of `task` at `indices`, as [question, solution] pairs.
 function benchmark_sample(task: string, indices: int[]) -> string[][] {
-    let questions = baml.json.decode<string[][]>(baml.fs.read(`benchmark/data/${task}.json`));
+    let questions = baml.json.decode<string[][]>(baml.fs.read(`benchmark/accuracy/data/${task}.json`));
     indices.map((i) -> {
         questions[i]
     })
