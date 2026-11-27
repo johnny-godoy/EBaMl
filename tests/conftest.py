@@ -222,6 +222,18 @@ def _handler_class(state: FakeLLM) -> type[http.server.BaseHTTPRequestHandler]:
     return ChatHandler
 
 
+class FakeLLMServer(http.server.ThreadingHTTPServer):
+    """The HTTP server of the fake LLM, with room for a burst of connections.
+
+    The standard server keeps at most 5 connections that wait for ``accept``. A burst of more requests, such as the
+    graphs of ``describe_ebm`` with ``max_concurrency=8``, overflows that queue. The kernel then drops a connection,
+    and the client tries again after one second, so the request seems to take one second more. A real provider does
+    not do that.
+    """
+
+    request_queue_size: int = 128
+
+
 @contextmanager
 def serve_fake_llm() -> Generator[FakeLLM]:
     """Run the server on a free port of the loopback interface, and stop it at the end.
@@ -233,7 +245,7 @@ def serve_fake_llm() -> Generator[FakeLLM]:
 
     """
     state = FakeLLM(base_url="")
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _handler_class(state))
+    server = FakeLLMServer(("127.0.0.1", 0), _handler_class(state))
     state.base_url = f"http://127.0.0.1:{server.server_port}/v1"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()

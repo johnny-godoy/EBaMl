@@ -5,8 +5,10 @@ of requests, the turns of a conversation, the requests in flight at the same tim
 """
 
 import asyncio
+import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -26,6 +28,9 @@ from tests.unit.ebaml.conftest import PandasFrame
 GRAPH_TURNS = 3
 SUMMARY_TURNS = 2
 DELAY_SECONDS = 0.05
+# a burst of connections, and the wait of a client whose connection the kernel dropped
+BURST = 64
+RETRY_SECONDS = 0.9
 
 
 class InFlight:
@@ -162,3 +167,19 @@ def test_the_sync_form_works_inside_a_running_event_loop(
     fake_llm.handler = lambda _request: Reply(text="The graph.")
     request = DescribeGraphRequest(ebm, feature_index=0, model=llm_model)
     assert asyncio.run(_describe_in_a_running_loop(request)) == "The graph."
+
+
+def test_the_fake_llm_accepts_a_burst_of_connections_without_a_retry_of_one_second(fake_llm: FakeLLM) -> None:
+    # A listen queue of 5 dropped connections in a burst, and each dropped client waited one second to try again.
+    host, port = fake_llm.base_url.removeprefix("http://").removesuffix("/v1").split(":")
+    start = threading.Barrier(BURST)
+
+    def connect_seconds() -> float:
+        start.wait()
+        began = time.perf_counter()
+        with socket.create_connection((host, int(port)), timeout=5):
+            return time.perf_counter() - began
+
+    with ThreadPoolExecutor(max_workers=BURST) as pool:
+        waits = [future.result() for future in [pool.submit(connect_seconds) for _ in range(BURST)]]
+    assert max(waits) < RETRY_SECONDS
