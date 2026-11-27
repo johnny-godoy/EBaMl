@@ -16,6 +16,8 @@ Import every public name from `ebaml`, for example `from ebaml import describe_e
 
 ## Results of the LLM calls
 
+::: ebaml.llm.ebm_description
+
 ::: ebaml.llm.pipelines
 
 ## Options

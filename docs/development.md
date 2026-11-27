@@ -13,7 +13,7 @@ of a change, and [Releasing](releasing.md) explains the release workflow.
 | --- | --- |
 | `src/ebaml/core/` | Shared kernel: types and errors. It imports no other part of `ebaml`. |
 | `src/ebaml/graphs/` | Graph extraction and simplification (numpy, `interpret`), and the text the LLM reads. |
-| `src/ebaml/llm/` | The edge: one generator pipeline for each LLM call (`pipelines.py`), the sync and the async drivers that run it against BAML (`descriptors.py`, `async_descriptors.py`), their options and the retry after a cut-off reply. |
+| `src/ebaml/llm/` | The edge: one generator pipeline for each LLM call (`pipelines.py`), the sync and the async driver that run it against BAML (`drivers.py`), the public functions of each form (`descriptors.py`, `async_descriptors.py`), their options and the retry after a cut-off reply. |
 | `baml_src/talk_to_ebm.baml` | Prompts, the default LLM clients, the three-turn description chain, the summary, `describe_ebm`, token accounting. |
 | `baml_src/model_spec.baml` | The model of a call: `ModelSpec` and one client builder for each provider. |
 | `src/ebaml/local/`, `baml_src/local_explanations.baml` | Local explanations: the facts of one prediction computed deterministically, their rendering as JSON texts, and the prompts that put them in words. |

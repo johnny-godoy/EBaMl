@@ -23,6 +23,7 @@ SOURCES: list[Path] = sorted([*(ROOT / "src" / "ebaml").rglob("*.py"), *(ROOT / 
 # sync and the async function, so each step has two rows.
 CALLED = frozenset({
     "answer_benchmark_question_sync",
+    "chat_with_mcp",
     "chat_with_mcp_sync",
     "check_model",
     "check_model_sync",
@@ -34,14 +35,15 @@ CALLED = frozenset({
     "explain_local_sync",
     "propose_difficulty",
     "propose_difficulty_sync",
+    "sample_graph_tokens",
     "sample_graph_tokens_sync",
     "summarize_ebm",
     "summarize_ebm_sync",
     "supported_providers",
     "supported_providers_sync",
 })
-# The functions that only the sync form calls: they are not part of a pipeline, and they have no async form.
-SYNC_ONLY = frozenset({"answer_benchmark_question_sync", "chat_with_mcp_sync", "sample_graph_tokens_sync"})
+# The functions that are not a step of a pipeline: the benchmark calls its function with no driver.
+SYNC_ONLY = frozenset({"answer_benchmark_question_sync"})
 
 
 class _Call(ast.NodeVisitor):

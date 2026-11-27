@@ -10,7 +10,8 @@ import pytest
 import baml_sdk
 from ebaml.llm import async_descriptors, descriptors
 from ebaml.llm.difficulties import DifficultyProposal
-from ebaml.llm.pipelines import EBMDescription, LocalExplanation
+from ebaml.llm.ebm_description import EBMDescription
+from ebaml.llm.pipelines import LocalExplanation
 from ebaml.llm.requests import (
     DescribeEBMRequest,
     DescribeGraphRequest,

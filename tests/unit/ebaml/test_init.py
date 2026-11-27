@@ -8,7 +8,7 @@ from scripts.fixed_command import run_fixed
 
 import ebaml
 from ebaml.core.custom_types import coerce_enum
-from ebaml.llm import descriptors, pipelines
+from ebaml.llm import descriptors, ebm_description, pipelines
 from ebaml.local import fact_types as local
 
 
@@ -26,8 +26,8 @@ def test_int_satisfies_a_float_hint() -> None:
 
 
 LAZY_FUNCTIONS = ("describe_ebm", "describe_graph", "explain_instance")
-LAZY_CLASSES = ("EBMDescription", "LocalExplanation")
-LAZY_NAMES = LAZY_CLASSES + LAZY_FUNCTIONS
+LAZY_CLASSES = {"EBMDescription": ebm_description, "FeatureFailure": ebm_description, "LocalExplanation": pipelines}
+LAZY_NAMES = (*LAZY_CLASSES, *LAZY_FUNCTIONS)
 
 
 def test_every_exported_name_resolves() -> None:
@@ -39,8 +39,8 @@ def test_each_lazy_name_is_the_object_of_its_module() -> None:
     for name in LAZY_FUNCTIONS:
         assert getattr(ebaml, name) is getattr(descriptors, name)
         assert name in ebaml.__all__
-    for name in LAZY_CLASSES:
-        assert getattr(ebaml, name) is getattr(pipelines, name)
+    for name, module in LAZY_CLASSES.items():
+        assert getattr(ebaml, name) is getattr(module, name)
         assert name in ebaml.__all__
 
 
