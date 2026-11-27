@@ -1,4 +1,4 @@
-# Plan: one benchmark directory for accuracy and performance (0.15.0)
+# Plan: one benchmark directory for accuracy and performance (0.16.0)
 
 You are a senior Python performance engineer with experience in numerical code, profilers and benchmark design. You
 will implement one milestone of `ROADMAP.md` in the EBaMl repository. Read `CLAUDE.md` and every file in
@@ -23,6 +23,9 @@ changes a fact is a bug.
 - `CLAUDE.md`, `benchmark/README.md`, `docs/benchmark.md`, `tests/api/test_command_lines.py` and the CI workflows name
   the current command `uv run python benchmark/run.py --task ...`. A change of the command is a change of a CLI, which is
   public API (`changelog-and-versioning.md`).
+- 0.15.0 gives each function that calls an LLM a native async form next to the sync form, with one shared
+  implementation of the pipeline. Read `docs/async.md` and the drivers in `ebaml.llm` before you profile: a fix in the
+  shared pipeline speeds up both forms, and a fix in one driver needs a check of the other.
 - The LLM request dominates the wall time of a call, and EBaMl does not control it. The performance benchmark measures
   the work around it: the graph extraction and simplification (`ebaml.graphs`), the graph text and the token budget, the
   facts of a local explanation (counterfactual, sufficient reason through OR-Tools, sampled completions in
@@ -58,6 +61,9 @@ changes a fact is a bug.
    - Synthetic EBMs that stress size: 10, 100 and 500 features, 32 and 1024 bins, and many categorical levels.
    - The calls: `describe_ebm` and `explain_instance` with the fake LLM, one edit with its report, and one call of each
      MCP tool.
+   - Each LLM call in its sync and its async form (0.15.0), and `describe_ebm` with several values of
+     `max_concurrency`, with a delay in the fake LLM so that the requests overlap. The sync form is the baseline of the
+     async one.
    Build the fitted models with a script and save them with `skops`, so each run measures the same model.
 3. **Profile before you measure.** Run each workload under a sampling profiler (py-spy or pyinstrument) and under a
    memory profiler (memray). Measure the import time with `python -X importtime -c "import ebaml"`. Measure the cost of
@@ -88,9 +94,9 @@ changes a fact is a bug.
 </steps>
 
 <release>
-This PR completes the milestone: it sets `version = "0.15.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
+This PR completes the milestone: it sets `version = "0.16.0"` in `pyproject.toml` and runs `uv lock`. Its changelog
 fragment marks the new benchmark command as **BREAKING** under `Changed`, and lists each performance fix that a user
-feels, with its gain on a named workload. Mark the 0.15.0 row of `ROADMAP.md` as done. The restructure and the fixes
+feels, with its gain on a named workload. Mark the 0.16.0 row of `ROADMAP.md` as done. The restructure and the fixes
 can come in earlier pull requests, each with its own fragment.
 </release>
 
