@@ -48,6 +48,12 @@ def xy_to_json(x_vals: Sequence[str | tuple[float | str, float | str]], y_vals: 
     return "{" + ", ".join(f"{orjson.dumps(key).decode()}: {y}" for key, y in zip(keys, y_vals, strict=True)) + "}"
 
 
+# The factor of each confidence level that a call asked for. scipy takes about 0.1 ms for one factor, and to_text asks
+# again for each class at each of up to 101 simplification levels of a graph. A process uses few levels, so the cache
+# stays small.
+_FACTORS: dict[float, float] = {}
+
+
 def confidence_factor(confidence_level: float) -> float:
     """Find the number of standard deviations between a score and the bounds of its confidence interval.
 
@@ -79,7 +85,11 @@ def confidence_factor(confidence_level: float) -> float:
     if not 0 < confidence_level < 1:
         msg = f"confidence_level must be between 0 and 1, both excluded. Got {confidence_level}."
         raise OptionRangeError(msg)
-    return float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
+    factor = _FACTORS.get(confidence_level)
+    if factor is None:
+        factor = float(scipy.stats.norm.interval(confidence_level, loc=0, scale=1)[1])
+        _FACTORS[confidence_level] = factor
+    return factor
 
 
 # nosemgrep: ebaml-return-attrs-not-container -- an interval is a homogeneous pair, like EBMGraph.x_vals
