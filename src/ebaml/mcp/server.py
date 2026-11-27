@@ -625,7 +625,7 @@ def _register_save_tool(server: MCPServer, store: ModelStore) -> None:
 
 def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions) -> None:
     @server.tool()
-    def describe_feature(
+    async def describe_feature(
         feature: str,
         mode: GraphMode = GraphMode.TEXT,
         vision_fallback: VisionFallback = VisionFallback.RAISE,
@@ -644,29 +644,31 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
         """
         with _tool_errors():
             graph = GraphOptions(mode=mode, vision_fallback=vision_fallback)
-            return llm_tools.describe_feature(store, llm, feature, graph)
+            return await llm_tools.describe_feature(store, llm, feature, graph)
 
     @server.tool()
-    def describe_model(
+    async def describe_model(
         mode: GraphMode = GraphMode.TEXT,
         vision_fallback: VisionFallback = VisionFallback.RAISE,
     ) -> str:
         """Ask a language model to describe the whole model in words.
 
         The first call is slow, and the server keeps the text of each mode. mode and vision_fallback work as in
-        describe_feature.
+        describe_feature. If the description of some features failed, for example after a rate limit, the text covers
+        the other features and ends with a line "failed_features:" that names each failed feature and its error. Call
+        the tool again to describe them.
 
         Returns
         -------
         str
-            The description.
+            The description, and the failed features if any.
 
         """
         with _tool_errors():
-            return llm_tools.describe_model(store, llm, GraphOptions(mode=mode, vision_fallback=vision_fallback))
+            return await llm_tools.describe_model(store, llm, GraphOptions(mode=mode, vision_fallback=vision_fallback))
 
     @server.tool()
-    def propose_difficulties(
+    async def propose_difficulties(
         instance: Mapping[str, FeatureValue] | None = None,
         row: int | None = None,
         cost_strategy: explain_tools.CostStrategyName = explain_tools.CostStrategyName.UNIT,
@@ -685,7 +687,7 @@ def _register_llm_tools(server: MCPServer, store: ModelStore, llm: ModelOptions)
 
         """
         with _tool_errors():
-            advice = llm_tools.propose_feature_difficulties(store, llm, instance, row, cost_strategy)
+            advice = await llm_tools.propose_feature_difficulties(store, llm, instance, row, cost_strategy)
             return _json(attrs.asdict(advice))
 
 

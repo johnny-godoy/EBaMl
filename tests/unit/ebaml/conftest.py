@@ -267,6 +267,23 @@ def returning[T](value: T) -> Callable[..., T]:
     return fake
 
 
+def awaiting[T](fake: Callable[..., T]) -> Callable[..., Coroutine[None, None, T]]:
+    """Turn a fake into a coroutine function, for code that awaits the function that the fake replaces.
+
+    Returns
+    -------
+    Callable[..., Coroutine[None, None, T]]
+        A coroutine function that gives the reply of ``fake``.
+
+    """
+
+    async def fake_async(*args: object, **kwargs: object) -> T:
+        await asyncio.sleep(0)
+        return fake(*args, **kwargs)
+
+    return fake_async
+
+
 def recording[T](calls: MutableMapping[str, Any], value: T) -> Callable[..., T]:
     """Build a fake function that stores its keyword arguments in ``calls`` and returns ``value``.
 
