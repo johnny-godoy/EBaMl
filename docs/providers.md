@@ -105,10 +105,10 @@ gateway = ModelOptions(
 describe_ebm(DescribeEBMRequest(ebm, model=gateway))
 ```
 
-The benchmark has the flag `--model`:
+The accuracy benchmark has the flag `--model`:
 
 ```bash
-uv run python benchmark/run.py --model anthropic/claude-haiku-4-5 --limit 10
+uv run python benchmark/run.py accuracy --model anthropic/claude-haiku-4-5 --limit 10
 ```
 
 ## Keys

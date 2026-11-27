@@ -1,12 +1,16 @@
 """The commands of ``ebaml``: the flags of each, the entry points of the package, and how a wrong call fails."""
 
 import re
+import sys
 import tomllib
 from pathlib import Path
 from types import ModuleType
 
+import orjson
 import pytest
-from benchmark.run import app as benchmark_app
+from benchmark.run import KINDS
+from benchmark.run import main as benchmark_main
+from scripts.fixed_command import run_fixed
 
 import ebaml
 from ebaml.mcp import chat, server
@@ -69,9 +73,46 @@ def test_a_call_without_the_model_fails_with_a_usage_error_and_not_a_traceback(
     assert "Traceback" not in captured.err
 
 
-def test_the_benchmark_script_lists_its_flags(capsys: pytest.CaptureFixture[str]) -> None:
-    benchmark_app(["--help"])
-    assert _flags(capsys.readouterr().out) == {"--task", "--limit", "--model", "--mode", "--output", "--progress"}
+# Each kind of the benchmark command, with its flags. A new kind or flag needs a row here and a line in its README.
+BENCHMARK_FLAGS: dict[str, set[str]] = {
+    "accuracy": {"--task", "--limit", "--model", "--mode", "--output", "--progress"},
+    "performance": {"--output", "--workload", "--models-dir", "--progress"},
+    "performance compare": {"--threshold", "--floor-seconds", "--markdown", "--gate"},
+}
+
+
+def test_the_benchmark_command_has_one_subcommand_for_each_kind_of_the_table() -> None:
+    assert {command.split()[0] for command in BENCHMARK_FLAGS} == set(KINDS)
+
+
+@pytest.mark.parametrize("command", sorted(BENCHMARK_FLAGS))
+def test_each_subcommand_of_the_benchmark_lists_its_flags(command: str, capsys: pytest.CaptureFixture[str]) -> None:
+    benchmark_main([*command.split(), "--help"])
+    assert _flags(capsys.readouterr().out) == BENCHMARK_FLAGS[command]
+
+
+def test_the_performance_benchmark_runs_by_path_and_writes_the_summary_of_its_workloads(tmp_path: Path) -> None:
+    output = tmp_path / "performance.json"
+    result = run_fixed(
+        [
+            sys.executable,
+            ROOT / "benchmark" / "run.py",
+            "performance",
+            "--workload",
+            "local.facts.diabetes",
+            "--models-dir",
+            tmp_path / "models",
+            "--output",
+            output,
+            "--no-progress",
+        ],
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    summary = orjson.loads(output.read_bytes())
+    (timing,) = summary["workloads"]
+    assert timing["name"] == "local.facts.diabetes"
+    assert timing["median_seconds"] > 0
 
 
 def test_the_chat_and_server_commands_print_the_version(capsys: pytest.CaptureFixture[str]) -> None:

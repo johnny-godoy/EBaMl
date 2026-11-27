@@ -54,3 +54,6 @@ notebooks/__marimo__/
 
 # The Node tools of the site test suite (npm ci --prefix tests/site)
 node_modules/
+
+# The fitted models of the performance benchmark (benchmark/performance/models.py fits them on the first run)
+benchmark/performance/.models/

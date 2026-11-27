@@ -8,7 +8,7 @@ from typing import cast
 
 import orjson
 import pytest
-from benchmark.run import DATA_DIR, ModeAsker, question_graph, question_view
+from benchmark.accuracy.command import DATA_DIR, ModeAsker, question_graph, question_view
 
 import baml_sdk
 from ebaml import GraphImageOptions, GraphMode, ModelOptions, graph_png

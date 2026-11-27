@@ -30,7 +30,8 @@ uv run python -m scripts.release.api_breaks --base origin/main   # a break of eb
 uv run python scripts/mutation/run.py [--base origin/main | --module src/ebaml/<package>/x.py]  # cosmic-ray; mutates only the changed lines or the named modules; CI requires zero survivors
 (cd proofs && lake build)          # check the Lean proofs; needs elan, CI runs it when proofs/ changes, see .claude/rules/proofs.md
 uv run python scripts/llm/openrouter.py   # optional live test; sends real requests
-uv run python benchmark/run.py --task monotonicity --limit 10 --output results.json   # sends real requests
+uv run python benchmark/run.py accuracy --task monotonicity --limit 10 --output results.json   # sends real requests
+uv run python benchmark/run.py performance --output perf.json   # time the work around the LLM; a local fake LLM, no real request
 uv run --group docs python -m scripts.docs.build         # build the docs like CI: strict, and fails on a griffe warning
 uv run --group docs python -m scripts.docs.build serve   # preview the docs; the first run exports the notebooks and is slow
 ```

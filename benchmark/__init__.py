@@ -1,1 +1,1 @@
-"""Benchmark of the LLM descriptions of EBM graphs, ported from TalkToEBM."""
+"""The benchmarks of EBaMl: one subpackage for each kind of measurement, behind the one command ``benchmark/run.py``."""
