@@ -71,4 +71,48 @@ the check is not a required check of `main`.
 
 ## Profiles and hotspots
 
-The profiles of the workloads and the table of the hotspots are in the next section of this page when they exist.
+One run on 2026-11-27, on a Linux container with 4 cores and Python 3.13, at the commit of the 0.15.0 release. A
+sampling profiler (pyinstrument) and a deterministic profiler (cProfile) ran each slow workload, and memray measured
+the memory. The share is the part of the time of the workload that the function takes. A profiler adds time to the
+Python code, so the table gives the shares that a prototype of the fix confirmed, where one exists.
+
+| # | Function | Share of the time | Workload | Median |
+| --- | --- | --- | --- | --- |
+| 1 | `TextFeatures.of` (`graphs/token_weights.py`): a Python loop over each character to count the digits | 19 to 29 % | `graphs.render.*` | 0.1 to 1.3 s |
+| 2 | `EBMGraph.simplify` (`graphs/ebm_graph.py`): a Python loop over each bin, for each of up to 11 levels | about 50 % after fix 1 | `graphs.render.features-100-bins-1024` | 1.3 s |
+| 3 | `confidence_factor` (`graphs/graph_text.py`): `scipy.stats.norm` for each class at each level | 11 to 46 % | `graphs.render.multiclass` | 0.76 s |
+| 4 | `xy_to_json` (`graphs/graph_text.py`): one `orjson.dumps` call for each value | about 18 % after fix 1 | `graphs.render.*` | |
+| 5 | `eval_terms` of `interpret`, through 22 calls of `predict` and `predict_proba`, about half of them repeated | about 75 % | `edit.monotonize.features-100-bins-1024` | 0.47 s |
+| 6 | `sample_completions` (`local/completions.py`): the sampled scores are gathered again at each step | about 45 % | `local.facts.features-100-bins-1024` | 0.11 s |
+| 7 | The import of `ebaml`: `skops.io`, `pandas` and the metrics of scikit-learn load eagerly | 0.65 s over `interpret`, 0.44 s more for the LLM functions | `import.*` | 1.75 to 2.2 s |
+| 8 | The JSON schemas of pydantic for about 20 tools, built at each `create_server` | about 40 % of a tool call | `mcp.*` | 40 ms |
+| 9 | The checks of beartype | 15 to 37 % of a call of a few milliseconds, 7 % or less of a slow call | `mcp.*`, `local.facts.*` | |
+| 10 | `describe_ebm` renders every graph before its first request | the whole rendering | `llm.*.describe_ebm.*` | |
+
+The memory is not a hotspot. The largest peak is 203 MB, for an edit of the model with 500 features and 1024 bins. The
+graph text of that model allocates 9 GB in total, but each text is short-lived, and the peak stays at 77 MB.
+
+beartype stays on for the whole package. A run with the hook off in a scratch copy saves 7 % or less on the slow
+workloads, 15 to 37 % on the calls of a few milliseconds (an MCP tool, the local facts of a small model), and 0.4 s on
+the first load of the LLM functions.
+
+### Sync and async forms
+
+`describe_ebm` and `describe_ebm_async` take the same time, and so do `explain_instance` and its async form, because
+the same pipeline runs in both. With 10 ms of delay in each reply, `describe_ebm` of 100 features takes 3.6 s with
+`max_concurrency=1`, 1.0 s with 4 and 0.46 s with 16, in both forms.
+
+The async forms run the CPU steps in the event loop. A task that sleeps 1 ms and records each gap measured how long
+the loop is blocked:
+
+| Model | `describe_ebm_async`: longest block | `explain_instance_async`: longest block |
+| --- | --- | --- |
+| `titanic` | 17 ms | 5 ms |
+| `diabetes` | 110 ms | 8 ms |
+| `multiclass` | 671 ms | 13 ms |
+| `features-100-bins-1024` | 1357 ms | 116 ms |
+| `features-500-bins-32` | 325 ms | 284 ms |
+| `features-500-bins-1024` | (over the token budget) | 585 ms |
+
+`describe_ebm_async` renders every graph before its first request, so it blocks the loop once, for the sum of the
+rendering of all graphs. `explain_instance_async` blocks the loop for the time of the local facts.
