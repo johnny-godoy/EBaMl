@@ -33,7 +33,7 @@ EBaMl will reach three goals:
 | 0.12.0 | Quality checks of the documentation site: accessibility, links, HTML, performance and layout. | None | 0.11.0 | Done |
 | 0.13.0 | Actionable recourse: immutable features, allowed values, cost strategies and several plans for the counterfactual, with proofs. | None | 0.10.0 | Done |
 | 0.14.0 | Graphs for vision models: text, vision and mixed modes, with a safe fallback or a specific error for a model without image input. | None | 0.10.0 | Done |
-| 0.15.0 | Async API: a native `_async` form of each public function that calls an LLM, next to the sync form, with one shared implementation, partial results of `describe_ebm`, and an MCP server that serves calls at the same time. | [async-api](docs/plans/async-api.md) | 0.14.0 | Planned |
+| 0.15.0 | Async API: a native `_async` form of each public function that calls an LLM, next to the sync form, with one shared implementation, partial results of `describe_ebm`, and an MCP server that serves calls at the same time. | None | 0.14.0 | Done |
 | 0.16.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system with the sync and the async forms, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.13.0, 0.15.0 | Planned |
 | 0.17.0 | Python 3.12 and later: the package supports every CPython release from 3.12, and a CI matrix tests each one. | [python-versions](docs/plans/python-versions.md) | 0.16.0 | Planned |
 | **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0, 0.16.0, 0.17.0 | Planned |
