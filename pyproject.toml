@@ -247,9 +247,9 @@ dist = [
 ignore_decorators = ["@pytest.fixture", "@server.tool", "@server.resource", "@app.default", "@app.command*", "@*.register*"]
 # reason: recurring patterns: pytest reads pytestmark and the pytest_* hooks of a conftest.py by name, Python calls the
 # module hooks __getattr__ and __dir__ (PEP 562) by name, http.server calls the do_*, translate_path and log_message
-# methods of a request handler by name, and html.parser calls the handle_* methods of a parser by name. Code never
+# methods of a request handler and the request_queue_size of a server by name, and html.parser calls the handle_* methods of a parser by name. Code never
 # references them, so vulture reports them as unused.
-ignore_names = ["pytestmark", "pytest_*", "__getattr__", "__dir__", "do_POST", "translate_path", "log_message", "handle_starttag"]
+ignore_names = ["pytestmark", "pytest_*", "__getattr__", "__dir__", "do_POST", "translate_path", "log_message", "request_queue_size", "handle_starttag"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/integration", "tests/api", "tests/contract"]
