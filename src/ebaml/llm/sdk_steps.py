@@ -11,11 +11,12 @@ the protocols below name the fields of the replies that a pipeline reads.
 """
 
 import functools
-from collections.abc import Callable, Generator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from typing import Any, Protocol, runtime_checkable
 
 import attrs
 
+from ebaml.core.exceptions import LLMRequestError
 from ebaml.llm.token_learning import RequestSample
 
 # A value of a class of baml_sdk, such as GraphPromptOptions, or a reply of a step. The module imports no baml_sdk,
@@ -134,11 +135,86 @@ class Described:
 
 
 @attrs.frozen
+class Outcome:
+    """The outcome of one step: its reply, or its error.
+
+    Attributes
+    ----------
+    reply: SDKValue
+        The reply of the step, or ``None`` if the step failed.
+    error: Exception | None
+        The error of the step, or ``None`` if the step succeeded.
+
+    """
+
+    reply: SDKValue = None
+    error: Exception | None = None
+
+    @classmethod
+    def of(cls, step: Callable[[], SDKValue]) -> "Outcome":
+        """Run a step and keep its reply or its error.
+
+        Parameters
+        ----------
+        step: Callable[[], SDKValue]
+            Runs the step and gives its reply.
+
+        Returns
+        -------
+        Outcome
+            The reply or the error.
+
+        """
+        try:
+            return cls(reply=step())
+        except Exception as error:  # ruff: ignore[blind-except] -- the pipeline or the FanOut decides which errors stop the call
+            return cls(error=error)
+
+    @classmethod
+    async def of_awaitable(cls, step: Awaitable[SDKValue]) -> "Outcome":
+        """Await a step and keep its reply or its error.
+
+        Parameters
+        ----------
+        step: Awaitable[SDKValue]
+            The step, which gives its reply.
+
+        Returns
+        -------
+        Outcome
+            The reply or the error.
+
+        """
+        try:
+            return cls(reply=await step)
+        except Exception as error:  # ruff: ignore[blind-except] -- the pipeline or the FanOut decides which errors stop the call
+            return cls(error=error)
+
+
+@attrs.frozen
+class FeatureOutcome:
+    """The outcome of one graph pipeline of a ``FanOut``: its description, or the error of its feature.
+
+    Attributes
+    ----------
+    described: Described | None
+        The description, or ``None`` if the pipeline failed.
+    error: LLMRequestError | None
+        The error that concerns this feature only, or ``None`` if the pipeline succeeded.
+
+    """
+
+    described: Described | None = None
+    error: LLMRequestError | None = None
+
+
+@attrs.frozen
 class FanOut:
     """Several pipelines that describe one graph each, and that a driver runs at the same time.
 
-    The driver replies with the result of each pipeline, in the order of ``pipelines``. If a pipeline fails, the driver
-    cancels the pipelines that have not started and raises the error of the first pipeline that failed.
+    The driver replies with the ``FeatureOutcome`` of each pipeline, in the order of ``pipelines``. It passes the error
+    of a pipeline to ``settle``. If ``settle`` raises, the error concerns every request: the driver cancels the
+    pipelines that have not started and raises that error.
 
     Attributes
     ----------
@@ -147,13 +223,34 @@ class FanOut:
     max_concurrency: int
         The maximum number of pipelines that run at the same time.
     finish_step: Callable[[], None]
-        The driver calls it once for each pipeline that finishes, in one thread.
+        The driver calls it once for each pipeline that finishes or fails, in one thread.
+    settle: Callable[[Exception], LLMRequestError]
+        Turns the error of one pipeline into the error of its feature, or raises it again if it stops the whole call.
 
     """
 
     pipelines: Sequence[Generator["Step", SDKValue, Described]]
     max_concurrency: int
     finish_step: Callable[[], None]
+    settle: Callable[[Exception], LLMRequestError]
+
+    def feature_outcome(self, outcome: Outcome) -> FeatureOutcome:
+        """Turn the outcome of one pipeline into the outcome of its feature.
+
+        Parameters
+        ----------
+        outcome: Outcome
+            The description that the pipeline returned, or its error.
+
+        Returns
+        -------
+        FeatureOutcome
+            The description, or the error of the feature. ``settle`` raises an error that stops the whole call.
+
+        """
+        if outcome.error is not None:
+            return FeatureOutcome(error=self.settle(outcome.error))
+        return FeatureOutcome(described=outcome.reply)
 
     def dispatch[T](self, driver: Driver[T]) -> T:
         """Let the driver run the pipelines.
@@ -182,8 +279,8 @@ type Step = SDKCall | FanOut
 class PipelineRun[R]:
     """One run of a pipeline, which a driver moves on with the outcome of each step.
 
-    A driver runs ``step`` while it is not ``None``, then passes the reply to ``reply``, or the error to ``fail``. An
-    error that the pipeline does not handle leaves ``reply`` or ``fail``. When ``step`` is ``None``, ``result`` gives
+    A driver runs ``step`` while it is not ``None``, then passes its ``Outcome`` to ``advance``. An error that the
+    pipeline does not handle leaves ``advance``. When ``step`` is ``None``, ``result`` gives
     the value that the pipeline returned. A driver closes the run when it stops (``contextlib.closing``), so that a
     run that stops early, for example when its task is cancelled, closes the pipeline.
 
@@ -209,27 +306,19 @@ class PipelineRun[R]:
             self.step = None
             self._result = stop.value
 
-    def reply(self, value: SDKValue) -> None:
-        """Send the reply of the step into the pipeline, and read its next step.
+    def advance(self, outcome: Outcome) -> None:
+        """Send the reply of the step into the pipeline, or throw its error into it, and read the next step.
 
         Parameters
         ----------
-        value: SDKValue
-            The reply.
+        outcome: Outcome
+            The reply or the error of the step. If the pipeline does not handle the error, the method raises it.
 
         """
-        self._resume(functools.partial(self._pipeline.send, value))
-
-    def fail(self, error: Exception) -> None:
-        """Throw the error of the step into the pipeline, and read its next step.
-
-        Parameters
-        ----------
-        error: Exception
-            The error of the step. If the pipeline does not handle it, the method raises it.
-
-        """
-        self._resume(functools.partial(self._pipeline.throw, error))
+        if outcome.error is not None:
+            self._resume(functools.partial(self._pipeline.throw, outcome.error))
+        else:
+            self._resume(functools.partial(self._pipeline.send, outcome.reply))
 
     def result(self) -> R:
         """Give the value that the pipeline returned.

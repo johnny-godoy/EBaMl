@@ -58,8 +58,10 @@ The boundary between the two languages is the generated `baml_sdk` package.
 - `src/ebaml/graphs/` (`ebm_graph.py`, `graph_text.py`) extract and simplify an `EBMGraph` and convert it to and from text.
   `terms.py` finds the term of each feature: index the term attributes (`term_scores_`, `bin_weights_`) through it. The
   token budget is an estimate from the words and digits of the text (`token_budget.py`, `token_weights.py`). A
-  `TokenLearner` in `llm/token_learning.py` keeps weights for each model and can learn them. `llm/descriptors.py`
-  connects this code to `baml_sdk` (`describe_graph`, `describe_ebm` with a thread pool, `explain_instance`).
+  `TokenLearner` in `llm/token_learning.py` keeps weights for each model and can learn them. `llm/pipelines.py`
+  writes each LLM call once, as a generator that yields the `SDKCall` steps of `llm/sdk_steps.py`. The sync driver in
+  `llm/descriptors.py` (a thread pool for `describe_ebm`) and the async driver in `llm/async_descriptors.py` (a task
+  group) run the same pipelines, so a fix in one form reaches the other. Each public LLM call has an `_async` twin.
 - `src/ebaml/benchmark.py` and `benchmark/` follow the TalkToEBM benchmark. `is_correct` parses and compares
   values.
 - `baml_src/tests/` holds the BAML tests: one `<source>_test.baml` for each source file, `support.baml` for the fakes that

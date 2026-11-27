@@ -154,3 +154,28 @@ def test_the_exported_names_come_from_modules_of_ebaml() -> None:
 )
 def test_each_layer_package_has_a_docstring(module: str) -> None:
     assert inspect.getdoc(__import__(module, fromlist=["_"]))
+
+
+def _llm_functions() -> list[str]:
+    """List the public functions that call an LLM in the sync form: the exported functions of the sync driver.
+
+    Returns
+    -------
+    list[str]
+        The names.
+
+    """
+    from ebaml.llm import descriptors  # ruff: ignore[import-outside-top-level] -- the import runs baml generate when the SDK is missing
+
+    return [name for name in ebaml.__all__ if inspect.isfunction(getattr(descriptors, name, None))]
+
+
+def test_the_public_functions_that_call_an_llm_are_found() -> None:
+    assert set(_llm_functions()) == {"describe_ebm", "describe_graph", "explain_instance", "propose_difficulties"}
+
+
+@pytest.mark.parametrize("name", _llm_functions())
+def test_each_public_function_that_calls_an_llm_has_an_async_twin_with_the_same_signature(name: str) -> None:
+    sync_form, async_form = getattr(ebaml, name), getattr(ebaml, f"{name}_async", None)
+    assert inspect.iscoroutinefunction(async_form), f"ebaml exports no async function {name}_async"
+    assert inspect.signature(sync_form) == inspect.signature(async_form)

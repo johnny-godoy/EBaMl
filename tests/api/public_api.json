@@ -407,10 +407,11 @@
     "fields": [
       "text: <class 'str'>",
       "skipped_terms: list[str]",
-      "skipped_features: list[str]"
+      "skipped_features: list[str]",
+      "failed_features: list[ebaml.llm.pipelines.FeatureFailure]"
     ],
     "kind": "class",
-    "signature": "(text: str, skipped_terms: list[str], skipped_features: list[str]) -> None"
+    "signature": "(text: str, skipped_terms: list[str], skipped_features: list[str], *, failed_features: list[ebaml.llm.pipelines.FeatureFailure] = NOTHING) -> None"
   },
   "EBMGraph": {
     "bases": [
@@ -630,6 +631,17 @@
     ],
     "kind": "class",
     "signature": "(feature: str, difficulty: ebaml.local.costs.Difficulty, multiplier: float, reason: str) -> None"
+  },
+  "FeatureFailure": {
+    "bases": [
+      "object"
+    ],
+    "fields": [
+      "feature: <class 'str'>",
+      "error: <class 'ebaml.core.exceptions.LLMRequestError'>"
+    ],
+    "kind": "class",
+    "signature": "(feature: str, error: ebaml.core.exceptions.LLMRequestError) -> None"
   },
   "FeatureProfile": {
     "bases": [
@@ -891,6 +903,17 @@
     ],
     "kind": "exception",
     "signature": "(option: str, valid_options: collections.abc.Collection[str]) -> None"
+  },
+  "LLMReplyError": {
+    "bases": [
+      "LLMRequestError",
+      "EBaMlError",
+      "Exception",
+      "BaseException",
+      "object"
+    ],
+    "kind": "exception",
+    "signature": null
   },
   "LLMRequestError": {
     "bases": [
@@ -1810,7 +1833,15 @@
     "kind": "function",
     "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.pipelines.EBMDescription"
   },
+  "describe_ebm_async": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.pipelines.EBMDescription"
+  },
   "describe_graph": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.DescribeGraphRequest) -> str"
+  },
+  "describe_graph_async": {
     "kind": "function",
     "signature": "(request: ebaml.llm.requests.DescribeGraphRequest) -> str"
   },
@@ -1819,6 +1850,10 @@
     "signature": "(session: ebaml.edit.edit_session.EditSession, data: Frame, labels: collections.abc.Sequence[FeatureValue] | ArrayLike | None = None, subgroup: ebaml.edit.edit_effect.Subgroup | None = None, *, revision: str = 'current') -> ebaml.edit.edit_effect.EditEffect"
   },
   "explain_instance": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.ExplainInstanceRequest) -> ebaml.llm.pipelines.LocalExplanation"
+  },
+  "explain_instance_async": {
     "kind": "function",
     "signature": "(request: ebaml.llm.requests.ExplainInstanceRequest) -> ebaml.llm.pipelines.LocalExplanation"
   },
@@ -1855,6 +1890,10 @@
     "signature": "(contribution: ebaml.local.fact_types.Contribution, prediction: ebaml.local.fact_types.Prediction) -> bool"
   },
   "propose_difficulties": {
+    "kind": "function",
+    "signature": "(request: ebaml.llm.requests.ProposeDifficultiesRequest) -> ebaml.llm.difficulties.DifficultyProposal"
+  },
+  "propose_difficulties_async": {
     "kind": "function",
     "signature": "(request: ebaml.llm.requests.ProposeDifficultiesRequest) -> ebaml.llm.difficulties.DifficultyProposal"
   },

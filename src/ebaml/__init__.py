@@ -1,9 +1,10 @@
 """Talk 2 EBM in BAML.
 
 Import every public name from ``ebaml``. The names ``describe_graph``, ``describe_ebm``, ``explain_instance``,
-``propose_difficulties``, ``LocalExplanation`` and ``EBMDescription`` load on first use, because the modules that hold
-them import the BAML runtime and can run ``baml generate``. The names ``graph_png``, ``graph_svg``, ``graph_figure``
-and ``GraphImageOptions`` load on first use too, because they need the extra ``vision``.
+``propose_difficulties``, their ``_async`` forms, ``LocalExplanation``, ``EBMDescription`` and ``FeatureFailure`` load
+on first use, because the modules that hold them import the BAML runtime and can run ``baml generate``. The names
+``graph_png``, ``graph_svg``, ``graph_figure`` and ``GraphImageOptions`` load on first use too, because they need the
+extra ``vision``.
 """
 
 import importlib
@@ -28,6 +29,7 @@ from ebaml.core.exceptions import (
     HistoryError,
     InvalidInstanceError,
     InvalidOptionError,
+    LLMReplyError,
     LLMRequestError,
     MissingAPIKeyError,
     MissingExtraError,
@@ -165,13 +167,19 @@ from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 
 if TYPE_CHECKING:
     from ebaml.graphs.graph_image import GraphImageOptions, graph_figure, graph_png, graph_svg
+    from ebaml.llm.async_descriptors import (
+        describe_ebm_async,
+        describe_graph_async,
+        explain_instance_async,
+        propose_difficulties_async,
+    )
     from ebaml.llm.descriptors import (
         describe_ebm,
         describe_graph,
         explain_instance,
         propose_difficulties,
     )
-    from ebaml.llm.pipelines import EBMDescription, LocalExplanation
+    from ebaml.llm.pipelines import EBMDescription, FeatureFailure, LocalExplanation
 
 __version__: str = version("ebaml")
 
@@ -228,6 +236,7 @@ __all__ = [
     "ExtendRange",
     "FactTexts",
     "FeatureDifficulty",
+    "FeatureFailure",
     "FeatureProfile",
     "FeatureType",
     "FitLine",
@@ -247,6 +256,7 @@ __all__ = [
     "Interval",
     "InvalidInstanceError",
     "InvalidOptionError",
+    "LLMReplyError",
     "LLMRequestError",
     "Layperson",
     "Levels",
@@ -328,9 +338,12 @@ __all__ = [
     "check_token_budget",
     "compute_local_facts",
     "describe_ebm",
+    "describe_ebm_async",
     "describe_graph",
+    "describe_graph_async",
     "edit_effect",
     "explain_instance",
+    "explain_instance_async",
     "facts_to_texts",
     "graph_figure",
     "graph_png",
@@ -340,6 +353,7 @@ __all__ = [
     "model_kind",
     "points_towards",
     "propose_difficulties",
+    "propose_difficulties_async",
     "resolve_audience",
     "round_value",
     "sample_size_word",
@@ -350,9 +364,9 @@ __all__ = [
 
 # nosemgrep: ebaml-no-object-type -- PEP 562 returns a function or a class chosen by name, so no single type fits
 def __getattr__(name: str) -> object:
-    """Load a name of ``ebaml.llm.descriptors``, ``ebaml.llm.pipelines`` or ``ebaml.graphs.graph_image`` on first use.
+    """Load a name of a module of ``ebaml.llm`` or of ``ebaml.graphs.graph_image`` on first use.
 
-    The first module can run ``baml generate`` when it is imported, the second imports the BAML runtime, and the third
+    The modules of ``ebaml.llm`` import the BAML runtime, and the drivers can run ``baml generate``. The last module
     needs the extra ``vision``, so ``import ebaml`` must not load them. The loaded name goes into the module namespace,
     and the next access skips this function.
 
@@ -377,6 +391,9 @@ def __getattr__(name: str) -> object:
     def load_descriptors() -> ModuleType:
         return importlib.import_module("ebaml.llm.descriptors")
 
+    def load_async_descriptors() -> ModuleType:
+        return importlib.import_module("ebaml.llm.async_descriptors")
+
     def load_pipelines() -> ModuleType:
         return importlib.import_module("ebaml.llm.pipelines")
 
@@ -387,10 +404,15 @@ def __getattr__(name: str) -> object:
     loaders: dict[str, Callable[[], ModuleType]] = {
         "EBMDescription": load_pipelines,
         "LocalExplanation": load_pipelines,
+        "FeatureFailure": load_pipelines,
         "describe_ebm": load_descriptors,
         "describe_graph": load_descriptors,
         "explain_instance": load_descriptors,
         "propose_difficulties": load_descriptors,
+        "describe_ebm_async": load_async_descriptors,
+        "describe_graph_async": load_async_descriptors,
+        "explain_instance_async": load_async_descriptors,
+        "propose_difficulties_async": load_async_descriptors,
         "GraphImageOptions": load_graph_image,
         "graph_figure": load_graph_image,
         "graph_png": load_graph_image,

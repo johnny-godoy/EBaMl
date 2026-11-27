@@ -5,15 +5,16 @@ are doctests, and the API reference page shows them. The ``python`` code blocks 
 in order, and the code blocks of one file share their variables. The root ``conftest.py`` gives the collection hook of
 this file to pytest, because a collection hook works only for the files below its ``conftest.py``.
 
-The Markdown examples use ``X`` and ``y`` with no definition, and they call the LLM. ``setup`` gives each Markdown file
-a small binary data set, and it replaces the LLM calls of ``baml_sdk`` with fakes that send no request. ``fake_sdk``
-checks each fake against the signature that ``baml generate`` wrote. An example therefore fails when it calls a
-function with arguments that the real function does not accept.
+The examples use ``X`` and ``y`` with no definition, and they call the LLM. ``setup`` gives each Markdown file and each
+docstring a small binary data set, and it replaces the LLM calls of ``baml_sdk`` with fakes that send no request.
+``fake_sdk`` checks each fake against the signature that ``baml generate`` wrote. An example therefore fails when it
+calls a function with arguments that the real function does not accept.
 
 Run the examples with ``uv run pytest README.md docs src --no-cov``. Put setup that the reader does not need in an
 ``<!-- invisible-code-block: python -->`` comment, and skip a block with ``<!-- skip: next -- <reason> -->``.
 """
 
+import contextlib
 import doctest  # ruff: ignore[banned-api] -- Sybil reads the option flags of doctest; the project runs no doctest itself
 from collections.abc import Callable, MutableMapping
 from pathlib import Path
@@ -21,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd  # ruff: ignore[banned-api] -- the test builds the pandas frame that interpret fits on
 import pytest
+from structlog.testing import capture_logs
 from sybil import Sybil
 from sybil.parsers.markdown import PythonCodeBlockParser, SkipParser
 from sybil.parsers.rest import DocTestParser
@@ -34,6 +36,7 @@ OPTIONS: int = doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE
 FAKE_TEXT = "A fake reply, which stands in for the text of the LLM."
 USAGE: baml_sdk.TokenUsage = baml_sdk.TokenUsage(input_tokens=1, output_tokens=1, samples=[])
 PATCHER = "_offline_llm"
+LOGS = "_captured_logs"
 
 
 def _counted(*_args: object, **_kwargs: object) -> baml_sdk.Counted:
@@ -59,13 +62,15 @@ def _difficulties(*_args: object, **_kwargs: object) -> baml_sdk.DifficultyPropo
     )
 
 
-# the BAML functions that send a request to the LLM. The other functions of baml_sdk run locally, so they stay real.
-LLM_FAKES = {
-    "describe_graph_cot_sync": _counted,
-    "summarize_ebm_sync": _counted,
-    "explain_local_sync": _local_text,
-    "propose_difficulty_sync": _difficulties,
+# the BAML functions that send a request to the LLM, in the sync and the async form. The other functions of baml_sdk run
+# locally, so they stay real. fake_sdk gives the fake of an async function a coroutine.
+_REPLIES = {
+    "describe_graph_cot": _counted,
+    "summarize_ebm": _counted,
+    "explain_local": _local_text,
+    "propose_difficulty": _difficulties,
 }
+LLM_FAKES = {**{f"{name}_sync": reply for name, reply in _REPLIES.items()}, **_REPLIES}
 
 
 def training_data() -> tuple[pd.DataFrame, pd.Series]:
@@ -93,7 +98,7 @@ def training_data() -> tuple[pd.DataFrame, pd.Series]:
 
 
 def setup(namespace: MutableMapping[str, object]) -> None:
-    """Prepare one Markdown file: give it ``X`` and ``y``, and replace the LLM calls with fakes.
+    """Prepare one Markdown file or one docstring: give it ``X`` and ``y``, and replace the LLM calls with fakes.
 
     Parameters
     ----------
@@ -105,11 +110,15 @@ def setup(namespace: MutableMapping[str, object]) -> None:
     for name, fake in LLM_FAKES.items():
         patcher.setattr(baml_sdk, name, fake_sdk(name, fake))
     namespace[PATCHER] = patcher
+    # the usage log would print among the output that a docstring example compares, so the setup keeps the logs
+    logs = contextlib.ExitStack()
+    logs.enter_context(capture_logs())
+    namespace[LOGS] = logs
     namespace["X"], namespace["y"] = training_data()
 
 
 def teardown(namespace: MutableMapping[str, object]) -> None:
-    """Put the real LLM calls back after one Markdown file.
+    """Put the real LLM calls back after one Markdown file or one docstring.
 
     Parameters
     ----------
@@ -120,6 +129,9 @@ def teardown(namespace: MutableMapping[str, object]) -> None:
     patcher = namespace[PATCHER]
     assert isinstance(patcher, pytest.MonkeyPatch)
     patcher.undo()
+    logs = namespace[LOGS]
+    assert isinstance(logs, contextlib.ExitStack)
+    logs.close()
 
 
 MARKDOWN: Sybil = Sybil(
@@ -135,6 +147,8 @@ DOCSTRINGS: Sybil = Sybil(
     path=str(ROOT),
     # "**/" needs one directory at least, so the modules at the top of the package need a pattern of their own
     patterns=["src/ebaml/*.py", "src/ebaml/**/*.py"],
+    setup=setup,
+    teardown=teardown,
     name="docstrings",
 )
 
