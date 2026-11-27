@@ -47,6 +47,32 @@ changes a fact is a bug.
   command keeps `--mode`, and the workloads cover the recourse search.
 </context>
 
+<decisions>
+The first pull request of the milestone added the two kinds of benchmark, the workloads, the CI comparison and the
+profiles (`benchmark/performance/README.md`). The user then made these choices from the profiles and from an impact
+and effort report (an or-solver knapsack over 158 options, a budget of 40 hours). A follow-up pull request implements
+them and completes the milestone.
+
+- Build the plan of 40 hours, every fix with a differential test that compares the old and the new output:
+  1. Render each graph in the task that sends its request, in both drivers, so that the rendering overlaps the
+     requests of the other graphs. Today `describe_ebm_pipeline` renders every graph before its first request.
+  2. Count the digits of `TextFeatures.of` with `str.translate` for an ASCII text, and keep the loop for any other text.
+  3. Cache `confidence_factor`, a pure function of the confidence level.
+  4. Make `EBMGraph.simplify` faster in Python, with the same groups.
+  5. Draw the sampled scores of `sample_completions` once, and keep the order of the additions, so that every share
+     stays the same (contract 6).
+  6. Compute each prediction of `edit_effect` once: a call with the same model, the same rows and the same method runs
+     once.
+  7. Run `compute_local_facts` of `explain_instance_async` in `asyncio.to_thread`.
+  8. Import `skops.io`, the metrics of scikit-learn and `pandas` only where they are used.
+  9. Build the JSON schemas of the MCP tools once for each process.
+  10. Give the hot paths of beartype cheaper exact hints, without turning beartype off.
+- Async: the user approved items 1 and 7. Update `docs/async.md` and the docstrings of the `_async` functions so that
+  they name the steps that still block the event loop.
+- The other options of the report (one `orjson` call for each graph in `xy_to_json`, processes for the rendering,
+  and the Rust options) are not part of the plan. Lean code is milestone 0.18.0 (`docs/plans/lean-kernels.md`).
+</decisions>
+
 <steps>
 1. **Restructure `benchmark/`.** Give each kind of benchmark its own subdirectory, and one command with one subcommand
    for each kind. Propose the layout to the user before you move files, for example:
