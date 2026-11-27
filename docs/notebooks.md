@@ -26,6 +26,7 @@ notebook never sends a request by accident. The default model needs `OPENROUTER_
 | [MCP server](mcp-notebook.md) | The real `ebaml-mcp` server and a client: read a graph, explain a row, edit the model and save it after a confirmation. |
 | [BAML agent](baml-agent-notebook.md) | The BAML agent of the `baml` command, which answers one question with the tools of the server. |
 | [Chat](chat-notebook.md) | A chat box in front of the `ebaml-chat` command. |
+| [Async API](async-notebook.md) | `describe_ebm_async` with its failed features, and several predictions explained at the same time in one task group. |
 
 To open a notebook and run its cells, use `marimo edit` from a source checkout:
 

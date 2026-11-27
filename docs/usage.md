@@ -20,7 +20,13 @@ print(describe_ebm(DescribeEBMRequest(ebm, num_sentences=30, prompt=PromptOption
 
 `describe_ebm` returns an `EBMDescription`. Its field `text` is the description. Its fields `skipped_terms` and
 `skipped_features` name the interaction terms and the features without a graph that the description leaves out. The text
-says so too, and the same names reach the log as `interactions_skipped` and `features_skipped` warnings.
+says so too, and the same names reach the log as `interactions_skipped` and `features_skipped` warnings. Its field
+`failed_features` names each feature whose request failed on its own, for example after a rate limit, with the error.
+The summary covers the other features and names the failed ones, and a `features_failed` warning names them too. See
+[Partial results of describe_ebm](async.md#partial-results-of-describe_ebm).
+
+Each function has an async form with the suffix `_async`, for a program that runs an event loop. See
+[Async API](async.md).
 
 A graph can be turned into text with `EBMGraph.to_text` and back with `EBMGraph.from_text`, which also reads a graph
 embedded in a longer prompt. It needs the confidence bounds, and it only reads continuous features.
@@ -28,7 +34,7 @@ embedded in a longer prompt. It needs the confidence bounds, and it only reads c
 Each function takes one request: `DescribeGraphRequest`, `DescribeEBMRequest` or `ExplainInstanceRequest`. Three keyword-only fields set the options. `graph=GraphOptions(...)` sets the options of `EBMGraph.from_ebm` and
 `EBMGraph.to_text`, for example `max_tokens`. `prompt=PromptOptions(...)` sets the descriptions that the prompts use
 (`expert_description`, `graph_description`, `dataset_description` and `task_description`). `model=` selects the LLM: see
-[Choosing the model](providers.md). The requests, `GraphOptions`, `PromptOptions` and `ModelOptions` are importable from `ebaml`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.descriptors` logger.
+[Choosing the model](providers.md). The requests, `GraphOptions`, `PromptOptions` and `ModelOptions` are importable from `ebaml`. Token usage reported by the provider is logged at `INFO` on the `ebaml.llm.pipelines` logger.
 
 A multiclass classifier has one graph series per class. `GraphOptions(classes=[...])` selects the classes to describe,
 because the text of a model with many classes is long. In every bin, the scores have the same mean over all the classes
