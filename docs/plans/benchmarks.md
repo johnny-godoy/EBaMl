@@ -26,6 +26,9 @@ changes a fact is a bug.
 - 0.15.0 gives each function that calls an LLM a native async form next to the sync form, with one shared
   implementation of the pipeline. Read `docs/async.md` and the drivers in `ebaml.llm` before you profile: a fix in the
   shared pipeline speeds up both forms, and a fix in one driver needs a check of the other.
+- The async forms of 0.15.0 run the CPU steps (graph rendering, the facts of a local explanation with the OR-Tools
+  search and the sampler) inline, in the event loop, and their docs say that these steps block the loop. The user chose
+  to decide on `asyncio.to_thread` only from measurements, and this milestone makes them.
 - The LLM request dominates the wall time of a call, and EBaMl does not control it. The performance benchmark measures
   the work around it: the graph extraction and simplification (`ebaml.graphs`), the graph text and the token budget, the
   facts of a local explanation (counterfactual, sufficient reason through OR-Tools, sampled completions in
@@ -80,6 +83,11 @@ changes a fact is a bug.
 6. **Choose the fixes.** For each hotspot, estimate the gain for a user and the risk to correctness. Fix only the ones
    where the gain is real for a normal workload. Show the list and your choice to the user before you change a
    proof-covered algorithm.
+   Decide also how the async forms run each CPU step. Measure how long each step blocks the event loop on each
+   workload (for example with `loop.slow_callback_duration` in debug mode, or the time of each step in the profile).
+   Show the table to the user with a proposal for each step: keep it inline, run it with `asyncio.to_thread`, or make
+   it faster. Implement the choice of the user, and update `docs/async.md` and the docstrings of the `_async`
+   functions so that they name the steps that still block the loop.
 7. **Fix one hotspot per commit.** Write each fix as a `perf` commit with the numbers before and after in the body.
    Prefer, in order: work that is not needed (a repeated extraction, a cache that the caller can hold), a vectorized
    numpy form (`loops.md`), a better data structure, a lazy import, and last a different algorithm.
