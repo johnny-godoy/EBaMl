@@ -8,6 +8,7 @@ above. The module needs no tokenizer, no file and no ``baml_sdk``.
 
 import itertools
 import math
+import string
 from collections.abc import Mapping, Sequence
 from typing import Self, TypedDict
 
@@ -19,6 +20,32 @@ import orjson
 from ebaml.core.exceptions import TokenFitError
 
 _FEATURE_COUNT = 3
+
+
+# Deletes the ASCII digits. An ASCII text has no other character for which str.isdigit is true.
+_WITHOUT_ASCII_DIGITS = str.maketrans("", "", string.digits)
+
+
+def _digit_count(text: str) -> int:
+    """Count the characters of a text for which ``str.isdigit`` is true.
+
+    An ASCII text, such as the graph text, takes the translation in C. Another text takes the loop over each character,
+    because ``str.isdigit`` is also true for some characters outside ASCII, such as ``²``.
+
+    Parameters
+    ----------
+    text: str
+        The text.
+
+    Returns
+    -------
+    int
+        The number of digits.
+
+    """
+    if text.isascii():
+        return len(text) - len(text.translate(_WITHOUT_ASCII_DIGITS))
+    return sum(map(str.isdigit, text))
 
 
 @attrs.frozen
@@ -60,7 +87,7 @@ class TextFeatures:
         TextFeatures(words=3, bytes=8, digits=2)
 
         """
-        return cls(words=len(text.split()), bytes=len(text.encode()), digits=sum(char.isdigit() for char in text))
+        return cls(words=len(text.split()), bytes=len(text.encode()), digits=_digit_count(text))
 
     def as_vector(self) -> tuple[float, ...]:
         """Return the counts in the order of ``TokenWeights.as_vector``.
