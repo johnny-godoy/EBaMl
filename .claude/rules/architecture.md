@@ -15,9 +15,9 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
 | `ebaml.mcp` | The MCP server: tools that read an EBM and explain a prediction. Only this layer imports `mcp`. | `llm`, `local`, `edit`, `graphs`, `core` |
 | `ebaml.benchmark` | The TalkToEBM benchmark. It stands alone. | Nothing from `ebaml`. |
 
-- Only `llm/descriptors.py` imports `baml_sdk`. The reason: domain code then runs in a plain unit test (SOLID: D).
-  The pipelines of `llm/pipelines.py` yield `SDKCall` steps and import no SDK. The async driver of
-  `llm/async_descriptors.py` takes the module from `descriptors.SDK_MODULE`.
+- Only `llm/drivers.py` imports `baml_sdk`. It holds the sync and the async driver, which run the pipelines of
+  `llm/pipelines.py`. The reason: domain code and the pipelines then run in a plain unit test (SOLID: D). The public
+  functions of `llm/descriptors.py` and `llm/async_descriptors.py` hand their pipeline to a driver.
 - The import-linter contract covers every module of `ebaml.llm`, and its `ignore_imports` list names the allowed
   imports of `baml_sdk` and `baml_bridge`. Add an entry only with a reason in the `reason:` block above the list.
   `llm/sdk_setup.py` imports `baml_sdk` through `importlib`, which import-linter cannot see.

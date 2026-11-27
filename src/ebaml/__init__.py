@@ -179,7 +179,8 @@ if TYPE_CHECKING:
         explain_instance,
         propose_difficulties,
     )
-    from ebaml.llm.pipelines import EBMDescription, FeatureFailure, LocalExplanation
+    from ebaml.llm.ebm_description import EBMDescription, FeatureFailure
+    from ebaml.llm.pipelines import LocalExplanation
 
 __version__: str = version("ebaml")
 
@@ -394,6 +395,9 @@ def __getattr__(name: str) -> object:
     def load_async_descriptors() -> ModuleType:
         return importlib.import_module("ebaml.llm.async_descriptors")
 
+    def load_ebm_description() -> ModuleType:
+        return importlib.import_module("ebaml.llm.ebm_description")
+
     def load_pipelines() -> ModuleType:
         return importlib.import_module("ebaml.llm.pipelines")
 
@@ -402,9 +406,9 @@ def __getattr__(name: str) -> object:
 
     # the names that load on first use, by the loader of the module that holds them
     loaders: dict[str, Callable[[], ModuleType]] = {
-        "EBMDescription": load_pipelines,
+        "EBMDescription": load_ebm_description,
         "LocalExplanation": load_pipelines,
-        "FeatureFailure": load_pipelines,
+        "FeatureFailure": load_ebm_description,
         "describe_ebm": load_descriptors,
         "describe_graph": load_descriptors,
         "explain_instance": load_descriptors,

@@ -59,9 +59,10 @@ The boundary between the two languages is the generated `baml_sdk` package.
   `terms.py` finds the term of each feature: index the term attributes (`term_scores_`, `bin_weights_`) through it. The
   token budget is an estimate from the words and digits of the text (`token_budget.py`, `token_weights.py`). A
   `TokenLearner` in `llm/token_learning.py` keeps weights for each model and can learn them. `llm/pipelines.py`
-  writes each LLM call once, as a generator that yields the `SDKCall` steps of `llm/sdk_steps.py`. The sync driver in
-  `llm/descriptors.py` (a thread pool for `describe_ebm`) and the async driver in `llm/async_descriptors.py` (a task
-  group) run the same pipelines, so a fix in one form reaches the other. Each public LLM call has an `_async` twin.
+  writes each LLM call once, as a generator that yields the `SDKCall` steps of `llm/sdk_steps.py`. `llm/drivers.py`
+  runs them: the sync driver (a thread pool for `describe_ebm`) and the async driver (a task group). The public
+  functions of `llm/descriptors.py` and their `_async` twins in `llm/async_descriptors.py` share each pipeline, so a
+  fix in one form reaches the other. `llm/ebm_description.py` holds `EBMDescription` and the partial results.
 - `src/ebaml/benchmark.py` and `benchmark/` follow the TalkToEBM benchmark. `is_correct` parses and compares
   values.
 - `baml_src/tests/` holds the BAML tests: one `<source>_test.baml` for each source file, `support.baml` for the fakes that
@@ -72,7 +73,7 @@ The boundary between the two languages is the generated `baml_sdk` package.
 
 <layout>
 `src/ebaml/` has four layers: `core`, `graphs`, `local` and `llm`, with `benchmark.py` alone. A layer imports only the
-layers below it, and only `llm/descriptors.py` imports `baml_sdk`. Read `.claude/rules/architecture.md` before you add a
+layers below it, and only `llm/drivers.py` imports `baml_sdk`. Read `.claude/rules/architecture.md` before you add a
 module. import-linter, `scripts/architecture/layout.py` and the semgrep rules in `semgrep/` enforce it. Each fails
 `prek run --all-files`.
 </layout>

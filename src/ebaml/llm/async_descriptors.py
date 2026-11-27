@@ -1,26 +1,19 @@
 """Describe EBM graphs and models using LLMs: the async form of each call.
 
-Each function awaits the async functions of ``baml_sdk``, so an application that runs an event loop (a web server, an
-agent framework, a notebook) serves other work while the LLM answers. The functions run the pipelines of
-``ebaml.llm.pipelines``, as the sync functions of ``ebaml.llm.descriptors`` do, so both forms give the same result
-for the same request.
+Each function runs its pipeline with the async driver of ``ebaml.llm.drivers``, which awaits the async functions of
+``baml_sdk``. An application that runs an event loop (a web server, an agent framework, a notebook) then serves other
+work while the LLM answers. The sync functions of ``ebaml.llm.descriptors`` run the same pipelines, so both forms give
+the same result for the same request.
 
 The steps that need no LLM run in the event loop and block it while they run: the extraction and the text of the
 graphs, the images of the vision mode, and the facts of a local explanation. These steps take less than a second for a
 usual model.
 """
 
-import asyncio
-import contextlib
-from collections.abc import Awaitable, Callable, Generator
-from types import ModuleType
-
-import attrs
-
-from ebaml.llm.descriptors import SDK_MODULE, SDK_TYPES
 from ebaml.llm.difficulties import DifficultyProposal
+from ebaml.llm.drivers import SDK_TYPES, run_async
+from ebaml.llm.ebm_description import EBMDescription
 from ebaml.llm.pipelines import (
-    EBMDescription,
     LocalExplanation,
     describe_ebm_pipeline,
     describe_graph_pipeline,
@@ -33,99 +26,6 @@ from ebaml.llm.requests import (
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_steps import Described, FanOut, FeatureOutcome, Outcome, PipelineRun, SDKCall, SDKValue, Step
-
-
-@attrs.frozen
-class _AsyncDriver:
-    """Awaits the steps of a pipeline, and runs the graphs of a ``FanOut`` as tasks of one task group.
-
-    Attributes
-    ----------
-    sdk: ModuleType
-        The module whose async functions the driver awaits: ``baml_sdk``.
-
-    """
-
-    sdk: ModuleType
-
-    async def run[R](self, pipeline: Generator[Step, SDKValue, R]) -> R:
-        """Await each step of a pipeline, and send its outcome back, until the pipeline returns.
-
-        Parameters
-        ----------
-        pipeline: Generator[Step, SDKValue, R]
-            The pipeline to run in the event loop.
-
-        Returns
-        -------
-        R
-            The result of the pipeline.
-
-        """
-        with contextlib.closing(PipelineRun(pipeline)) as run:
-            while (step := run.step) is not None:
-                run.advance(await Outcome.of_awaitable(step.dispatch(self)))
-            return run.result()
-
-    def call(self, call: SDKCall) -> Awaitable[SDKValue]:
-        """Call the async function of ``baml_sdk`` that the step names.
-
-        Parameters
-        ----------
-        call: SDKCall
-            The name of the function and its arguments.
-
-        Returns
-        -------
-        Awaitable[SDKValue]
-            The coroutine of the call.
-
-        """
-        function: Callable[..., Awaitable[SDKValue]] = getattr(self.sdk, call.name)
-        return function(**call.arguments)
-
-    async def fan_out(self, fan_out: FanOut) -> list[FeatureOutcome]:
-        """Describe the graphs as tasks of one task group, with at most ``max_concurrency`` of them at the same time.
-
-        Each task counts its graph in the thread of the event loop when it finishes, so the progress bar needs no lock.
-        A graph that fails with an error of its feature only gives an outcome with the error. An error that stops the
-        whole call cancels the task group, and the method raises that one error, not an ``ExceptionGroup``.
-
-        Parameters
-        ----------
-        fan_out: FanOut
-            The pipelines, the number of graphs at the same time, the counter of finished graphs, and the function that
-            settles an error.
-
-        Returns
-        -------
-        list[FeatureOutcome]
-            The outcome of each graph, in the order of the pipelines.
-
-        """
-        limit = asyncio.Semaphore(fan_out.max_concurrency)
-
-        async def describe(pipeline: Generator[Step, SDKValue, Described]) -> FeatureOutcome:
-            async with limit:
-                outcome = fan_out.feature_outcome(await Outcome.of_awaitable(self.run(pipeline)))
-            fan_out.finish_step()
-            return outcome
-
-        tasks: list[asyncio.Task[FeatureOutcome]] = []
-        stopped: list[Exception] = []
-        try:
-            async with asyncio.TaskGroup() as group:
-                tasks.extend(group.create_task(describe(pipeline)) for pipeline in fan_out.pipelines)
-        except ExceptionGroup as errors:
-            stopped.extend(errors.exceptions)
-        if stopped:
-            # raised outside the handler, so the error keeps its own cause and its fix steps lead the traceback
-            raise stopped[0]
-        return [task.result() for task in tasks]
-
-
-_DRIVER = _AsyncDriver(SDK_MODULE)
 
 
 async def describe_graph_async(request: DescribeGraphRequest) -> str:
@@ -154,7 +54,7 @@ async def describe_graph_async(request: DescribeGraphRequest) -> str:
     A fake reply, which stands in for the text of the LLM.
 
     """
-    return await _DRIVER.run(describe_graph_pipeline(request, SDK_TYPES))
+    return await run_async(describe_graph_pipeline(request, SDK_TYPES))
 
 
 async def describe_ebm_async(request: DescribeEBMRequest) -> EBMDescription:
@@ -190,7 +90,7 @@ async def describe_ebm_async(request: DescribeEBMRequest) -> EBMDescription:
     []
 
     """
-    return await _DRIVER.run(describe_ebm_pipeline(request, SDK_TYPES))
+    return await run_async(describe_ebm_pipeline(request, SDK_TYPES))
 
 
 async def explain_instance_async(request: ExplainInstanceRequest) -> LocalExplanation:
@@ -220,7 +120,7 @@ async def explain_instance_async(request: ExplainInstanceRequest) -> LocalExplan
     A fake reply, which stands in for the text of the LLM.
 
     """
-    return await _DRIVER.run(explain_instance_pipeline(request, SDK_TYPES))
+    return await run_async(explain_instance_pipeline(request, SDK_TYPES))
 
 
 async def propose_difficulties_async(request: ProposeDifficultiesRequest) -> DifficultyProposal:
@@ -249,4 +149,4 @@ async def propose_difficulties_async(request: ProposeDifficultiesRequest) -> Dif
     [('fare', 'Easy'), ('age', 'VeryHard')]
 
     """
-    return await _DRIVER.run(propose_difficulties_pipeline(request, SDK_TYPES))
+    return await run_async(propose_difficulties_pipeline(request, SDK_TYPES))

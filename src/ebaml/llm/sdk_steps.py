@@ -2,9 +2,9 @@
 
 A pipeline (``ebaml.llm.pipelines``) is a generator. It yields a step: an ``SDKCall`` (one call of a ``baml_sdk``
 function) or a ``FanOut`` (several pipelines that run at the same time). A ``Driver`` runs the step, and a
-``PipelineRun`` sends the reply into the generator, or throws the error of the step into it. The sync driver in
-``ebaml.llm.descriptors`` calls ``baml_sdk.<name>_sync``, and the async driver in ``ebaml.llm.async_descriptors``
-awaits ``baml_sdk.<name>``. So the logic of a pipeline exists once for both forms.
+``PipelineRun`` sends the reply into the generator, or throws the error of the step into it. The sync driver of
+``ebaml.llm.drivers`` calls ``baml_sdk.<name>_sync``, and its async driver awaits ``baml_sdk.<name>``. So the logic of
+a pipeline exists once for both forms.
 
 The module imports no ``baml_sdk``. The classes of ``baml_sdk`` that a pipeline builds reach it in ``SDKTypes``, and
 the protocols below name the fields of the replies that a pipeline reads.

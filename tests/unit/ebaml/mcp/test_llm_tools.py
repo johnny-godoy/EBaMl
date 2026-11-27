@@ -10,8 +10,8 @@ from ebaml.edit.edits import SetScores
 from ebaml.edit.model_view import term_view
 from ebaml.edit.selections import Bins
 from ebaml.llm.difficulties import DifficultyProposal, FeatureDifficulty
+from ebaml.llm.ebm_description import EBMDescription, FeatureFailure
 from ebaml.llm.options import GraphOptions, ModelOptions
-from ebaml.llm.pipelines import EBMDescription, FeatureFailure
 from ebaml.llm.requests import DescribeEBMRequest, DescribeGraphRequest, ProposeDifficultiesRequest
 from ebaml.local.costs import DataCost, Difficulty, ScaledCost
 from ebaml.mcp import llm_tools

@@ -2,161 +2,35 @@
 
 The prompts and the chat conversations live in ``baml_src/talk_to_ebm.baml``. The pipelines of
 ``ebaml.llm.pipelines`` extract the graphs from the EBM, convert them to text and say which ``baml_sdk`` functions to
-call. This module drives them: it calls the ``<name>_sync`` function of ``baml_sdk`` for each step. Each function takes
+call. Each function of this module runs its pipeline with the sync driver of ``ebaml.llm.drivers``. Each function takes
 one request from ``ebaml.llm.requests``, and the ``model`` field of the request chooses the LLM of the call.
 """
 
-import contextlib
-import functools
-from collections.abc import Generator, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
-from types import ModuleType
-
-import attrs
+from collections.abc import Sequence
 
 from ebaml.llm.difficulties import DifficultyProposal
+from ebaml.llm.drivers import SDK_TYPES, run_sync
+from ebaml.llm.ebm_description import EBMDescription
 from ebaml.llm.options import ModelOptions, PromptOptions
 from ebaml.llm.pipelines import (
-    EBMDescription,
     LocalExplanation,
+    chat_with_mcp_pipeline,
     describe_ebm_pipeline,
     describe_graph_pipeline,
     explain_instance_pipeline,
-    model_spec_pipeline,
-    prompt_options_pipeline,
     propose_difficulties_pipeline,
+    sample_graph_tokens_pipeline,
 )
-from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.requests import (
     DescribeEBMRequest,
     DescribeGraphRequest,
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_setup import ensure_sdk
-from ebaml.llm.sdk_steps import (
-    Described,
-    FanOut,
-    FeatureOutcome,
-    Outcome,
-    PipelineRun,
-    SDKCall,
-    SDKTypes,
-    SDKValue,
-    Step,
-)
-
-# `baml_sdk` is generated and gitignored, so a checkout may lack it. Generate it before the import, or explain the fix.
-ensure_sdk()
-
-import baml_sdk  # ruff: ignore[module-import-not-at-top-of-file] -- ensure_sdk must run first
+from ebaml.llm.token_learning import RequestSample
 
 # the default of the option argument, as a module-level value that nothing changes: the option class is frozen
 _DEFAULT_PROMPT_OPTIONS = PromptOptions()
-# the generated module, for the async driver of ebaml.llm.async_descriptors: this module is the one that imports it
-SDK_MODULE: ModuleType = baml_sdk
-SDK_TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
-
-
-@attrs.frozen
-class _SyncDriver:
-    """Runs the steps of a pipeline in the thread of the caller, and the graphs of a ``FanOut`` in a thread pool.
-
-    Attributes
-    ----------
-    sdk: ModuleType
-        The module whose ``<name>_sync`` functions the driver calls: ``baml_sdk``.
-
-    """
-
-    sdk: ModuleType
-
-    def run[R](self, pipeline: Generator[Step, SDKValue, R]) -> R:
-        """Run a pipeline to its end.
-
-        Parameters
-        ----------
-        pipeline: Generator[Step, SDKValue, R]
-            The pipeline.
-
-        Returns
-        -------
-        R
-            The value that the pipeline returns.
-
-        """
-        with contextlib.closing(PipelineRun(pipeline)) as run:
-            while (step := run.step) is not None:
-                run.advance(Outcome.of(functools.partial(step.dispatch, self)))
-            return run.result()
-
-    def call(self, call: SDKCall) -> SDKValue:
-        """Call the ``<name>_sync`` function of ``baml_sdk``.
-
-        Parameters
-        ----------
-        call: SDKCall
-            The name of the function and its arguments.
-
-        Returns
-        -------
-        SDKValue
-            The reply.
-
-        """
-        return getattr(self.sdk, f"{call.name}_sync")(**call.arguments)
-
-    def fan_out(self, fan_out: FanOut) -> list[FeatureOutcome]:
-        """Describe the graphs at the same time, and count each one that finishes.
-
-        The method counts the graphs in the thread of the caller, in the order in which they finish, because the
-        progress bar is not thread safe. It returns the outcomes in the order of the pipelines. A graph that fails with
-        an error of its feature only gives an outcome with the error. An error that stops the whole call cancels the
-        graphs that have not started, and the method raises it.
-
-        Parameters
-        ----------
-        fan_out: FanOut
-            The pipelines, the number of graphs at the same time, and the counter of finished graphs.
-
-        Returns
-        -------
-        list[FeatureOutcome]
-            The outcome of each graph, in the order of the pipelines.
-
-        """
-        with ThreadPoolExecutor(max_workers=fan_out.max_concurrency) as pool:
-            futures: list[Future[Described]] = [pool.submit(self.run, pipeline) for pipeline in fan_out.pipelines]
-            outcomes: dict[Future[Described], FeatureOutcome] = {}
-            try:
-                for finished in as_completed(futures):
-                    outcomes[finished] = fan_out.feature_outcome(Outcome.of(finished.result))
-                    fan_out.finish_step()
-            except BaseException:
-                for future in futures:
-                    future.cancel()
-                raise
-            return [outcomes[future] for future in futures]
-
-
-_DRIVER = _SyncDriver(baml_sdk)
-
-
-def run_pipeline[R](pipeline: Generator[Step, SDKValue, R]) -> R:
-    """Run a pipeline to its end with the sync functions of ``baml_sdk``.
-
-    Parameters
-    ----------
-    pipeline: Generator[Step, SDKValue, R]
-        The pipeline.
-
-    Returns
-    -------
-    R
-        The value that the pipeline returns.
-
-    """
-    return _DRIVER.run(pipeline)
 
 
 def describe_graph(request: DescribeGraphRequest) -> str:
@@ -179,7 +53,7 @@ def describe_graph(request: DescribeGraphRequest) -> str:
         The description of the graph.
 
     """
-    return run_pipeline(describe_graph_pipeline(request, SDK_TYPES))
+    return run_sync(describe_graph_pipeline(request, SDK_TYPES))
 
 
 def sample_graph_tokens(
@@ -187,7 +61,7 @@ def sample_graph_tokens(
     model: ModelOptions | str | None = None,
     *,
     prompt: PromptOptions = _DEFAULT_PROMPT_OPTIONS,
-) -> list[baml_sdk.TokenSample]:
+) -> list[RequestSample]:
     """Send one request with the text of a graph and return its token samples.
 
     The request is the first turn of ``describe_graph``. Each sample has the body of the request and the input tokens
@@ -207,14 +81,12 @@ def sample_graph_tokens(
 
     Returns
     -------
-    list[baml_sdk.TokenSample]
-        One sample for each request that the provider counted. The list is empty when the provider reports no count.
+    list[RequestSample]
+        One ``baml_sdk.TokenSample`` for each request that the provider counted. The list is empty when the provider
+        reports no count.
 
     """
-    model_spec = run_pipeline(model_spec_pipeline(model, SDK_TYPES))
-    opts = run_pipeline(prompt_options_pipeline(prompt))
-    with provider_errors():
-        return baml_sdk.sample_graph_tokens_sync(graph=graph, opts=opts, model=model_spec)
+    return run_sync(sample_graph_tokens_pipeline(graph, model, prompt, SDK_TYPES))
 
 
 def chat_with_mcp(
@@ -247,9 +119,7 @@ def chat_with_mcp(
         The number of questions that the chat answered.
 
     """
-    model_spec = run_pipeline(model_spec_pipeline(model, SDK_TYPES))
-    with provider_errors():
-        return baml_sdk.chat_with_mcp_sync(command=command, args=list(arguments), model=model_spec, max_steps=max_steps)
+    return run_sync(chat_with_mcp_pipeline(command, arguments, model, max_steps, SDK_TYPES))
 
 
 def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
@@ -276,7 +146,7 @@ def describe_ebm(request: DescribeEBMRequest) -> EBMDescription:
         The description of the EBM, and the names of the interaction terms and the features that it leaves out.
 
     """
-    return run_pipeline(describe_ebm_pipeline(request, SDK_TYPES))
+    return run_sync(describe_ebm_pipeline(request, SDK_TYPES))
 
 
 def explain_instance(request: ExplainInstanceRequest) -> LocalExplanation:
@@ -299,7 +169,7 @@ def explain_instance(request: ExplainInstanceRequest) -> LocalExplanation:
         The three explanations and the facts they come from.
 
     """
-    return run_pipeline(explain_instance_pipeline(request, SDK_TYPES))
+    return run_sync(explain_instance_pipeline(request, SDK_TYPES))
 
 
 def propose_difficulties(request: ProposeDifficultiesRequest) -> DifficultyProposal:
@@ -320,4 +190,4 @@ def propose_difficulties(request: ProposeDifficultiesRequest) -> DifficultyPropo
         The difficulty and the reason of each input that the reply rates, and the ``ScaledCost`` that they give.
 
     """
-    return run_pipeline(propose_difficulties_pipeline(request, SDK_TYPES))
+    return run_sync(propose_difficulties_pipeline(request, SDK_TYPES))

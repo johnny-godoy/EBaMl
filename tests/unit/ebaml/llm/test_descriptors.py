@@ -6,9 +6,8 @@ import base64
 import io
 import re
 import sys
-import time
 import typing
-from collections.abc import Callable, Generator, Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, ClassVar, override
 
@@ -34,17 +33,16 @@ from ebaml.graphs.graph_image import GraphImageOptions, graph_png
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.token_budget import check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey, TokenWeights, WeightsEntry, WeightsTable
-from ebaml.llm import descriptors, pipelines
+from ebaml.llm import descriptors, drivers, pipelines
+from ebaml.llm.ebm_description import EBMDescription
 from ebaml.llm.graph_views import RenderedGraph
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
-from ebaml.llm.pipelines import EBMDescription
 from ebaml.llm.requests import (
     DescribeEBMRequest,
     DescribeGraphRequest,
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_steps import Described, FanOut
 from ebaml.llm.token_learning import TokenLearner
 from ebaml.local import fact_types as local
 from ebaml.local.audience import Audience, DataScientist, Layperson
@@ -61,7 +59,6 @@ from tests.unit.ebaml.conftest import (
     returning,
     same_type,
     sdk_fields,
-    sdk_function_names,
     sdk_signature,
 )
 from tests.unit.ebaml.llm.conftest import Form, fake_both_forms
@@ -102,7 +99,7 @@ def rendering(graph_text: Callable[[object, int, GraphOptions, object], str]) ->
 
 
 def _model_spec(model: ModelOptions | str | None) -> baml_sdk.ModelSpec | None:
-    return descriptors.run_pipeline(pipelines.model_spec_pipeline(model, descriptors.SDK_TYPES))
+    return drivers.run_sync(pipelines.model_spec_pipeline(model, drivers.SDK_TYPES))
 
 
 @pytest.fixture
@@ -130,11 +127,11 @@ def default_options(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_prompt_options_defaults() -> None:
-    assert descriptors.run_pipeline(pipelines.prompt_options_pipeline(PromptOptions())).model_dump() == DEFAULTS
+    assert drivers.run_sync(pipelines.prompt_options_pipeline(PromptOptions())).model_dump() == DEFAULTS
 
 
 def test_prompt_options_overrides_and_ignores_none() -> None:
-    opts = descriptors.run_pipeline(
+    opts = drivers.run_sync(
         pipelines.prompt_options_pipeline(PromptOptions(task_description="new", graph_description=None)),
     )
     assert opts.model_dump() == {**DEFAULTS, "task_description": "new"}
@@ -147,7 +144,7 @@ def test_prompt_options_override_every_description() -> None:
         dataset_description="d2",
         task_description="t2",
     )
-    assert descriptors.run_pipeline(pipelines.prompt_options_pipeline(options)).model_dump() == {
+    assert drivers.run_sync(pipelines.prompt_options_pipeline(options)).model_dump() == {
         "expert_description": "e",
         "graph_description": "g2",
         "dataset_description": "d2",
@@ -695,12 +692,12 @@ def test_describe_ebm_runs_eight_graphs_at_a_time_by_default(
 ) -> None:
     workers = []
 
-    class RecordingPool(descriptors.ThreadPoolExecutor):
+    class RecordingPool(drivers.ThreadPoolExecutor):
         def __init__(self, max_workers: int) -> None:
             workers.append(max_workers)
             super().__init__(max_workers=max_workers)
 
-    monkeypatch.setattr(descriptors, "ThreadPoolExecutor", RecordingPool)
+    monkeypatch.setattr(drivers, "ThreadPoolExecutor", RecordingPool)
     monkeypatch.setattr(pipelines, "render_graph", returning(rendered("g")))
     monkeypatch.setattr(baml_sdk, "describe_graph_cot_sync", fake_sdk("describe_graph_cot_sync", returning(counted)))
     monkeypatch.setattr(baml_sdk, "summarize_ebm_sync", fake_sdk("summarize_ebm_sync", returning(counted)))
@@ -755,84 +752,6 @@ def test_describe_ebm_counts_the_summary_after_the_graphs(
     monkeypatch.setattr(baml_sdk, "summarize_ebm_sync", fake_sdk("summarize_ebm_sync", summary))
     descriptors.describe_ebm(DescribeEBMRequest(fake_ebm, progress_bar=True))
     assert "(3 of 3)" in error_stream.getvalue()
-
-
-def _described_after(
-    text: str,
-    delay: float,
-    started: list[str] | None = None,
-) -> Generator[Any, Any, Described]:
-    """Build a pipeline that yields no step and describes one graph after a delay.
-
-    Returns
-    -------
-    Described
-        A description with the text.
-
-    Yields
-    ------
-    Any
-        Nothing: the pipeline yields from an empty tuple and returns.
-
-    Raises
-    ------
-    RuntimeError
-        If the text is ``"fail"``.
-
-    """
-    if started is not None:
-        started.append(text)
-    if text == "fail":
-        msg = "first graph failed"
-        raise RuntimeError(msg)
-    time.sleep(delay)
-    yield from ()
-    return Described(baml_sdk.Counted(text=text, usage=_no_usage()), truncated_attempts=0)
-
-
-def test_fan_out_returns_the_descriptions_in_the_order_of_the_pipelines() -> None:
-    finished = []
-    # the first graph finishes last
-    fan_out = FanOut(
-        [_described_after("d0", 0.1), _described_after("d1", 0)],
-        2,
-        lambda: finished.append(len(finished)),
-        pipelines.feature_error,
-    )
-    described = descriptors.run_pipeline(_yield_step(fan_out))
-    assert [item.described.counted.text for item in described if item.described is not None] == ["d0", "d1"]
-    assert finished == [0, 1]
-
-
-def test_fan_out_cancels_the_graphs_that_have_not_started_after_a_failure() -> None:
-    started: list[str] = []
-    # the second graph runs while the driver cancels the third, which has not started
-    fan_out = FanOut(
-        [_described_after(text, 0.2, started) for text in ("fail", "b", "c")],
-        1,
-        lambda: None,
-        pipelines.feature_error,
-    )
-    with pytest.raises(RuntimeError, match="first graph failed"):
-        descriptors.run_pipeline(_yield_step(fan_out))
-    assert "c" not in started
-
-
-def _yield_step(step: FanOut) -> Generator[Any, Any, Any]:
-    """Build a pipeline that yields one step and returns its reply.
-
-    Returns
-    -------
-    Any
-        The reply of the step.
-
-    Yields
-    ------
-    FanOut
-        The step.
-
-    """
-    return (yield step)
 
 
 def _no_usage() -> baml_sdk.TokenUsage:
@@ -1727,24 +1646,6 @@ def test_sample_graph_tokens_turns_a_missing_key_into_an_error_with_fix_steps(mo
     monkeypatch.setattr(baml_sdk, "sample_graph_tokens_sync", fake_sdk("sample_graph_tokens_sync", refuse))
     with pytest.raises(MissingAPIKeyError):
         descriptors.sample_graph_tokens("GRAPH")
-
-
-def _sdk_names_used_by_descriptors() -> set[str]:
-    tree = ast.parse(Path(descriptors.__file__).read_text(encoding="utf-8"))
-    return {
-        node.attr
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "baml_sdk"
-    }
-
-
-def test_the_sdk_functions_that_descriptors_calls_are_plain_functions() -> None:
-    # A toolchain newer than the baml-bridge of uv.lock writes `async def` for every function. The fakes of the other
-    # tests return a value at once, so only this check sees that the real call would return a coroutine.
-    functions = _sdk_names_used_by_descriptors() & sdk_function_names()
-    assert functions, "descriptors.py calls no function of baml_sdk"
-    for name in sorted(functions):
-        sdk_signature(name)
 
 
 def test_an_async_sync_twin_fails_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:

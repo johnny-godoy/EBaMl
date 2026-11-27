@@ -1,8 +1,8 @@
 """The pipelines of the LLM calls: one implementation for the sync and the async forms.
 
 Each pipeline is a generator that yields the steps of ``ebaml.llm.sdk_steps``. A driver runs each step, then sends
-the reply into the generator, or throws the error of the step into it. ``ebaml.llm.descriptors`` holds the sync
-driver, and ``ebaml.llm.async_descriptors`` holds the async driver. The graph rendering, the shrinking retry, the
+the reply into the generator, or throws the error of the step into it. ``ebaml.llm.drivers`` holds the sync and the
+async driver. The graph rendering, the shrinking retry, the
 vision fallback, the provider errors and the facts live here once, so a fix reaches both forms.
 
 The module imports no ``baml_sdk``. The classes of ``baml_sdk`` that a pipeline builds reach it in ``SDKTypes``, and
@@ -20,8 +20,6 @@ from ebaml.core.custom_types import ExplainableBoostingModel
 from ebaml.core.exceptions import (
     EBMGraphSimplificationError,
     InvalidOptionError,
-    LLMReplyError,
-    LLMRequestError,
     VisionUnsupportedError,
 )
 from ebaml.graphs.ebm_graph import EBMGraph
@@ -29,6 +27,7 @@ from ebaml.graphs.terms import main_effect_features
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
 from ebaml.graphs.token_weights import ModelKey
 from ebaml.llm.difficulties import DifficultyProposal, features_text, read_proposal
+from ebaml.llm.ebm_description import EBMDescription, feature_error, settle_outcomes
 from ebaml.llm.graph_views import GraphView, ImageSettings, RenderedGraph, VisionSwitch, graph_view, shrinks_with_text
 from ebaml.llm.model_parts import feature_importances_text, features_without_graph, skipped_interactions
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
@@ -53,6 +52,7 @@ from ebaml.llm.sdk_steps import (
     Step,
     TokenCounts,
 )
+from ebaml.llm.token_learning import RequestSample
 from ebaml.local.audience import resolve_audience
 from ebaml.local.fact_text import facts_to_texts
 from ebaml.local.fact_types import LocalFacts
@@ -61,7 +61,6 @@ from ebaml.local.facts import compute_local_facts
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 GRAPH_SENTENCES = 7
-_QUOTE_CHARACTERS = 300
 
 
 def prompt_options_pipeline(prompt: PromptOptions) -> Generator[Step, SDKValue, SDKValue]:
@@ -477,139 +476,6 @@ def describe_graph_pipeline(request: DescribeGraphRequest, types: SDKTypes) -> G
     return described.counted.text
 
 
-@attrs.frozen
-class FeatureFailure:
-    """A feature whose graph description failed, and the error of its request.
-
-    Attributes
-    ----------
-    feature: str
-        The name of the feature.
-    error: LLMRequestError
-        The error. It concerns this feature only: an error that concerns every request stops ``describe_ebm``.
-
-    """
-
-    feature: str
-    error: LLMRequestError
-
-
-@functools.singledispatch
-def feature_error(error: Exception) -> LLMRequestError:
-    """Turn the error of one graph pipeline into the error of its feature, or raise it when it stops the whole call.
-
-    An ``LLMRequestError`` concerns one feature when its class says that it does not affect every request. A
-    ``BamlError`` that ``provider_errors`` does not explain is a reply that stays cut off or does not parse, so it
-    concerns one feature, and the function returns an ``LLMReplyError``. The function raises any other error again,
-    and an ``LLMRequestError`` that affects every request, because such an error stops the whole call.
-
-    Parameters
-    ----------
-    error: Exception
-        The error of the pipeline. The registered functions of the ``LLMRequestError`` and the ``BamlError`` classes
-        return the error of the feature.
-
-    """
-    raise error
-
-
-@feature_error.register
-def _feature_error_of_request(error: LLMRequestError) -> LLMRequestError:
-    if error.affects_every_request:
-        raise error
-    return error
-
-
-@feature_error.register
-def _feature_error_of_reply(error: BamlError) -> LLMRequestError:
-    reply_error = LLMReplyError(
-        "The reply of the LLM for one graph was cut off by max_tokens after the retries, or did not parse.\n"
-        f"The BAML runtime said: {str(error)[:_QUOTE_CHARACTERS]}\n"
-        "To fix it:\n"
-        '  1. Raise max_output_tokens, for example model=ModelOptions("provider", "model", max_output_tokens=4000).\n'
-        "  2. Lower max_tokens in GraphOptions, so that the graph text and the reply are shorter.\n"
-        "  3. Run the call again, or choose another model, if the reply did not parse.",
-    )
-    reply_error.__cause__ = error
-    return reply_error
-
-
-@attrs.frozen
-class _Settled:
-    """The descriptions of the features that succeeded, by name, and the features that failed, in order."""
-
-    described: dict[str, Described]
-    failed_features: list[FeatureFailure]
-
-    def graph_descriptions(self) -> str:
-        """Join the descriptions for the summary prompt.
-
-        Returns
-        -------
-        str
-            One paragraph for each feature that succeeded: its name and its description.
-
-        """
-        return "\n\n".join(f"{name}: {item.counted.text}" for name, item in self.described.items())
-
-
-def _settle(feature_names: Sequence[str], outcomes: Sequence[FeatureOutcome]) -> _Settled:
-    """Split the outcomes of the graphs into descriptions and failures, and log the failures.
-
-    If every feature failed, the summary has nothing to cover, so the function raises the error of the first feature.
-
-    Parameters
-    ----------
-    feature_names: Sequence[str]
-        The name of each feature, in the order of the outcomes.
-    outcomes: Sequence[FeatureOutcome]
-        The outcome of the graph of each feature.
-
-    Returns
-    -------
-    _Settled
-        The descriptions and the failures.
-
-    """
-    pairs = list(zip(feature_names, outcomes, strict=True))
-    described = {name: outcome.described for name, outcome in pairs if outcome.described is not None}
-    failed = [FeatureFailure(name, outcome.error) for name, outcome in pairs if outcome.error is not None]
-    if failed and not described:
-        raise failed[0].error
-    if failed:
-        logger.warning("features_failed", features=[failure.feature for failure in failed])
-    return _Settled(described, failed)
-
-
-@attrs.frozen
-class EBMDescription:
-    """The description of an EBM, and the parts of the model that it leaves out.
-
-    A reader of ``text`` learns from the text itself what the description leaves out. A program reads the same
-    information from the three lists, with no need to parse a log or the text.
-
-    Attributes
-    ----------
-    text: str
-        The description. Pass it as ``global_explanation`` to ``explain_instance``.
-    skipped_terms: list[str]
-        The names of the interaction terms that the description leaves out. The list is empty for a model without
-        interactions.
-    skipped_features: list[str]
-        The names of the features that have no main-effect term, because ``exclude`` or ``remove_terms`` left them
-        out. The description has no graph for them.
-    failed_features: list[FeatureFailure]
-        The features whose graph description failed, each with its error, in the order of the features. The summary
-        names them and does not cover them. The list is empty when every graph description succeeded.
-
-    """
-
-    text: str
-    skipped_terms: list[str]
-    skipped_features: list[str]
-    failed_features: list[FeatureFailure] = attrs.field(factory=list, kw_only=True)
-
-
 def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Generator[Step, SDKValue, EBMDescription]:
     """Describe an EBM: the pipeline of ``describe_ebm`` and its async form.
 
@@ -664,7 +530,7 @@ def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Gener
             finish_step,
             feature_error,
         )
-        settled = _settle(feature_names, outcomes)
+        settled = settle_outcomes(feature_names, outcomes)
         with provider_errors(job.switch.model):
             summary = yield SDKCall(
                 "summarize_ebm",
@@ -789,3 +655,85 @@ def propose_difficulties_pipeline(
     )
     feature_names = [ebm.feature_names_in_[feature_index] for feature_index in main_effect_features(ebm)]
     return read_proposal(result.difficulties, feature_names, request.base)
+
+
+def sample_graph_tokens_pipeline(
+    graph: str,
+    model: ModelOptions | str | None,
+    prompt: PromptOptions,
+    types: SDKTypes,
+) -> Generator[Step, SDKValue, list[RequestSample]]:
+    """Send the first turn of a graph description, and keep its token samples: the pipeline of ``sample_graph_tokens``.
+
+    Parameters
+    ----------
+    graph: str
+        The text of the graph.
+    model: ModelOptions | str | None
+        The LLM of the call. ``None`` selects the default clients.
+    prompt: PromptOptions
+        The descriptions that the prompt uses.
+    types: SDKTypes
+        The classes of ``baml_sdk``.
+
+    Returns
+    -------
+    list[RequestSample]
+        One sample for each request that the provider counted.
+
+    Yields
+    ------
+    Step
+        The checks of the model and the call of the request.
+
+    """
+    model_spec = yield from model_spec_pipeline(model, types)
+    opts = yield from prompt_options_pipeline(prompt)
+    with provider_errors():
+        samples: list[RequestSample] = yield SDKCall(
+            "sample_graph_tokens",
+            {"graph": graph, "opts": opts, "model": model_spec},
+        )
+    return samples
+
+
+def chat_with_mcp_pipeline(
+    command: str,
+    arguments: Sequence[str],
+    model: ModelOptions | str | None,
+    max_steps: int,
+    types: SDKTypes,
+) -> Generator[Step, SDKValue, int]:
+    """Chat with an agent that reads an EBM through an MCP server: the pipeline of ``chat_with_mcp``.
+
+    Parameters
+    ----------
+    command: str
+        The program that starts the MCP server.
+    arguments: Sequence[str]
+        The arguments of the program.
+    model: ModelOptions | str | None
+        The LLM of the chat. ``None`` selects the default clients.
+    max_steps: int
+        The most rounds of tool calls for one answer.
+    types: SDKTypes
+        The classes of ``baml_sdk``.
+
+    Returns
+    -------
+    int
+        The number of questions that the chat answered.
+
+    Yields
+    ------
+    Step
+        The checks of the model and the call of the chat.
+
+    """
+    model_spec = yield from model_spec_pipeline(model, types)
+    with provider_errors():
+        answered: int = yield SDKCall(
+            "chat_with_mcp",
+            {"command": command, "args": list(arguments), "model": model_spec, "max_steps": max_steps},
+        )
+    return answered

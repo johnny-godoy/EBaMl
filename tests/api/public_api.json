@@ -408,10 +408,10 @@
       "text: <class 'str'>",
       "skipped_terms: list[str]",
       "skipped_features: list[str]",
-      "failed_features: list[ebaml.llm.pipelines.FeatureFailure]"
+      "failed_features: list[ebaml.llm.ebm_description.FeatureFailure]"
     ],
     "kind": "class",
-    "signature": "(text: str, skipped_terms: list[str], skipped_features: list[str], *, failed_features: list[ebaml.llm.pipelines.FeatureFailure] = NOTHING) -> None"
+    "signature": "(text: str, skipped_terms: list[str], skipped_features: list[str], *, failed_features: list[ebaml.llm.ebm_description.FeatureFailure] = NOTHING) -> None"
   },
   "EBMGraph": {
     "bases": [
@@ -1831,11 +1831,11 @@
   },
   "describe_ebm": {
     "kind": "function",
-    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.pipelines.EBMDescription"
+    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.ebm_description.EBMDescription"
   },
   "describe_ebm_async": {
     "kind": "function",
-    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.pipelines.EBMDescription"
+    "signature": "(request: ebaml.llm.requests.DescribeEBMRequest) -> ebaml.llm.ebm_description.EBMDescription"
   },
   "describe_graph": {
     "kind": "function",
