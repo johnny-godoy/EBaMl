@@ -21,6 +21,7 @@ BUILTIN_BASE = {
     "HistoryError": ValueError,
     "InvalidInstanceError": ValueError,
     "InvalidOptionError": ValueError,
+    "LLMReplyError": None,
     "LLMRequestError": None,
     "MissingAPIKeyError": None,
     "MissingExtraError": ImportError,
@@ -83,6 +84,7 @@ def test_the_errors_of_the_provider_share_one_base_class() -> None:
         "MissingAPIKeyError",
         "APIKeyRejectedError",
         "RateLimitedError",
+        "LLMReplyError",
         "ProviderUnreachableError",
         "VisionUnsupportedError",
     }
@@ -96,3 +98,22 @@ def test_an_error_of_the_package_is_caught_as_the_base_class() -> None:
 def test_a_bad_value_is_also_a_value_error() -> None:
     with pytest.raises(ValueError, match="temperature"):
         ebaml.ModelOptions(provider="openai", model="model", temperature=-1)
+
+
+# The errors that stop describe_ebm at once, because every request of the call fails in the same way. The others
+# concern one feature, and describe_ebm describes the other features.
+AFFECTS_EVERY_REQUEST = {
+    "LLMRequestError": True,
+    "MissingAPIKeyError": True,
+    "APIKeyRejectedError": True,
+    "ProviderUnreachableError": True,
+    "VisionUnsupportedError": True,
+    "RateLimitedError": False,
+    "LLMReplyError": False,
+}
+
+
+def test_each_error_of_the_provider_says_whether_it_affects_every_request() -> None:
+    errors = _defined_errors()
+    marks = {name: getattr(errors[name], "affects_every_request", None) for name in AFFECTS_EVERY_REQUEST}
+    assert marks == AFFECTS_EVERY_REQUEST

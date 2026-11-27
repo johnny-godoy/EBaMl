@@ -1,6 +1,7 @@
 """Tests for the LLM descriptors."""
 
 import ast
+import asyncio
 import base64
 import io
 import re
@@ -63,6 +64,7 @@ from tests.unit.ebaml.conftest import (
     sdk_function_names,
     sdk_signature,
 )
+from tests.unit.ebaml.llm.conftest import Form, fake_both_forms
 
 FAKE_EBM: ExplainableBoostingClassifier = fake_model()
 
@@ -795,9 +797,10 @@ def test_fan_out_returns_the_descriptions_in_the_order_of_the_pipelines() -> Non
         [_described_after("d0", 0.1), _described_after("d1", 0)],
         2,
         lambda: finished.append(len(finished)),
+        pipelines.feature_error,
     )
     described = descriptors.run_pipeline(_yield_step(fan_out))
-    assert [item.counted.text for item in described] == ["d0", "d1"]
+    assert [item.described.counted.text for item in described if item.described is not None] == ["d0", "d1"]
     assert finished == [0, 1]
 
 
@@ -808,6 +811,7 @@ def test_fan_out_cancels_the_graphs_that_have_not_started_after_a_failure() -> N
         [_described_after(text, 0.2, started) for text in ("fail", "b", "c")],
         1,
         lambda: None,
+        pipelines.feature_error,
     )
     with pytest.raises(RuntimeError, match="first graph failed"):
         descriptors.run_pipeline(_yield_step(fan_out))
@@ -1413,7 +1417,8 @@ def test_describe_ebm_skips_a_feature_without_a_term(
     ]
 
 
-def _sdk_calls(monkeypatch: pytest.MonkeyPatch, counted: baml_sdk.Counted) -> dict[str, list[dict[str, Any]]]:
+@pytest.fixture
+def sdk_calls(monkeypatch: pytest.MonkeyPatch, counted: baml_sdk.Counted) -> dict[str, list[dict[str, Any]]]:
     """Replace the SDK functions of the three entry points by fakes that record their calls.
 
     Returns
@@ -1427,32 +1432,29 @@ def _sdk_calls(monkeypatch: pytest.MonkeyPatch, counted: baml_sdk.Counted) -> di
         "summarize_ebm_sync": [],
         "explain_local_sync": [],
     }
-    for name in ("describe_graph_cot_sync", "summarize_ebm_sync"):
-        monkeypatch.setattr(baml_sdk, name, fake_sdk(name, appending(calls[name], counted)))
+    # one fake for the sync and the async function, so that a test reads the calls of either form under the sync name
+    for name in ("describe_graph_cot", "summarize_ebm"):
+        fake_both_forms(monkeypatch, name, appending(calls[f"{name}_sync"], counted))
     explained = baml_sdk.LocalExplanationText(
         counterfactual="c",
         sufficient_reason="s",
         completions="k",
         usage=counted.usage,
     )
-    monkeypatch.setattr(
-        baml_sdk,
-        "explain_local_sync",
-        fake_sdk("explain_local_sync", appending(calls["explain_local_sync"], explained)),
-    )
+    fake_both_forms(monkeypatch, "explain_local", appending(calls["explain_local_sync"], explained))
     return calls
 
 
 @pytest.mark.parametrize("mode", list(GraphMode))
 @pytest.mark.parametrize("kind", PARTIAL_KINDS)
 def test_each_entry_point_names_or_rejects_a_model_with_an_interaction(
-    monkeypatch: pytest.MonkeyPatch,
     partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
-    counted: baml_sdk.Counted,
+    sdk_calls: dict[str, list[dict[str, Any]]],
+    form: Form,
     kind: str,
     mode: GraphMode,
 ) -> None:
-    # contract 4: an explanation covers every term in its scope, or it names what it leaves out
+    # contract 4, in both forms: an explanation covers every term in its scope, or it names what it leaves out
     ebm, data = partial_models[kind, "interaction"]
     (term, features) = next(
         (name, features)
@@ -1460,12 +1462,12 @@ def test_each_entry_point_names_or_rejects_a_model_with_an_interaction(
         if len(features) > 1
     )
     outside = next(index for index, _ in enumerate(ebm.feature_names_in_) if index not in features)
-    calls = _sdk_calls(monkeypatch, counted)
+    calls = sdk_calls
     graph_options = GraphOptions(max_tokens=20_000, mode=mode)
 
     # describe_ebm: named in the summary prompt and in the log, in every mode
     with capture_logs() as logs:
-        described = descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+        described = form.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
     assert (described.skipped_terms, described.skipped_features) == ([term], [])
     assert [call["omitted_terms"] for call in calls["summarize_ebm_sync"]] == [[term]]
     assert [log["terms"] for log in logs if log["event"] == "interactions_skipped"] == [[term]]
@@ -1473,31 +1475,31 @@ def test_each_entry_point_names_or_rejects_a_model_with_an_interaction(
 
     # describe_graph: named in the prompt of a feature of the term only
     calls["describe_graph_cot_sync"].clear()
-    descriptors.describe_graph(DescribeGraphRequest(ebm, features[0], graph=graph_options))
-    descriptors.describe_graph(DescribeGraphRequest(ebm, outside, graph=graph_options))
+    form.describe_graph(DescribeGraphRequest(ebm, features[0], graph=graph_options))
+    form.describe_graph(DescribeGraphRequest(ebm, outside, graph=graph_options))
     assert [call["omitted_terms"] for call in calls["describe_graph_cot_sync"]] == [[term], []]
 
     # explain_instance: rejected before any LLM call
     with pytest.raises(UnsupportedModelError, match="without interactions"):
-        descriptors.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
+        form.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
     assert calls["explain_local_sync"] == []
 
 
 @pytest.mark.parametrize("kind", PARTIAL_KINDS)
 def test_each_entry_point_names_or_rejects_a_model_with_a_removed_term(
-    monkeypatch: pytest.MonkeyPatch,
     partial_models: dict[tuple[str, str], tuple[ExplainableBoostingClassifier | ExplainableBoostingRegressor, Any]],
-    counted: baml_sdk.Counted,
+    sdk_calls: dict[str, list[dict[str, Any]]],
+    form: Form,
     kind: str,
 ) -> None:
     ebm, data = partial_models[kind, "removed_term"]
     removed = list(ebm.feature_names_in_).index(REMOVED_FEATURE)
-    calls = _sdk_calls(monkeypatch, counted)
+    calls = sdk_calls
     graph_options = GraphOptions(max_tokens=20_000)
 
     # describe_ebm: named in the summary prompt and in the log
     with capture_logs() as logs:
-        described = descriptors.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
+        described = form.describe_ebm(DescribeEBMRequest(ebm, graph=graph_options))
     assert (described.skipped_terms, described.skipped_features) == ([], [REMOVED_FEATURE])
     assert [call["omitted_features"] for call in calls["summarize_ebm_sync"]] == [[REMOVED_FEATURE]]
     assert [call["omitted_terms"] for call in calls["summarize_ebm_sync"]] == [[]]
@@ -1507,9 +1509,9 @@ def test_each_entry_point_names_or_rejects_a_model_with_a_removed_term(
     # describe_graph of the feature without a graph, and explain_instance: rejected before any LLM call
     calls["describe_graph_cot_sync"].clear()
     with pytest.raises(UnsupportedModelError, match="no main-effect term"):
-        descriptors.describe_graph(DescribeGraphRequest(ebm, removed, graph=graph_options))
+        form.describe_graph(DescribeGraphRequest(ebm, removed, graph=graph_options))
     with pytest.raises(UnsupportedModelError, match="main-effect term for every feature"):
-        descriptors.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
+        form.explain_instance(ExplainInstanceRequest(ebm, instance_of(data, 0), "G"))
     assert calls["describe_graph_cot_sync"] == []
     assert calls["explain_local_sync"] == []
 
@@ -1745,13 +1747,20 @@ def test_the_sdk_functions_that_descriptors_calls_are_plain_functions() -> None:
         sdk_signature(name)
 
 
-def test_an_async_sdk_function_fails_the_fake_with_the_way_to_fix_it(monkeypatch: pytest.MonkeyPatch) -> None:
-    stub = ast.parse("async def describe(x: int) -> str: ...\ndef describe_sync(x: int) -> str: ...\n")
-    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_stub", lambda: stub)
-    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_functions", lambda: {"describe_sync": stub.body[1]})
-    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_functions", lambda: frozenset({"describe"}))
-    with pytest.raises(AssertionError, match=r"baml_sdk\.describe is async.*_sync. twin"):
-        sdk_signature("describe")
+def test_an_async_sync_twin_fails_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:
+    # a toolchain that writes `async def describe_sync` would make the call of the sync driver return a coroutine
+    stub = ast.parse("async def describe_sync(x: int) -> str: ...\n")
+    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_functions", lambda: frozenset({"describe_sync"}))
+    monkeypatch.setattr("tests.unit.ebaml.conftest._sdk_async_nodes", lambda: {"describe_sync": stub.body[0]})
+    with pytest.raises(AssertionError, match=r"baml_sdk\.describe_sync is async.*plain function"):
+        sdk_signature("describe_sync")
+
+
+def test_the_fake_of_an_async_sdk_function_returns_a_coroutine(counted: baml_sdk.Counted) -> None:
+    fake = fake_sdk("describe_graph_cot", returning(counted))
+    reply = fake(graph="g", num_sentences=1, opts=baml_sdk.GraphPromptOptions(**DEFAULTS))
+    assert asyncio.iscoroutine(reply)
+    assert asyncio.run(reply) == counted
 
 
 def test_chat_with_mcp_sends_the_server_command_the_model_and_the_step_limit(

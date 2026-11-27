@@ -17,7 +17,13 @@ import structlog
 from baml_bridge.errors import BamlError
 
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.core.exceptions import EBMGraphSimplificationError, InvalidOptionError, VisionUnsupportedError
+from ebaml.core.exceptions import (
+    EBMGraphSimplificationError,
+    InvalidOptionError,
+    LLMReplyError,
+    LLMRequestError,
+    VisionUnsupportedError,
+)
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.terms import main_effect_features
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
@@ -39,6 +45,7 @@ from ebaml.llm.sdk_steps import (
     CountedText,
     Described,
     FanOut,
+    FeatureOutcome,
     ModelIdentity,
     SDKCall,
     SDKTypes,
@@ -54,6 +61,7 @@ from ebaml.local.facts import compute_local_facts
 logger: structlog.typing.FilteringBoundLogger = structlog.get_logger(__name__)
 
 GRAPH_SENTENCES = 7
+_QUOTE_CHARACTERS = 300
 
 
 def prompt_options_pipeline(prompt: PromptOptions) -> Generator[Step, SDKValue, SDKValue]:
@@ -470,11 +478,115 @@ def describe_graph_pipeline(request: DescribeGraphRequest, types: SDKTypes) -> G
 
 
 @attrs.frozen
+class FeatureFailure:
+    """A feature whose graph description failed, and the error of its request.
+
+    Attributes
+    ----------
+    feature: str
+        The name of the feature.
+    error: LLMRequestError
+        The error. It concerns this feature only: an error that concerns every request stops ``describe_ebm``.
+
+    """
+
+    feature: str
+    error: LLMRequestError
+
+
+@functools.singledispatch
+def feature_error(error: Exception) -> LLMRequestError:
+    """Turn the error of one graph pipeline into the error of its feature, or raise it when it stops the whole call.
+
+    An ``LLMRequestError`` concerns one feature when its class says that it does not affect every request. A
+    ``BamlError`` that ``provider_errors`` does not explain is a reply that stays cut off or does not parse, so it
+    concerns one feature, and the function returns an ``LLMReplyError``. The function raises any other error again,
+    and an ``LLMRequestError`` that affects every request, because such an error stops the whole call.
+
+    Parameters
+    ----------
+    error: Exception
+        The error of the pipeline. The registered functions of the ``LLMRequestError`` and the ``BamlError`` classes
+        return the error of the feature.
+
+    """
+    raise error
+
+
+@feature_error.register
+def _feature_error_of_request(error: LLMRequestError) -> LLMRequestError:
+    if error.affects_every_request:
+        raise error
+    return error
+
+
+@feature_error.register
+def _feature_error_of_reply(error: BamlError) -> LLMRequestError:
+    reply_error = LLMReplyError(
+        "The reply of the LLM for one graph was cut off by max_tokens after the retries, or did not parse.\n"
+        f"The BAML runtime said: {str(error)[:_QUOTE_CHARACTERS]}\n"
+        "To fix it:\n"
+        '  1. Raise max_output_tokens, for example model=ModelOptions("provider", "model", max_output_tokens=4000).\n'
+        "  2. Lower max_tokens in GraphOptions, so that the graph text and the reply are shorter.\n"
+        "  3. Run the call again, or choose another model, if the reply did not parse.",
+    )
+    reply_error.__cause__ = error
+    return reply_error
+
+
+@attrs.frozen
+class _Settled:
+    """The descriptions of the features that succeeded, by name, and the features that failed, in order."""
+
+    described: dict[str, Described]
+    failed_features: list[FeatureFailure]
+
+    def graph_descriptions(self) -> str:
+        """Join the descriptions for the summary prompt.
+
+        Returns
+        -------
+        str
+            One paragraph for each feature that succeeded: its name and its description.
+
+        """
+        return "\n\n".join(f"{name}: {item.counted.text}" for name, item in self.described.items())
+
+
+def _settle(feature_names: Sequence[str], outcomes: Sequence[FeatureOutcome]) -> _Settled:
+    """Split the outcomes of the graphs into descriptions and failures, and log the failures.
+
+    If every feature failed, the summary has nothing to cover, so the function raises the error of the first feature.
+
+    Parameters
+    ----------
+    feature_names: Sequence[str]
+        The name of each feature, in the order of the outcomes.
+    outcomes: Sequence[FeatureOutcome]
+        The outcome of the graph of each feature.
+
+    Returns
+    -------
+    _Settled
+        The descriptions and the failures.
+
+    """
+    pairs = list(zip(feature_names, outcomes, strict=True))
+    described = {name: outcome.described for name, outcome in pairs if outcome.described is not None}
+    failed = [FeatureFailure(name, outcome.error) for name, outcome in pairs if outcome.error is not None]
+    if failed and not described:
+        raise failed[0].error
+    if failed:
+        logger.warning("features_failed", features=[failure.feature for failure in failed])
+    return _Settled(described, failed)
+
+
+@attrs.frozen
 class EBMDescription:
     """The description of an EBM, and the parts of the model that it leaves out.
 
     A reader of ``text`` learns from the text itself what the description leaves out. A program reads the same
-    information from the two lists, with no need to parse a log or the text.
+    information from the three lists, with no need to parse a log or the text.
 
     Attributes
     ----------
@@ -486,12 +598,16 @@ class EBMDescription:
     skipped_features: list[str]
         The names of the features that have no main-effect term, because ``exclude`` or ``remove_terms`` left them
         out. The description has no graph for them.
+    failed_features: list[FeatureFailure]
+        The features whose graph description failed, each with its error, in the order of the features. The summary
+        names them and does not cover them. The list is empty when every graph description succeeded.
 
     """
 
     text: str
     skipped_terms: list[str]
     skipped_features: list[str]
+    failed_features: list[FeatureFailure] = attrs.field(factory=list, kw_only=True)
 
 
 def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Generator[Step, SDKValue, EBMDescription]:
@@ -539,42 +655,38 @@ def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Gener
     )
 
     with progress(len(features) + 1, "describe_ebm", enabled=request.progress_bar) as finish_step:
-        described: list[Described] = yield FanOut(
+        outcomes: list[FeatureOutcome] = yield FanOut(
             [
                 describe_graph_counted(job, feature_index, graph)
                 for feature_index, graph in zip(features, graphs, strict=True)
             ],
             request.max_concurrency,
             finish_step,
+            feature_error,
         )
-        graph_descriptions = "\n\n".join(
-            f"{name}: {item.counted.text}"
-            for name, item in zip(
-                feature_names,
-                described,
-                strict=True,  # pragma: no mutate -- one item per feature, so strict never raises
-            )
-        )
+        settled = _settle(feature_names, outcomes)
         with provider_errors(job.switch.model):
             summary = yield SDKCall(
                 "summarize_ebm",
                 {
                     "feature_importances": feature_importances,
-                    "graph_descriptions": graph_descriptions,
+                    "graph_descriptions": settled.graph_descriptions(),
                     "num_sentences": request.num_sentences,
                     "opts": opts,
                     "model": model_spec,
                     "omitted_terms": omitted_terms,
                     "omitted_features": omitted_features,
+                    "failed_features": [failure.feature for failure in settled.failed_features],
                 },
             )
         finish_step()
+    described = list(settled.described.values())
     usage = _TokenTotals(
         input_tokens=summary.usage.input_tokens + sum(item.counted.usage.input_tokens for item in described),
         output_tokens=summary.usage.output_tokens + sum(item.counted.usage.output_tokens for item in described),
     )
     log_usage("describe_ebm", usage, truncated_attempts=sum(item.truncated_attempts for item in described))
-    return EBMDescription(summary.text, omitted_terms, omitted_features)
+    return EBMDescription(summary.text, omitted_terms, omitted_features, failed_features=settled.failed_features)
 
 
 @attrs.frozen

@@ -16,6 +16,8 @@ that breaks one fails `prek run --all-files`. Put new code where the layer rules
 | `ebaml.benchmark` | The TalkToEBM benchmark. It stands alone. | Nothing from `ebaml`. |
 
 - Only `llm/descriptors.py` imports `baml_sdk`. The reason: domain code then runs in a plain unit test (SOLID: D).
+  The pipelines of `llm/pipelines.py` yield `SDKCall` steps and import no SDK. The async driver of
+  `llm/async_descriptors.py` takes the module from `descriptors.SDK_MODULE`.
 - The import-linter contract covers every module of `ebaml.llm`, and its `ignore_imports` list names the allowed
   imports of `baml_sdk` and `baml_bridge`. Add an entry only with a reason in the `reason:` block above the list.
   `llm/sdk_setup.py` imports `baml_sdk` through `importlib`, which import-linter cannot see.

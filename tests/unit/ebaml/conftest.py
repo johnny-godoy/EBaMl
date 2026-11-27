@@ -1,6 +1,7 @@
 """Fixtures and helpers for the tests of the ebaml package."""
 
 import ast
+import asyncio
 import builtins
 import copy
 import functools
@@ -9,7 +10,7 @@ import inspect
 import os
 import types
 import typing
-from collections.abc import Callable, Mapping, MutableMapping, MutableSequence, Sequence
+from collections.abc import Callable, Coroutine, Mapping, MutableMapping, MutableSequence, Sequence
 from pathlib import Path
 from typing import Any, override
 
@@ -311,8 +312,12 @@ def _sdk_functions() -> dict[str, ast.FunctionDef]:
 
 
 @functools.cache
+def _sdk_async_nodes() -> dict[str, ast.AsyncFunctionDef]:
+    return {node.name: node for node in _sdk_stub().body if isinstance(node, ast.AsyncFunctionDef)}
+
+
 def _sdk_async_functions() -> frozenset[str]:
-    return frozenset(node.name for node in _sdk_stub().body if isinstance(node, ast.AsyncFunctionDef))
+    return frozenset(_sdk_async_nodes())
 
 
 def sdk_function_names() -> frozenset[str]:
@@ -410,13 +415,12 @@ def sdk_signature(name: str) -> inspect.Signature:
         The parameters, with their types, and the return type.
 
     """
-    # ebaml calls the `name_sync` twin of each SDK function. A call of `async def name` returns a coroutine, and no fake
-    # notices, because a fake returns the value at once.
-    assert name not in _sdk_async_functions(), (
-        f"baml_sdk.{name} is async in the generated stub, but ebaml calls it as a plain function. "
-        "Call the `_sync` twin of the function."
+    # The sync driver calls the `name_sync` twin of each SDK function as a plain function. A toolchain that writes
+    # `async def name_sync` would make that call return a coroutine, and a plain fake would not notice.
+    assert not (name.endswith("_sync") and name in _sdk_async_functions()), (
+        f"baml_sdk.{name} is async in the generated stub, but ebaml calls it as a plain function."
     )
-    node = _sdk_functions()[name]
+    node = _sdk_functions().get(name) or _sdk_async_nodes()[name]
     arguments = node.args
     required = len(arguments.args) - len(arguments.defaults)
     parameters = [
@@ -440,8 +444,10 @@ def sdk_signature(name: str) -> inspect.Signature:
     return inspect.Signature(parameters, return_annotation=_resolve(node.returns))
 
 
-def fake_sdk[T](name: str, fake: Callable[..., T]) -> Callable[..., T]:
+def fake_sdk[T](name: str, fake: Callable[..., T]) -> Callable[..., T | Coroutine[None, None, T]]:
     """Wrap a fake of an SDK function, so that it obeys the signature that ``baml generate`` wrote for the function.
+
+    The fake of an async function returns a coroutine, which the async driver awaits, as it awaits the real function.
 
     A named parameter of the fake must be a parameter of the function. On each call, the arguments must bind to the
     parameters and fit their types, and the result must fit the return type. A ``baml generate`` that renames a
@@ -449,7 +455,7 @@ def fake_sdk[T](name: str, fake: Callable[..., T]) -> Callable[..., T]:
 
     Returns
     -------
-    Callable[..., T]
+    Callable[..., T | Coroutine[None, None, T]]
         The checked fake.
 
     """
@@ -471,7 +477,15 @@ def fake_sdk[T](name: str, fake: Callable[..., T]) -> Callable[..., T]:
         assert is_bearable(result, signature.return_annotation), f"{name} returned {result!r}"
         return result
 
-    return checked
+    if name not in _sdk_async_functions():
+        return checked
+
+    # the async driver awaits the reply, so the fake of an async function returns a coroutine, as the real one does
+    async def checked_async(*args: object, **kwargs: object) -> T:
+        await asyncio.sleep(0)
+        return checked(*args, **kwargs)
+
+    return checked_async
 
 
 def sdk_fields(name: str) -> dict[str, object]:

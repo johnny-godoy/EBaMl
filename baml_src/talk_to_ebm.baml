@@ -142,8 +142,13 @@ function describe_graph_msg(
 
 // The parts of the model that a description leaves out. The reader of a description cannot see a log warning, so the
 // text itself must name them. An empty list gives no block, so a model without such parts gets no text about them.
-function omitted_parts_msg(omitted_terms: string[], omitted_features: string[]) -> string {
-    if (omitted_terms.length() + omitted_features.length() == 0) {
+// `failed_features` are the features whose graph description failed, for example after a rate limit.
+function omitted_parts_msg(
+    omitted_terms: string[],
+    omitted_features: string[],
+    failed_features: string[] = [],
+) -> string {
+    if (omitted_terms.length() + omitted_features.length() + failed_features.length() == 0) {
         return "";
     };
     let msg = "<omitted_parts>\nThe graph descriptions cover the main effect of one feature at a time.\n";
@@ -156,6 +161,11 @@ function omitted_parts_msg(omitted_terms: string[], omitted_features: string[]) 
         msg
             = msg
                 + `These features have no main effect in the model, and no graph description covers them: ${omitted_features.join(", ")}.\n`;
+    };
+    if (failed_features.length() > 0) {
+        msg
+            = msg
+                + `The request for the graph description of these features failed, so no graph description covers them: ${failed_features.join(", ")}.\n`;
     };
     msg
         + "Say in one sentence that your answer leaves these parts out, and name each of them, because the reader must know that the answer does not cover the whole model.\n</omitted_parts>\n\n"
@@ -171,6 +181,7 @@ function summarize_ebm_msg(
     dataset_description: string,
     omitted_terms: string[] = [],
     omitted_features: string[] = [],
+    failed_features: string[] = [],
 ) -> string {
     let msg = `
         <feature_importances>
@@ -186,10 +197,10 @@ function summarize_ebm_msg(
         msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
     msg
-        + omitted_parts_msg(omitted_terms, omitted_features)
+        + omitted_parts_msg(omitted_terms, omitted_features, failed_features = failed_features)
         + `
             <instructions>
-            Summarize the model. The feature importances are global, and there is exactly one graph description for each feature.
+            Summarize the model. The feature importances are global, and there is at most one graph description for each feature.
             Cover the most important features and their effect on the outcome. Leave out unimportant features and effects, so the summary stays short.
             Include any surprising pattern, because the reader wants to know where the model differs from expectation.
             </instructions>
@@ -290,13 +301,14 @@ function EbmSummaryDraft(
     opts: GraphPromptOptions,
     omitted_terms: string[] = [],
     omitted_features: string[] = [],
+    failed_features: string[] = [],
 ) -> string {
     client: RouterLong
     prompt: `
         ${role("system")}
         ${summarize_ebm_system_msg(opts.expert_description)}
         ${role("user")}
-        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features)}
+        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features, failed_features = failed_features)}
     `
 }
 
@@ -309,13 +321,14 @@ function EbmSummaryShorten(
     opts: GraphPromptOptions,
     omitted_terms: string[] = [],
     omitted_features: string[] = [],
+    failed_features: string[] = [],
 ) -> string {
     client: Router
     prompt: `
         ${role("system")}
         ${summarize_ebm_system_msg(opts.expert_description)}
         ${role("user")}
-        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features)}
+        ${summarize_ebm_msg(feature_importances, graph_descriptions, opts.dataset_description, omitted_terms = omitted_terms, omitted_features = omitted_features, failed_features = failed_features)}
         ${role("assistant")}
         ${draft}
         ${role("user")}
@@ -504,6 +517,7 @@ function summarize_ebm(
     model: ModelSpec? = null,
     omitted_terms: string[] = [],
     omitted_features: string[] = [],
+    failed_features: string[] = [],
 ) -> Counted {
     let draft = run_counted(
         EbmSummaryDraft@spec(
@@ -512,6 +526,7 @@ function summarize_ebm(
             opts,
             omitted_terms = omitted_terms,
             omitted_features = omitted_features,
+            failed_features = failed_features,
         ),
         client = select_client(client, model, long_defaults()),
     );
@@ -527,6 +542,7 @@ function summarize_ebm(
             opts,
             omitted_terms = omitted_terms,
             omitted_features = omitted_features,
+            failed_features = failed_features,
         ),
         client = select_client(client, model, short_defaults()),
     );

@@ -6,7 +6,7 @@ An error for a bad value also derives from ``ValueError``, so code that catches 
 
 import enum
 from collections.abc import Collection
-from typing import Self
+from typing import ClassVar, Self
 
 
 class EBaMlError(Exception):
@@ -112,7 +112,17 @@ class LLMRequestError(EBaMlError):
 
     The message names the cause and lists the steps that fix it. The error that the BAML runtime raised is the
     ``__cause__``.
+
+    Attributes
+    ----------
+    affects_every_request: bool
+        True if every request of a call fails in the same way, for example without an API key. ``describe_ebm`` then
+        stops at once. If it is false, the error concerns one request, and ``describe_ebm`` describes the other
+        features.
+
     """
+
+    affects_every_request: ClassVar[bool] = True
 
 
 class MissingAPIKeyError(LLMRequestError):
@@ -124,7 +134,22 @@ class APIKeyRejectedError(LLMRequestError):
 
 
 class RateLimitedError(LLMRequestError):
-    """Exception raised when a provider limits the rate of the requests."""
+    """Exception raised when a provider limits the rate of the requests, after the retries.
+
+    The other requests of a call can still succeed, so the error concerns one request only.
+    """
+
+    affects_every_request: ClassVar[bool] = False
+
+
+class LLMReplyError(LLMRequestError):
+    """Exception raised when a reply of the LLM stays cut off by ``max_tokens`` after the retries, or does not parse.
+
+    ``describe_ebm`` raises it in place of the error of the BAML runtime, which is the ``__cause__``. The error concerns
+    the reply of one graph only.
+    """
+
+    affects_every_request: ClassVar[bool] = False
 
 
 class ProviderUnreachableError(LLMRequestError):

@@ -7,6 +7,7 @@ one request from ``ebaml.llm.requests``, and the ``model`` field of the request 
 """
 
 import contextlib
+import functools
 from collections.abc import Generator, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from types import ModuleType
@@ -33,7 +34,17 @@ from ebaml.llm.requests import (
     ProposeDifficultiesRequest,
 )
 from ebaml.llm.sdk_setup import ensure_sdk
-from ebaml.llm.sdk_steps import Described, FanOut, PipelineRun, SDKCall, SDKTypes, SDKValue, Step
+from ebaml.llm.sdk_steps import (
+    Described,
+    FanOut,
+    FeatureOutcome,
+    Outcome,
+    PipelineRun,
+    SDKCall,
+    SDKTypes,
+    SDKValue,
+    Step,
+)
 
 # `baml_sdk` is generated and gitignored, so a checkout may lack it. Generate it before the import, or explain the fix.
 ensure_sdk()
@@ -42,6 +53,8 @@ import baml_sdk  # ruff: ignore[module-import-not-at-top-of-file] -- ensure_sdk 
 
 # the default of the option argument, as a module-level value that nothing changes: the option class is frozen
 _DEFAULT_PROMPT_OPTIONS = PromptOptions()
+# the generated module, for the async driver of ebaml.llm.async_descriptors: this module is the one that imports it
+SDK_MODULE: ModuleType = baml_sdk
 SDK_TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
 
 
@@ -74,12 +87,7 @@ class _SyncDriver:
         """
         with contextlib.closing(PipelineRun(pipeline)) as run:
             while (step := run.step) is not None:
-                try:
-                    reply = step.dispatch(self)
-                except Exception as error:  # ruff: ignore[blind-except] -- the pipeline decides which errors it handles
-                    run.fail(error)
-                else:
-                    run.reply(reply)
+                run.advance(Outcome.of(functools.partial(step.dispatch, self)))
             return run.result()
 
     def call(self, call: SDKCall) -> SDKValue:
@@ -98,12 +106,13 @@ class _SyncDriver:
         """
         return getattr(self.sdk, f"{call.name}_sync")(**call.arguments)
 
-    def fan_out(self, fan_out: FanOut) -> list[Described]:
+    def fan_out(self, fan_out: FanOut) -> list[FeatureOutcome]:
         """Describe the graphs at the same time, and count each one that finishes.
 
         The method counts the graphs in the thread of the caller, in the order in which they finish, because the
-        progress bar is not thread safe. It returns the descriptions in the order of the pipelines. If a graph fails,
-        the method cancels the graphs that have not started and raises the error of the first graph that failed.
+        progress bar is not thread safe. It returns the outcomes in the order of the pipelines. A graph that fails with
+        an error of its feature only gives an outcome with the error. An error that stops the whole call cancels the
+        graphs that have not started, and the method raises it.
 
         Parameters
         ----------
@@ -112,21 +121,22 @@ class _SyncDriver:
 
         Returns
         -------
-        list[Described]
-            The description of each graph, in the order of the pipelines.
+        list[FeatureOutcome]
+            The outcome of each graph, in the order of the pipelines.
 
         """
         with ThreadPoolExecutor(max_workers=fan_out.max_concurrency) as pool:
             futures: list[Future[Described]] = [pool.submit(self.run, pipeline) for pipeline in fan_out.pipelines]
+            outcomes: dict[Future[Described], FeatureOutcome] = {}
             try:
                 for finished in as_completed(futures):
-                    finished.result()
+                    outcomes[finished] = fan_out.feature_outcome(Outcome.of(finished.result))
                     fan_out.finish_step()
             except BaseException:
                 for future in futures:
                     future.cancel()
                 raise
-            return [future.result() for future in futures]
+            return [outcomes[future] for future in futures]
 
 
 _DRIVER = _SyncDriver(baml_sdk)

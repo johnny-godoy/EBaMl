@@ -1,5 +1,6 @@
 """Tests for the pipelines of the LLM calls, driven step by step with plain replies and no fake of ``baml_sdk``."""
 
+import functools
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -17,7 +18,7 @@ from ebaml.llm.requests import (
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_steps import FanOut, PipelineRun, SDKCall, SDKTypes, Step
+from ebaml.llm.sdk_steps import FanOut, Outcome, PipelineRun, SDKCall, SDKTypes, Step
 from tests.unit.ebaml.conftest import instance_of
 
 TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
@@ -45,10 +46,7 @@ def drive[R](pipeline: Generator[Step, Any, R], answer: Answer, steps: list[Step
     while (step := run.step) is not None:
         steps.append(step)
         reply = answer(step)
-        if isinstance(reply, Exception):
-            run.fail(reply)
-        else:
-            run.reply(reply)
+        run.advance(Outcome(error=reply) if isinstance(reply, Exception) else Outcome(reply=reply))
     return run.result()
 
 
@@ -68,7 +66,10 @@ def answer_by_name(replies: dict[str, Any]) -> Answer:
 
     def answer(step: Step) -> Any:  # ruff: ignore[any-type] -- a reply has the type of its step
         if isinstance(step, FanOut):
-            return [drive(pipeline, answer, []) for pipeline in step.pipelines]
+            return [
+                step.feature_outcome(Outcome.of(functools.partial(drive, pipeline, answer, [])))
+                for pipeline in step.pipelines
+            ]
         reply = replies[step.name]
         return reply.pop(0) if isinstance(reply, list) else reply
 

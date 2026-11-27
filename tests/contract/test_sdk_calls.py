@@ -3,7 +3,8 @@
 The unit tests check each fake against the stub, so a fake cannot drift. These tests check the real call sites, so a
 call cannot drift from the stub either, even on a branch that no unit test runs. A call site is a direct call such as
 ``baml_sdk.chat_with_mcp_sync(...)``, or a step of a pipeline, ``SDKCall("describe_graph_cot", {...})``, which the sync
-driver runs as a call of ``baml_sdk.describe_graph_cot_sync``.
+driver runs as a call of ``baml_sdk.describe_graph_cot_sync`` and the async driver as an await of
+``baml_sdk.describe_graph_cot``.
 """
 
 import ast
@@ -18,19 +19,29 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCES: list[Path] = sorted([*(ROOT / "src" / "ebaml").rglob("*.py"), *(ROOT / "benchmark").rglob("*.py")])
 # The functions of baml_sdk that ebaml calls. The BAML code has many more, and they run inside the BAML runtime. A new
 # call of the sources needs a row here, so that a reviewer sees each new crossing of the boundary. The benchmark
-# passes answer_benchmark_question on as a value, so it is a reference and no call.
+# passes answer_benchmark_question on as a value, so it is a reference and no call. A step of a pipeline calls the
+# sync and the async function, so each step has two rows.
 CALLED = frozenset({
     "answer_benchmark_question_sync",
     "chat_with_mcp_sync",
+    "check_model",
     "check_model_sync",
+    "default_graph_options",
     "default_graph_options_sync",
+    "describe_graph_cot",
     "describe_graph_cot_sync",
+    "explain_local",
     "explain_local_sync",
+    "propose_difficulty",
     "propose_difficulty_sync",
     "sample_graph_tokens_sync",
+    "summarize_ebm",
     "summarize_ebm_sync",
+    "supported_providers",
     "supported_providers_sync",
 })
+# The functions that only the sync form calls: they are not part of a pipeline, and they have no async form.
+SYNC_ONLY = frozenset({"answer_benchmark_question_sync", "chat_with_mcp_sync", "sample_graph_tokens_sync"})
 
 
 class _Call(ast.NodeVisitor):
@@ -49,7 +60,8 @@ class _Call(ast.NodeVisitor):
         function = node.func
         match node:
             case ast.Call(func=ast.Name(id="SDKCall"), args=[ast.Constant(value=str(name)), ast.Dict() as arguments]):
-                self.calls.append((f"{name}_sync", _step_call(node, arguments)))
+                step = _step_call(node, arguments)
+                self.calls.extend([(f"{name}_sync", step), (name, step)])
             case _:
                 pass
         if (
@@ -134,6 +146,11 @@ def test_a_construction_of_an_sdk_class_names_only_fields(name: str, call: ast.C
     assert keywords <= set(sdk_fields(name)), f"{name} has no fields {sorted(keywords - set(sdk_fields(name)))}"
 
 
-def test_no_call_site_uses_the_async_variant_of_a_function() -> None:
-    assert not [name for name, _ in SCAN.calls if name.endswith("_async")]
+def test_no_call_site_uses_a_stream_or_a_spec_of_a_function() -> None:
     assert not [name for name in SCAN.references if name.endswith(("_async", "_stream", "_spec"))]
+
+
+def test_each_step_of_a_pipeline_has_a_sync_and_an_async_function() -> None:
+    sync_steps = {name.removesuffix("_sync") for name in CALLED - SYNC_ONLY if name.endswith("_sync")}
+    async_steps = {name for name in CALLED - SYNC_ONLY if not name.endswith("_sync")}
+    assert sync_steps == async_steps

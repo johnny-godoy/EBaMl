@@ -503,6 +503,35 @@ test "the summary prompts name the omitted parts, and a model without them gets 
     assert.is_true(draft.text.includes("age & income") && !draft.text.includes("no main effect"))
 }
 
+test "the summary names the features whose description failed, in both turns" {
+    // Contract 4: describe_ebm keeps the descriptions of the other features when one fails, so the summary must say
+    // which features it does not cover.
+    let failed = omitted_parts_msg([], [], failed_features = ["age", "city"]);
+    assert.is_true(
+        failed.includes(
+            "graph description of these features failed, so no graph description covers them: age, city.",
+        ),
+    );
+    assert.is_true(!failed.includes("interaction terms") && !failed.includes("no main effect"));
+    let msg = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "", failed_features = ["age"]);
+    assert.is_true(position_of(msg, "<omitted_parts>") < position_of(msg, "<instructions>"));
+    assert.is_true(msg.includes("at most one graph description for each feature"));
+    let result = summarize_ebm(
+        "IMPORTANCES",
+        "DESCRIPTIONS",
+        3,
+        default_graph_options(),
+        client = EchoClient {},
+        failed_features = ["age"],
+    );
+    assert.is_true(
+        result.text.includes("these features failed, so no graph description covers them: age."),
+    );
+    assert.is_true(
+        result.text.includes("keep the sentence that names the parts that the summary leaves out"),
+    )
+}
+
 test "describe_graph_cot names the omitted interaction terms in its final turn only" {
     assert.is_true(!final_description_request(3).includes("omitted_parts"));
     assert.is_true(
