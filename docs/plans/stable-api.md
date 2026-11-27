@@ -12,10 +12,10 @@ to review.
 </goal>
 
 <context>
-- 1.0.0 needs 0.17.0 and every milestone before it. By then every other milestone of `ROADMAP.md` is on `main`: the model providers, the model
+- 1.0.0 needs 0.18.0 and every milestone before it. By then every other milestone of `ROADMAP.md` is on `main`: the model providers, the model
   kinds, the custom audiences, the MCP server with its read, explain and edit tools, the local explanations of every
-  model kind with recourse plans, model editing with GAM Changer parity, graphs for vision models, and the native
-  async API.
+  model kind with recourse plans, model editing with GAM Changer parity, graphs for vision models, the native
+  async API, the benchmarks and the verified kernels in Lean.
 - The public API is: the public Python names, the BAML entry points that `baml_sdk` exposes, the MCP tool names and
   argument schemas, and the CLI flags (`benchmark/run.py`, `ebaml-mcp`). Prompt wording, LLM output text and log events
   are not part of it.
