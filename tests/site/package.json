@@ -5,7 +5,7 @@
   "license": "MIT",
   "devDependencies": {
     "@lhci/cli": "0.16.1",
-    "axe-core": "4.14.0",
+    "axe-core": "4.14.1",
     "html-validate": "11.21.1"
   },
   "overrides": {
