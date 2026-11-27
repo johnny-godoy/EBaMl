@@ -10,7 +10,6 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-import pandas as pd  # ruff: ignore[banned-api] -- the fixtures of the fitted models hold pandas frames
 import pytest
 from baml_bridge.errors import BamlError
 from structlog.testing import capture_logs
@@ -33,7 +32,7 @@ from ebaml.llm.requests import (
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from tests.unit.ebaml.conftest import instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 from tests.unit.ebaml.llm.conftest import ASYNC, FORMS, SYNC, Form, fake_both_forms
 
 USAGE: baml_sdk.TokenUsage = baml_sdk.TokenUsage(input_tokens=3, output_tokens=5, samples=[])
@@ -156,12 +155,12 @@ def _replies() -> dict[str, Callable[[dict[str, Any]], Any]]:
 
 
 @pytest.fixture
-def fitted(continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame]) -> ExplainableBoostingClassifier:
+def fitted(continuous_ebm: FittedClassifier) -> ExplainableBoostingClassifier:
     return continuous_ebm[0]
 
 
 def _requests(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> dict[str, Callable[[Form], Any]]:
     ebm, data = continuous_ebm
     instance = instance_of(data, 0)
@@ -176,7 +175,7 @@ def _requests(
 @pytest.mark.parametrize("function", ["describe_graph", "describe_ebm", "explain_instance", "propose_difficulties"])
 def test_both_forms_give_the_same_result(
     monkeypatch: pytest.MonkeyPatch,
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     function: str,
 ) -> None:
     Recorder(_replies()).install(monkeypatch)
@@ -187,7 +186,7 @@ def test_both_forms_give_the_same_result(
 @pytest.mark.parametrize("function", ["describe_graph", "describe_ebm", "explain_instance", "propose_difficulties"])
 def test_both_forms_make_the_same_sdk_calls(
     monkeypatch: pytest.MonkeyPatch,
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
     function: str,
 ) -> None:
     call = _requests(continuous_ebm)[function]

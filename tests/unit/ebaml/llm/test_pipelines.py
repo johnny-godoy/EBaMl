@@ -4,7 +4,6 @@ import functools
 from collections.abc import Callable, Generator
 from typing import Any
 
-import pandas as pd  # ruff: ignore[banned-api] -- the fixtures of the fitted models hold pandas frames
 import pytest
 from baml_bridge.errors import BamlError
 
@@ -19,7 +18,7 @@ from ebaml.llm.requests import (
     ProposeDifficultiesRequest,
 )
 from ebaml.llm.sdk_steps import FanOut, Outcome, PipelineRun, SDKCall, SDKTypes, Step
-from tests.unit.ebaml.conftest import instance_of
+from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
 OPTIONS: baml_sdk.GraphPromptOptions = baml_sdk.GraphPromptOptions(
@@ -82,7 +81,7 @@ def names(steps: list[Step]) -> list[str]:
 
 @pytest.fixture
 def fitted(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> ExplainableBoostingClassifier:
     return continuous_ebm[0]
 
@@ -194,7 +193,7 @@ def test_describe_ebm_summarizes_the_description_of_every_feature(fitted: Explai
 
 
 def test_explain_instance_asks_for_the_three_explanations(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
     reply = baml_sdk.LocalExplanationText(counterfactual="c", sufficient_reason="s", completions="k", usage=USAGE)
@@ -207,7 +206,7 @@ def test_explain_instance_asks_for_the_three_explanations(
 
 
 def test_propose_difficulties_reads_the_ratings_of_the_reply(
-    continuous_ebm: tuple[ExplainableBoostingClassifier, pd.DataFrame],
+    continuous_ebm: FittedClassifier,
 ) -> None:
     ebm, data = continuous_ebm
     rating = baml_sdk.FeatureDifficulty(feature="a", difficulty=baml_sdk.Difficulty.Hard, reason="r")
