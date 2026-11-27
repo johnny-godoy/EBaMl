@@ -93,27 +93,6 @@ class RunSummary:
         return next((timing for timing in self.workloads if timing.name == name), None)
 
 
-def _workload_name(entry: Mapping[str, object]) -> str:
-    """Read the name of a workload from an entry of the report of pytest-benchmark.
-
-    Returns
-    -------
-    str
-        The id of the parameter of the test, which is the name of the workload.
-
-    Raises
-    ------
-    TypeError
-        If the entry has no parameters.
-
-    """
-    params = entry["params"]
-    if not isinstance(params, Mapping):
-        msg = f"The entry {entry['name']} has no parameters."
-        raise TypeError(msg)
-    return str(params["workload"])
-
-
 def summarize(report: Mapping[str, object], commit: str | None) -> RunSummary:
     """Summarize the JSON report of pytest-benchmark.
 
@@ -144,7 +123,7 @@ def summarize(report: Mapping[str, object], commit: str | None) -> RunSummary:
         stats = entry["stats"]
         timings.append(
             WorkloadTiming(
-                name=_workload_name(entry),
+                name=str(entry["param"]),
                 group=str(entry["group"]),
                 rounds=int(stats["rounds"]),
                 median_seconds=float(stats["median"]),

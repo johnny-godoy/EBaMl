@@ -143,7 +143,7 @@ class CompareOptions:
     threshold: float = DEFAULT_THRESHOLD
     floor_seconds: float = DEFAULT_FLOOR_SECONDS
     markdown: Path | None = None
-    gate: bool = False
+    gate: Annotated[bool, cyclopts.Parameter(negative=())] = False
 
 
 @app.command(name="compare")

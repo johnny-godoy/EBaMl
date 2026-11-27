@@ -12,7 +12,7 @@ def _report(*names: str) -> dict[str, object]:
             {
                 "name": f"bench_workload[{name}]",
                 "group": name.split(".")[0],
-                "params": {"workload": name},
+                "param": name,
                 "stats": {"rounds": 5, "median": 0.5, "iqr": 0.1, "min": 0.4, "mean": 0.55},
             }
             for name in names
@@ -52,10 +52,3 @@ def test_the_timing_of_a_workload_that_the_run_did_not_measure_is_none() -> None
 def test_a_report_without_a_list_of_benchmarks_fails() -> None:
     with pytest.raises(TypeError, match="no list"):
         summarize({"benchmarks": None}, None)
-
-
-def test_an_entry_without_parameters_fails() -> None:
-    report = _report("local.facts.titanic")
-    report["benchmarks"][0]["params"] = None  # type: ignore[index] -- the helper builds a list of dicts
-    with pytest.raises(TypeError, match="no parameters"):
-        summarize(report, None)
