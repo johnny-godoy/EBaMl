@@ -79,7 +79,7 @@ Python code, so the table gives the shares that a prototype of the fix confirmed
 | # | Function | Share of the time | Workload | Median |
 | --- | --- | --- | --- | --- |
 | 1 | `TextFeatures.of` (`graphs/token_weights.py`): a Python loop over each character to count the digits | 19 to 29 % | `graphs.render.*` | 0.1 to 1.3 s |
-| 2 | `EBMGraph.simplify` (`graphs/ebm_graph.py`): a Python loop over each bin, for each of up to 11 levels | about 50 % after fix 1 | `graphs.render.features-100-bins-1024` | 1.3 s |
+| 2 | `EBMGraph.simplify` (`graphs/ebm_graph.py`): a Python loop over each bin, for each of up to 101 levels | about 50 % after fix 1 | `graphs.render.features-100-bins-1024` | 1.3 s |
 | 3 | `confidence_factor` (`graphs/graph_text.py`): `scipy.stats.norm` for each class at each level | 11 to 46 % | `graphs.render.multiclass` | 0.76 s |
 | 4 | `xy_to_json` (`graphs/graph_text.py`): one `orjson.dumps` call for each value | about 18 % after fix 1 | `graphs.render.*` | |
 | 5 | `eval_terms` of `interpret`, through 22 calls of `predict` and `predict_proba`, about half of them repeated | about 75 % | `edit.monotonize.features-100-bins-1024` | 0.47 s |
