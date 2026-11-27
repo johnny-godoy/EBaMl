@@ -36,11 +36,13 @@ EBaMl will reach three goals:
 | 0.15.0 | Async API: a native `_async` form of each public function that calls an LLM, next to the sync form, with one shared implementation, partial results of `describe_ebm`, and an MCP server that serves calls at the same time. | None | 0.14.0 | Done |
 | 0.16.0 | Benchmarks: one `benchmark/` directory for accuracy and performance, profiles of the whole system with the sync and the async forms, and fixes of the hotspots that do not change a fact. | [benchmarks](docs/plans/benchmarks.md) | 0.13.0, 0.15.0 | Planned |
 | 0.17.0 | Python 3.12 and later: the package supports every CPython release from 3.12, and a CI matrix tests each one. | [python-versions](docs/plans/python-versions.md) | 0.16.0 | Planned |
-| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0, 0.16.0, 0.17.0 | Planned |
+| 0.18.0 | Verified kernels: `EBMGraph.simplify` runs as compiled Lean code that a Lean proof covers, in an optional extra with one wheel for each platform, and the Python code stays as the fallback. | [lean-kernels](docs/plans/lean-kernels.md) | 0.16.0, 0.17.0 | Planned |
+| **1.0.0** | **Stable API.** No breaking change without a new MAJOR version. | [stable-api](docs/plans/stable-api.md) | 0.11.0, 0.12.0, 0.13.0, 0.14.0, 0.15.0, 0.16.0, 0.17.0, 0.18.0 | Planned |
 
 Until 0.17.0, pull requests run on Linux with Python 3.13 only. A matrix of Python versions makes each CI run longer,
-so it comes last before 1.0.0. The plan of 0.17.0 adds the Python versions from 3.12, and the plan of 1.0.0 adds the
-other operating systems. Each plan makes the package claim only what the matrix passes.
+so it comes late, before 1.0.0. The plan of 0.17.0 adds the Python versions from 3.12, the plan of 0.18.0 builds the
+wheels of the kernels for each platform, and the plan of 1.0.0 adds the other operating systems. Each plan makes the
+package claim only what the matrix passes.
 
 Interaction terms are not on the list yet. The graph descriptions skip them, and the local explanations do not accept a
 model that has them. The README table "Supported models" shows the state of each feature. Full support needs a
