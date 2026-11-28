@@ -27,6 +27,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
     UnsupportedModelError,
 )
+from ebaml.graphs.bin_groups import group_starts
 from ebaml.graphs.graph_text import confidence_factor, parse_graph_text, xy_to_json
 from ebaml.graphs.model_kinds import model_kind
 from ebaml.graphs.terms import main_term
@@ -454,28 +455,21 @@ class EBMGraph:
         if not 0 <= min_variation_per_cent <= 1:
             msg = f"min_variation_per_cent must be between 0 and 1. Got {min_variation_per_cent}."
             raise OptionRangeError(msg)
-        # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
-        x_vals = [(float(low), float(high)) for low, high in self.x_vals]
         scores, stds = np.asarray(self.scores, dtype=float), np.asarray(self.stds, dtype=float)
         threshold = float(np.max(scores) - np.min(scores)) * min_variation_per_cent
-        # Python floats, one row per bin, because NumPy calls on single bins are slow in this loop
-        rows = scores.reshape(len(x_vals), -1).tolist()
-        # the bins of each merged bin; a bin joins the last group if no score moved more than the threshold
-        groups = [[0]]
-        for bin_index, row in enumerate(rows[1:], start=1):
-            first = rows[groups[-1][0]]
-            if max(abs(a - b) for a, b in zip(first, row, strict=True)) <= threshold:
-                groups[-1].append(bin_index)
-            else:
-                groups.append([bin_index])
-        # the groups are runs of neighbouring bins, so reduceat over the first bin of each group reduces each run
-        firsts = [group[0] for group in groups]
+        firsts = group_starts(scores.reshape(len(self.x_vals), -1), threshold)
+        lasts = [start - 1 for start in firsts[1:]] + [len(self.x_vals) - 1]
         return type(self)(
             self.feature_name,
             self.feature_type,
-            [(x_vals[group[0]][0], x_vals[group[-1]][1]) for group in groups],
+            # a continuous graph has intervals of numbers on its x-axis, so float() changes no value
+            [
+                (float(self.x_vals[first][0]), float(self.x_vals[last][1]))
+                for first, last in zip(firsts, lasts, strict=True)
+            ],
             scores[firsts].tolist(),
-            # the largest std of a merged bin, so no bin of the run gets a narrower confidence band than it has in the
+            # the groups are runs of neighbouring bins, so reduceat over the first bin of each group reduces each run.
+            # The largest std of a merged bin, so no bin of the run gets a narrower confidence band than it has in the
             # original graph. The band is centred on the score of the first bin, so it does not always cover the bands
             # of the other bins of the run.
             np.maximum.reduceat(stds, firsts, axis=0).tolist(),
