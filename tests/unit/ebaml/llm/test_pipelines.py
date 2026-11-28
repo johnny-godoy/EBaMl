@@ -8,16 +8,29 @@ import pytest
 from baml_bridge.errors import BamlError
 
 import baml_sdk
+from ebaml.core.custom_types import RenderTiming
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
-from ebaml.core.exceptions import InvalidOptionError, MissingAPIKeyError
-from ebaml.llm import pipelines
+from ebaml.core.exceptions import EBMGraphTokenLimitError, InvalidOptionError, MissingAPIKeyError
+from ebaml.llm import graph_conversation, pipelines
+from ebaml.llm.graph_views import RenderedGraph
+from ebaml.llm.options import GraphOptions
 from ebaml.llm.requests import (
     DescribeEBMRequest,
     DescribeGraphRequest,
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_steps import FanOut, LocalWork, Outcome, PipelineRun, SDKCall, SDKTypes, Step
+from ebaml.llm.sdk_steps import (
+    FanOut,
+    LocalWork,
+    ModelIdentity,
+    Outcome,
+    PipelineRun,
+    SDKCall,
+    SDKTypes,
+    SDKValue,
+    Step,
+)
 from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
@@ -175,10 +188,92 @@ def test_describe_ebm_fans_out_one_pipeline_per_feature_then_summarizes(fitted: 
         steps,
     )
     assert description.text == "sum"
-    assert names(steps) == ["default_graph_options", "fan_out", "summarize_ebm"]
+    assert names(steps) == ["default_graph_options", "render_graphs", "fan_out", "summarize_ebm"]
     (fan_out,) = [step for step in steps if isinstance(step, FanOut)]
     assert len(fan_out.pipelines) == len(fitted.feature_names_in_)
     assert fan_out.max_concurrency == 8
+
+
+def _describe_with(fitted: ExplainableBoostingClassifier, timing: RenderTiming, answer: Answer) -> list[Step]:
+    steps: list[Step] = []
+    drive(pipelines.describe_ebm_pipeline(DescribeEBMRequest(fitted, render_timing=timing), TYPES), answer, steps)
+    return steps
+
+
+def _graph_answer(prompts: list[str], graph_steps: list[Step] | None = None) -> Answer:
+    """Answer every step, and record the graph of each description and the steps of the pipelines of the graphs.
+
+    Returns
+    -------
+    Answer
+        The function that answers a step.
+
+    """
+    replies = {"default_graph_options": OPTIONS, "describe_graph_cot": counted("graph"), "summarize_ebm": counted("s")}
+    nested = [] if graph_steps is None else graph_steps
+
+    def answer(step: Step) -> SDKValue:
+        if isinstance(step, LocalWork):
+            return step.run()
+        if isinstance(step, FanOut):
+            return [
+                step.feature_outcome(Outcome.of(functools.partial(drive, pipeline, answer, nested)))
+                for pipeline in step.pipelines
+            ]
+        if step.name == "describe_graph_cot":
+            prompts.append(step.arguments["graph"])
+        return replies[step.name]
+
+    return answer
+
+
+def test_both_render_timings_send_the_same_graphs(fitted: ExplainableBoostingClassifier) -> None:
+    before: list[str] = []
+    with_requests: list[str] = []
+    _describe_with(fitted, RenderTiming.BEFORE_REQUESTS, _graph_answer(before))
+    _describe_with(fitted, RenderTiming.WITH_REQUESTS, _graph_answer(with_requests))
+    assert before == with_requests
+    assert len(before) == len(fitted.feature_names_in_)
+
+
+def test_rendering_with_the_requests_renders_each_graph_in_the_pipeline_of_its_feature(
+    fitted: ExplainableBoostingClassifier,
+) -> None:
+    graph_steps: list[Step] = []
+    steps = _describe_with(fitted, RenderTiming.WITH_REQUESTS, _graph_answer([], graph_steps))
+    assert names(steps) == ["default_graph_options", "fan_out", "summarize_ebm"]
+    feature_count = len(fitted.feature_names_in_)
+    assert names(graph_steps) == ["render_graph", "describe_graph_cot"] * feature_count
+
+
+@pytest.mark.parametrize(
+    ("timing", "expected"),
+    [(RenderTiming.BEFORE_REQUESTS, 0), (RenderTiming.WITH_REQUESTS, 1)],
+)
+def test_a_graph_that_fails_to_render_stops_the_call_before_or_after_the_requests_of_the_other_graphs(
+    fitted: ExplainableBoostingClassifier,
+    monkeypatch: pytest.MonkeyPatch,
+    timing: RenderTiming,
+    expected: int,
+) -> None:
+    render = graph_conversation.render_graph
+
+    def fail_on_the_second(
+        ebm: ExplainableBoostingClassifier,
+        feature_index: int,
+        options: GraphOptions,
+        model: ModelIdentity | None,
+    ) -> RenderedGraph:
+        if feature_index == 1:
+            msg = "too long"
+            raise EBMGraphTokenLimitError(msg)
+        return render(ebm, feature_index, options, model)
+
+    monkeypatch.setattr(graph_conversation, "render_graph", fail_on_the_second)
+    prompts: list[str] = []
+    with pytest.raises(EBMGraphTokenLimitError):
+        _describe_with(fitted, timing, _graph_answer(prompts))
+    assert len(prompts) == expected
 
 
 def test_describe_ebm_summarizes_the_description_of_every_feature(fitted: ExplainableBoostingClassifier) -> None:

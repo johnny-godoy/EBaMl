@@ -23,7 +23,7 @@ from ebaml.graphs.terms import main_effect_features
 from ebaml.llm import graph_conversation
 from ebaml.llm.difficulties import DifficultyProposal, features_text, read_proposal
 from ebaml.llm.ebm_description import EBMDescription, feature_error, settle_outcomes
-from ebaml.llm.graph_conversation import GraphJob, describe_graph_counted
+from ebaml.llm.graph_conversation import GraphJob, describe_graph_counted, graph_pipelines
 from ebaml.llm.graph_views import ImageSettings, VisionSwitch
 from ebaml.llm.model_parts import feature_importances_text, features_without_graph, skipped_interactions
 from ebaml.llm.options import ModelOptions, PromptOptions
@@ -243,8 +243,8 @@ def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Gener
         The checks of the model, the ``FanOut`` of the graphs, and the call of the summary.
 
     """
-    # Convert all objects to text and check the model before prompting the LLM the first time, so that errors in
-    # processing one of the graphs or in the model surface before any LLM call is paid for.
+    # Check the model before prompting the LLM the first time, so that its errors surface before any LLM call is paid
+    # for. RenderTiming.BEFORE_REQUESTS also renders every graph before that call, so the errors of a graph do too.
     # a feature that exclude or remove_terms left out has no graph to describe
     ebm = request.ebm
     features = main_effect_features(ebm)
@@ -253,9 +253,6 @@ def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Gener
     omitted_features = features_without_graph(ebm, features)
     feature_importances = feature_importances_text(ebm)
     model_spec = yield from model_spec_pipeline(request.model, types)
-    graphs = [
-        graph_conversation.render_graph(ebm, feature_index, request.graph, model_spec) for feature_index in features
-    ]
     opts = yield from prompt_options_pipeline(request.prompt)
     job = GraphJob(
         ebm=ebm,
@@ -266,13 +263,12 @@ def describe_ebm_pipeline(request: DescribeEBMRequest, types: SDKTypes) -> Gener
         switch=VisionSwitch.for_call(request.graph, request.model),
         image=ImageSettings.from_options(ebm, request.graph),
     )
+    # RenderTiming.BEFORE_REQUESTS renders every graph here, before the first request of the LLM
+    conversations = yield from graph_pipelines(request.render_timing, job, features)
 
     with progress(len(features) + 1, "describe_ebm", enabled=request.progress_bar) as finish_step:
         outcomes: list[FeatureOutcome] = yield FanOut(
-            [
-                describe_graph_counted(job, feature_index, graph)
-                for feature_index, graph in zip(features, graphs, strict=True)
-            ],
+            conversations,
             request.max_concurrency,
             finish_step,
             feature_error,

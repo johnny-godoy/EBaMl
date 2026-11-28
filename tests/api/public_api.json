@@ -353,10 +353,11 @@
       "graph: <class 'ebaml.llm.options.GraphOptions'>",
       "num_sentences: <class 'int'>",
       "max_concurrency: <class 'int'>",
-      "progress_bar: <class 'bool'>"
+      "progress_bar: <class 'bool'>",
+      "render_timing: <enum 'RenderTiming'>"
     ],
     "kind": "class",
-    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, num_sentences: int = 30, max_concurrency: int = 8, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, graph: ebaml.llm.options.GraphOptions = NOTHING, progress_bar: bool = False) -> None"
+    "signature": "(ebm: interpret.glassbox._ebm._ebm.ExplainableBoostingClassifier | interpret.glassbox._ebm._ebm.ExplainableBoostingRegressor, num_sentences: int = 30, max_concurrency: int = 8, *, prompt: ebaml.llm.options.PromptOptions = NOTHING, model: ebaml.llm.options.ModelOptions | str | None = None, graph: ebaml.llm.options.GraphOptions = NOTHING, progress_bar: bool = False, render_timing: ebaml.core.custom_types.RenderTiming = <RenderTiming.BEFORE_REQUESTS: 'before_requests'>) -> None"
   },
   "DescribeGraphRequest": {
     "bases": [
@@ -1430,6 +1431,18 @@
     ],
     "kind": "class",
     "signature": "(terms) -> None"
+  },
+  "RenderTiming": {
+    "bases": [
+      "str",
+      "object"
+    ],
+    "kind": "enum",
+    "members": [
+      "BEFORE_REQUESTS",
+      "WITH_REQUESTS"
+    ],
+    "signature": "(*values)"
   },
   "SDKUnavailableError": {
     "bases": [
