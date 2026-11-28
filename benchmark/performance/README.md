@@ -33,7 +33,7 @@ machine.
 | `local` | `local.facts.<model>` | `compute_local_facts` for the first row, with the default options (the MIP search and 10,000 samples). |
 | `edit` | `edit.monotonize.<model>` | A new `EditSession`, one `Monotonize` edit and its `edit_effect` on the training data. |
 | `llm` | `llm.sync.<call>.<model>`, `llm.async.<call>.<model>` | `describe_ebm`, `explain_instance` and `propose_difficulties` with the fake LLM, in the sync and the async form. |
-| `concurrency` | `concurrency.<form>.describe_ebm.max_concurrency-<n>` | `describe_ebm` of 100 features with 1, 4 and 16 requests at the same time. Each reply waits 10 ms, so the requests overlap. |
+| `concurrency` | `concurrency.<form>.describe_ebm.max_concurrency-<n>`, `concurrency.<form>.describe_ebm.render-<timing>` | `describe_ebm` of 100 features with 1, 4 and 16 requests at the same time, and with each `RenderTiming` on the model with 100 features and 1024 bins. Each reply waits 10 ms, and 100 ms for the render timing, so the requests overlap. |
 | `mcp` | `mcp.<tool>`, `mcp.session` | One call of each MCP tool on the Titanic model, through an in-memory client. `mcp.session` lists the tools only: it measures the start of the session that each call includes. |
 
 The models are in `benchmark/performance/models.py`. Each has a fixed seed and no interactions.
