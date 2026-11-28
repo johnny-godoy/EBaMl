@@ -135,7 +135,12 @@ of the profiles.
 | Predict each set of rows once for each model | `edit/data_effect.py` | `edit.monotonize.features-100-bins-1024` | 474.6 ms | 224.7 ms |
 | Import skops at the first save | `edit/edit_session.py` | `python -c "import ebaml"` | 1984 ms | 1739 ms |
 
-The first three rows chain: each "before" is the result of the row above it. Together they make the graph text 40 to
+| Check the length before the boolean format | `graphs/ebm_graph.py` | `graphs.render.features-100-bins-1024` | 633.0 ms | 445.9 ms |
+| Score each set of rows once for each model | `edit/data_effect.py` | `edit.monotonize.features-100-bins-1024` | 272.3 ms | 153.2 ms |
+| Import OR-Tools at the first MIP search | `local/covering_solvers.py` | `python -c "import ebaml"` | 2019 ms | 1893 ms |
+
+The first three rows chain: each "before" is the result of the row above it. The last three rows come from a second
+round, measured against the release 0.16.0; the graph workloads of that round call the public `EBMGraph`. Together they make the graph text 40 to
 58 % faster on every model (`graphs.render.*`), and `describe_ebm` with the fake LLM 26 to 58 % faster.
 
 ### The event loop of the async forms
@@ -151,11 +156,10 @@ The first three rows chain: each "before" is the result of the row above it. Tog
 
 ### Not done
 
-- The JSON schemas of the MCP tools take about 20 ms of the 29 ms of `create_server`. The tools close over the store of
-  the server, so only a change inside the MCP SDK can share their schemas. A server calls `create_server` once, so the
-  cost is once for each process.
+- The JSON schemas of the MCP tools take about 20 ms of the 29 ms of `create_server`. The SDK builds them for each tool
+  of each new server, and a built `Tool` also holds its resolvers (`head` and `ask_person` of `save_model`), which
+  close over the store of its server. So a tool of one server cannot serve another, and only a change inside the MCP
+  SDK can share the schemas. A server calls `create_server` once, so the cost is once for each process.
 - beartype has no slow hint: one `attrs.evolve` of a `Feature`, with all its checks, takes 2.5 µs. Its cost comes from
   many short calls, and it stays on.
-- OR-Tools takes about 80 ms of `import ebaml`. Its types are in the hints of `ebaml.local`, so a lazy import needs a
-  change of those modules.
 - The draws of the random generator take most of the time of the completions, and they must stay the same.
