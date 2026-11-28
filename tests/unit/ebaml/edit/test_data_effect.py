@@ -10,7 +10,7 @@ import pytest
 from ebaml.core.custom_types import Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
-from ebaml.edit.data_effect import RowChanges, row_changes
+from ebaml.edit.data_effect import ModelPredictions, RowChanges, row_changes
 from ebaml.edit.edit_session import EditSession
 from ebaml.edit.edits import Edit, SetScores, Shift
 from ebaml.edit.model_view import term_view
@@ -109,3 +109,44 @@ def test_the_class_changes_are_counted_in_each_direction(
     assert up.rows_to_negative_class == down.rows_to_positive_class == 0
     assert up.rows_to_positive_class is not None
     assert up.rows_to_positive_class > 0
+
+
+def _rows(seed: int) -> PandasFrame:
+    random_generator = np.random.default_rng(seed)
+    return frame_of_columns(
+        {"a": random_generator.normal(scale=3, size=500), "c": random_generator.choice(["x", "y", "z"], 500)},
+    )
+
+
+def test_the_predictions_of_one_score_pass_equal_predict_and_predict_proba_of_interpret(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, PandasFrame],
+    regression_ebm: ExplainableBoostingRegressor,
+    multiclass_ebm: ExplainableBoostingClassifier,
+) -> None:
+    # 0.16.0 called predict and predict_proba, which score the rows twice; one score pass must give the same arrays
+    binary, binary_rows = continuous_ebm
+    for classifier, rows in ((binary, binary_rows), (multiclass_ebm, _rows(1))):
+        predictions = ModelPredictions(classifier, rows)
+        assert np.array_equal(predictions.predicted(), classifier.predict(rows))
+        assert np.array_equal(predictions.probabilities(), classifier.predict_proba(rows))
+    rows = _rows(2)
+    assert np.array_equal(ModelPredictions(regression_ebm, rows).predicted(), regression_ebm.predict(rows))
+
+
+def test_the_predictions_score_the_rows_once(
+    continuous_ebm: tuple[ExplainableBoostingClassifier, PandasFrame],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ebm, rows = continuous_ebm
+    calls: list[int] = []
+    score = ExplainableBoostingClassifier.decision_function
+
+    def counted(model: ExplainableBoostingClassifier, data: PandasFrame) -> np.ndarray:
+        calls.append(len(data))
+        return score(model, data)
+
+    monkeypatch.setattr(ExplainableBoostingClassifier, "decision_function", counted)
+    predictions = ModelPredictions(ebm, rows)
+    predictions.predicted()
+    predictions.probabilities()
+    assert calls == [len(rows)]

@@ -12,6 +12,7 @@ from typing import cast
 import attrs
 import numpy as np
 import numpy.typing as npt
+from interpret.utils._link import inv_link  # ruff: ignore[import-private-name] -- interpret has no public inverse link, and predict_proba applies this one to the scores
 
 from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
@@ -71,10 +72,12 @@ class RowChanges:
 
 @attrs.define(eq=False)
 class ModelPredictions:
-    """The predictions of one model for one set of rows, each computed on its first use and then kept.
+    """The predictions of one model for one set of rows, computed from one pass of the scores and then kept.
 
-    ``edit_effect`` reads the same predictions for its counts, its metrics and its affected rows, so each model predicts
-    each set of rows once.
+    ``edit_effect`` reads the same predictions for its counts, its metrics and its affected rows, so each model scores
+    each set of rows once. ``predict`` and ``predict_proba`` of a classifier of ``interpret`` both start from the same
+    scores (its ``decision_function``), so the class and the probabilities come from that one pass, with the rules of
+    ``interpret``. A regressor has no probabilities, and ``predict`` is its one pass.
 
     Attributes
     ----------
@@ -87,11 +90,26 @@ class ModelPredictions:
 
     model: ExplainableBoostingModel
     rows: npt.ArrayLike
+    _scores: npt.NDArray[np.float64] | None = attrs.field(default=None, init=False)
     _probabilities: npt.NDArray[np.float64] | None = attrs.field(default=None, init=False)
     _predicted: npt.NDArray[np.generic] | None = attrs.field(default=None, init=False)
 
+    def classifier_scores(self) -> npt.NDArray[np.float64]:
+        """Give the scores of a classifier for each row, before its link function.
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            One score for each row of a binary classifier, and one for each class of a multiclass classifier.
+
+        """
+        if self._scores is None:
+            classifier = cast(ExplainableBoostingClassifier, self.model)
+            self._scores = np.asarray(classifier.decision_function(self.rows), dtype=float)
+        return self._scores
+
     def probabilities(self) -> npt.NDArray[np.float64]:
-        """Give the probability of each class for each row. Only a classifier has them.
+        """Give the probability of each class for each row, as ``predict_proba`` does. Only a classifier has them.
 
         Returns
         -------
@@ -100,12 +118,14 @@ class ModelPredictions:
 
         """
         if self._probabilities is None:
-            classifier = cast(ExplainableBoostingClassifier, self.model)
-            self._probabilities = np.asarray(classifier.predict_proba(self.rows), dtype=float)
+            self._probabilities = np.asarray(
+                inv_link(self.classifier_scores(), self.model.link_, self.model.link_param_),
+                dtype=float,
+            )
         return self._probabilities
 
     def predicted(self) -> npt.NDArray[np.generic]:
-        """Give the prediction of each row: the class of a classifier, or the value of a regressor.
+        """Give the prediction of each row, as ``predict`` does: the class of a classifier, or the value of a regressor.
 
         Returns
         -------
@@ -114,8 +134,34 @@ class ModelPredictions:
 
         """
         if self._predicted is None:
-            self._predicted = np.asarray(self.model.predict(self.rows))
+            self._predicted = _predicted_of_kind(model_kind(self.model), self)
         return self._predicted
+
+
+@functools.singledispatch
+def _predicted_of_kind(_kind: ModelKind, predictions: ModelPredictions) -> npt.NDArray[np.generic]:
+    """Predict the value of each row of a regressor. Each kind of classifier registers its own rule.
+
+    Returns
+    -------
+    npt.NDArray[np.generic]
+        The value of each row. A regressor has no probabilities, so ``predict`` is its one pass of the scores.
+
+    """
+    return np.asarray(predictions.model.predict(predictions.rows))
+
+
+@_predicted_of_kind.register
+def _binary_predicted(_kind: BinaryClassifier, predictions: ModelPredictions) -> npt.NDArray[np.generic]:
+    # interpret follows scikit-learn: a score of 0 or less is the first class
+    classes: npt.NDArray[np.generic] = np.asarray(predictions.model.classes_)
+    return classes[(predictions.classifier_scores() > 0).astype(np.int8)]
+
+
+@_predicted_of_kind.register
+def _multiclass_predicted(_kind: MulticlassClassifier, predictions: ModelPredictions) -> npt.NDArray[np.generic]:
+    classes: npt.NDArray[np.generic] = np.asarray(predictions.model.classes_)
+    return classes[np.argmax(predictions.classifier_scores(), axis=1)]
 
 
 def _value_counts(value_change: npt.NDArray[np.float64], changed_classes: int | None) -> RowChanges:
