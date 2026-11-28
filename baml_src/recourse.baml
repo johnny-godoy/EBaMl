@@ -10,9 +10,10 @@ enum Difficulty {
 }
 
 class FeatureDifficulty {
-    feature: string @description(
-        "The name of the input: the text between the quotes in the list of inputs, without the quotes and without the type.",
-    ),
+    feature: string
+        @description(
+            "The name of the input: the text between the quotes in the list of inputs, without the quotes and without the type.",
+        ),
     difficulty: Difficulty,
     reason: string @description("One sentence: why a person finds this change easy or hard."),
 }
@@ -89,5 +90,8 @@ function propose_difficulty(
 ) -> DifficultyProposal {
     let selected = select_client(client, model, short_defaults());
     let result = ai.Agent.new(client = selected).run(ProposeFeatureDifficulty@spec(features, opts));
-    DifficultyProposal { difficulties: result.value, usage: usage_of(result) }
+    DifficultyProposal {
+        difficulties: result.value,
+        usage: usage_of(result),
+    }
 }

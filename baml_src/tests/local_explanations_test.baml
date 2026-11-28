@@ -8,19 +8,33 @@ test "local_user_msg prepends the global explanation and puts in the guidance of
     assert.is_true(plain.includes("GUIDANCE"));
     assert.is_true(!plain.includes("<dataset_description>"));
 
-    let described = local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "A bank dataset");
+    let described = local_user_msg(
+        "GLOBAL",
+        "PRED",
+        "QUESTION",
+        "FACTS",
+        "GUIDANCE",
+        "A bank dataset",
+    );
     assert.is_true(described.includes("A bank dataset"))
 }
 
 test "local_user_msg tells the model to write in the language" {
     assert.is_true(
-        local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "").includes(
-            "Write the whole answer in English",
-        ),
+        local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "")
+            .includes("Write the whole answer in English"),
     );
     assert.is_true(
-        local_user_msg("GLOBAL", "PRED", "QUESTION", "FACTS", "GUIDANCE", "", language = "German")
-            .includes("Write the whole answer in German"),
+        local_user_msg(
+            "GLOBAL",
+            "PRED",
+            "QUESTION",
+            "FACTS",
+            "GUIDANCE",
+            "",
+            language = "German",
+        )
+        .includes("Write the whole answer in German"),
     )
 }
 
@@ -32,7 +46,14 @@ test "explain_local makes three calls and sums usage" {
         sufficient_reason: "S",
         completions: "K",
     };
-    let result = explain_local("GLOBAL", facts, "GUIDANCE", 5, default_graph_options(), client = scripted);
+    let result = explain_local(
+        "GLOBAL",
+        facts,
+        "GUIDANCE",
+        5,
+        default_graph_options(),
+        client = scripted,
+    );
     assert.equal(scripted.calls, 3);
     assert.equal(result.counterfactual, "R");
     assert.equal(result.sufficient_reason, "R");
@@ -69,37 +90,61 @@ test "local_user_msg orders the global explanation, dataset, prediction, facts, 
 
 test "question functions state the sentence limit and their own query" {
     assert.is_true(counterfactual_question(3).includes("at most 3 sentences"));
-    assert.is_true(counterfactual_question(3).includes("minimum change required"));
+    assert.is_true(
+        counterfactual_question(3).includes("minimum change required"),
+    );
     assert.is_true(counterfactual_question(3).includes("is_optimal"));
-    assert.is_true(counterfactual_question(3).includes("keep its size out of the answer"));
-    assert.is_true(sufficient_reason_question(4).includes("at most 4 sentences"));
+    assert.is_true(
+        counterfactual_question(3).includes("keep its size out of the answer"),
+    );
+    assert.is_true(
+        sufficient_reason_question(4).includes("at most 4 sentences"),
+    );
     assert.is_true(sufficient_reason_question(4).includes("sufficient reason"));
     assert.is_true(
         sufficient_reason_question(4).includes("name the inputs of \"features_not_needed\""),
     );
     assert.is_true(sufficient_reason_question(4).includes("is_optimal"));
-    assert.is_true(sufficient_reason_question(4).includes("keep its size out of the answer"));
+    assert.is_true(
+        sufficient_reason_question(4).includes("keep its size out of the answer"),
+    );
     assert.is_true(completions_question(6).includes("at most 6 sentences"));
     assert.is_true(completions_question(6).includes("count completions"))
 }
 
 test "the questions explain the lower bound and why a set is not proved smallest" {
-    assert.is_true(counterfactual_question(3).includes("smallest_possible_number_of_changes"));
+    assert.is_true(
+        counterfactual_question(3).includes("smallest_possible_number_of_changes"),
+    );
     assert.is_true(
         counterfactual_question(3).includes("ended at its time limit or was a fast search"),
     );
     assert.is_true(counterfactual_question(3).includes("you may state the gap"));
-    assert.is_true(sufficient_reason_question(3).includes("smallest_possible_number_of_features"));
-    assert.is_true(sufficient_reason_question(3).includes("did not prove the size"));
-    assert.is_true(sufficient_reason_question(3).includes("you may state the gap"))
+    assert.is_true(
+        sufficient_reason_question(3).includes("smallest_possible_number_of_features"),
+    );
+    assert.is_true(
+        sufficient_reason_question(3).includes("did not prove the size"),
+    );
+    assert.is_true(
+        sufficient_reason_question(3).includes("you may state the gap"),
+    )
 }
 
 test "the questions make no claim that the facts do not support" {
     // A failed search is not a proof: the counterfactual search covers realistic values only.
-    assert.is_true(counterfactual_question(3).includes("within the realistic values"));
-    assert.is_true(!counterfactual_question(3).includes("cannot be changed by altering"));
-    assert.is_true(sufficient_reason_question(3).includes("found no set of inputs"));
-    assert.is_true(!sufficient_reason_question(3).includes("every input matters"));
+    assert.is_true(
+        counterfactual_question(3).includes("within the realistic values"),
+    );
+    assert.is_true(
+        !counterfactual_question(3).includes("cannot be changed by altering"),
+    );
+    assert.is_true(
+        sufficient_reason_question(3).includes("found no set of inputs"),
+    );
+    assert.is_true(
+        !sufficient_reason_question(3).includes("every input matters"),
+    );
     // Completion shares are estimates and can fall as inputs become known.
     assert.is_true(completions_question(3).includes("when it falls"));
     assert.is_true(!completions_question(3).includes("how that share grows"))
@@ -114,21 +159,30 @@ test "the questions state a condition of the facts only through its key" {
     assert.is_true(
         counterfactual.includes("\"flip_holds_even_if_the_model_is_somewhat_off\" is true"),
     );
-    assert.is_true(counterfactual.includes("\"flip_holds_at_confidence\" is above 0"));
     assert.is_true(
-        sufficient.includes("\"guarantee_holds_even_if_the_model_is_somewhat_off\" is true"),
+        counterfactual.includes("\"flip_holds_at_confidence\" is above 0"),
     );
-    assert.is_true(sufficient.includes("\"guarantee_holds_at_confidence\" is above 0"));
+    assert.is_true(sufficient.includes(
+        "\"guarantee_holds_even_if_the_model_is_somewhat_off\" is true",
+    ));
+    assert.is_true(
+        sufficient.includes("\"guarantee_holds_at_confidence\" is above 0"),
+    );
     for (let question in [counterfactual, sufficient]) {
-        assert.is_true(question.includes("make no statement about the model's uncertainty"));
+        assert.is_true(
+            question.includes("make no statement about the model's uncertainty"),
+        );
         // min_support=0 leaves out no value
         assert.is_true(question.includes("If \"rare_values_left_out\" is true"));
         assert.is_true(!question.includes("(rare extreme values are left out)"))
     }
-    ;
     // only the changed features of a counterfactual move by their uncertainty
-    assert.is_true(counterfactual.includes("the effects of the changed features"));
-    assert.is_true(!counterfactual.includes("holds even if the model's effects"));
+    assert.is_true(
+        counterfactual.includes("the effects of the changed features"),
+    );
+    assert.is_true(
+        !counterfactual.includes("holds even if the model's effects"),
+    );
     // n_samples accepts any count
     assert.is_true(completions.includes("\"sample_size\""));
     assert.is_true(completions.includes("\"number_of_samples\""));
@@ -139,10 +193,18 @@ test "the questions state a condition of the facts only through its key" {
 test "the counterfactual names the limits of the person only through their keys" {
     // Immutable features and allowed values narrow the search, so "smallest" and "no change" hold only within them.
     let counterfactual = counterfactual_question(3);
-    assert.is_true(counterfactual.includes("If the facts give \"features_kept_unchanged\""));
-    assert.is_true(counterfactual.includes("If the facts give \"allowed_values\""));
-    assert.is_true(counterfactual.includes("limit every claim about the smallest set"));
-    assert.is_true(counterfactual.includes("within the limits that the facts list"));
+    assert.is_true(
+        counterfactual.includes("If the facts give \"features_kept_unchanged\""),
+    );
+    assert.is_true(
+        counterfactual.includes("If the facts give \"allowed_values\""),
+    );
+    assert.is_true(
+        counterfactual.includes("limit every claim about the smallest set"),
+    );
+    assert.is_true(
+        counterfactual.includes("within the limits that the facts list"),
+    );
     // with no limits, the answer states none
     assert.is_true(counterfactual.includes("make no statement about limits"))
 }
@@ -150,7 +212,9 @@ test "the counterfactual names the limits of the person only through their keys"
 test "the counterfactual calls a plan the cheapest only under the costs of its key" {
     // With costs, the plan is the cheapest and may have more changes than the smallest set.
     let counterfactual = counterfactual_question(3);
-    assert.is_true(counterfactual.includes("If the facts give \"costs_of_the_changes\""));
+    assert.is_true(
+        counterfactual.includes("If the facts give \"costs_of_the_changes\""),
+    );
     assert.is_true(counterfactual.includes("never call it the fewest changes"));
     assert.is_true(counterfactual.includes("the difficulties are assumptions"));
     // a difficulty that a language model proposed is a guess, and the answer says so
@@ -162,10 +226,12 @@ test "the counterfactual presents other plans as alternatives with their own cla
     // Plan k + 1 is the cheapest only without the changes of the earlier plans, never the cheapest overall.
     let counterfactual = counterfactual_question(3);
     assert.is_true(counterfactual.includes("If the facts give \"other_plans\""));
+    assert.is_true(counterfactual.includes(
+        "\"is_cheapest_without_the_changes_of_earlier_plans\" is true",
+    ));
     assert.is_true(
-        counterfactual.includes("\"is_cheapest_without_the_changes_of_earlier_plans\" is true"),
-    );
-    assert.is_true(counterfactual.includes("never call it the cheapest plan overall"))
+        counterfactual.includes("never call it the cheapest plan overall"),
+    )
 }
 
 test "each local function gets its own facts, question and system role" {
@@ -175,18 +241,26 @@ test "each local function gets its own facts, question and system role" {
         sufficient_reason: "SR-FACT",
         completions: "CO-FACT",
     };
-    let opts = GraphPromptOptions { ...default_graph_options(), expert_description: "an EXPERT" };
+    let opts = GraphPromptOptions {
+        ...default_graph_options(),
+        expert_description: "an EXPERT",
+    };
 
-    let cf = LocalCounterfactual@spec("GLOBAL", facts, "GUIDANCE", 3, opts).prompt().text();
-    let sr = LocalSufficientReason@spec("GLOBAL", facts, "GUIDANCE", 4, opts).prompt().text();
-    let co = LocalCompletions@spec("GLOBAL", facts, "GUIDANCE", 6, opts).prompt().text();
+    let cf = LocalCounterfactual@spec("GLOBAL", facts, "GUIDANCE", 3, opts)
+        .prompt()
+        .text();
+    let sr = LocalSufficientReason@spec("GLOBAL", facts, "GUIDANCE", 4, opts)
+        .prompt()
+        .text();
+    let co = LocalCompletions@spec("GLOBAL", facts, "GUIDANCE", 6, opts)
+        .prompt()
+        .text();
 
     for (let prompt in [cf, sr, co]) {
         assert.is_true(prompt.includes("You are an EXPERT."));
         assert.is_true(prompt.includes("GLOBAL"));
         assert.is_true(prompt.includes("PRED-FACT"))
     }
-    ;
 
     assert.is_true(
         cf.includes("CF-FACT")
@@ -215,7 +289,14 @@ test "explain_local routes each answer to its own field" {
         sufficient_reason: "SR-FACT",
         completions: "CO-FACT",
     };
-    let result = explain_local("GLOBAL", facts, "GUIDANCE", 5, default_graph_options(), client = EchoClient {});
+    let result = explain_local(
+        "GLOBAL",
+        facts,
+        "GUIDANCE",
+        5,
+        default_graph_options(),
+        client = EchoClient {},
+    );
     assert.is_true(result.counterfactual.includes("CF-FACT"));
     assert.is_true(
         !result.counterfactual.includes("SR-FACT") && !result.counterfactual.includes("CO-FACT"),

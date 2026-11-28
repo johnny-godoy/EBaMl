@@ -22,8 +22,13 @@ class ToolCallingClient {
             self.turns += 1;
             if (self.turns == 1) {
                 let turn = scripted_turn("", 10, 5);
-                turn.content
-                    = [ai.content.ToolUse { id: "call-1", name: "get_model_summary", args: {} }];
+                turn.content = [
+                    ai.content.ToolUse {
+                        id: "call-1",
+                        name: "get_model_summary",
+                        args: {},
+                    },
+                ];
                 turn.stop_reason = ai.content.StopReason.ToolUse;
                 return turn;
             };
@@ -33,15 +38,19 @@ class ToolCallingClient {
 }
 
 function fake_summary_tool() -> ai.tools.Tool {
-    ai.tools.raw_tool("get_model_summary", "Summarize the model.", { "type": "object", "properties": {} }, (
-        args,
-    ) -> {
-        `{"feature_count": 2}`
-    })
+    ai.tools.raw_tool(
+        "get_model_summary",
+        "Summarize the model.",
+        { "type": "object", "properties": {} },
+        (args) -> { `{"feature_count": 2}` },
+    )
 }
 
 test "explain_with_tools runs the tool the model asks for and reports it" {
-    let scripted = ToolCallingClient { turns: 0, seen_tools: [] };
+    let scripted = ToolCallingClient {
+        turns: 0,
+        seen_tools: [],
+    };
     let result = explain_with_tools("What matters?", [fake_summary_tool()], client = scripted);
     assert.equal(result.report, "Report: 2 features.");
     assert.equal(result.tool_calls, ["get_model_summary"]);
@@ -55,12 +64,16 @@ test "the user message holds the question and the system message forbids invente
 }
 
 test "conversation_text keeps the order and the speaker of each message" {
-    let text = conversation_text(
-        [
-            ChatTurn { speaker: "user", text: "Explain row 3." },
-            ChatTurn { speaker: "assistant", text: "Age pushes it up." },
-        ],
-    );
+    let text = conversation_text([
+        ChatTurn {
+            speaker: "user",
+            text: "Explain row 3.",
+        },
+        ChatTurn {
+            speaker: "assistant",
+            text: "Age pushes it up.",
+        },
+    ]);
     assert.equal(
         text,
         "<user>\nExplain row 3.\n</user>\n<assistant>\nAge pushes it up.\n</assistant>",
@@ -68,16 +81,34 @@ test "conversation_text keeps the order and the speaker of each message" {
 }
 
 test "the chat message holds the history and the new message" {
-    let message = mcp_chat_user_msg("What if income were higher?", [ChatTurn { speaker: "user", text: "Explain row 3." }]);
+    let message = mcp_chat_user_msg("What if income were higher?", [
+        ChatTurn {
+            speaker: "user",
+            text: "Explain row 3.",
+        },
+    ]);
     assert.is_true(message.includes("Explain row 3."));
     assert.is_true(message.includes("What if income were higher?"));
     assert.is_true(mcp_chat_system_msg().includes("follow-up"))
 }
 
 test "chat_with_tools answers a follow-up with the history in the prompt" {
-    let scripted = ToolCallingClient { turns: 0, seen_tools: [] };
-    let history = [ChatTurn { speaker: "user", text: "Explain row 3." }];
-    let result = chat_with_tools("And row 4?", history, [fake_summary_tool()], client = scripted);
+    let scripted = ToolCallingClient {
+        turns: 0,
+        seen_tools: [],
+    };
+    let history = [
+        ChatTurn {
+            speaker: "user",
+            text: "Explain row 3.",
+        },
+    ];
+    let result = chat_with_tools(
+        "And row 4?",
+        history,
+        [fake_summary_tool()],
+        client = scripted,
+    );
     assert.equal(result.report, "Report: 2 features.");
     assert.equal(result.tool_calls, ["get_model_summary"]);
     let prompt = McpChat@spec("And row 4?", history).prompt();
@@ -85,5 +116,7 @@ test "chat_with_tools answers a follow-up with the history in the prompt" {
 }
 
 test "the chat message asks for rounded numbers" {
-    assert.is_true(mcp_chat_user_msg("Q", []).includes("round them to three digits"))
+    assert.is_true(
+        mcp_chat_user_msg("Q", []).includes("round them to three digits"),
+    )
 }

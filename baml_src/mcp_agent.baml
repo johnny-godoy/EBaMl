@@ -99,34 +99,43 @@ function run_with_tools(
 ) -> McpAgentReport {
     let tool_calls: string[] = [];
     let samples: TokenSample[] = [];
-    let agent = ai.Agent.new(max_steps = max_steps, client = select_client(client, model, short_defaults()), on_event = (
-        event,
-    ) -> {
-        if let call: ai.events.ToolRequested = event {
-            tool_calls.push(call.name);
-        };
-        if let model_call: ai.events.ModelCall = event {
-            let sample = sample_of(model_call);
-            if (sample != null) {
-                samples.push(sample);
+    let agent = ai.Agent.new(
+        max_steps = max_steps,
+        client = select_client(client, model, short_defaults()),
+        on_event = (event) -> {
+            if let call: ai.events.ToolRequested = event {
+                tool_calls.push(call.name);
             };
-        };
-    });
+            if let model_call: ai.events.ModelCall = event {
+                let sample = sample_of(model_call);
+                if (sample != null) {
+                    samples.push(sample);
+                };
+            };
+        },
+    );
     //# The spec carries the tools of the caller. The generated spec has none, because the tools are known at run time.
-    let result = agent.run(ai.FunctionSpec { ...spec, toolbox: ai.tools.Toolbox.new(tools) });
-    let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: samples };
+    let result = agent.run(ai.FunctionSpec {
+        ...spec,
+        toolbox: ai.tools.Toolbox.new(tools),
+    });
+    let usage = TokenUsage {
+        input_tokens: 0,
+        output_tokens: 0,
+        samples: samples,
+    };
     for (let entry in result.usage) {
-        usage
-            = add_usage(
-                usage,
-                TokenUsage {
-                    input_tokens: entry.usage.input_tokens ?? 0,
-                    output_tokens: entry.usage.output_tokens ?? 0,
-                    samples: [],
-                },
-            );
+        usage = add_usage(usage, TokenUsage {
+            input_tokens: entry.usage.input_tokens ?? 0,
+            output_tokens: entry.usage.output_tokens ?? 0,
+            samples: [],
+        });
     }
-    McpAgentReport { report: result.value, tool_calls: tool_calls, usage: usage }
+    McpAgentReport {
+        report: result.value,
+        tool_calls: tool_calls,
+        usage: usage,
+    }
 }
 
 function explain_with_tools(
@@ -136,7 +145,13 @@ function explain_with_tools(
     model: ModelSpec? = null,
     max_steps: int = 12,
 ) -> McpAgentReport {
-    run_with_tools(McpExplainer@spec(question), tools, client = client, model = model, max_steps = max_steps)
+    run_with_tools(
+        McpExplainer@spec(question),
+        tools,
+        client = client,
+        model = model,
+        max_steps = max_steps,
+    )
 }
 
 // One chat answer on tools that the caller supplies.
@@ -148,7 +163,13 @@ function chat_with_tools(
     model: ModelSpec? = null,
     max_steps: int = 12,
 ) -> McpAgentReport {
-    run_with_tools(McpChat@spec(question, history), tools, client = client, model = model, max_steps = max_steps)
+    run_with_tools(
+        McpChat@spec(question, history),
+        tools,
+        client = client,
+        model = model,
+        max_steps = max_steps,
+    )
 }
 
 // Entry point called from Python or the command line. `command` and `args` start the MCP server, for example
@@ -165,7 +186,13 @@ function explain_with_mcp(
     let connection = ai.mcp.Connection.connect("ebaml", command, args);
     defer { connection.close() }
     //# Let the model call the tools, then return its report.
-    explain_with_tools(question, connection.tools(), client = client, model = model, max_steps = max_steps)
+    explain_with_tools(
+        question,
+        connection.tools(),
+        client = client,
+        model = model,
+        max_steps = max_steps,
+    )
 }
 
 // A chat in the terminal. The server starts once and stays up for the whole chat, so a later question is fast, and a
@@ -193,21 +220,38 @@ function chat_with_mcp(
         if (message.length() == 0) {
             break;
         };
-        let reply = chat_with_tools(message, history, tools, client = client, model = model, max_steps = max_steps) catch_all (error) {
+        let reply = chat_with_tools(
+            message,
+            history,
+            tools,
+            client = client,
+            model = model,
+            max_steps = max_steps,
+        ) catch_all (error) {
             _ => {
                 McpAgentReport {
                     report: `This turn failed: ${error}`,
                     tool_calls: [],
-                    usage: TokenUsage { input_tokens: 0, output_tokens: 0, samples: [] },
+                    usage: TokenUsage {
+                        input_tokens: 0,
+                        output_tokens: 0,
+                        samples: [],
+                    },
                 }
-            }
+            },
         };
         baml.io.println(`\n${reply.report}\n`);
         if (reply.tool_calls.length() > 0) {
             baml.io.eprintln(`(tools: ${reply.tool_calls.join(", ")})`);
         };
-        history.push(ChatTurn { speaker: "user", text: message });
-        history.push(ChatTurn { speaker: "assistant", text: reply.report });
+        history.push(ChatTurn {
+            speaker: "user",
+            text: message,
+        });
+        history.push(ChatTurn {
+            speaker: "assistant",
+            text: reply.report,
+        });
     }
     history.length() / 2
 }

@@ -42,28 +42,27 @@ function local_user_msg(
     if (dataset_description.length() > 0) {
         msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
-    msg
-        + `
-            <prediction>
-            ${prediction}
-            </prediction>
+    msg + `
+        <prediction>
+        ${prediction}
+        </prediction>
 
-            <facts>
-            ${facts}
-            </facts>
+        <facts>
+        ${facts}
+        </facts>
 
-            <audience>
-            ${audience_guidance}
-            </audience>
+        <audience>
+        ${audience_guidance}
+        </audience>
 
-            <language>
-            Write the whole answer in ${language}, because the reader reads ${language}. Keep every number exactly as the facts give it, and translate the names of inputs and categories only where the reader needs them.
-            </language>
+        <language>
+        Write the whole answer in ${language}, because the reader reads ${language}. Keep every number exactly as the facts give it, and translate the names of inputs and categories only where the reader needs them.
+        </language>
 
-            <question>
-            ${question}
-            </question>
-        `
+        <question>
+        ${question}
+        </question>
+    `
 }
 
 function counterfactual_question(num_sentences: int) -> string {
@@ -173,19 +172,40 @@ function explain_local(
     let selected = select_client(client, model, short_defaults());
     let counterfactual = spawn {
         run_counted(
-            LocalCounterfactual@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
+            LocalCounterfactual@spec(
+                global_explanation,
+                facts,
+                audience_guidance,
+                num_sentences,
+                opts,
+                language = language,
+            ),
             client = selected,
         )
     };
     let sufficient = spawn {
         run_counted(
-            LocalSufficientReason@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
+            LocalSufficientReason@spec(
+                global_explanation,
+                facts,
+                audience_guidance,
+                num_sentences,
+                opts,
+                language = language,
+            ),
             client = selected,
         )
     };
     let completions = spawn {
         run_counted(
-            LocalCompletions@spec(global_explanation, facts, audience_guidance, num_sentences, opts, language = language),
+            LocalCompletions@spec(
+                global_explanation,
+                facts,
+                audience_guidance,
+                num_sentences,
+                opts,
+                language = language,
+            ),
             client = selected,
         )
     };

@@ -11,10 +11,9 @@
 
 // The questions of `task` at `indices`, as [question, solution] pairs.
 function benchmark_sample(task: string, indices: int[]) -> string[][] {
-    let questions = baml.json.decode<string[][]>(baml.fs.read(`benchmark/accuracy/data/${task}.json`));
-    indices.map((i) -> {
-        questions[i]
-    })
+    let questions =
+        baml.json.decode<string[][]>(baml.fs.read(`benchmark/accuracy/data/${task}.json`));
+    indices.map((i) -> { questions[i] })
 }
 
 // The letter of the chosen option, as `_parse_choice` reads it: "a)" anywhere, or a bare "a" at the start.
@@ -37,7 +36,6 @@ function benchmark_monotonicity(answer: string) -> string? {
             return label;
         }
     }
-    ;
     null
 }
 
@@ -47,7 +45,7 @@ function benchmark_monotonicity(answer: string) -> string? {
 // the test, because they say nothing about the answers.
 function benchmark_answer(question: string, answer_format: string, client: ai.Client?) -> string {
     answer_benchmark_question(question, answer_format, client = client).text catch (e) {
-        ai.errors.FinishReasonError => ""
+        ai.errors.FinishReasonError => "",
     }
 }
 
@@ -63,7 +61,11 @@ function benchmark_correct(
     let i = 0;
     while (i < sample.length()) {
         let batch = sample.slice(i, i + 2);
-        let replies: string[] = await baml.future.all(batch.map((pair) => { spawn { benchmark_answer(pair[0], answer_format, client) } }));
+        let replies: string[] = await baml.future.all(batch.map((pair) -> {
+            spawn {
+                benchmark_answer(pair[0], answer_format, client)
+            }
+        }));
         let j = 0;
         while (j < batch.length()) {
             let answer = replies[j];
@@ -77,10 +79,8 @@ function benchmark_correct(
             };
             j = j + 1;
         }
-        ;
         i = i + 2;
     }
-    ;
     correct
 }
 
@@ -89,7 +89,11 @@ testset "LiveBenchmark" {
     test "benchmark monotonicity: at least 4 of 6 sample questions are correct" {
         // 2 "Decreasing", 2 "Increasing", 2 "Not monotone"
         let sample = benchmark_sample("monotonicity", [17, 37, 4, 7, 0, 8]);
-        let correct = benchmark_correct(sample, "'Increasing', 'Decreasing' or 'Not monotone'", benchmark_monotonicity);
+        let correct = benchmark_correct(
+            sample,
+            "'Increasing', 'Decreasing' or 'Not monotone'",
+            benchmark_monotonicity,
+        );
         assert.is_true(correct >= 4)
     }
 
@@ -97,7 +101,11 @@ testset "LiveBenchmark" {
     test "benchmark function recognition: at least 4 of 6 sample questions are correct" {
         // the first question of each solution a) to e), and a second c)
         let sample = benchmark_sample("function-recognition", [0, 1, 2, 7, 10, 14]);
-        let correct = benchmark_correct(sample, "the letter of the function, for example 'a)'", benchmark_choice);
+        let correct = benchmark_correct(
+            sample,
+            "the letter of the function, for example 'a)'",
+            benchmark_choice,
+        );
         assert.is_true(correct >= 4)
     }
 }
@@ -130,7 +138,9 @@ testset "BenchmarkChecks" {
             sample,
             "'Increasing', 'Decreasing' or 'Not monotone'",
             benchmark_monotonicity,
-            client = ConstantClient { answer: "Decreasing." },
+            client = ConstantClient {
+                answer: "Decreasing.",
+            },
         );
         assert.equal(correct, 2)
     }

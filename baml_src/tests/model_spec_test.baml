@@ -16,7 +16,10 @@ test "every provider of the table builds a client with no network access" {
     let providers = client_builders().keys();
     assert.equal(providers.length(), 9);
     for (let provider in providers) {
-        assert.equal(build_client(spec_for(provider), short_defaults()).requested_model(), "m");
+        assert.equal(
+            build_client(spec_for(provider), short_defaults()).requested_model(),
+            "m",
+        );
     }
 }
 
@@ -132,12 +135,21 @@ test "select_client builds the client of the model" {
 }
 
 test "select_client returns null with no client and no model, so the declared client runs" {
-    assert.equal(client_id(select_client(null, null, short_defaults())), "null")
+    assert.equal(
+        client_id(select_client(null, null, short_defaults())),
+        "null",
+    )
 }
 
 test "describe_graph_cot sends every turn to the client when both client and model are set" {
     let scripted = ScriptedClient { calls: 0 };
-    let result = describe_graph_cot("G", 7, default_graph_options(), client = scripted, model = spec_for("ollama"));
+    let result = describe_graph_cot(
+        "G",
+        7,
+        default_graph_options(),
+        client = scripted,
+        model = spec_for("ollama"),
+    );
     assert.equal(result.text, "R");
     assert.equal(scripted.calls, 3)
 }
@@ -150,7 +162,8 @@ test "an Azure client without base_url names the deployment after the model" {
 // The part of a request body that carries the PNG "iVBORw0KGgo=", in the format that each provider documents: an
 // OpenAI image_url with a data URL, an Anthropic base64 image source, a Gemini inlineData part and a Bedrock image block.
 function image_wire_formats() -> map<string, string> {
-    let openai = "\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}";
+    let openai =
+        "\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,iVBORw0KGgo=\"}";
     let gemini = "\"inlineData\":{\"mimeType\":\"image/png\",\"data\":\"iVBORw0KGgo=\"}";
     {
         "openai": openai,
@@ -178,7 +191,13 @@ function offline_client(provider: string) -> ai.Client {
             )
         },
         "openai-generic" => {
-            build_openai_generic(ModelSpec { ...spec_for(provider), base_url: "http://localhost:1" }, short_defaults())
+            build_openai_generic(
+                ModelSpec {
+                    ...spec_for(provider),
+                    base_url: "http://localhost:1",
+                },
+                short_defaults(),
+            )
         },
         _ => build_client(spec_for(provider), short_defaults()),
     }

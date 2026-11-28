@@ -4,15 +4,30 @@
 // count against `max_tokens`, so the caps are generous. 16000 stays below the output cap of 16384 tokens of common OpenAI
 // models, because these limits are also the defaults of a ModelSpec for any provider.
 // Transient failures (rate limits, network, 5xx) are retried; rejected requests are not.
-client RouterBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 12000);
+client RouterBase = openai.OpenRouterClient.new(
+    model = "openrouter/free",
+    api_key = env.OPENROUTER_API_KEY,
+    temperature = 0.7,
+    max_tokens = 12000,
+);
 
 // First assistant turn of each conversation allows a longer answer.
-client RouterLongBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.7, max_tokens = 16000);
+client RouterLongBase = openai.OpenRouterClient.new(
+    model = "openrouter/free",
+    api_key = env.OPENROUTER_API_KEY,
+    temperature = 0.7,
+    max_tokens = 16000,
+);
 
 client Router = ai.clients.Retry.new(inner = RouterBase, max_attempts = 3);
 
 // The benchmark is scored on one answer per question, so it samples greedily, as TalkToEBM's benchmark does.
-client RouterBenchmarkBase = openai.OpenRouterClient.new(model = "openrouter/free", api_key = env.OPENROUTER_API_KEY, temperature = 0.0, max_tokens = 16000);
+client RouterBenchmarkBase = openai.OpenRouterClient.new(
+    model = "openrouter/free",
+    api_key = env.OPENROUTER_API_KEY,
+    temperature = 0.0,
+    max_tokens = 16000,
+);
 
 client RouterBenchmark = ai.clients.Retry.new(inner = RouterBenchmarkBase, max_attempts = 3);
 
@@ -109,13 +124,14 @@ function graph_text_and_image_msg(graph: string) -> string {
 
 // The graph part of the user message: the text, the reading of the image, or both. A request needs the text or the
 // image, because a description of a graph that the model did not get would be made up.
-function graph_content_msg(
-    graph: string?,
-    has_image: bool,
-) -> string throws baml.errors.InvalidArgument {
+function graph_content_msg(graph: string?, has_image: bool) -> string
+    throws baml.errors.InvalidArgument
+{
     if (graph == null) {
         if (!has_image) {
-            throw baml.errors.InvalidArgument { message: "a graph request needs the graph text, the graph image or both" };
+            throw baml.errors.InvalidArgument {
+                message: "a graph request needs the graph text, the graph image or both",
+            };
         };
         return graph_image_msg();
     };
@@ -135,7 +151,8 @@ function describe_graph_msg(
         msg = msg + `<graph_description>\n${opts.graph_description}\n</graph_description>\n\n`;
     };
     if (opts.dataset_description.length() > 0) {
-        msg = msg + `<dataset_description>\n${opts.dataset_description}\n</dataset_description>\n\n`;
+        msg =
+            msg + `<dataset_description>\n${opts.dataset_description}\n</dataset_description>\n\n`;
     };
     msg + `<task>\n${opts.task_description}\n</task>`
 }
@@ -151,21 +168,19 @@ function omitted_parts_msg(
     if (omitted_terms.length() + omitted_features.length() + failed_features.length() == 0) {
         return "";
     };
-    let msg = "<omitted_parts>\nThe graph descriptions cover the main effect of one feature at a time.\n";
+    let msg =
+        "<omitted_parts>\nThe graph descriptions cover the main effect of one feature at a time.\n";
     if (omitted_terms.length() > 0) {
-        msg
-            = msg
-                + `The model also has these interaction terms, and no graph description covers them: ${omitted_terms.join(", ")}.\n`;
+        msg = msg
+            + `The model also has these interaction terms, and no graph description covers them: ${omitted_terms.join(", ")}.\n`;
     };
     if (omitted_features.length() > 0) {
-        msg
-            = msg
-                + `These features have no main effect in the model, and no graph description covers them: ${omitted_features.join(", ")}.\n`;
+        msg = msg
+            + `These features have no main effect in the model, and no graph description covers them: ${omitted_features.join(", ")}.\n`;
     };
     if (failed_features.length() > 0) {
-        msg
-            = msg
-                + `The request for the graph description of these features failed, so no graph description covers them: ${failed_features.join(", ")}.\n`;
+        msg = msg
+            + `The request for the graph description of these features failed, so no graph description covers them: ${failed_features.join(", ")}.\n`;
     };
     msg
         + "Say in one sentence that your answer leaves these parts out, and name each of them, because the reader must know that the answer does not cover the whole model.\n</omitted_parts>\n\n"
@@ -197,7 +212,11 @@ function summarize_ebm_msg(
         msg = msg + `<dataset_description>\n${dataset_description}\n</dataset_description>\n\n`;
     };
     msg
-        + omitted_parts_msg(omitted_terms, omitted_features, failed_features = failed_features)
+        + omitted_parts_msg(
+            omitted_terms,
+            omitted_features,
+            failed_features = failed_features,
+        )
         + `
             <instructions>
             Summarize the model. The feature importances are global, and there is at most one graph description for each feature.
@@ -217,14 +236,13 @@ function surprises_request() -> string {
 }
 
 function final_description_request(num_sentences: int, omitted_terms: string[] = []) -> string {
-    omitted_parts_msg(omitted_terms, [])
-        + `
-            <instructions>
-                    Describe the graph in at most ${num_sentences} sentences.
-                    Include the important surprising patterns, because the reader uses them to decide where to look closer.
-                    The reader knows that the graph is from a Generalized Additive Model (GAM), so leave that background out.
-                    </instructions>
-        `
+    omitted_parts_msg(omitted_terms, []) + `
+        <instructions>
+                Describe the graph in at most ${num_sentences} sentences.
+                Include the important surprising patterns, because the reader uses them to decide where to look closer.
+                The reader knows that the graph is from a Generalized Additive Model (GAM), so leave that background out.
+                </instructions>
+    `
 }
 
 // describe_graph_cot, turn 1: system + describe_graph prompt.
@@ -420,24 +438,27 @@ function samples_of(events: ai.events.Event[]) -> TokenSample[] {
 // is zero.
 // The tokens of a run, whatever its output type: the sum that the provider reported for each call, and the samples.
 function usage_of<Out>(result: ai.RunResult<Out>) -> TokenUsage {
-    let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: samples_of(result.journal.entries()) };
+    let usage = TokenUsage {
+        input_tokens: 0,
+        output_tokens: 0,
+        samples: samples_of(result.journal.entries()),
+    };
     for (let entry in result.usage) {
-        usage
-            = add_usage(
-                usage,
-                TokenUsage {
-                    input_tokens: entry.usage.input_tokens ?? 0,
-                    output_tokens: entry.usage.output_tokens ?? 0,
-                    samples: [],
-                },
-            );
+        usage = add_usage(usage, TokenUsage {
+            input_tokens: entry.usage.input_tokens ?? 0,
+            output_tokens: entry.usage.output_tokens ?? 0,
+            samples: [],
+        });
     }
     usage
 }
 
 function run_counted(spec: ai.FunctionSpec<string>, client: ai.Client? = null) -> Counted {
     let result = ai.Agent.new(client = client).run(spec);
-    Counted { text: result.value, usage: usage_of(result) }
+    Counted {
+        text: result.value,
+        usage: usage_of(result),
+    }
 }
 
 // Entry points called from Python.
@@ -453,21 +474,24 @@ function sample_graph_tokens(
     model: ModelSpec? = null,
 ) -> TokenSample[] {
     let samples: TokenSample[] = [];
-    let agent = ai.Agent.new(client = select_client(client, model, long_defaults()), on_event = (event) -> {
-        if let call: ai.events.ModelCall = event {
-            let sample = sample_of(call);
-            if (sample != null) {
-                samples.push(sample);
+    let agent = ai.Agent.new(
+        client = select_client(client, model, long_defaults()),
+        on_event = (event) -> {
+            if let call: ai.events.ModelCall = event {
+                let sample = sample_of(call);
+                if (sample != null) {
+                    samples.push(sample);
+                };
             };
-        };
-    });
+        },
+    );
     //# A reply that hits the limit raises. The input counts of the request are what this function returns.
     //# Any other error (a rate limit, a refused key) is not a cut-off reply, so it propagates.
     let finished = {
         agent.run(GraphFirstPass@spec(graph, opts));
         true
     } catch (e) {
-        ai.errors.FinishReasonError => false
+        ai.errors.FinishReasonError => false,
     };
     samples
 }
@@ -487,8 +511,14 @@ function describe_graph_cot(
     //# Three sequential assistant turns, each seeing the previous replies
     let long = select_client(client, model, long_defaults());
     let short = select_client(client, model, short_defaults());
-    let first_pass = run_counted(GraphFirstPass@spec(graph, opts, png_base64 = png_base64), client = long);
-    let surprises = run_counted(GraphSurprises@spec(graph, first_pass.text, opts, png_base64 = png_base64), client = short);
+    let first_pass = run_counted(
+        GraphFirstPass@spec(graph, opts, png_base64 = png_base64),
+        client = long,
+    );
+    let surprises = run_counted(
+        GraphSurprises@spec(graph, first_pass.text, opts, png_base64 = png_base64),
+        client = short,
+    );
     let final = run_counted(
         GraphFinalDescription@spec(
             graph,
@@ -546,7 +576,10 @@ function summarize_ebm(
         ),
         client = select_client(client, model, short_defaults()),
     );
-    Counted { text: shortened.text, usage: add_usage(draft.usage, shortened.usage) }
+    Counted {
+        text: shortened.text,
+        usage: add_usage(draft.usage, shortened.usage),
+    }
 }
 
 // Full EBM description: one chain per feature graph (concurrently), then the summary.
@@ -565,7 +598,9 @@ function describe_ebm(
     omitted_features: string[] = [],
 ) -> Counted {
     if (feature_names.length() != graphs.length()) {
-        throw baml.errors.InvalidArgument { message: "feature_names and graphs must have the same length" };
+        throw baml.errors.InvalidArgument {
+            message: "feature_names and graphs must have the same length",
+        };
     };
     //# One description chain per graph, at most `max_concurrency` at a time
     let limit = baml.spawn.Limit.new(max_concurrency);
@@ -576,7 +611,11 @@ function describe_ebm(
     });
     let described: Counted[] = await baml.future.all(futures);
 
-    let usage = TokenUsage { input_tokens: 0, output_tokens: 0, samples: [] };
+    let usage = TokenUsage {
+        input_tokens: 0,
+        output_tokens: 0,
+        samples: [],
+    };
     let lines: string[] = [];
     let i = 0;
     while (i < described.length()) {
@@ -596,7 +635,10 @@ function describe_ebm(
         omitted_terms = omitted_terms,
         omitted_features = omitted_features,
     );
-    Counted { text: summary.text, usage: add_usage(usage, summary.usage) }
+    Counted {
+        text: summary.text,
+        usage: add_usage(usage, summary.usage),
+    }
 }
 
 // Benchmark (benchmark/): the questions end with "Think step by step.", so turn 1 reasons freely and turn 2
@@ -646,10 +688,21 @@ function answer_benchmark_question(
     png_base64: string? = null,
 ) -> Counted {
     let selected = select_client(client, model, benchmark_defaults());
-    let reasoning = run_counted(BenchmarkReasoning@spec(question, png_base64 = png_base64), client = selected);
-    let answer = run_counted(
-        BenchmarkAnswer@spec(question, reasoning.text, answer_format, png_base64 = png_base64),
+    let reasoning = run_counted(
+        BenchmarkReasoning@spec(question, png_base64 = png_base64),
         client = selected,
     );
-    Counted { text: answer.text, usage: add_usage(reasoning.usage, answer.usage) }
+    let answer = run_counted(
+        BenchmarkAnswer@spec(
+            question,
+            reasoning.text,
+            answer_format,
+            png_base64 = png_base64,
+        ),
+        client = selected,
+    );
+    Counted {
+        text: answer.text,
+        usage: add_usage(reasoning.usage, answer.usage),
+    }
 }
