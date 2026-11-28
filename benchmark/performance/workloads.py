@@ -28,8 +28,8 @@ from ebaml import (
     edit_effect,
 )
 from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.llm.graph_conversation import render_graph
 from ebaml.llm.graph_views import RenderedGraph
-from ebaml.llm.pipelines import render_graph
 
 # the models of each group of workloads
 GRAPH_MODELS: Sequence[str] = (
