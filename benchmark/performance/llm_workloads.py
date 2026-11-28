@@ -11,12 +11,12 @@ from collections.abc import Callable, Mapping, Sequence
 import orjson
 from tests.conftest import RecordedRequest, Reply
 
+import ebaml
 from benchmark.performance.workload_types import Context, Round, Workload
 from ebaml import (
     DescribeEBMRequest,
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
-    RenderTiming,
     describe_ebm,
     describe_ebm_async,
     explain_instance,
@@ -46,6 +46,8 @@ CONCURRENCY_MODEL = "features-100-bins-32"
 CONCURRENCY_LIMITS: Sequence[int] = (1, 4, 16)
 # the model of the workloads of the render timing: its graphs take about half a second to render
 RENDER_MODEL = "features-100-bins-1024"
+# the values of RenderTiming, as text: the enum is new in 0.16.0, and the base of a pull request may not have it
+RENDER_TIMINGS: Sequence[str] = ("before_requests", "with_requests")
 
 
 def default_reply(_request: RecordedRequest) -> Reply:
@@ -123,7 +125,7 @@ def _describe_ebm(
     is_async: bool,
     max_concurrency: int = 8,
     delay_seconds: float = 0.0,
-    render_timing: RenderTiming = RenderTiming.BEFORE_REQUESTS,
+    render_timing: str | None = None,
 ) -> Callable[[Context], Round]:
     """Measure ``describe_ebm`` or ``describe_ebm_async``.
 
@@ -137,8 +139,9 @@ def _describe_ebm(
         The most graphs that the call describes at the same time.
     delay_seconds: float
         The wait of the fake LLM before each reply.
-    render_timing: RenderTiming
-        When the call renders the graphs.
+    render_timing: str | None
+        The value of ``RenderTiming`` that the call takes, or ``None`` to leave the default. The workload reads the
+        enum on first use, because the base of a pull request may not have it.
 
     Returns
     -------
@@ -149,11 +152,12 @@ def _describe_ebm(
 
     def prepare(context: Context) -> Round:
         context.reply_with(_waiting(delay_seconds))
+        timing = {} if render_timing is None else {"render_timing": ebaml.RenderTiming(render_timing)}
         request = DescribeEBMRequest(
             context.model(model).ebm,
             model=context.llm,
             max_concurrency=max_concurrency,
-            render_timing=render_timing,
+            **timing,
         )
         return _round(
             is_async=is_async,
@@ -230,6 +234,7 @@ def _forms(
     make: Callable[[bool], Callable[[Context], Round]],
     *,
     rounds: int = 5,
+    requires: str | None = None,
 ) -> list[Workload]:
     """Make the sync and the async workload of one call.
 
@@ -243,6 +248,8 @@ def _forms(
         Builds the ``prepare`` function of a form: ``True`` for the async form.
     rounds: int
         The rounds of each workload.
+    requires: str | None
+        The public name of ``ebaml`` that both workloads need, or ``None``.
 
     Returns
     -------
@@ -251,7 +258,8 @@ def _forms(
 
     """
     return [
-        Workload(f"{group}.{form}.{call}", group, make(form == "async"), rounds=rounds) for form in ("sync", "async")
+        Workload(f"{group}.{form}.{call}", group, make(form == "async"), rounds=rounds, requires=requires)
+        for form in ("sync", "async")
     ]
 
 
@@ -296,7 +304,7 @@ def llm_workloads() -> list[Workload]:
             ),
             rounds=3,
         )
-    for timing in RenderTiming:
+    for timing in RENDER_TIMINGS:
         workloads += _forms(
             "concurrency",
             f"describe_ebm.render-{timing}",
@@ -308,5 +316,6 @@ def llm_workloads() -> list[Workload]:
                 render_timing=timing,
             ),
             rounds=3,
+            requires="RenderTiming",
         )
     return workloads

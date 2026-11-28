@@ -18,18 +18,17 @@ from benchmark.performance.llm_workloads import llm_workloads
 from benchmark.performance.mcp_workloads import mcp_workloads
 from benchmark.performance.workload_types import Context, Round, Workload
 from ebaml import (
+    EBMGraph,
     EBMGraphSimplificationError,
     EBMGraphTokenLimitError,
     EditEffect,
     EditSession,
-    GraphOptions,
     Monotonize,
     compute_local_facts,
     edit_effect,
 )
 from ebaml.core.custom_types import ExplainableBoostingModel
-from ebaml.llm.graph_conversation import render_graph
-from ebaml.llm.graph_views import RenderedGraph
+from ebaml.graphs.token_budget import check_token_budget
 
 # the models of each group of workloads
 GRAPH_MODELS: Sequence[str] = (
@@ -75,8 +74,12 @@ def _import(statement: str) -> Callable[[Context], Round]:
     return prepare
 
 
-def _render_or_fail(ebm: ExplainableBoostingModel, feature_index: int, options: GraphOptions) -> RenderedGraph | None:
+def _render_or_fail(ebm: ExplainableBoostingModel, feature_index: int) -> str | None:
     """Render the graph text of one feature, or fail as ``describe_ebm`` does for a graph over the token budget.
+
+    The workload calls the public ``EBMGraph`` with the budget check of ``describe_ebm``, so it runs on any version of
+    ``ebaml``: the base of a pull request runs the workloads of its head. The defaults of ``EBMGraph.to_text`` are the
+    defaults of ``GraphOptions``.
 
     Parameters
     ----------
@@ -84,18 +87,16 @@ def _render_or_fail(ebm: ExplainableBoostingModel, feature_index: int, options: 
         The EBM.
     feature_index: int
         The index of the feature.
-    options: GraphOptions
-        The options of the graph.
 
     Returns
     -------
-    RenderedGraph | None
-        The graph and its text, or ``None`` for a graph that no simplification brings under the token budget.
-        ``describe_ebm`` reports such a graph as a failure of its feature, after the same work.
+    str | None
+        The text, or ``None`` for a graph that no simplification brings under the token budget. ``describe_ebm``
+        reports such a graph as a failure of its feature, after the same work.
 
     """
     try:
-        return render_graph(ebm, feature_index, options, None)
+        return EBMGraph.from_ebm(ebm, feature_index).to_text(check_budget=check_token_budget)
     except (EBMGraphSimplificationError, EBMGraphTokenLimitError):
         return None
 
@@ -117,9 +118,8 @@ def _graphs(model: str) -> Callable[[Context], Round]:
 
     def prepare(context: Context) -> Round:
         ebm = context.model(model).ebm
-        options = GraphOptions()
         feature_count = len(ebm.feature_names_in_)
-        return Round(lambda: [_render_or_fail(ebm, feature_index, options) for feature_index in range(feature_count)])
+        return Round(lambda: [_render_or_fail(ebm, feature_index) for feature_index in range(feature_count)])
 
     return prepare
 

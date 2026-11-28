@@ -111,6 +111,10 @@ class Workload:
         Does the work that the rounds share, and returns the round.
     rounds: int
         The number of measured rounds. A slow workload has fewer rounds, so the run stays short.
+    requires: str | None
+        A public name of ``ebaml`` that the workload needs, or ``None``. A run skips the workload when the measured
+        ``ebaml`` lacks the name: the base of a pull request runs the workloads of its head, and a workload of a new
+        feature cannot run there.
 
     """
 
@@ -118,3 +122,4 @@ class Workload:
     group: str
     prepare: Callable[[Context], Round]
     rounds: int = 5
+    requires: str | None = None
