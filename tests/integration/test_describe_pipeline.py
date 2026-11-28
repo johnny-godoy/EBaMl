@@ -3,6 +3,9 @@
 One graph takes a conversation of three turns, and each turn repeats the earlier ones. The summary takes two turns.
 """
 
+import asyncio
+
+import attrs
 import pytest
 
 from ebaml import (
@@ -10,7 +13,9 @@ from ebaml import (
     DescribeGraphRequest,
     MissingAPIKeyError,
     ModelOptions,
+    RenderTiming,
     describe_ebm,
+    describe_ebm_async,
     describe_graph,
 )
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier
@@ -156,3 +161,22 @@ def test_describe_graph_returns_the_text_of_the_last_turn(
     text = describe_graph(DescribeGraphRequest(ebm, feature_index=0, model=llm_model, num_sentences=2))
     assert text == "A graph."
     assert len(fake_llm.requests) == GRAPH_TURNS
+
+
+@pytest.mark.parametrize("form", ["sync", "async"])
+def test_rendering_with_the_requests_sends_the_prompts_of_rendering_before_them(
+    describe_request: DescribeEBMRequest,
+    fake_llm: FakeLLM,
+    form: str,
+) -> None:
+    def run(request: DescribeEBMRequest) -> list[str]:
+        fake_llm.requests.clear()
+        if form == "sync":
+            describe_ebm(request)
+        else:
+            asyncio.run(describe_ebm_async(request))
+        return sorted(fake_llm.prompts)
+
+    before = run(describe_request)
+    with_requests = run(attrs.evolve(describe_request, render_timing=RenderTiming.WITH_REQUESTS))
+    assert with_requests == before
