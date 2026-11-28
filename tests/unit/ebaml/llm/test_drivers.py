@@ -2,6 +2,7 @@
 
 import ast
 import asyncio
+import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
@@ -11,7 +12,7 @@ import pytest
 
 import baml_sdk
 from ebaml.llm import drivers, ebm_description, pipelines
-from ebaml.llm.sdk_steps import Described, FanOut
+from ebaml.llm.sdk_steps import Described, FanOut, LocalWork
 from tests.unit.ebaml.conftest import sdk_function_names, sdk_signature
 
 
@@ -150,3 +151,51 @@ def test_each_step_has_a_plain_sync_function_and_an_async_function() -> None:
     for name in sorted(names):
         sdk_signature(f"{name}_sync")
         assert name in sdk_function_names()
+
+
+def _computes(work: LocalWork) -> Generator[Any, Any, str]:
+    result: str = yield work
+    return result
+
+
+def test_the_sync_driver_runs_local_work_in_the_thread_of_the_caller() -> None:
+    caller = threading.get_ident()
+    work = LocalWork("thread", lambda: "same" if threading.get_ident() == caller else "other")
+    assert drivers.run_sync(_computes(work)) == "same"
+
+
+def test_the_async_driver_runs_local_work_in_another_thread_while_the_event_loop_runs() -> None:
+    def slow() -> str:
+        time.sleep(0.2)
+        return "facts"
+
+    async def both() -> tuple[str, int]:
+        ticks = 0
+
+        async def tick() -> None:
+            nonlocal ticks
+            while True:
+                await asyncio.sleep(0.01)
+                ticks += 1
+
+        ticker = asyncio.create_task(tick())
+        try:
+            result = await drivers.run_async(_computes(LocalWork("slow", slow)))
+        finally:
+            ticker.cancel()
+        return result, ticks
+
+    result, ticks = asyncio.run(both())
+    assert result == "facts"
+    assert ticks >= 5, "the event loop must keep running while the work runs"
+
+
+def test_an_error_of_local_work_reaches_the_caller_of_each_driver() -> None:
+    def broken() -> str:
+        msg = "broken work"
+        raise ValueError(msg)
+
+    with pytest.raises(ValueError, match="broken work"):
+        drivers.run_sync(_computes(LocalWork("broken", broken)))
+    with pytest.raises(ValueError, match="broken work"):
+        asyncio.run(drivers.run_async(_computes(LocalWork("broken", broken))))
