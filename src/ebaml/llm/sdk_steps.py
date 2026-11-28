@@ -91,6 +91,10 @@ class Driver[T](Protocol):
         """Run the pipelines of the step at the same time."""
         ...
 
+    def compute(self, work: "LocalWork") -> T:
+        """Run the work of the CPU that the step names: in the caller, or in a thread outside the event loop."""
+        ...
+
 
 @attrs.frozen
 class SDKCall:
@@ -124,6 +128,42 @@ class SDKCall:
 
         """
         return driver.call(self)
+
+
+@attrs.frozen
+class LocalWork:
+    """Work of the CPU that a pipeline needs before its next call, such as the facts of a local explanation.
+
+    The sync driver runs it in the thread of the caller. The async driver runs it in a thread of its own, so that the
+    event loop serves other tasks meanwhile.
+
+    Attributes
+    ----------
+    name: str
+        The name of the work, for example ``"compute_local_facts"``.
+    run: Callable[[], SDKValue]
+        The work. It must not touch the state of the event loop, because it may run in another thread.
+
+    """
+
+    name: str
+    run: Callable[[], SDKValue]
+
+    def dispatch[T](self, driver: Driver[T]) -> T:
+        """Let the driver run the work.
+
+        Parameters
+        ----------
+        driver: Driver[T]
+            The driver of the pipeline.
+
+        Returns
+        -------
+        T
+            The result of the work, or for the async driver the awaitable of the result.
+
+        """
+        return driver.compute(self)
 
 
 @attrs.frozen
@@ -272,7 +312,7 @@ class FanOut:
 # A pipeline is a Generator[Step, SDKValue, R]: it yields steps, receives the replies, and returns its result R. The
 # driver sends each reply of a step into the pipeline, and the type of a reply depends on the step. The hints spell the
 # generator out, because beartype reads no alias in the return hint of a generator function.
-type Step = SDKCall | FanOut
+type Step = SDKCall | FanOut | LocalWork
 
 
 @attrs.define

@@ -143,12 +143,14 @@ free.
 
 ## Steps that block the event loop
 
-The async form awaits the LLM requests only. The other steps run in the event loop, and the loop waits while they run:
+The async form awaits the LLM requests. `explain_instance_async` also computes the facts of the local explanation in a
+thread (`asyncio.to_thread`), so the loop serves other work meanwhile. The other steps run in the event loop, and the
+loop waits while they run:
 
 - the extraction, the simplification and the text of each graph,
-- the images of the vision and the mixed modes,
-- the facts of a local explanation.
+- the images of the vision and the mixed modes.
 
-These steps take less than a second for a usual model. A model with many features, or a local explanation with a
-large search, takes longer. If your server must answer during that time, run the whole call in a task of its own and
-keep a second worker for the other requests.
+These steps take less than a second for a usual model. `describe_ebm_async` renders every graph before its first
+request, so it blocks the loop once, for the sum of the graphs: 0.6 seconds for a model with 100 features and 1024
+bins (the performance benchmark, `graphs.render.features-100-bins-1024`). If your server must answer during that
+time, run the whole call in a task of its own and keep a second worker for the other requests.

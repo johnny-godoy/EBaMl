@@ -45,6 +45,7 @@ from ebaml.llm.sdk_steps import (
     Described,
     FanOut,
     FeatureOutcome,
+    LocalWork,
     ModelIdentity,
     SDKCall,
     SDKTypes,
@@ -591,7 +592,11 @@ def explain_instance_pipeline(
 
     """
     audience = resolve_audience(request.audience)
-    facts = compute_local_facts(request.ebm, request.instance, request.local)
+    # the facts take up to a second for a large model, so the async driver computes them outside the event loop
+    facts: LocalFacts = yield LocalWork(
+        "compute_local_facts",
+        functools.partial(compute_local_facts, request.ebm, request.instance, request.local),
+    )
     texts = facts_to_texts(facts, audience)
     model_spec = yield from model_spec_pipeline(request.model, types)
     opts = yield from prompt_options_pipeline(request.prompt)
