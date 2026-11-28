@@ -10,6 +10,7 @@ A call that changes the head can take ``expected_revision``. If the head differs
 """
 
 import hashlib
+import importlib
 import threading
 import uuid
 from collections.abc import Callable
@@ -18,7 +19,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import attrs
-import skops.io
 
 from ebaml.core.custom_types import ExplainableBoostingModel, PathLike
 from ebaml.core.exceptions import EditError, HistoryError, StaleRevisionError, UnreviewedEditError
@@ -482,7 +482,8 @@ class EditSession:
             msg = f"The edits {ids} are not reviewed. Call review for each one, or pass allow_unreviewed=True."
             raise UnreviewedEditError(msg)
         target = Path(path)
-        data = skops.io.dumps(state.head_model)
+        # skops loads in about 0.2 s, and only a save needs it, so the import waits for the first save
+        data = importlib.import_module("skops.io").dumps(state.head_model)
         with self._lock:
             latest = self._state
             entry = SaveEntry(
