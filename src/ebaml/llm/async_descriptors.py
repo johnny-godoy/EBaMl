@@ -5,9 +5,9 @@ Each function runs its pipeline with the async driver of ``ebaml.llm.drivers``, 
 work while the LLM answers. The sync functions of ``ebaml.llm.descriptors`` run the same pipelines, so both forms give
 the same result for the same request.
 
-The steps that need no LLM run in the event loop and block it while they run: the extraction and the text of the
-graphs, the images of the vision mode, and the facts of a local explanation. These steps take less than a second for a
-usual model.
+The facts of a local explanation run in a thread, so the event loop serves other work meanwhile. The other steps that
+need no LLM run in the event loop and block it while they run: the extraction and the text of the graphs, and the
+images of the vision mode. These steps take less than a second for a usual model.
 """
 
 from ebaml.llm.difficulties import DifficultyProposal
@@ -97,7 +97,7 @@ async def explain_instance_async(request: ExplainInstanceRequest) -> LocalExplan
     """Explain one prediction of an EBM, and await the reply. The async form of ``explain_instance``.
 
     The function computes the same facts and sends the same request as ``explain_instance``. The facts are computed in
-    the event loop and block it while they run.
+    a thread (``asyncio.to_thread``), so the event loop serves other work meanwhile.
 
     Parameters
     ----------

@@ -17,7 +17,7 @@ from ebaml.llm.requests import (
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
 )
-from ebaml.llm.sdk_steps import FanOut, Outcome, PipelineRun, SDKCall, SDKTypes, Step
+from ebaml.llm.sdk_steps import FanOut, LocalWork, Outcome, PipelineRun, SDKCall, SDKTypes, Step
 from tests.unit.ebaml.conftest import FittedClassifier, instance_of
 
 TYPES: SDKTypes = SDKTypes(model_spec=baml_sdk.ModelSpec, local_fact_texts=baml_sdk.LocalFactTexts)
@@ -64,6 +64,8 @@ def answer_by_name(replies: dict[str, Any]) -> Answer:
     """
 
     def answer(step: Step) -> Any:  # ruff: ignore[any-type] -- a reply has the type of its step
+        if isinstance(step, LocalWork):
+            return step.run()
         if isinstance(step, FanOut):
             return [
                 step.feature_outcome(Outcome.of(functools.partial(drive, pipeline, answer, [])))
@@ -76,7 +78,7 @@ def answer_by_name(replies: dict[str, Any]) -> Answer:
 
 
 def names(steps: list[Step]) -> list[str]:
-    return [step.name if isinstance(step, SDKCall) else "fan_out" for step in steps]
+    return [step.name if isinstance(step, SDKCall | LocalWork) else "fan_out" for step in steps]
 
 
 @pytest.fixture
@@ -202,7 +204,7 @@ def test_explain_instance_asks_for_the_three_explanations(
     request = ExplainInstanceRequest(ebm, instance_of(data, 0), "global")
     explanation = drive(pipelines.explain_instance_pipeline(request, TYPES), answer_by_name(replies), steps)
     assert (explanation.counterfactual, explanation.sufficient_reason, explanation.completions) == ("c", "s", "k")
-    assert names(steps) == ["default_graph_options", "explain_local"]
+    assert names(steps) == ["compute_local_facts", "default_graph_options", "explain_local"]
 
 
 def test_propose_difficulties_reads_the_ratings_of_the_reply(

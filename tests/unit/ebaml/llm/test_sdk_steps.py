@@ -9,7 +9,7 @@ import pytest
 
 import baml_sdk
 from ebaml.core.exceptions import LLMRequestError, RateLimitedError
-from ebaml.llm.sdk_steps import Described, FanOut, FeatureOutcome, Outcome, PipelineRun, SDKCall, Step
+from ebaml.llm.sdk_steps import Described, FanOut, FeatureOutcome, LocalWork, Outcome, PipelineRun, SDKCall, Step
 
 _COUNTED: baml_sdk.Counted = baml_sdk.Counted(
     text="t",
@@ -47,6 +47,19 @@ class RecordingDriver:
         self.calls.append(f"fan_out {len(fan_out.pipelines)}")
         return []
 
+    def compute(self, work: LocalWork) -> str:
+        """Record the work, and run it.
+
+        Returns
+        -------
+        str
+            The result of the work.
+
+        """
+        self.calls.append(f"compute {work.name}")
+        result: str = work.run()
+        return result
+
 
 def _settle_nothing(error: Exception) -> LLMRequestError:
     raise error
@@ -56,6 +69,12 @@ def test_a_call_asks_the_driver_to_call_the_function() -> None:
     driver = RecordingDriver()
     assert SDKCall("summarize_ebm", {}).dispatch(driver) == "reply"
     assert driver.calls == ["call summarize_ebm"]
+
+
+def test_local_work_asks_the_driver_to_run_it() -> None:
+    driver = RecordingDriver()
+    assert LocalWork("facts", lambda: "facts").dispatch(driver) == "facts"
+    assert driver.calls == ["compute facts"]
 
 
 def test_a_fan_out_asks_the_driver_to_run_the_pipelines() -> None:

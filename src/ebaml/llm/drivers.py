@@ -20,6 +20,7 @@ from ebaml.llm.sdk_steps import (
     Described,
     FanOut,
     FeatureOutcome,
+    LocalWork,
     Outcome,
     PipelineRun,
     SDKCall,
@@ -84,6 +85,23 @@ class _SyncDriver:
 
         """
         return getattr(self.sdk, f"{call.name}_sync")(**call.arguments)
+
+    @staticmethod
+    def compute(work: LocalWork) -> SDKValue:
+        """Run the work of the CPU in the thread of the caller.
+
+        Parameters
+        ----------
+        work: LocalWork
+            The work.
+
+        Returns
+        -------
+        SDKValue
+            The result of the work.
+
+        """
+        return work.run()
 
     def fan_out(self, fan_out: FanOut) -> list[FeatureOutcome]:
         """Describe the graphs at the same time, and count each one that finishes.
@@ -166,6 +184,23 @@ class _AsyncDriver:
         """
         function: Callable[..., Awaitable[SDKValue]] = getattr(self.sdk, call.name)
         return function(**call.arguments)
+
+    @staticmethod
+    def compute(work: LocalWork) -> Awaitable[SDKValue]:
+        """Run the work of the CPU in a thread, so that the event loop serves other tasks meanwhile.
+
+        Parameters
+        ----------
+        work: LocalWork
+            The work.
+
+        Returns
+        -------
+        Awaitable[SDKValue]
+            The awaitable of the result of the work.
+
+        """
+        return asyncio.to_thread(work.run)
 
     async def fan_out(self, fan_out: FanOut) -> list[FeatureOutcome]:
         """Describe the graphs as tasks of one task group, with at most ``max_concurrency`` of them at the same time.
