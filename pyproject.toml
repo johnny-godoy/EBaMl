@@ -312,8 +312,8 @@ source_modules = ["ebaml.llm"]
 forbidden_modules = ["baml_sdk", "baml_bridge"]
 # reason: the allowed imports of the BAML runtime: drivers.py holds the sync and the async driver, the one module that
 # calls baml_sdk, and provider_errors.py, pipelines.py, graph_conversation.py and ebm_description.py need BamlError from
-# baml_bridge to read the errors of the provider and of a reply that max_tokens cut off. import-linter sees an external package only at its
-# top level, so each entry names baml_bridge, not baml_bridge.errors.
+# baml_bridge to read the errors of the provider and of a reply that max_tokens cut off. import-linter sees an external
+# package only at its top level, so each entry names baml_bridge, not baml_bridge.errors.
 ignore_imports = [
     "ebaml.llm.drivers -> baml_sdk",
     "ebaml.llm.provider_errors -> baml_bridge",

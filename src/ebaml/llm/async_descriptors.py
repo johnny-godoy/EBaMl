@@ -5,9 +5,10 @@ Each function runs its pipeline with the async driver of ``ebaml.llm.drivers``, 
 work while the LLM answers. The sync functions of ``ebaml.llm.descriptors`` run the same pipelines, so both forms give
 the same result for the same request.
 
-The facts of a local explanation run in a thread, so the event loop serves other work meanwhile. The other steps that
-need no LLM run in the event loop and block it while they run: the extraction and the text of the graphs, and the
-images of the vision mode. These steps take less than a second for a usual model.
+The facts of a local explanation and the graphs of ``describe_ebm_async`` run in a thread, so the event loop serves
+other work meanwhile. The other steps that need no LLM run in the event loop and block it while they run: the text of
+the graph of ``describe_graph_async``, and the images of the vision mode. These steps take less than a second for a
+usual model.
 """
 
 from ebaml.llm.difficulties import DifficultyProposal
@@ -64,7 +65,7 @@ async def describe_ebm_async(request: DescribeEBMRequest) -> EBMDescription:
     time, and then asks for the summary. It returns the same description as ``describe_ebm``, with the same partial
     results: a feature whose request fails on its own goes into ``failed_features``, and an error that affects every
     request stops the call at once. A cancelled call cancels the requests of the graphs that have not finished. The
-    extraction and the text of the graphs run in the event loop and block it while they run.
+    extraction and the text of the graphs run in a thread, at the time that ``request.render_timing`` chooses.
 
     Parameters
     ----------

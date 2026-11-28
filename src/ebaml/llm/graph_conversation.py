@@ -6,12 +6,12 @@
 """
 
 import functools
-from collections.abc import Generator, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 
 import attrs
 from baml_bridge.errors import BamlError
 
-from ebaml.core.custom_types import ExplainableBoostingModel
+from ebaml.core.custom_types import ExplainableBoostingModel, RenderTiming
 from ebaml.core.exceptions import EBMGraphSimplificationError, VisionUnsupportedError
 from ebaml.graphs.ebm_graph import EBMGraph
 from ebaml.graphs.token_budget import TokenEstimator, check_token_budget, estimate_tokens
@@ -20,7 +20,7 @@ from ebaml.llm.graph_views import GraphView, ImageSettings, RenderedGraph, Visio
 from ebaml.llm.options import GraphOptions
 from ebaml.llm.provider_errors import provider_errors
 from ebaml.llm.retry import ShrinkingGraphCall, call_with_shrinking_graph
-from ebaml.llm.sdk_steps import CountedText, Described, ModelIdentity, SDKCall, SDKValue, Step
+from ebaml.llm.sdk_steps import CountedText, Described, LocalWork, ModelIdentity, SDKCall, SDKValue, Step
 
 
 def _estimator(options: GraphOptions, model: ModelIdentity | None) -> TokenEstimator | None:
@@ -269,3 +269,136 @@ def describe_graph_counted(
     if graph_options.token_learner is not None and last.png_base64 is None and last.text is not None:
         graph_options.token_learner.observe(counted.usage.samples, last.text)
     return Described(counted, len(truncated))
+
+
+type GraphPipeline = Generator[Step, SDKValue, Described]
+
+
+def _render_all(job: GraphJob, features: Sequence[int]) -> list[RenderedGraph]:
+    """Render the graph of each feature.
+
+    Parameters
+    ----------
+    job: GraphJob
+        The EBM, the options of the graphs and the model of the requests.
+    features: Sequence[int]
+        The indices of the features.
+
+    Returns
+    -------
+    list[RenderedGraph]
+        The graph and its text, for each feature in order.
+
+    """
+    return [render_graph(job.ebm, feature_index, job.graph_options, job.model) for feature_index in features]
+
+
+def _render_before_requests(job: GraphJob, features: Sequence[int]) -> Generator[Step, SDKValue, list[GraphPipeline]]:
+    """Render every graph before the first request, and make the conversation of each graph.
+
+    Parameters
+    ----------
+    job: GraphJob
+        The settings of the call.
+    features: Sequence[int]
+        The indices of the features.
+
+    Returns
+    -------
+    list[GraphPipeline]
+        The conversation of each graph, with its text ready.
+
+    Yields
+    ------
+    Step
+        The rendering of every graph, as one ``LocalWork``, so that the async driver runs it outside the event loop.
+
+    """
+    graphs: list[RenderedGraph] = yield LocalWork("render_graphs", functools.partial(_render_all, job, features))
+    return [describe_graph_counted(job, index, graph) for index, graph in zip(features, graphs, strict=True)]
+
+
+def _render_then_describe(job: GraphJob, feature_index: int) -> Generator[Step, SDKValue, Described]:
+    """Render one graph, and describe it.
+
+    Parameters
+    ----------
+    job: GraphJob
+        The settings of the call.
+    feature_index: int
+        The index of the feature.
+
+    Returns
+    -------
+    Described
+        The description of the graph, as ``describe_graph_counted`` returns it.
+
+    Yields
+    ------
+    Step
+        The rendering of the graph as a ``LocalWork``, and then the calls of its description.
+
+    """
+    render = functools.partial(render_graph, job.ebm, feature_index, job.graph_options, job.model)
+    graph: RenderedGraph = yield LocalWork("render_graph", render)
+    return (yield from describe_graph_counted(job, feature_index, graph))
+
+
+def _render_with_requests(job: GraphJob, features: Sequence[int]) -> Generator[Step, SDKValue, list[GraphPipeline]]:
+    """Make the conversation of each graph, each of which renders its graph first.
+
+    Parameters
+    ----------
+    job: GraphJob
+        The settings of the call.
+    features: Sequence[int]
+        The indices of the features.
+
+    Returns
+    -------
+    list[GraphPipeline]
+        The conversation of each graph.
+
+    Yields
+    ------
+    Step
+        Nothing: this schedule renders no graph before the requests.
+
+    """
+    yield from ()
+    return [_render_then_describe(job, feature_index) for feature_index in features]
+
+
+# How describe_ebm renders its graphs, for each RenderTiming. A new timing is a new function and a new row.
+_SCHEDULES: Mapping[
+    RenderTiming,
+    Callable[[GraphJob, Sequence[int]], Generator[Step, SDKValue, list[GraphPipeline]]],
+] = {
+    RenderTiming.BEFORE_REQUESTS: _render_before_requests,
+    RenderTiming.WITH_REQUESTS: _render_with_requests,
+}
+
+
+def graph_pipelines(
+    timing: RenderTiming,
+    job: GraphJob,
+    features: Sequence[int],
+) -> Generator[Step, SDKValue, list[GraphPipeline]]:
+    """Make the conversation of each graph of ``describe_ebm``, with the graphs rendered at the chosen time.
+
+    Parameters
+    ----------
+    timing: RenderTiming
+        When the graphs are rendered.
+    job: GraphJob
+        The settings of the call.
+    features: Sequence[int]
+        The indices of the features.
+
+    Returns
+    -------
+    Generator[Step, SDKValue, list[GraphPipeline]]
+        The pipeline that yields the rendering steps that come before the requests, and returns the conversations.
+
+    """
+    return _SCHEDULES[timing](job, features)

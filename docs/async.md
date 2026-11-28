@@ -91,6 +91,26 @@ description = asyncio.run(describe_ebm_async(DescribeEBMRequest(ebm, max_concurr
 
 `progress_bar=True` shows one step for each feature and one step for the summary, in both forms.
 
+## When describe_ebm renders the graphs
+
+`render_timing` chooses when `describe_ebm` and `describe_ebm_async` render the text of each graph:
+
+| `render_timing` | The call renders | A graph that cannot fit the token budget |
+| --- | --- | --- |
+| `RenderTiming.BEFORE_REQUESTS` (default) | every graph, before the first request | fails before the LLM is paid |
+| `RenderTiming.WITH_REQUESTS` | each graph in the task that sends its request | stops the call after the requests of the graphs before it |
+
+`WITH_REQUESTS` renders one graph while the requests of the other graphs wait for the LLM, so a model with many
+features finishes sooner. Use it when you know that the graphs fit, for example after one call with the default.
+
+```python
+from ebaml import RenderTiming
+
+description = asyncio.run(
+    describe_ebm_async(DescribeEBMRequest(ebm, render_timing=RenderTiming.WITH_REQUESTS)),
+)
+```
+
 ## Partial results of describe_ebm
 
 The request of one feature can fail while the other requests succeed, for example after a rate limit. Both forms then
@@ -143,14 +163,16 @@ free.
 
 ## Steps that block the event loop
 
-The async form awaits the LLM requests. `explain_instance_async` also computes the facts of the local explanation in a
-thread (`asyncio.to_thread`), so the loop serves other work meanwhile. The other steps run in the event loop, and the
-loop waits while they run:
+The async form awaits the LLM requests, and runs the slow steps that need no LLM in a thread (`asyncio.to_thread`),
+so the loop serves other work meanwhile:
 
-- the extraction, the simplification and the text of each graph,
+- the facts of a local explanation in `explain_instance_async`,
+- the extraction, the simplification and the text of each graph in `describe_ebm_async`.
+
+The other steps run in the event loop, and the loop waits while they run:
+
+- the text of the one graph of `describe_graph_async`,
 - the images of the vision and the mixed modes.
 
-These steps take less than a second for a usual model. `describe_ebm_async` renders every graph before its first
-request, so it blocks the loop once, for the sum of the graphs: 0.6 seconds for a model with 100 features and 1024
-bins (the performance benchmark, `graphs.render.features-100-bins-1024`). If your server must answer during that
-time, run the whole call in a task of its own and keep a second worker for the other requests.
+These steps take less than a second for a usual model. If your server must answer during that time, run the whole call
+in a task of its own and keep a second worker for the other requests.

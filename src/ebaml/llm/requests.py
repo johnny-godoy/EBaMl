@@ -9,7 +9,7 @@ from collections.abc import Mapping
 
 import attrs
 
-from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue
+from ebaml.core.custom_types import ExplainableBoostingModel, FeatureValue, RenderTiming
 from ebaml.llm.options import GraphOptions, ModelOptions, PromptOptions
 from ebaml.local.audience import Audience
 from ebaml.local.costs import CostStrategy, UnitCost
@@ -81,12 +81,17 @@ class DescribeEBMRequest(_GraphRequest):
     progress_bar: bool
         Whether to show a progress bar on the error stream: one step for each feature and one for the summary.
         Without a terminal, the bar writes one line for each step.
+    render_timing: RenderTiming
+        When the graphs are rendered. ``RenderTiming.BEFORE_REQUESTS`` (the default) renders every graph first, so a
+        graph that cannot fit the token budget fails before the LLM is paid. ``RenderTiming.WITH_REQUESTS`` renders each
+        graph in the task of its request, so the rendering runs while the other requests wait for the LLM.
 
     """
 
     num_sentences: int = 30
     max_concurrency: int = 8
     progress_bar: bool = attrs.field(default=False, kw_only=True)
+    render_timing: RenderTiming = attrs.field(default=RenderTiming.BEFORE_REQUESTS, kw_only=True)
 
 
 @attrs.frozen

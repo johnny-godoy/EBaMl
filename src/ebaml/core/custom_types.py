@@ -78,6 +78,19 @@ class GraphMode(enum.StrEnum):
     MIXED = "mixed"
 
 
+class RenderTiming(enum.StrEnum):
+    """When ``describe_ebm`` renders the text of each graph.
+
+    ``BEFORE_REQUESTS`` renders every graph before the first request, so a graph that cannot fit the token budget fails
+    before the LLM is paid. ``WITH_REQUESTS`` renders each graph in the task that sends its request, so the rendering
+    of one graph runs while the requests of the others wait for the LLM. A graph that fails then stops the call after
+    the requests of the graphs before it.
+    """
+
+    BEFORE_REQUESTS = "before_requests"
+    WITH_REQUESTS = "with_requests"
+
+
 class VisionFallback(enum.StrEnum):
     """What a call in vision or mixed mode does when the model reads no images.
 

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 # The hook module must load first, or the modules that load before it stay unchecked.
 import ebaml.core.beartype_hook  # ruff: ignore[unused-import] -- the import installs the beartype hook as a side effect
-from ebaml.core.custom_types import FeatureType, GraphMode, Normalization, VisionFallback
+from ebaml.core.custom_types import FeatureType, GraphMode, Normalization, RenderTiming, VisionFallback
 from ebaml.core.exceptions import (
     APIKeyRejectedError,
     DataFileError,
@@ -300,6 +300,7 @@ __all__ = [
     "RegressorMetrics",
     "RemoveFeature",
     "RemoveTerms",
+    "RenderTiming",
     "SDKUnavailableError",
     "SaveEntry",
     "Scale",
