@@ -47,7 +47,8 @@
           { "context": "docs site checks", "integration_id": 15368 },
           { "context": "fragment", "integration_id": 15368 },
           { "context": "title", "integration_id": 15368 },
-          { "context": "commits", "integration_id": 15368 }
+          { "context": "commits", "integration_id": 15368 },
+          { "context": "performance", "integration_id": 15368 }
         ]
       }
     }

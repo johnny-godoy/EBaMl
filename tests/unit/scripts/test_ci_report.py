@@ -74,7 +74,7 @@ def test_the_progress_comment_counts_the_gates_that_it_waits_for(
     monkeypatch.setenv("GITHUB_RUN_ID", "1")
     states = ci_report.gate_states([check_run("docs build", "completed", "failure")], "pull_request")
     text = ci_report.render_progress(states, {"docs": "the docs failed"})
-    assert "CI in progress: 1 of 12 gates finished, 1 failed" in text
+    assert "CI in progress: 1 of 13 gates finished, 1 failed" in text
     assert "### ❌ docs build" in text
     assert "not started" in text
 
@@ -94,7 +94,7 @@ def test_the_final_report_names_a_failed_gate_of_another_workflow(
     monkeypatch.setenv("GITHUB_RUN_ID", "1")
     ci_report.assemble()
     text = (tmp_path / "comment.md").read_text()
-    assert "CI failed: 1 of 12 gates" in text
+    assert "CI failed: 1 of 13 gates" in text
     assert "[job log](https://example.test/title)" in text
 
 
