@@ -114,5 +114,45 @@ the loop is blocked:
 | `features-500-bins-32` | 325 ms | 284 ms |
 | `features-500-bins-1024` | (over the token budget) | 585 ms |
 
-`describe_ebm_async` renders every graph before its first request, so it blocks the loop once, for the sum of the
-rendering of all graphs. `explain_instance_async` blocks the loop for the time of the local facts.
+In that run, `describe_ebm_async` rendered every graph in the event loop before its first request, and
+`explain_instance_async` computed the facts in the event loop. With the fixes below, both steps run in a thread.
+
+## Fixes
+
+Each fix keeps every fact and every text the same, and a differential test compares its output with the code before
+it. The table gives the median of the benchmark at the commit of the 0.15.0 release and with the fixes, on the machine
+of the profiles.
+
+| Fix | Module | Workload | Before | After |
+| --- | --- | --- | --- | --- |
+| Count the digits of an ASCII text with `str.translate` | `graphs/token_weights.py` | `graphs.render.diabetes` | 104.9 ms | 73.0 ms |
+| Keep the confidence factor of each level | `graphs/graph_text.py` | `graphs.render.multiclass` | 510.9 ms | 290.6 ms |
+| Group the bins of `simplify` in a loop of one column | `graphs/bin_groups.py` | `graphs.render.features-100-bins-1024` | 946.9 ms | 584.1 ms |
+| Read the sampled scores of each margin once | `local/completions.py` | `local.facts.features-100-bins-1024` | 106.4 ms | 100.3 ms |
+| Predict each set of rows once for each model | `edit/data_effect.py` | `edit.monotonize.features-100-bins-1024` | 474.6 ms | 224.7 ms |
+| Import skops at the first save | `edit/edit_session.py` | `python -c "import ebaml"` | 1984 ms | 1739 ms |
+
+The first three rows chain: each "before" is the result of the row above it. Together they make the graph text 40 to
+58 % faster on every model (`graphs.render.*`), and `describe_ebm` with the fake LLM 26 to 58 % faster.
+
+### The event loop of the async forms
+
+- `explain_instance_async` computes the facts in a thread (`asyncio.to_thread`). It blocked the loop for up to 585 ms
+  on `features-500-bins-1024`. The thread costs about 1 ms for each call that starts a new event loop, as each round
+  of `llm.async.explain_instance.*` does.
+- `describe_ebm_async` renders the graphs in a thread. With `RenderTiming.BEFORE_REQUESTS`, the default, it renders
+  every graph before the first request, so a graph that cannot fit the token budget fails before the LLM is paid. With
+  `RenderTiming.WITH_REQUESTS`, each graph renders in the task of its request, while the other requests wait. With
+  100 ms for each reply, that is 8 % faster in the sync form on `features-100-bins-1024`
+  (`concurrency.*.describe_ebm.render-*`).
+
+### Not done
+
+- The JSON schemas of the MCP tools take about 20 ms of the 29 ms of `create_server`. The tools close over the store of
+  the server, so only a change inside the MCP SDK can share their schemas. A server calls `create_server` once, so the
+  cost is once for each process.
+- beartype has no slow hint: one `attrs.evolve` of a `Feature`, with all its checks, takes 2.5 µs. Its cost comes from
+  many short calls, and it stays on.
+- OR-Tools takes about 80 ms of `import ebaml`. Its types are in the hints of `ebaml.local`, so a lazy import needs a
+  change of those modules.
+- The draws of the random generator take most of the time of the completions, and they must stay the same.
