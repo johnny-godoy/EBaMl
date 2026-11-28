@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!-- scriv-insert-here -->
 
+<a id='changelog-0.15.1'></a>
+## [0.15.1] - 2026-11-28
+
+### Added
+
+- `uv run python benchmark/run.py performance` measures the time of the work of EBaMl around the LLM requests, with a local fake LLM and no real request: the graph text, the local facts, an edit, each LLM call in its sync and its async form, and each MCP tool. `benchmark/run.py performance compare` compares two runs workload by workload.
+
+### Changed
+
+- **BREAKING:** The benchmark command takes the kind of benchmark as its first argument. `uv run python benchmark/run.py accuracy --task jumps` replaces `uv run python benchmark/run.py --task jumps`, and the questions live in `benchmark/accuracy/data/`.
+
 <a id='changelog-0.15.0'></a>
 ## [0.15.0] - 2026-11-27
 
