@@ -104,7 +104,7 @@ GATES = [
     Gate("commits", "commits", "commit messages", "pull_request"),
     Gate("prompts", "live prompt tests", "live prompt tests", "some"),
     Gate("proofs", "lake build", "Lean proofs", "some"),
-    Gate("performance", "performance", "performance (base against head)", "some"),
+    Gate("performance", "performance", "performance (base against head)", "pull_request"),
 ]
 
 PREK_HINTS = {
