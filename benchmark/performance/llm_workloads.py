@@ -16,6 +16,7 @@ from ebaml import (
     DescribeEBMRequest,
     ExplainInstanceRequest,
     ProposeDifficultiesRequest,
+    RenderTiming,
     describe_ebm,
     describe_ebm_async,
     explain_instance,
@@ -24,8 +25,10 @@ from ebaml import (
     propose_difficulties_async,
 )
 
-# the delay of each reply of the fake LLM in the concurrency workloads
+# the delay of each reply of the fake LLM in the concurrency workloads, and in the workloads of the render timing, whose
+# rendering can only overlap a wait that is longer than the rendering of one graph
 REPLY_DELAY_SECONDS = 0.01
+RENDER_REPLY_DELAY_SECONDS = 0.1
 DIFFICULTY_REPLY = [
     {"feature": "fare", "difficulty": "Easy", "reason": "A cheaper ticket is a choice."},
     {"feature": "age", "difficulty": "VeryHard", "reason": "Age cannot change."},
@@ -41,6 +44,8 @@ DESCRIBE_MODELS: Mapping[str, int] = {
 EXPLAIN_MODELS: Sequence[str] = ("titanic", "diabetes", "multiclass")
 CONCURRENCY_MODEL = "features-100-bins-32"
 CONCURRENCY_LIMITS: Sequence[int] = (1, 4, 16)
+# the model of the workloads of the render timing: its graphs take about half a second to render
+RENDER_MODEL = "features-100-bins-1024"
 
 
 def default_reply(_request: RecordedRequest) -> Reply:
@@ -55,9 +60,26 @@ def default_reply(_request: RecordedRequest) -> Reply:
     return Reply()
 
 
-def _delayed_reply(_request: RecordedRequest) -> Reply:
-    time.sleep(REPLY_DELAY_SECONDS)
-    return Reply()
+def _waiting(delay_seconds: float) -> Callable[[RecordedRequest], Reply]:
+    """Make a reply of the fake LLM that waits before it answers.
+
+    Parameters
+    ----------
+    delay_seconds: float
+        The wait before each reply. Zero answers at once.
+
+    Returns
+    -------
+    Callable[[RecordedRequest], Reply]
+        The handler of the fake LLM.
+
+    """
+
+    def reply(_request: RecordedRequest) -> Reply:
+        time.sleep(delay_seconds)
+        return Reply()
+
+    return reply if delay_seconds else default_reply
 
 
 def difficulty_reply(_request: RecordedRequest) -> Reply:
@@ -100,7 +122,8 @@ def _describe_ebm(
     *,
     is_async: bool,
     max_concurrency: int = 8,
-    delayed: bool = False,
+    delay_seconds: float = 0.0,
+    render_timing: RenderTiming = RenderTiming.BEFORE_REQUESTS,
 ) -> Callable[[Context], Round]:
     """Measure ``describe_ebm`` or ``describe_ebm_async``.
 
@@ -112,8 +135,10 @@ def _describe_ebm(
         Whether to run the async form.
     max_concurrency: int
         The most graphs that the call describes at the same time.
-    delayed: bool
-        Whether the fake LLM waits before each reply.
+    delay_seconds: float
+        The wait of the fake LLM before each reply.
+    render_timing: RenderTiming
+        When the call renders the graphs.
 
     Returns
     -------
@@ -123,8 +148,13 @@ def _describe_ebm(
     """
 
     def prepare(context: Context) -> Round:
-        context.reply_with(_delayed_reply if delayed else default_reply)
-        request = DescribeEBMRequest(context.model(model).ebm, model=context.llm, max_concurrency=max_concurrency)
+        context.reply_with(_waiting(delay_seconds))
+        request = DescribeEBMRequest(
+            context.model(model).ebm,
+            model=context.llm,
+            max_concurrency=max_concurrency,
+            render_timing=render_timing,
+        )
         return _round(
             is_async=is_async,
             sync=lambda: describe_ebm(request),
@@ -262,7 +292,20 @@ def llm_workloads() -> list[Workload]:
                 CONCURRENCY_MODEL,
                 is_async=is_async,
                 max_concurrency=limit,
-                delayed=True,
+                delay_seconds=REPLY_DELAY_SECONDS,
+            ),
+            rounds=3,
+        )
+    for timing in RenderTiming:
+        workloads += _forms(
+            "concurrency",
+            f"describe_ebm.render-{timing}",
+            lambda is_async, timing=timing: _describe_ebm(
+                RENDER_MODEL,
+                is_async=is_async,
+                max_concurrency=16,
+                delay_seconds=RENDER_REPLY_DELAY_SECONDS,
+                render_timing=timing,
             ),
             rounds=3,
         )
