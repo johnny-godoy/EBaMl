@@ -1094,14 +1094,19 @@ def test_to_text_ignores_the_confidence_level_without_bounds() -> None:
     assert "Bounds" not in cont_graph().to_text(confidence_bounds=False, confidence_level=1.0)
 
 
-_LABELS = st.lists(st.sampled_from(["False", "True", "false", "TRUE", "red", "0"]), max_size=5)
-_INTERVALS = st.lists(st.tuples(st.floats(), st.floats()), max_size=5)
+class _UnreadLabel(str):  # ruff: ignore[subclass-builtin] -- the label must be a str for the hint of _is_boolean, and fail when read
+    """An x-axis label that fails when the code turns it into a string, to show that the code never read it."""
+
+    __slots__ = ()
+
+    def __str__(self) -> str:
+        msg = "the boolean check read a label of a graph of many bins"
+        raise AssertionError(msg)
 
 
-@given(x_vals=_LABELS | _INTERVALS)
-def test_the_boolean_check_equals_the_check_of_every_value_of_version_0_16(
-    x_vals: list[str] | list[tuple[float, float]],
-) -> None:
-    # the check of 0.16.0 turned every x-axis value into a string, even for a graph of 1024 bins
-    reference = tuple(str(x).upper() for x in x_vals) == ("FALSE", "TRUE")
-    assert ebm_graph._is_boolean(x_vals) is reference
+def test_the_boolean_check_reads_no_label_of_a_graph_of_more_than_two_bins() -> None:
+    # the check of 0.16.0 turned each of the 1024 labels into a string at each simplification level
+    labels = [_UnreadLabel(f"bin {bin_index}") for bin_index in range(1024)]
+    assert not ebm_graph._is_boolean(labels)
+    assert ebm_graph._is_boolean(["False", "TRUE"])
+    assert not ebm_graph._is_boolean(["False", "maybe"])
