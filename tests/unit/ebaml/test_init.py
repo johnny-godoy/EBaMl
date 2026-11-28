@@ -73,3 +73,10 @@ def test_import_loads_ortools_and_not_highspy() -> None:
     code = "import sys, ebaml; print('ortools.math_opt.python.mathopt' in sys.modules, 'highspy' in sys.modules)"
     result = run_fixed([sys.executable, "-c", code], check=True)
     assert result.stdout.split() == ["True", "False"]
+
+
+def test_import_does_not_load_skops() -> None:
+    # only a save needs skops, and it costs about 0.2 s at import
+    code = "import sys, ebaml; print('skops.io' in sys.modules)"
+    result = run_fixed([sys.executable, "-c", code], check=True)
+    assert result.stdout.split() == ["False"]
