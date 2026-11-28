@@ -4,7 +4,8 @@ Import every public name from ``ebaml``. The names ``describe_graph``, ``describ
 ``propose_difficulties``, their ``_async`` forms, ``LocalExplanation``, ``EBMDescription`` and ``FeatureFailure`` load
 on first use, because the modules that hold them import the BAML runtime and can run ``baml generate``. The names
 ``graph_png``, ``graph_svg``, ``graph_figure`` and ``GraphImageOptions`` load on first use too, because they need the
-extra ``vision``.
+extra ``vision``. ``OrToolsBackend`` and ``OrToolsSolver`` load on first use, because OR-Tools takes about 0.1 s to
+import and only a MIP search needs it.
 """
 
 import importlib
@@ -162,7 +163,6 @@ from ebaml.local.fact_types import (
 from ebaml.local.facts import compute_local_facts
 from ebaml.local.local_kinds import OutputKind
 from ebaml.local.minimality import MinimalityStatus
-from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 from ebaml.local.recourse import Levels, RangeMatch, RecourseOptions, ValueRange
 
 if TYPE_CHECKING:
@@ -181,6 +181,7 @@ if TYPE_CHECKING:
     )
     from ebaml.llm.ebm_description import EBMDescription, FeatureFailure
     from ebaml.llm.pipelines import LocalExplanation
+    from ebaml.local.ortools_backend import OrToolsBackend, OrToolsSolver
 
 __version__: str = version("ebaml")
 
@@ -366,11 +367,11 @@ __all__ = [
 
 # nosemgrep: ebaml-no-object-type -- PEP 562 returns a function or a class chosen by name, so no single type fits
 def __getattr__(name: str) -> object:
-    """Load a name of a module of ``ebaml.llm`` or of ``ebaml.graphs.graph_image`` on first use.
+    """Load a name of ``ebaml.llm``, of ``ebaml.graphs.graph_image`` or of the OR-Tools backend on first use.
 
-    The modules of ``ebaml.llm`` import the BAML runtime, and the drivers can run ``baml generate``. The last module
-    needs the extra ``vision``, so ``import ebaml`` must not load them. The loaded name goes into the module namespace,
-    and the next access skips this function.
+    The modules of ``ebaml.llm`` import the BAML runtime, and the drivers can run ``baml generate``. The image module
+    needs the extra ``vision``, and the backend imports OR-Tools, so ``import ebaml`` must not load them. The loaded
+    name goes into the module namespace, and the next access skips this function.
 
     Parameters
     ----------
@@ -405,6 +406,9 @@ def __getattr__(name: str) -> object:
     def load_graph_image() -> ModuleType:
         return importlib.import_module("ebaml.graphs.graph_image")
 
+    def load_ortools_backend() -> ModuleType:
+        return importlib.import_module("ebaml.local.ortools_backend")
+
     # the names that load on first use, by the loader of the module that holds them
     loaders: dict[str, Callable[[], ModuleType]] = {
         "EBMDescription": load_ebm_description,
@@ -422,6 +426,8 @@ def __getattr__(name: str) -> object:
         "graph_figure": load_graph_image,
         "graph_png": load_graph_image,
         "graph_svg": load_graph_image,
+        "OrToolsBackend": load_ortools_backend,
+        "OrToolsSolver": load_ortools_backend,
     }
     if name not in loaders:
         msg = f"module {__name__!r} has no attribute {name!r}"
