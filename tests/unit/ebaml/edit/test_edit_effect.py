@@ -341,20 +341,21 @@ def _counting(calls: list[tuple[str, int, int]], method: str) -> _Predict:
     return counted
 
 
-def test_each_model_predicts_every_row_once_for_each_method(
+def test_each_model_scores_every_row_once(
     edit_ebm: ExplainableBoostingClassifier,
     edit_data: PandasFrame,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # edit_effect made 22 predictions, about half of them repeated, before the models shared their predictions
+    # edit_effect made 22 predictions before the models shared them, and 6 (predict and predict_proba) in 0.16.0
     labels = _labels(edit_ebm, edit_data)
     session = _session_with(edit_ebm, Shift("age", Bins(10, 20), 1.5), Shift("age", Bins(30, 40), -1.0))
     calls: list[tuple[str, int, int]] = []
-    for method in ("predict", "predict_proba"):
+    for method in ("predict", "predict_proba", "decision_function"):
         monkeypatch.setattr(ExplainableBoostingClassifier, method, _counting(calls, method))
     edit_effect(session, as_frame(edit_data), labels)
     every_row = [(method, model) for method, model, row_count in calls if row_count == len(edit_data)]
-    assert len(every_row) == len(set(every_row)) == 6
+    assert [method for method, _ in every_row] == ["decision_function"] * 3
+    assert len(set(every_row)) == 3
 
 
 def test_the_counts_of_the_effect_equal_the_counts_of_row_changes(
