@@ -236,7 +236,7 @@ def test_a_missing_baml_command_names_the_install_steps(setup: Setup) -> None:
     )
     assert f"  1. Install the BAML toolchain: {INSTALL_COMMAND}\n" in message
     assert '  2. Open a new shell, or run `. "$HOME/.baml/env"`, so that `baml` is on PATH.\n' in message
-    assert "  3. Check that `baml --version` prints 0.25 or later." in message
+    assert "  3. Check that `baml --version` prints 0.26 or later." in message
     assert f"  4. Run `baml generate` in {setup.checkout}." in message
 
 

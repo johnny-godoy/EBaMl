@@ -6,26 +6,38 @@ test "describe_graph_msg includes optional sections only when set" {
     assert.is_true(bare.includes("Describe the general pattern of the graph."));
     assert.is_true(!bare.includes("<dataset_description>"));
 
-    let opts = GraphPromptOptions { ...default_graph_options(), dataset_description: "A pneumonia dataset" };
-    assert.is_true(describe_graph_msg("GRAPH", opts).includes("A pneumonia dataset"))
+    let opts = GraphPromptOptions {
+        ...default_graph_options(),
+        dataset_description: "A pneumonia dataset",
+    };
+    assert.is_true(
+        describe_graph_msg("GRAPH", opts).includes("A pneumonia dataset"),
+    )
 }
 
 test "describe_graph_msg says how to read the classes of a multiclass graph" {
-    let msg = describe_graph_msg("Feature Name: a\nClass: high\nMeans: {}", default_graph_options());
-    assert.is_true(
-        msg.includes("(optional).\nA graph of a multiclass classifier repeats items 3 to 5"),
+    let msg = describe_graph_msg(
+        "Feature Name: a\nClass: high\nMeans: {}",
+        default_graph_options(),
     );
+    assert.is_true(msg.includes(
+        "(optional).\nA graph of a multiclass classifier repeats items 3 to 5",
+    ));
     assert.is_true(msg.includes("including classes that the graph leaves out"));
-    assert.is_true(msg.includes("compare the classes with each other within each bin."));
-    assert.is_true(position_of(msg, "Class: <name>") < position_of(msg, "</graph_format>"))
+    assert.is_true(
+        msg.includes("compare the classes with each other within each bin."),
+    );
+    assert.is_true(
+        position_of(msg, "Class: <name>") < position_of(msg, "</graph_format>"),
+    )
 }
 
 test "describe_graph_msg of a graph with one output says nothing about classes" {
     let msg = describe_graph_msg("Feature Name: a\nMeans: {}", default_graph_options());
     assert.is_true(!msg.includes("multiclass"));
-    assert.is_true(
-        msg.includes("5. The upper bounds of the confidence interval (optional).\n</graph_format>"),
-    )
+    assert.is_true(msg.includes(
+        "5. The upper bounds of the confidence interval (optional).\n</graph_format>",
+    ))
 }
 
 test "describe_graph_cot makes three calls and sums usage" {
@@ -39,18 +51,39 @@ test "describe_graph_cot makes three calls and sums usage" {
 
 test "summarize_ebm shortens only when num_sentences is set" {
     let draft_only = ScriptedClient { calls: 0 };
-    summarize_ebm("IMP", "DESC", null, default_graph_options(), client = draft_only);
+    summarize_ebm(
+        "IMP",
+        "DESC",
+        null,
+        default_graph_options(),
+        client = draft_only,
+    );
     assert.equal(draft_only.calls, 1);
 
     let shortened = ScriptedClient { calls: 0 };
-    let result = summarize_ebm("IMP", "DESC", 30, default_graph_options(), client = shortened);
+    let result = summarize_ebm(
+        "IMP",
+        "DESC",
+        30,
+        default_graph_options(),
+        client = shortened,
+    );
     assert.equal(shortened.calls, 2);
     assert.equal(result.usage.input_tokens, 20)
 }
 
 test "describe_ebm: one chain per graph plus the summary" {
     let scripted = ScriptedClient { calls: 0 };
-    let result = describe_ebm(["age", "bmi"], ["G1", "G2"], "IMP", 30, 7, 2, default_graph_options(), client = scripted);
+    let result = describe_ebm(
+        ["age", "bmi"],
+        ["G1", "G2"],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = scripted,
+    );
     // 2 graphs x 3 turns + draft + shorten. The two chains run at the same time, so `self.calls += 1` of the
     // scripted client can lose an increment; each call reports 10 input and 5 output tokens, so the usage counts the
     // calls without a shared counter.
@@ -60,11 +93,72 @@ test "describe_ebm: one chain per graph plus the summary" {
 
 test "describe_ebm rejects mismatched names and graphs" {
     let scripted = ScriptedClient { calls: 0 };
-    let outcome = describe_ebm(["age"], [], "IMP", 30, 7, 2, default_graph_options(), client = scripted) catch (e) {
+    let outcome = describe_ebm(
+        ["age"],
+        [],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = scripted,
+    ) catch (e) {
         baml.errors.InvalidArgument => null,
     };
     assert.is_true(outcome == null);
     assert.equal(scripted.calls, 0)
+}
+
+// Holds each call for a short time and records the largest number of calls that ran at the same time.
+class ConcurrencyProbeClient {
+    in_flight: int,
+    peak: int,
+
+    implements ai.Client {
+        function provider(self) -> string {
+            "concurrency-probe"
+        }
+
+        function requested_model(self) -> string {
+            "concurrency-probe"
+        }
+
+        function render(self, input: ai.ModelTurnInput) -> baml.http.Request {
+            baml.http.Request.from_url("http://concurrency-probe.invalid")
+        }
+
+        function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
+            baml.sync.atomic(self, () -> {
+                self.in_flight += 1;
+                if (self.in_flight > self.peak) {
+                    self.peak = self.in_flight;
+                };
+            });
+            baml.sys.sleep(baml.time.Duration.from_milliseconds(20));
+            baml.sync.atomic(self, () -> {
+                self.in_flight -= 1;
+            });
+            scripted_turn("R", 10, 5)
+        }
+    }
+}
+
+test "describe_ebm runs at most max_concurrency graph chains at the same time" {
+    let probe = ConcurrencyProbeClient {
+        in_flight: 0,
+        peak: 0,
+    };
+    describe_ebm(
+        ["a", "b", "c", "d"],
+        ["G1", "G2", "G3", "G4"],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = probe,
+    );
+    assert.equal(probe.peak, 2)
 }
 
 test "answer_benchmark_question reasons, then extracts the answer" {
@@ -78,11 +172,7 @@ test "answer_benchmark_question reasons, then extracts the answer" {
 
 // The roles of a rendered prompt, joined, e.g. "system,user,assistant,user".
 function roles_of(prompt: ai.Prompt) -> string {
-    prompt.messages()
-        .map((m) -> {
-            m.role
-        })
-        .join(",")
+    prompt.messages().map((m) -> { m.role }).join(",")
 }
 
 // The content of message `index` of a rendered prompt.
@@ -92,10 +182,16 @@ function message_at(prompt: ai.Prompt, index: int) -> string {
 
 test "default_graph_options is a plain statistician with no extra context" {
     let opts = default_graph_options();
-    assert.equal(opts.expert_description, "an expert statistician and data scientist");
+    assert.equal(
+        opts.expert_description,
+        "an expert statistician and data scientist",
+    );
     assert.equal(opts.graph_description, "");
     assert.equal(opts.dataset_description, "");
-    assert.equal(opts.task_description, "Describe the general pattern of the graph.")
+    assert.equal(
+        opts.task_description,
+        "Describe the general pattern of the graph.",
+    )
 }
 
 test "graph_system_msg names the expert and the GAM" {
@@ -120,17 +216,26 @@ test "describe_graph_msg orders graph, graph description, dataset and task" {
 }
 
 test "describe_graph_msg leaves out each optional section on its own" {
-    let only_graph = GraphPromptOptions { ...default_graph_options(), graph_description: "GRAPHDESC" };
+    let only_graph = GraphPromptOptions {
+        ...default_graph_options(),
+        graph_description: "GRAPHDESC",
+    };
     let msg = describe_graph_msg("GRAPH", only_graph);
     assert.is_true(msg.includes("GRAPHDESC"));
     assert.is_true(!msg.includes("<dataset_description>"));
 
-    let only_dataset = GraphPromptOptions { ...default_graph_options(), dataset_description: "DATASET" };
+    let only_dataset = GraphPromptOptions {
+        ...default_graph_options(),
+        dataset_description: "DATASET",
+    };
     let other = describe_graph_msg("GRAPH", only_dataset);
     assert.is_true(other.includes("DATASET"));
     assert.is_true(!other.includes("GRAPHDESC"));
 
-    let custom = GraphPromptOptions { ...default_graph_options(), task_description: "MY TASK" };
+    let custom = GraphPromptOptions {
+        ...default_graph_options(),
+        task_description: "MY TASK",
+    };
     let task = describe_graph_msg("GRAPH", custom);
     assert.is_true(task.includes("MY TASK"));
     assert.is_true(!task.includes("Describe the general pattern"))
@@ -145,9 +250,15 @@ test "summarize_ebm_system_msg names the expert" {
 test "summarize_ebm_msg orders importances, descriptions and dataset, and the dataset is optional" {
     let msg = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "DATASET");
     assert.is_true(position_of(msg, "IMPORTANCES") >= 0);
-    assert.is_true(position_of(msg, "IMPORTANCES") < position_of(msg, "DESCRIPTIONS"));
-    assert.is_true(position_of(msg, "DESCRIPTIONS") < position_of(msg, "DATASET"));
-    assert.is_true(position_of(msg, "DATASET") < position_of(msg, "<instructions>"));
+    assert.is_true(
+        position_of(msg, "IMPORTANCES") < position_of(msg, "DESCRIPTIONS"),
+    );
+    assert.is_true(
+        position_of(msg, "DESCRIPTIONS") < position_of(msg, "DATASET"),
+    );
+    assert.is_true(
+        position_of(msg, "DATASET") < position_of(msg, "<instructions>"),
+    );
 
     let bare = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "");
     assert.is_true(!bare.includes("<dataset_description>"));
@@ -155,7 +266,10 @@ test "summarize_ebm_msg orders importances, descriptions and dataset, and the da
 }
 
 test "describe_graph_cot prompts: roles, content and sentence limit per turn" {
-    let opts = GraphPromptOptions { ...default_graph_options(), expert_description: "an EXPERT" };
+    let opts = GraphPromptOptions {
+        ...default_graph_options(),
+        expert_description: "an EXPERT",
+    };
 
     let first = GraphFirstPass@spec("GRAPH", opts).prompt();
     assert.equal(roles_of(first), "system,user");
@@ -166,7 +280,9 @@ test "describe_graph_cot prompts: roles, content and sentence limit per turn" {
     assert.equal(roles_of(second), "system,user,assistant,user");
     assert.is_true(message_at(second, 1).includes("GRAPH"));
     assert.equal(message_at(second, 2).trim(), "FIRST");
-    assert.is_true(message_at(second, 3).includes("surprising or counterintuitive"));
+    assert.is_true(
+        message_at(second, 3).includes("surprising or counterintuitive"),
+    );
 
     let third = GraphFinalDescription@spec("GRAPH", "FIRST", "SURPRISES", 7, opts).prompt();
     assert.equal(roles_of(third), "system,user,assistant,user,assistant,user");
@@ -199,10 +315,19 @@ test "describe_graph_cot passes the second and third turns the replies of the ea
     let first = GraphFirstPass@spec("GRAPH", default_graph_options());
     let reply_one = run_counted(first, client = sequence);
     assert.equal(reply_one.text, "REPLY-1");
-    let reply_two = run_counted(GraphSurprises@spec("GRAPH", reply_one.text, default_graph_options()), client = sequence);
+    let reply_two = run_counted(
+        GraphSurprises@spec("GRAPH", reply_one.text, default_graph_options()),
+        client = sequence,
+    );
     assert.equal(reply_two.text, "REPLY-2");
-    let third = GraphFinalDescription@spec("GRAPH", reply_one.text, reply_two.text, 5, default_graph_options())
-        .prompt();
+    let third = GraphFinalDescription@spec(
+        "GRAPH",
+        reply_one.text,
+        reply_two.text,
+        5,
+        default_graph_options(),
+    )
+    .prompt();
     assert.equal(message_at(third, 2).trim(), "REPLY-1");
     assert.equal(message_at(third, 4).trim(), "REPLY-2")
 }
@@ -229,19 +354,37 @@ test "summarize_ebm prompts: roles, content and sentence limit" {
 
 test "summarize_ebm returns the draft when num_sentences is null, else the shortened reply" {
     let draft_only = SequenceClient { calls: 0 };
-    let kept = summarize_ebm("IMP", "DESC", null, default_graph_options(), client = draft_only);
+    let kept = summarize_ebm(
+        "IMP",
+        "DESC",
+        null,
+        default_graph_options(),
+        client = draft_only,
+    );
     assert.equal(kept.text, "REPLY-1");
     assert.equal(kept.usage.input_tokens, 1);
     assert.equal(kept.usage.output_tokens, 1);
 
     let shortened = SequenceClient { calls: 0 };
-    let result = summarize_ebm("IMP", "DESC", 30, default_graph_options(), client = shortened);
+    let result = summarize_ebm(
+        "IMP",
+        "DESC",
+        30,
+        default_graph_options(),
+        client = shortened,
+    );
     assert.equal(result.text, "REPLY-2");
     assert.equal(result.usage.input_tokens, 2);
     assert.equal(result.usage.output_tokens, 2);
 
     // The shorten prompt holds the draft and the limit.
-    let echo = summarize_ebm("IMP", "DESC", 30, default_graph_options(), client = EchoClient {});
+    let echo = summarize_ebm(
+        "IMP",
+        "DESC",
+        30,
+        default_graph_options(),
+        client = EchoClient {},
+    );
     assert.is_true(echo.text.includes("at most 30 sentences"));
     assert.is_true(echo.text.includes("IMP"));
     assert.is_true(echo.text.includes("DESC"))
@@ -260,9 +403,15 @@ test "describe_ebm pairs each feature name with its own description, in order" {
     );
     // The summary draft echoes the "name: description" lines; each description echoes its own graph.
     assert.is_true(position_of(result.text, "age: ") >= 0);
-    assert.is_true(position_of(result.text, "age: ") < position_of(result.text, "bmi: "));
-    assert.is_true(position_of(result.text, "G-AGE") < position_of(result.text, "bmi: "));
-    assert.is_true(position_of(result.text, "bmi: ") < position_of(result.text, "G-BMI"));
+    assert.is_true(
+        position_of(result.text, "age: ") < position_of(result.text, "bmi: "),
+    );
+    assert.is_true(
+        position_of(result.text, "G-AGE") < position_of(result.text, "bmi: "),
+    );
+    assert.is_true(
+        position_of(result.text, "bmi: ") < position_of(result.text, "G-BMI"),
+    );
     assert.is_true(result.text.includes("at most 30 sentences"));
     assert.is_true(result.text.includes("at most 7 sentence"));
     assert.is_true(result.text.includes("IMP"))
@@ -298,14 +447,32 @@ test "describe_ebm gives the same usage whatever the concurrency" {
 
 test "describe_ebm with no graphs only summarizes" {
     let scripted = ScriptedClient { calls: 0 };
-    let result = describe_ebm([], [], "IMP", 30, 7, 2, default_graph_options(), client = scripted);
+    let result = describe_ebm(
+        [],
+        [],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = scripted,
+    );
     assert.equal(scripted.calls, 2);
     assert.equal(result.usage.input_tokens, 20)
 }
 
 test "describe_ebm rejects more names than graphs and more graphs than names" {
     let scripted = ScriptedClient { calls: 0 };
-    let more_graphs = describe_ebm([], ["G"], "IMP", 30, 7, 2, default_graph_options(), client = scripted) catch (e) {
+    let more_graphs = describe_ebm(
+        [],
+        ["G"],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = scripted,
+    ) catch (e) {
         baml.errors.InvalidArgument => null,
     };
     assert.is_true(more_graphs == null);
@@ -367,7 +534,7 @@ class TaggedEchoClient {
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
             self.calls += 1;
-            let prompt = input.prompt(ai.internal.build_output_format(input.output_type));
+            let prompt = (input.prompt)(ai.internal.build_output_format(input.output_type));
             text_turn(`R${self.calls}<<${prompt.text()}>>`)
         }
     }
@@ -389,7 +556,7 @@ class SummaryEchoClient {
         }
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
-            let text = input.prompt(ai.internal.build_output_format(input.output_type)).text();
+            let text = (input.prompt)(ai.internal.build_output_format(input.output_type)).text();
             if (text.includes("overall summary of a Generalized Additive Model")) {
                 return text_turn(text);
             };
@@ -407,7 +574,9 @@ test "describe_graph_cot puts the first reply in the second and third turns and 
     let r2 = position_of(result.text, "R2<<");
     assert.is_true(r1 > 0);
     assert.is_true(r1 < r2);
-    assert.is_true(position_of(result.text.slice(r2, result.text.length()), "R1<<") > 0)
+    assert.is_true(
+        position_of(result.text.slice(r2, result.text.length()), "R1<<") > 0,
+    )
 }
 
 test "describe_ebm joins the per-feature descriptions with a blank line" {
@@ -447,21 +616,27 @@ test "summarize_ebm puts the draft reply in the shorten prompt" {
 test "omitted_parts_msg names each omitted part and says why, and is empty without one" {
     assert.equal(omitted_parts_msg([], []), "");
     let both = omitted_parts_msg(["age & income", "age & city"], ["zip"]);
-    assert.is_true(both.includes("<omitted_parts>") && both.includes("</omitted_parts>"));
     assert.is_true(
-        both.includes(
-            "interaction terms, and no graph description covers them: age & income, age & city.",
-        ),
+        both.includes("<omitted_parts>") && both.includes("</omitted_parts>"),
     );
-    assert.is_true(
-        both.includes("no main effect in the model, and no graph description covers them: zip."),
-    );
-    assert.is_true(both.includes("Say in one sentence that your answer leaves these parts out"));
+    assert.is_true(both.includes(
+        "interaction terms, and no graph description covers them: age & income, age & city.",
+    ));
+    assert.is_true(both.includes(
+        "no main effect in the model, and no graph description covers them: zip.",
+    ));
+    assert.is_true(both.includes(
+        "Say in one sentence that your answer leaves these parts out",
+    ));
     assert.is_true(both.includes("does not cover the whole model"));
     let terms = omitted_parts_msg(["age & income"], []);
-    assert.is_true(terms.includes("age & income") && !terms.includes("no main effect"));
+    assert.is_true(
+        terms.includes("age & income") && !terms.includes("no main effect"),
+    );
     let features = omitted_parts_msg([], ["zip"]);
-    assert.is_true(features.includes("zip") && !features.includes("interaction terms"))
+    assert.is_true(
+        features.includes("zip") && !features.includes("interaction terms"),
+    )
 }
 
 test "the summary prompts name the omitted parts, and a model without them gets no such text" {
@@ -475,8 +650,12 @@ test "the summary prompts name the omitted parts, and a model without them gets 
         omitted_terms = ["age & income"],
         omitted_features = ["zip"],
     );
-    assert.is_true(position_of(msg, "DESCRIPTIONS") < position_of(msg, "<omitted_parts>"));
-    assert.is_true(position_of(msg, "</omitted_parts>") < position_of(msg, "<instructions>"));
+    assert.is_true(
+        position_of(msg, "DESCRIPTIONS") < position_of(msg, "<omitted_parts>"),
+    );
+    assert.is_true(
+        position_of(msg, "</omitted_parts>") < position_of(msg, "<instructions>"),
+    );
 
     let result = summarize_ebm(
         "IMPORTANCES",
@@ -488,10 +667,12 @@ test "the summary prompts name the omitted parts, and a model without them gets 
         omitted_features = ["zip"],
     );
     // the echo of the shorten turn holds the draft turn too, so both turns got the block
-    assert.is_true(result.text.includes("age & income") && result.text.includes("zip"));
     assert.is_true(
-        result.text.includes("keep the sentence that names the parts that the summary leaves out"),
+        result.text.includes("age & income") && result.text.includes("zip"),
     );
+    assert.is_true(result.text.includes(
+        "keep the sentence that names the parts that the summary leaves out",
+    ));
     let draft = summarize_ebm(
         "IMPORTANCES",
         "DESCRIPTIONS",
@@ -500,22 +681,28 @@ test "the summary prompts name the omitted parts, and a model without them gets 
         client = EchoClient {},
         omitted_terms = ["age & income"],
     );
-    assert.is_true(draft.text.includes("age & income") && !draft.text.includes("no main effect"))
+    assert.is_true(
+        draft.text.includes("age & income") && !draft.text.includes("no main effect"),
+    )
 }
 
 test "the summary names the features whose description failed, in both turns" {
     // Contract 4: describe_ebm keeps the descriptions of the other features when one fails, so the summary must say
     // which features it does not cover.
     let failed = omitted_parts_msg([], [], failed_features = ["age", "city"]);
+    assert.is_true(failed.includes(
+        "graph description of these features failed, so no graph description covers them: age, city.",
+    ));
     assert.is_true(
-        failed.includes(
-            "graph description of these features failed, so no graph description covers them: age, city.",
-        ),
+        !failed.includes("interaction terms") && !failed.includes("no main effect"),
     );
-    assert.is_true(!failed.includes("interaction terms") && !failed.includes("no main effect"));
     let msg = summarize_ebm_msg("IMPORTANCES", "DESCRIPTIONS", "", failed_features = ["age"]);
-    assert.is_true(position_of(msg, "<omitted_parts>") < position_of(msg, "<instructions>"));
-    assert.is_true(msg.includes("at most one graph description for each feature"));
+    assert.is_true(
+        position_of(msg, "<omitted_parts>") < position_of(msg, "<instructions>"),
+    );
+    assert.is_true(
+        msg.includes("at most one graph description for each feature"),
+    );
     let result = summarize_ebm(
         "IMPORTANCES",
         "DESCRIPTIONS",
@@ -524,12 +711,12 @@ test "the summary names the features whose description failed, in both turns" {
         client = EchoClient {},
         failed_features = ["age"],
     );
-    assert.is_true(
-        result.text.includes("these features failed, so no graph description covers them: age."),
-    );
-    assert.is_true(
-        result.text.includes("keep the sentence that names the parts that the summary leaves out"),
-    )
+    assert.is_true(result.text.includes(
+        "these features failed, so no graph description covers them: age.",
+    ));
+    assert.is_true(result.text.includes(
+        "keep the sentence that names the parts that the summary leaves out",
+    ))
 }
 
 test "describe_graph_cot names the omitted interaction terms in its final turn only" {
@@ -539,12 +726,18 @@ test "describe_graph_cot names the omitted interaction terms in its final turn o
     );
     let opts = default_graph_options();
     let first = GraphFirstPass@spec("GRAPH", opts).prompt().text();
-    let final = GraphFinalDescription@spec("GRAPH", "FIRST", "SURPRISES", 3, opts, omitted_terms = ["age & income"])
-        .prompt()
-        .text();
+    let final = GraphFinalDescription@spec("GRAPH", "FIRST", "SURPRISES", 3, opts, omitted_terms = [
+        "age & income",
+    ])
+    .prompt()
+    .text();
     assert.is_true(!first.includes("age & income"));
-    assert.is_true(final.includes("age & income") && final.includes("at most 3 sentences"));
-    let result = describe_graph_cot("GRAPH", 3, opts, client = EchoClient {}, omitted_terms = ["age & income"]);
+    assert.is_true(
+        final.includes("age & income") && final.includes("at most 3 sentences"),
+    );
+    let result = describe_graph_cot("GRAPH", 3, opts, client = EchoClient {}, omitted_terms = [
+        "age & income",
+    ]);
     assert.is_true(result.text.includes("age & income"))
 }
 
@@ -562,7 +755,9 @@ test "describe_ebm hands the omitted parts to the summary" {
         omitted_features = ["zip"],
     );
     assert.is_true(result.text.includes("<omitted_parts>"));
-    assert.is_true(result.text.includes("age & income") && result.text.includes("zip"))
+    assert.is_true(
+        result.text.includes("age & income") && result.text.includes("zip"),
+    )
 }
 
 // Graph modes: text, vision (the image only) and mixed (the text and the image).
@@ -574,7 +769,9 @@ const IMAGE_PART = "\"type\":\"image_url\"";
 
 // The body of the request of a spec, as an OpenAI chat client writes it. The client sends nothing.
 function request_body(spec: ai.FunctionSpec<string>) -> string {
-    spec.build_request(client = openai.ChatClient.new(model = "m", api_key = "unused")).body
+    spec.build_request(
+        client = openai.ChatClient.new(model = "m", api_key = "unused"),
+    ).body
 }
 
 // The number of times `needle` occurs in `text`.
@@ -583,7 +780,9 @@ function count_of(text: string, needle: string) -> int {
 }
 
 test "a request in vision mode carries one image and no graph text" {
-    let body = request_body(GraphFirstPass@spec(null, default_graph_options(), png_base64 = TEST_PNG));
+    let body = request_body(
+        GraphFirstPass@spec(null, default_graph_options(), png_base64 = TEST_PNG),
+    );
     assert.equal(count_of(body, IMAGE_PART), 1);
     assert.is_true(body.includes(`data:image/png;base64,${TEST_PNG}`));
     assert.is_true(!body.includes("<graph>"));
@@ -591,7 +790,9 @@ test "a request in vision mode carries one image and no graph text" {
 }
 
 test "a request in mixed mode carries the image and the graph text" {
-    let body = request_body(GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG));
+    let body = request_body(
+        GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG),
+    );
     assert.equal(count_of(body, IMAGE_PART), 1);
     assert.is_true(body.includes("GRAPH-TEXT"));
     assert.is_true(body.includes("<image_reading>"))
@@ -605,14 +806,22 @@ test "a request in text mode carries no image" {
 }
 
 test "the image comes before the text that refers to it" {
-    let body = request_body(GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG));
-    assert.is_true(position_of(body, "image_url") < position_of(body, "<graph_format>"))
+    let body = request_body(
+        GraphFirstPass@spec("GRAPH-TEXT", default_graph_options(), png_base64 = TEST_PNG),
+    );
+    assert.is_true(
+        position_of(body, "image_url") < position_of(body, "<graph_format>"),
+    )
 }
 
 test "every turn of the chain resends the image in vision mode" {
     let opts = default_graph_options();
-    let second = request_body(GraphSurprises@spec(null, "FIRST", opts, png_base64 = TEST_PNG));
-    let third = request_body(GraphFinalDescription@spec(null, "FIRST", "SUR", 7, opts, png_base64 = TEST_PNG));
+    let second = request_body(
+        GraphSurprises@spec(null, "FIRST", opts, png_base64 = TEST_PNG),
+    );
+    let third = request_body(
+        GraphFinalDescription@spec(null, "FIRST", "SUR", 7, opts, png_base64 = TEST_PNG),
+    );
     assert.equal(count_of(second, IMAGE_PART), 1);
     assert.equal(count_of(third, IMAGE_PART), 1)
 }
@@ -626,13 +835,13 @@ test "the vision prompt calls each value read from the image an estimate" {
 
 test "the mixed prompt takes every number from the text and the shape from the image" {
     let msg = describe_graph_msg("GRAPH-TEXT", default_graph_options(), has_image = true);
-    assert.is_true(
-        msg.includes(
-            "The text holds the exact values, so take every number that you quote from the text.",
-        ),
-    );
+    assert.is_true(msg.includes(
+        "The text holds the exact values, so take every number that you quote from the text.",
+    ));
     assert.is_true(msg.includes("Use the image to see the shape of the graph"));
-    assert.is_true(position_of(msg, "</graph>") < position_of(msg, "<image_reading>"))
+    assert.is_true(
+        position_of(msg, "</graph>") < position_of(msg, "<image_reading>"),
+    )
 }
 
 test "the text prompt says nothing about an image" {
@@ -641,32 +850,63 @@ test "the text prompt says nothing about an image" {
 }
 
 test "the mixed prompt of a multiclass graph says how to read the classes" {
-    let msg = describe_graph_msg("Feature Name: a\nClass: high\nMeans: {}", default_graph_options(), has_image = true);
-    assert.is_true(msg.includes("A graph of a multiclass classifier repeats items 3 to 5"))
+    let msg = describe_graph_msg(
+        "Feature Name: a\nClass: high\nMeans: {}",
+        default_graph_options(),
+        has_image = true,
+    );
+    assert.is_true(
+        msg.includes("A graph of a multiclass classifier repeats items 3 to 5"),
+    )
 }
 
 test "every mode names the omitted interaction terms in the final turn" {
     let opts = default_graph_options();
     let terms = ["a & b"];
-    let text = request_body(GraphFinalDescription@spec("G", "F", "S", 7, opts, omitted_terms = terms));
+    let text = request_body(
+        GraphFinalDescription@spec("G", "F", "S", 7, opts, omitted_terms = terms),
+    );
     let vision = request_body(
-        GraphFinalDescription@spec(null, "F", "S", 7, opts, omitted_terms = terms, png_base64 = TEST_PNG),
+        GraphFinalDescription@spec(
+            null,
+            "F",
+            "S",
+            7,
+            opts,
+            omitted_terms = terms,
+            png_base64 = TEST_PNG,
+        ),
     );
     let mixed = request_body(
-        GraphFinalDescription@spec("G", "F", "S", 7, opts, omitted_terms = terms, png_base64 = TEST_PNG),
+        GraphFinalDescription@spec(
+            "G",
+            "F",
+            "S",
+            7,
+            opts,
+            omitted_terms = terms,
+            png_base64 = TEST_PNG,
+        ),
     );
-    assert.is_true(text.includes("interaction terms, and no graph description covers them: a & b."));
-    assert.is_true(
-        vision.includes("interaction terms, and no graph description covers them: a & b."),
-    );
-    assert.is_true(
-        mixed.includes("interaction terms, and no graph description covers them: a & b."),
-    )
+    assert.is_true(text.includes(
+        "interaction terms, and no graph description covers them: a & b.",
+    ));
+    assert.is_true(vision.includes(
+        "interaction terms, and no graph description covers them: a & b.",
+    ));
+    assert.is_true(mixed.includes(
+        "interaction terms, and no graph description covers them: a & b.",
+    ))
 }
 
 test "describe_graph_cot rejects a call with neither the text nor the image before any request" {
     let scripted = ScriptedClient { calls: 0 };
-    let outcome = describe_graph_cot(null, 7, default_graph_options(), client = scripted) catch (e) {
+    let outcome = describe_graph_cot(
+        null,
+        7,
+        default_graph_options(),
+        client = scripted,
+    ) catch (e) {
         baml.errors.InvalidArgument => null,
     };
     assert.is_true(outcome == null);
@@ -675,27 +915,60 @@ test "describe_graph_cot rejects a call with neither the text nor the image befo
 
 test "describe_graph_cot in vision mode sends the image in each of the three turns" {
     let scripted = ScriptedClient { calls: 0 };
-    let result = describe_graph_cot(null, 7, default_graph_options(), client = scripted, png_base64 = TEST_PNG);
+    let result = describe_graph_cot(
+        null,
+        7,
+        default_graph_options(),
+        client = scripted,
+        png_base64 = TEST_PNG,
+    );
     assert.equal(scripted.calls, 3);
-    let echo = describe_graph_cot(null, 7, default_graph_options(), client = EchoClient {}, png_base64 = TEST_PNG);
+    let echo = describe_graph_cot(
+        null,
+        7,
+        default_graph_options(),
+        client = EchoClient {},
+        png_base64 = TEST_PNG,
+    );
     assert.is_true(echo.text.includes("The image gives no exact values."));
     assert.is_true(!echo.text.includes("<graph>"))
 }
 
 test "both turns of a benchmark question carry the image of its graph, before the question" {
     let reasoning = request_body(BenchmarkReasoning@spec("QUESTION", png_base64 = TEST_PNG));
-    let answer = request_body(BenchmarkAnswer@spec("QUESTION", "REASONING", "'a' or 'b'", png_base64 = TEST_PNG));
+    let answer = request_body(
+        BenchmarkAnswer@spec("QUESTION", "REASONING", "'a' or 'b'", png_base64 = TEST_PNG),
+    );
     assert.equal(count_of(reasoning, IMAGE_PART), 1);
     assert.equal(count_of(answer, IMAGE_PART), 1);
-    assert.is_true(position_of(reasoning, "image_url") < position_of(reasoning, "QUESTION"))
+    assert.is_true(
+        position_of(reasoning, "image_url") < position_of(reasoning, "QUESTION"),
+    )
 }
 
 test "a benchmark question in text mode carries no image" {
-    assert.equal(count_of(request_body(BenchmarkReasoning@spec("QUESTION")), IMAGE_PART), 0);
-    assert.equal(count_of(request_body(BenchmarkAnswer@spec("QUESTION", "R", "F")), IMAGE_PART), 0)
+    assert.equal(
+        count_of(
+            request_body(BenchmarkReasoning@spec("QUESTION")),
+            IMAGE_PART,
+        ),
+        0,
+    );
+    assert.equal(
+        count_of(
+            request_body(BenchmarkAnswer@spec("QUESTION", "R", "F")),
+            IMAGE_PART,
+        ),
+        0,
+    )
 }
 
 test "answer_benchmark_question sends the image in both turns" {
-    let echo = answer_benchmark_question("QUESTION", "'a' or 'b'", client = EchoClient {}, png_base64 = TEST_PNG);
+    let echo = answer_benchmark_question(
+        "QUESTION",
+        "'a' or 'b'",
+        client = EchoClient {},
+        png_base64 = TEST_PNG,
+    );
     assert.is_true(echo.text.includes("Summarize your response"))
 }

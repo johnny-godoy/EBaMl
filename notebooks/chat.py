@@ -53,7 +53,7 @@ def _(mo) -> None:
     - You need no data download. The notebook fits a small EBM on made-up data.
     - The notebook starts the chat without a key. Each message that you send needs an LLM, so it needs
       `OPENROUTER_API_KEY`, or a key that you type below.
-    - The notebook needs the BAML toolchain (`baml`, version 0.25 or later) and the `mcp` extra:
+    - The notebook needs the BAML toolchain (`baml`, version 0.26 or later) and the `mcp` extra:
       `pip install "ebaml[mcp]"`.
     """)
 

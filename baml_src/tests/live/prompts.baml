@@ -7,8 +7,14 @@
 // Number of sentences in `text`: a run of closing punctuation followed by a space or the end of the text ends a sentence.
 // The period of a decimal (0.62) and the abbreviations "e.g." and "i.e." do not end a sentence.
 function count_sentences(text: string) -> int {
-    let ends = baml.regex.new("[.!?]+[\"')\\]]*(\\s|$)").match_all(text.trim()).length();
-    let abbreviations = baml.regex.new("(?i)\\b(e\\.g|i\\.e)\\.\\s").match_all(text).length();
+    let ends = baml.regex
+        .new("[.!?]+[\"')\\]]*(\\s|$)")
+        .match_all(text.trim())
+        .length();
+    let abbreviations = baml.regex
+        .new("(?i)\\b(e\\.g|i\\.e)\\.\\s")
+        .match_all(text)
+        .length();
     ends - abbreviations
 }
 
@@ -22,18 +28,24 @@ function ties_figure_to_denial(text: string, figure: string) -> bool {
             return true;
         }
     }
-    ;
     false
 }
 
 testset "PromptChecks" {
     test "decimals_of: lists the decimal numbers with their sign, and no whole number" {
-        assert.equal(decimals_of("about 0.8 at age 30, and -0.6 after 50"), ["0.8", "-0.6"])
+        assert.equal(decimals_of("about 0.8 at age 30, and -0.6 after 50"), [
+            "0.8",
+            "-0.6",
+        ])
     }
 
     test "marks_numbers_as_estimates: a number read from a picture needs a word of estimate" {
-        assert.is_true(!marks_numbers_as_estimates("The score is 0.8 for young people."));
-        assert.is_true(marks_numbers_as_estimates("The score is roughly 0.8 for young people."));
+        assert.is_true(
+            !marks_numbers_as_estimates("The score is 0.8 for young people."),
+        );
+        assert.is_true(
+            marks_numbers_as_estimates("The score is roughly 0.8 for young people."),
+        );
         assert.is_true(marks_numbers_as_estimates("The score falls with age."))
     }
 
@@ -43,13 +55,18 @@ testset "PromptChecks" {
 
     test "count_sentences: an abbreviation does not end a sentence" {
         assert.equal(
-            count_sentences("Young people, e.g. those under 30, score higher. Older people score lower!"),
+            count_sentences(
+                "Young people, e.g. those under 30, score higher. Older people score lower!",
+            ),
             2,
         )
     }
 
     test "count_sentences: a closing quote or bracket after the end counts once" {
-        assert.equal(count_sentences("He said \"no.\" Then (later.) she left..."), 3)
+        assert.equal(
+            count_sentences("He said \"no.\" Then (later.) she left..."),
+            3,
+        )
     }
 
     test "count_sentences: text with no closing punctuation has no sentence end" {
@@ -59,13 +76,13 @@ testset "PromptChecks" {
 
     test "ties_figure_to_denial: catches the probability of the new class read as a denial" {
         // the reply of a live run with the facts of the counterfactual in separate keys
+        assert.is_true(ties_figure_to_denial(
+            "subtracting 2.91 log-odds from the model and reducing the denial probability to 0.82 (95% CI [0.74, 0.89]).",
+            "0.82",
+        ));
         assert.is_true(
-            ties_figure_to_denial(
-                "subtracting 2.91 log-odds from the model and reducing the denial probability to 0.82 (95% CI [0.74, 0.89]).",
-                "0.82",
-            ),
-        );
-        assert.is_true(ties_figure_to_denial("a 0.82 chance of being denied", "0.82"))
+            ties_figure_to_denial("a 0.82 chance of being denied", "0.82"),
+        )
     }
 
     test "ties_figure_to_denial: accepts the probability given to the new class" {
@@ -76,7 +93,10 @@ testset "PromptChecks" {
             ),
         );
         assert.is_true(
-            !ties_figure_to_denial("The prediction flips to loan approved (probability 0.82).", "0.82"),
+            !ties_figure_to_denial(
+                "The prediction flips to loan approved (probability 0.82).",
+                "0.82",
+            ),
         )
     }
 }
@@ -148,15 +168,18 @@ function live_age_graph_png() -> string {
 
 // The decimal numbers of `text`, such as "0.8" or "-0.6".
 function decimals_of(text: string) -> string[] {
-    baml.regex.new("-?\\d+\\.\\d+").match_all(text).map((found) -> {
-        found.text
-    })
+    baml.regex
+        .new("-?\\d+\\.\\d+")
+        .match_all(text)
+        .map((found) -> { found.text })
 }
 
 // True when `text` quotes no decimal number, or marks its numbers as estimates. A value read from a picture is an
 // estimate, so a description of an image must not state one as exact.
 function marks_numbers_as_estimates(text: string) -> bool {
-    let estimate = baml.regex.new("(?i)\\b(about|approximately|around|roughly|nearly|estimated?|close to)\\b|~");
+    let estimate = baml.regex.new(
+        "(?i)\\b(about|approximately|around|roughly|nearly|estimated?|close to)\\b|~",
+    );
     decimals_of(text).length() == 0 || estimate.has_match(text)
 }
 
@@ -172,17 +195,11 @@ testset "Live" {
         log_reply(ratings.to_string());
         assert.equal(
             ratings
-                .map((rating) -> {
-                    rating.feature
-                })
-                .sort_by_key((name) -> {
-                    name
-                }),
+                .map((rating) -> { rating.feature })
+                .sort_by_key((name) -> { name }),
             ["monthly savings", "number of past defaults"],
         );
-        let past = ratings.find((rating) -> {
-            rating.feature == "number of past defaults"
-        });
+        let past = ratings.find((rating) -> { rating.feature == "number of past defaults" });
         assert.equal(past?.difficulty, Difficulty.VeryHard)
     }
 
@@ -196,7 +213,9 @@ testset "Live" {
         );
         log_reply(text);
         assert.is_true(text.includes("income"));
-        assert.is_true(!text.includes("0.83") && !text.includes("1.37") && !text.includes("2.91"));
+        assert.is_true(
+            !text.includes("0.83") && !text.includes("1.37") && !text.includes("2.91"),
+        );
         assert.is_true(!text.includes("%"));
         assert.is_true(count_sentences(text) <= 3)
     }
@@ -239,7 +258,11 @@ testset "Live" {
         );
         log_reply(text);
         // the target bin "[4.5e+04, 5e+04)" may be written as "45,000", "45 000" or "45k"
-        assert.is_true(baml.regex.new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k").has_match(text));
+        assert.is_true(
+            baml.regex
+                .new("2\\.91|4\\.5e\\+?04|45[,. ]?000|45k")
+                .has_match(text),
+        );
         // 0.82 is the probability of "loan approved", the class after the changes
         assert.is_true(!ties_figure_to_denial(text, "0.82"))
     }
@@ -405,7 +428,12 @@ testset "Live" {
     }
 
     test "describe_graph_cot in vision mode: names the feature and calls the values that it reads estimates" {
-        let result = describe_graph_cot(null, 3, default_graph_options(), png_base64 = live_age_graph_png());
+        let result = describe_graph_cot(
+            null,
+            3,
+            default_graph_options(),
+            png_base64 = live_age_graph_png(),
+        );
         log_reply(result.text);
         assert.is_true(result.text.to_lower_case().includes("age"));
         assert.is_true(count_sentences(result.text) <= 4);
@@ -413,13 +441,16 @@ testset "Live" {
     }
 
     test "describe_graph_cot in mixed mode: every decimal number of the reply comes from the graph text" {
-        let result = describe_graph_cot(LIVE_AGE_GRAPH_TEXT, 3, default_graph_options(), png_base64 = live_age_graph_png());
+        let result = describe_graph_cot(
+            LIVE_AGE_GRAPH_TEXT,
+            3,
+            default_graph_options(),
+            png_base64 = live_age_graph_png(),
+        );
         log_reply(result.text);
         assert.is_true(result.text.to_lower_case().includes("age"));
         assert.is_true(
-            decimals_of(result.text).every((number) -> {
-                LIVE_AGE_GRAPH_TEXT.includes(number)
-            }),
+            decimals_of(result.text).every((number) -> { LIVE_AGE_GRAPH_TEXT.includes(number) }),
         )
     }
 
@@ -433,7 +464,9 @@ testset "Live" {
         log_reply(result.text);
         let answer = result.text.trim().to_lower_case();
         assert.is_true(
-            baml.regex.new("^\\W*(increasing|decreasing|not monotone)\\W*$").has_match(answer),
+            baml.regex
+                .new("^\\W*(increasing|decreasing|not monotone)\\W*$")
+                .has_match(answer),
         )
     }
 }

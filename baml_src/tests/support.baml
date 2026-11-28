@@ -11,7 +11,10 @@ function scripted_turn(text: string, input_tokens: int, output_tokens: int) -> a
         requested_model: null,
         calls: [
             ai.events.ModelCall {
-                resolved_model: ai.events.ModelKey { provider: "scripted", model: null },
+                resolved_model: ai.events.ModelKey {
+                    provider: "scripted",
+                    model: null,
+                },
                 usage: ai.events.Usage {
                     input_tokens: input_tokens,
                     output_tokens: output_tokens,
@@ -20,7 +23,11 @@ function scripted_turn(text: string, input_tokens: int, output_tokens: int) -> a
                     cache_write_input_tokens: null,
                     uncached_input_tokens: null,
                 },
-                timing: ai.events.Timing { start_time: null, duration: null, ttft: null },
+                timing: ai.events.Timing {
+                    start_time: null,
+                    duration: null,
+                    ttft: null,
+                },
                 http_request: null,
                 http_response: null,
                 sse_responses: null,
@@ -71,7 +78,7 @@ class EchoClient {
         }
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
-            let prompt = input.prompt(ai.internal.build_output_format(input.output_type));
+            let prompt = (input.prompt)(ai.internal.build_output_format(input.output_type));
             scripted_turn(prompt.text(), 1, 1)
         }
     }

@@ -11,7 +11,7 @@ description: Install EBaMl from PyPI or from a source checkout, set the API key 
 - A package installer such as [pip](https://pip.pypa.io) or [uv](https://docs.astral.sh/uv/getting-started/installation/).
 - An API key for an LLM provider. The default is [OpenRouter](https://openrouter.ai)'s free router, which needs no
   paid plan. You can use another provider instead: see [Choosing the model](providers.md).
-- The BAML toolchain 0.25, only in a source checkout (step 1).
+- The BAML toolchain 0.26, only in a source checkout (step 1).
 
 ## Install from PyPI
 
@@ -43,7 +43,7 @@ The installer prints a line to add to your shell profile. Add it, then open a ne
 Check it:
 
 ```bash
-baml --version   # toolchain 0.25 or later
+baml --version   # toolchain 0.26 or later
 ```
 
 If `baml` resolves to an older install (Homebrew `baml`, or `baml-py` in a virtualenv), remove it or put `~/.baml/bin`
