@@ -23,6 +23,7 @@ from ebaml.core.exceptions import (
     OptionRangeError,
     UnsupportedModelError,
 )
+from ebaml.graphs import ebm_graph
 from ebaml.graphs.ebm_graph import BudgetCheck, EBMGraph, TokenBudget
 from ebaml.graphs.model_kinds import MulticlassClassifier
 from ebaml.graphs.token_budget import BudgetStatus, TokenEstimator, check_token_budget
@@ -1091,3 +1092,16 @@ def test_to_text_rejects_a_confidence_level_that_gives_no_readable_bounds(level:
 
 def test_to_text_ignores_the_confidence_level_without_bounds() -> None:
     assert "Bounds" not in cont_graph().to_text(confidence_bounds=False, confidence_level=1.0)
+
+
+_LABELS = st.lists(st.sampled_from(["False", "True", "false", "TRUE", "red", "0"]), max_size=5)
+_INTERVALS = st.lists(st.tuples(st.floats(), st.floats()), max_size=5)
+
+
+@given(x_vals=_LABELS | _INTERVALS)
+def test_the_boolean_check_equals_the_check_of_every_value_of_version_0_16(
+    x_vals: list[str] | list[tuple[float, float]],
+) -> None:
+    # the check of 0.16.0 turned every x-axis value into a string, even for a graph of 1024 bins
+    reference = tuple(str(x).upper() for x in x_vals) == ("FALSE", "TRUE")
+    assert ebm_graph._is_boolean(x_vals) is reference

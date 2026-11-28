@@ -120,6 +120,9 @@ def _rendered[G](text: str, graph: G, on_render: Callable[[G], None] | None) -> 
     return text
 
 
+_BOOLEAN_KEYS = ("FALSE", "TRUE")
+
+
 def _is_boolean(x_vals: XValues) -> bool:
     """Whether the x-axis values are exactly the keys ``False`` and ``True`` (case-insensitive).
 
@@ -134,7 +137,8 @@ def _is_boolean(x_vals: XValues) -> bool:
         True if the x-axis values are the keys ``False`` and ``True``.
 
     """
-    return tuple(str(x).upper() for x in x_vals) == ("FALSE", "TRUE")
+    # the length first: a graph of many bins is never boolean, and to_text asks at each simplification level
+    return len(x_vals) == len(_BOOLEAN_KEYS) and tuple(str(x).upper() for x in x_vals) == _BOOLEAN_KEYS
 
 
 def _describe_format(feature_format: FeatureType) -> str:
