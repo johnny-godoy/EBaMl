@@ -22,9 +22,16 @@ DEFAULTS: dict[str, Callable[[], baml_sdk.CallDefaults]] = {
 }
 
 
-def _setting(line: str, pattern: str) -> str:
-    found = re.search(pattern, line)
-    assert found, f"the client line has no {pattern}"
+# the text of a client declaration, from `client <name> =` to the end of its statement, which may span several lines
+def _declaration(client: str) -> str:
+    found = re.search(rf"^client {client} = .*?\);$", BAML_CLIENTS, flags=re.MULTILINE | re.DOTALL)
+    assert found, f"talk_to_ebm.baml declares no client {client}"
+    return found.group(0)
+
+
+def _setting(declaration: str, pattern: str) -> str:
+    found = re.search(pattern, declaration)
+    assert found, f"the client declaration has no {pattern}"
     return found.group(1)
 
 
@@ -44,9 +51,9 @@ def test_a_python_only_field_has_no_field_of_the_spec() -> None:
 
 @pytest.mark.parametrize("client", sorted(DEFAULTS))
 def test_the_defaults_of_the_spec_equal_the_settings_of_the_default_client(client: str) -> None:
-    line = next(line for line in BAML_CLIENTS.splitlines() if line.startswith(f"client {client} "))
-    temperature = float(_setting(line, r"temperature = ([0-9.]+)"))
-    max_tokens = int(_setting(line, r"max_tokens = (\d+)"))
+    declaration = _declaration(client)
+    temperature = float(_setting(declaration, r"temperature = ([0-9.]+)"))
+    max_tokens = int(_setting(declaration, r"max_tokens = (\d+)"))
     defaults = DEFAULTS[client]()
     assert (defaults.temperature, defaults.max_output_tokens) == (temperature, max_tokens)
 

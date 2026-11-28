@@ -9,7 +9,7 @@ OpenRouter's `openrouter/free`, which needs `OPENROUTER_API_KEY`.
 </project>
 
 <commands>
-Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.25 or later. `baml.toml` pins the toolchain to the `baml-bridge` version that `pyproject.toml` requires, because the wheel ships a generated `baml_sdk` (`scripts/release/toolchain_pin.py`). Put `~/.baml/bin` first on `PATH`,
+Requirements: Python 3.13 or later, `uv`, and the BAML toolchain 0.26 or later. `baml.toml` pins the toolchain to the `baml-bridge` version that `pyproject.toml` requires, because the wheel ships a generated `baml_sdk` (`scripts/release/toolchain_pin.py`). Put `~/.baml/bin` first on `PATH`,
 because older `baml` versions lack `describe`.
 
 ```bash

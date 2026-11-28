@@ -603,7 +603,7 @@ function describe_ebm(
         };
     };
     //# One description chain per graph, at most `max_concurrency` at a time
-    let limit = baml.spawn.Limit.new(max_concurrency);
+    let limit = baml.sync.Semaphore.new(max_concurrency);
     let futures = graphs.map((graph) -> {
         spawn with limit {
             describe_graph_cot(graph, graph_sentences, opts, client = client, model = model)

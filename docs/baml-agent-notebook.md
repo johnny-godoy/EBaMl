@@ -14,7 +14,7 @@ that the model called, and shows the message of each setup problem that a user c
 - The last button sends real requests to the LLM, one for each step of the agent. The default model needs
   `OPENROUTER_API_KEY`. Type `PROVIDER/MODEL` in the notebook to use another model, see
   [Choosing the model](providers.md).
-- The notebook needs the BAML toolchain (`baml`, version 0.25 or later) and the `mcp` extra:
+- The notebook needs the BAML toolchain (`baml`, version 0.26 or later) and the `mcp` extra:
   `pip install "ebaml[mcp]"`.
 
 The page below is the notebook with the output of its cells, exported when the docs are built. To run it:

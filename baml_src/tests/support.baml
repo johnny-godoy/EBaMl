@@ -78,7 +78,7 @@ class EchoClient {
         }
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
-            let prompt = input.prompt(ai.internal.build_output_format(input.output_type));
+            let prompt = (input.prompt)(ai.internal.build_output_format(input.output_type));
             scripted_turn(prompt.text(), 1, 1)
         }
     }

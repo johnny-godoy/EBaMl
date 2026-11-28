@@ -109,6 +109,58 @@ test "describe_ebm rejects mismatched names and graphs" {
     assert.equal(scripted.calls, 0)
 }
 
+// Holds each call for a short time and records the largest number of calls that ran at the same time.
+class ConcurrencyProbeClient {
+    in_flight: int,
+    peak: int,
+
+    implements ai.Client {
+        function provider(self) -> string {
+            "concurrency-probe"
+        }
+
+        function requested_model(self) -> string {
+            "concurrency-probe"
+        }
+
+        function render(self, input: ai.ModelTurnInput) -> baml.http.Request {
+            baml.http.Request.from_url("http://concurrency-probe.invalid")
+        }
+
+        function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
+            baml.sync.atomic(self, () -> {
+                self.in_flight += 1;
+                if (self.in_flight > self.peak) {
+                    self.peak = self.in_flight;
+                };
+            });
+            baml.sys.sleep(baml.time.Duration.from_milliseconds(20));
+            baml.sync.atomic(self, () -> {
+                self.in_flight -= 1;
+            });
+            scripted_turn("R", 10, 5)
+        }
+    }
+}
+
+test "describe_ebm runs at most max_concurrency graph chains at the same time" {
+    let probe = ConcurrencyProbeClient {
+        in_flight: 0,
+        peak: 0,
+    };
+    describe_ebm(
+        ["a", "b", "c", "d"],
+        ["G1", "G2", "G3", "G4"],
+        "IMP",
+        30,
+        7,
+        2,
+        default_graph_options(),
+        client = probe,
+    );
+    assert.equal(probe.peak, 2)
+}
+
 test "answer_benchmark_question reasons, then extracts the answer" {
     let scripted = ScriptedClient { calls: 0 };
     let result = answer_benchmark_question("QUESTION", "'a' or 'b'", client = scripted);
@@ -482,7 +534,7 @@ class TaggedEchoClient {
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
             self.calls += 1;
-            let prompt = input.prompt(ai.internal.build_output_format(input.output_type));
+            let prompt = (input.prompt)(ai.internal.build_output_format(input.output_type));
             text_turn(`R${self.calls}<<${prompt.text()}>>`)
         }
     }
@@ -504,9 +556,7 @@ class SummaryEchoClient {
         }
 
         function invoke(self, input: ai.ModelTurnInput) -> ai.ModelTurn {
-            let text = input
-                .prompt(ai.internal.build_output_format(input.output_type))
-                .text();
+            let text = (input.prompt)(ai.internal.build_output_format(input.output_type)).text();
             if (text.includes("overall summary of a Generalized Additive Model")) {
                 return text_turn(text);
             };
