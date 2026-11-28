@@ -10,9 +10,9 @@ special care for `.claude/rules/proofs.md`, `.claude/rules/semantic-contracts.md
 Run an algorithm of EBaMl as compiled Lean code, so that the code that runs is the code that the proof covers. Today
 each Lean proof describes a model of the Python code (contract 1 of `semantic-contracts.md`), and a unit test guards
 the link between the two. A kernel removes that gap for the part it covers: Python calls a function that Lean compiled,
-and the theorems are about that same function. The first kernel is `EBMGraph.simplify`, because it is the largest
-hotspot of the graph text that remains after the fixes of 0.16.0, and its claim ("no merged bin moves more than the
-threshold") is exact. The milestone also builds the parts that every later kernel reuses: the Lean library, the C
+and the theorems are about that same function. The first kernel is the grouping of `EBMGraph.simplify`
+(`ebaml.graphs.bin_groups.group_starts`), because its claim ("no merged bin moves more than the threshold") is exact
+and its code is small. The gain in speed is small (see the context), so the value of the milestone is the proof. The milestone also builds the parts that every later kernel reuses: the Lean library, the C
 binding, the wheels and the Python fallback.
 </goal>
 
@@ -20,20 +20,24 @@ binding, the wheels and the Python fallback.
 These facts were true when the plan was written. Check each one again before you act on it. The facts that nobody has
 tested yet are marked "check in phase 0".
 
-- The performance benchmark of 0.16.0 (`benchmark/performance/README.md`) measures `graphs.render.*`. After the fixes
-  of the follow-up PR of 0.16.0, `EBMGraph.simplify` takes about half of the rendering time of a graph with 1024 bins.
-  `to_text` tries up to 101 levels (`_SIMPLIFICATION_STEP = 0.001`, `_MAX_SIMPLIFICATION_STEPS = 100`), and each level
-  runs `simplify` again on the full graph, in a Python loop over each bin.
+- The performance benchmark (`benchmark/performance/README.md`) measures `graphs.render.*`. With the fixes of 0.16.0
+  and of the second iteration (the boolean check by length), `EBMGraph.simplify` takes 8 to 14 % of the rendering time,
+  and `group_starts` 3 to 8 % (8 % on `graphs.render.features-100-bins-1024`). The text of each level
+  (`EBMGraph.to_body_text`) takes most of the rest. `to_text` tries up to 101 levels (`_SIMPLIFICATION_STEP = 0.001`,
+  `_MAX_SIMPLIFICATION_STEPS = 100`), about 7 for a graph of 1024 bins, and each level runs `group_starts` again on
+  the full graph, in a Python loop over each bin.
 - `simplify` is a greedy merge. The first bin opens a group. Each next bin joins the open group if no score of the bin
   differs from the score of the first bin of the group by more than `threshold`; else it opens a new group. The
   threshold is `(max(scores) - min(scores)) * min_variation_per_cent`. A merged bin keeps the score of its first bin,
   the interval from the low end of its first bin to the high end of its last bin, and the largest standard deviation of
   its bins. A multiclass graph has one score for each class, and a bin joins only if every class stays within the
   threshold.
-- The impact and effort report of 0.16.0 (an or-solver run, not in the repository) rated a compiled `simplify` at
-  about 95 % of the time of `simplify`, for 24 hours of work plus 30 hours for the build of the Lean library. With
-  40 hours of budget it did not fit. With 80 hours it was the best choice for any value of a proof above zero. The
-  user chose to plan it as a milestone of its own.
+- The impact and effort report of the second iteration (an or-solver run, not in the repository) rates a compiled
+  `group_starts` at about 0.15 seconds a week for its reference user: 18 calls of `describe_ebm` a week. A Rust
+  kernel saves the same time. The report counts the effort in agent minutes, calibrated on the real times of 0.16.0:
+  about 150 minutes for the build of the Lean library and its wheels, and 90 for the kernel and its proofs. No real
+  time of a native build exists yet, so phase 0 measures it. Lean wins over Rust only for the proof. The user chose
+  to plan it as a milestone of its own.
 - The proofs live in `proofs/`: one Lake project, Lean and Mathlib pinned to `v4.35.0`, one topic for each claim
   (`LocalExplanations`, `MulticlassScores`, `Recourse`). The proofs never import the Python code, and CI runs
   `lake build` only when `proofs/` changes (`.github/workflows/proofs.yml`).
@@ -117,9 +121,11 @@ Ask the user about these points before phase 2, with the measurements of phase 0
    the name in the Lean kernel and in `ebm_graph.py`. Its limits name what is not proved: the arithmetic of floats, the
    C shim, ctypes, and the steps of `simplify` outside the groups (the merged intervals, the scores of the first bins
    and the largest standard deviations stay in Python).
-3. **Bind it in Python.** Add a module in `ebaml.graphs` (for example `graphs/group_kernel.py`) that loads the library
-   once, lazily, and gives one function `group_starts(scores, threshold) -> list[int]`. `simplify` calls it, and keeps
-   its Python loop as the fallback when the library is missing, does not load, or `EBAML_KERNELS=0`. Keep `simplify`
+3. **Bind it in Python.** `ebaml.graphs.bin_groups.group_starts(score_rows, threshold) -> list[int]` is the one
+   function that `simplify` calls for the groups, and its Python loops are the fallback and the reference. Add a module
+   in `ebaml.graphs` (for example `graphs/group_kernel.py`) that loads the library once, lazily, and let
+   `group_starts` call the kernel, or its Python loops when the library is missing, does not load, or
+   `EBAML_KERNELS=0`. Keep `simplify`
    itself in Python, so that the public API and the beartype checks stay the same. The layer `graphs` may hold the
    binding, because ctypes is no I/O in the sense of `architecture.md`. Check the semgrep rule of I/O in domain code,
    and ask the user if it fails. Register the binding in `architecture/abstractions.yml` if a second kernel will reuse
@@ -140,8 +146,9 @@ Ask the user about these points before phase 2, with the measurements of phase 0
    - Update the release workflow so that one tag publishes both packages.
 6. **Measure.** Run `uv run python benchmark/run.py performance --workload "graphs.render.*" --workload "llm.*"` with
    the kernel and with `EBAML_KERNELS=0`, and compare with `benchmark/run.py performance compare`. Put the table in the
-   commit of the kernel and in `benchmark/performance/README.md`. If the gain on `graphs.render.features-100-bins-1024`
-   is below 30 %, report it to the user before you ship.
+   commit of the kernel and in `benchmark/performance/README.md`. Expect about 8 % on
+   `graphs.render.features-100-bins-1024`. A gain below that is not a reason to stop, because the proof is the goal,
+   but a kernel that is slower than the Python loop on any workload is: report it to the user before you ship.
 7. **Write the docs.** Add `docs/graph-simplification-proof.md` with the parts that `proofs.md` lists and the iframe of
    the paper, and a page or a section that says how to install the kernels, how to turn them off, and which platforms
    have them. Point the docstring of `simplify` to the paper in one sentence. Add the topic to `proofs/README.md`.
