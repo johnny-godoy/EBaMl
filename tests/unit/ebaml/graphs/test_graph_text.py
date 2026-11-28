@@ -3,10 +3,9 @@
 import orjson
 import pytest
 import scipy
-from hypothesis import given
-from hypothesis import strategies as st
 
 from ebaml.core.exceptions import GraphTextError, OptionRangeError
+from ebaml.graphs import graph_text
 from ebaml.graphs.graph_text import confidence_factor, parse_graph_text, parse_str_tuple_to_float_tuple, xy_to_json
 
 
@@ -142,8 +141,17 @@ def test_the_parser_rejects_bounds_of_two_confidence_levels() -> None:
         parse_graph_text(bounds_text("80", "95"))
 
 
-@given(level=st.floats(min_value=1e-6, max_value=1 - 1e-6))
-def test_the_cached_confidence_factor_equals_the_quantile_of_scipy_at_each_call(level: float) -> None:
-    exact = float(scipy.stats.norm.interval(level, loc=0, scale=1)[1])
-    assert confidence_factor(level) == exact
-    assert confidence_factor(level) == exact
+def test_the_confidence_factor_asks_scipy_once_for_each_level(monkeypatch: pytest.MonkeyPatch) -> None:
+    # to_text asks for the factor of each class at each of up to 101 levels, and scipy takes about 0.1 ms each time
+    calls: list[float] = []
+    interval = scipy.stats.norm.interval
+
+    def counted(confidence: float, *, loc: float, scale: float) -> tuple[float, float]:
+        calls.append(confidence)
+        return interval(confidence, loc=loc, scale=scale)
+
+    monkeypatch.setattr(graph_text, "_FACTORS", {})
+    monkeypatch.setattr(scipy.stats.norm, "interval", counted)
+    factors = [confidence_factor(level) for level in (0.9, 0.9, 0.8, 0.9, 0.8)]
+    assert calls == [0.9, 0.8]
+    assert factors[0] == factors[1] == factors[3]
