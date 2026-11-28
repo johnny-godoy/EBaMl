@@ -64,6 +64,9 @@ demand.
   a workload is slower. It never compares with an absolute time, because a CI runner changes its speed from one job to
   the next.
 - Each run keeps its summaries as an artifact for 90 days.
+- The base runs the workloads of the head. So a workload calls the public API of `ebaml` where it can, and a workload
+  of a new feature names the public name that it needs in `requires`, such as `RenderTiming`. The base run skips it,
+  and the comparison lists it under "Only the head measures".
 
 Calibrate the threshold from the first ten runs: read the largest change of a workload between two runs of the same
 commit, and set the threshold of `compare` in the workflow to about twice that change, but not below 25 %. Until then,
