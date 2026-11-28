@@ -26,7 +26,7 @@ from sklearn import metrics
 from ebaml.core.custom_types import ClassLabel, ExplainableBoostingModel, FeatureValue, Frame
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
-from ebaml.edit.data_effect import RowChanges, row_changes
+from ebaml.edit.data_effect import ModelPredictions, RowChanges, changes_between
 from ebaml.edit.edit_session import CURRENT, ORIGINAL, EditSession
 from ebaml.edit.history import HistoryKind
 from ebaml.edit.model_view import term_view
@@ -200,7 +200,7 @@ class _Outputs(abc.ABC):
     """The predictions and the metrics of one kind of model."""
 
     @abc.abstractmethod
-    def predictions(self, rows: Frame) -> npt.NDArray[np.float64]:
+    def predictions(self, source: ModelPredictions) -> npt.NDArray[np.float64]:
         """Give the prediction of each row: the probability of each class, or the predicted value.
 
         Returns
@@ -211,7 +211,7 @@ class _Outputs(abc.ABC):
         """
 
     @abc.abstractmethod
-    def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
+    def metrics(self, source: ModelPredictions, labels: npt.NDArray[np.generic]) -> Metrics:
         """Compute the metrics of the model on rows with their labels.
 
         Returns
@@ -238,10 +238,10 @@ class _ClassifierOutputs(_Outputs):
     model: ExplainableBoostingClassifier
 
     @override
-    def predictions(self, rows: Frame) -> npt.NDArray[np.float64]:
-        return np.asarray(self.model.predict_proba(rows.to_native()), dtype=float)
+    def predictions(self, source: ModelPredictions) -> npt.NDArray[np.float64]:
+        return source.probabilities()
 
-    def confusion(self, rows: Frame, labels: npt.NDArray[np.generic]) -> _Confusion:
+    def confusion(self, source: ModelPredictions, labels: npt.NDArray[np.generic]) -> _Confusion:
         """Compare the predicted classes of rows with their labels.
 
         Returns
@@ -251,21 +251,22 @@ class _ClassifierOutputs(_Outputs):
 
         """
         classes: list[ClassLabel] = np.asarray(self.model.classes_).tolist()
-        predicted = np.asarray(self.model.predict(rows.to_native()))
+        predicted = source.predicted()
         matrix = np.asarray(metrics.confusion_matrix(labels, predicted, labels=classes), dtype=np.int64)
         return _Confusion(classes, matrix, float(metrics.accuracy_score(labels, predicted)))
 
     @override
-    def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
-        confusion = self.confusion(rows, labels)
+    def metrics(self, source: ModelPredictions, labels: npt.NDArray[np.generic]) -> Metrics:
+        confusion = self.confusion(source, labels)
         positive: npt.NDArray[np.bool_] = np.asarray(labels) == confusion.classes[1]
         # with one class in the rows, the balanced accuracy is the recall of that class, which is the accuracy
         has_both_classes = bool(positive.any() and not positive.all())
         recalls = np.diag(confusion.matrix) / confusion.matrix.sum(axis=1).clip(min=1)
+        scores = self.predictions(source)[:, 1]
         return ClassifierMetrics(
             accuracy=confusion.accuracy,
             balanced_accuracy=float(recalls.mean()) if has_both_classes else confusion.accuracy,
-            roc_auc=float(metrics.roc_auc_score(positive, self.predictions(rows)[:, 1])) if has_both_classes else None,
+            roc_auc=float(metrics.roc_auc_score(positive, scores)) if has_both_classes else None,
             confusion_matrix=ConfusionMatrix(*(int(count) for count in confusion.matrix.ravel())),
         )
 
@@ -275,12 +276,12 @@ class _MulticlassOutputs(_ClassifierOutputs):
     """The predictions and the metrics of a multiclass classifier."""
 
     @override
-    def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
-        confusion = self.confusion(rows, labels)
+    def metrics(self, source: ModelPredictions, labels: npt.NDArray[np.generic]) -> Metrics:
+        confusion = self.confusion(source, labels)
         # the balanced accuracy is the mean recall of the classes in the rows; a class with no row has no recall
         totals = confusion.matrix.sum(axis=1)
         seen = totals > 0
-        probabilities = self.predictions(rows)
+        probabilities = self.predictions(source)
         return MulticlassMetrics(
             accuracy=confusion.accuracy,
             balanced_accuracy=float(np.mean(np.diag(confusion.matrix)[seen] / totals[seen])),
@@ -297,13 +298,13 @@ class _RegressorOutputs(_Outputs):
     model: ExplainableBoostingRegressor
 
     @override
-    def predictions(self, rows: Frame) -> npt.NDArray[np.float64]:
-        return np.asarray(self.model.predict(rows.to_native()), dtype=float).reshape(-1, 1)
+    def predictions(self, source: ModelPredictions) -> npt.NDArray[np.float64]:
+        return np.asarray(source.predicted(), dtype=float).reshape(-1, 1)
 
     @override
-    def metrics(self, rows: Frame, labels: npt.NDArray[np.generic]) -> Metrics:
+    def metrics(self, source: ModelPredictions, labels: npt.NDArray[np.generic]) -> Metrics:
         truth = np.asarray(labels, dtype=float)
-        error = self.predictions(rows)[:, 0] - truth
+        error = self.predictions(source)[:, 0] - truth
         return RegressorMetrics(
             rmse=float(np.sqrt(np.mean(error**2))),
             mae=float(np.mean(np.abs(error))),
@@ -348,11 +349,27 @@ def _model_rows(ebm: ExplainableBoostingModel, data: Frame) -> Frame:
     return data.select(names)
 
 
-def _affected(
-    last: ExplainableBoostingModel | None,
-    current: ExplainableBoostingModel,
-    rows: Frame,
-) -> npt.NDArray[np.bool_]:
+@attrs.frozen(eq=False)
+class _VersionPredictions:
+    """The predictions of the three models of the Metric Panel for one set of rows."""
+
+    row_count: int
+    original: ModelPredictions
+    last: ModelPredictions | None
+    current: ModelPredictions
+
+
+def _version_predictions(versions: _Versions, rows: Frame) -> _VersionPredictions:
+    native = rows.to_native()
+    return _VersionPredictions(
+        len(rows),
+        ModelPredictions(versions.original, native),
+        None if versions.last is None else ModelPredictions(versions.last, native),
+        ModelPredictions(versions.current, native),
+    )
+
+
+def _affected(predictions: _VersionPredictions) -> npt.NDArray[np.bool_]:
     """Find the rows whose prediction the last edit changes.
 
     Returns
@@ -361,26 +378,25 @@ def _affected(
         One flag for each row. Every flag is false for the original model, which no edit made.
 
     """
-    if last is None:
-        return np.zeros(len(rows), dtype=bool)
-    changed: npt.NDArray[np.bool_] = _outputs(last).predictions(rows) != _outputs(current).predictions(rows)
+    if predictions.last is None:
+        return np.zeros(predictions.row_count, dtype=bool)
+    last, current = predictions.last, predictions.current
+    changed: npt.NDArray[np.bool_] = _outputs(last.model).predictions(last) != _outputs(current.model).predictions(
+        current,
+    )
     return changed.any(axis=1)
 
 
-def _scope(
-    name: str,
-    versions: _Versions,
-    rows: Frame,
-    labels: npt.NDArray[np.generic] | None,
-) -> ScopeMetrics:
-    if labels is None or len(rows) == 0:
-        return ScopeMetrics(name, len(rows), None, None, None)
+def _scope(name: str, predictions: _VersionPredictions, labels: npt.NDArray[np.generic] | None) -> ScopeMetrics:
+    if labels is None or predictions.row_count == 0:
+        return ScopeMetrics(name, predictions.row_count, None, None, None)
+    last = predictions.last
     return ScopeMetrics(
         name,
-        len(rows),
-        _outputs(versions.original).metrics(rows, labels),
-        None if versions.last is None else _outputs(versions.last).metrics(rows, labels),
-        _outputs(versions.current).metrics(rows, labels),
+        predictions.row_count,
+        _outputs(predictions.original.model).metrics(predictions.original, labels),
+        None if last is None else _outputs(last.model).metrics(last, labels),
+        _outputs(predictions.current.model).metrics(predictions.current, labels),
     )
 
 
@@ -463,13 +479,16 @@ def edit_effect(
     if truth is not None and len(truth) != len(rows):
         msg = f"The labels need one value for each row: the data has {len(rows)} rows and the labels {len(truth)}."
         raise InvalidInstanceError(msg)
-    affected = _affected(versions.last, versions.current, rows)
+    every_row = _version_predictions(versions, rows)
+    affected = _affected(every_row)
     scopes = [
-        _scope(ALL_ROWS, versions, rows, truth),
+        _scope(ALL_ROWS, every_row, truth),
         _scope(
             AFFECTED_ROWS,
-            versions,
-            rows.filter(nw.new_series("affected", affected, backend=nw.get_native_namespace(rows))),
+            _version_predictions(
+                versions,
+                rows.filter(nw.new_series("affected", affected, backend=nw.get_native_namespace(rows))),
+            ),
             None if truth is None else truth[affected],
         ),
     ]
@@ -478,17 +497,20 @@ def edit_effect(
         scopes.append(
             _scope(
                 SUBGROUP_ROWS,
-                versions,
-                rows.filter(nw.new_series("subgroup", mask, backend=nw.get_native_namespace(rows))),
+                _version_predictions(
+                    versions,
+                    rows.filter(nw.new_series("subgroup", mask, backend=nw.get_native_namespace(rows))),
+                ),
                 None if truth is None else truth[mask],
             ),
         )
+    # the counts read the predictions of the scope of every row, so no model predicts those rows twice
     return EditEffect(
         revision=versions.revision,
         last_revision=versions.last_revision,
         edited_feature=versions.edited_feature,
-        changes_since_original=row_changes(versions.original, versions.current, frame),
-        changes_since_last=None if versions.last is None else row_changes(versions.last, versions.current, frame),
+        changes_since_original=changes_between(every_row.original, every_row.current),
+        changes_since_last=None if every_row.last is None else changes_between(every_row.last, every_row.current),
         scopes=tuple(scopes),
         subgroup=subgroup,
     )
@@ -543,7 +565,7 @@ def affected_profile(session: EditSession, data: Frame, *, revision: str = CURRE
     frame = data
     versions = _versions(session, revision)
     rows = _model_rows(versions.current, frame)
-    affected = _affected(versions.last, versions.current, rows)
+    affected = _affected(_version_predictions(versions, rows))
     model = versions.current
     names = [model.feature_names_in_[index] for index in main_effect_features(model)]
     profiles = (

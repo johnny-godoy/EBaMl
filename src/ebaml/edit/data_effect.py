@@ -69,6 +69,55 @@ class RowChanges:
     class_changes: tuple[ClassChange, ...] = ()
 
 
+@attrs.define(eq=False)
+class ModelPredictions:
+    """The predictions of one model for one set of rows, each computed on its first use and then kept.
+
+    ``edit_effect`` reads the same predictions for its counts, its metrics and its affected rows, so each model predicts
+    each set of rows once.
+
+    Attributes
+    ----------
+    model: ExplainableBoostingModel
+        The model.
+    rows: npt.ArrayLike
+        The rows, as the frame of the caller, with the columns in the order of the model.
+
+    """
+
+    model: ExplainableBoostingModel
+    rows: npt.ArrayLike
+    _probabilities: npt.NDArray[np.float64] | None = attrs.field(default=None, init=False)
+    _predicted: npt.NDArray[np.generic] | None = attrs.field(default=None, init=False)
+
+    def probabilities(self) -> npt.NDArray[np.float64]:
+        """Give the probability of each class for each row. Only a classifier has them.
+
+        Returns
+        -------
+        npt.NDArray[np.float64]
+            One row for each row of data, one column for each class.
+
+        """
+        if self._probabilities is None:
+            classifier = cast(ExplainableBoostingClassifier, self.model)
+            self._probabilities = np.asarray(classifier.predict_proba(self.rows), dtype=float)
+        return self._probabilities
+
+    def predicted(self) -> npt.NDArray[np.generic]:
+        """Give the prediction of each row: the class of a classifier, or the value of a regressor.
+
+        Returns
+        -------
+        npt.NDArray[np.generic]
+            One prediction for each row of data.
+
+        """
+        if self._predicted is None:
+            self._predicted = np.asarray(self.model.predict(self.rows))
+        return self._predicted
+
+
 def _value_counts(value_change: npt.NDArray[np.float64], changed_classes: int | None) -> RowChanges:
     """Count the rows whose value changes, with the number of rows whose class changes.
 
@@ -88,12 +137,7 @@ def _value_counts(value_change: npt.NDArray[np.float64], changed_classes: int | 
 
 
 @functools.singledispatch
-def _changes(
-    _kind: ModelKind,
-    before: ExplainableBoostingModel,
-    after: ExplainableBoostingModel,
-    rows: npt.ArrayLike,
-) -> RowChanges:
+def _changes(_kind: ModelKind, before: ModelPredictions, after: ModelPredictions) -> RowChanges:
     """Count the changes of a regressor. Each kind of classifier registers its own count.
 
     Returns
@@ -102,24 +146,16 @@ def _changes(
         The counts, with no class.
 
     """
-    value_change = np.asarray(after.predict(rows), dtype=float) - np.asarray(before.predict(rows), dtype=float)
+    value_change = np.asarray(after.predicted(), dtype=float) - np.asarray(before.predicted(), dtype=float)
     return _value_counts(value_change, None)
 
 
 @_changes.register
-def _binary_changes(
-    kind: BinaryClassifier,
-    before: ExplainableBoostingModel,
-    after: ExplainableBoostingModel,
-    rows: npt.ArrayLike,
-) -> RowChanges:
-    old, new = cast(ExplainableBoostingClassifier, before), cast(ExplainableBoostingClassifier, after)
-    value_change = (
-        np.asarray(new.predict_proba(rows), dtype=float)[:, 1] - np.asarray(old.predict_proba(rows), dtype=float)[:, 1]
-    )
+def _binary_changes(kind: BinaryClassifier, before: ModelPredictions, after: ModelPredictions) -> RowChanges:
+    value_change = after.probabilities()[:, 1] - before.probabilities()[:, 1]
     positive = kind.classes[1]
-    was_positive: npt.NDArray[np.bool_] = np.asarray(old.predict(rows)) == positive
-    is_positive: npt.NDArray[np.bool_] = np.asarray(new.predict(rows)) == positive
+    was_positive: npt.NDArray[np.bool_] = before.predicted() == positive
+    is_positive: npt.NDArray[np.bool_] = after.predicted() == positive
     return attrs.evolve(
         _value_counts(value_change, int(np.count_nonzero(was_positive != is_positive))),
         rows_to_positive_class=int(np.count_nonzero(is_positive & ~was_positive)),
@@ -128,15 +164,9 @@ def _binary_changes(
 
 
 @_changes.register
-def _multiclass_changes(
-    kind: MulticlassClassifier,
-    before: ExplainableBoostingModel,
-    after: ExplainableBoostingModel,
-    rows: npt.ArrayLike,
-) -> RowChanges:
-    old, new = cast(ExplainableBoostingClassifier, before), cast(ExplainableBoostingClassifier, after)
-    old_probabilities = np.asarray(old.predict_proba(rows), dtype=float)
-    new_probabilities = np.asarray(new.predict_proba(rows), dtype=float)
+def _multiclass_changes(kind: MulticlassClassifier, before: ModelPredictions, after: ModelPredictions) -> RowChanges:
+    old_probabilities = before.probabilities()
+    new_probabilities = after.probabilities()
     # interpret predicts the class with the highest probability, so the argmax is the column of the predicted class
     old_classes, new_classes = old_probabilities.argmax(axis=1), new_probabilities.argmax(axis=1)
     row_numbers = np.arange(len(old_classes))
@@ -150,6 +180,25 @@ def _multiclass_changes(
     )
     counts = _value_counts(value_change, int(np.count_nonzero(old_classes != new_classes)))
     return attrs.evolve(counts, class_changes=class_changes)
+
+
+def changes_between(before: ModelPredictions, after: ModelPredictions) -> RowChanges:
+    """Count the rows whose prediction differs between the predictions of two models for the same rows.
+
+    Parameters
+    ----------
+    before : ModelPredictions
+        The predictions of the model that the edit started from.
+    after : ModelPredictions
+        The predictions of the model that the edit made, for the same rows.
+
+    Returns
+    -------
+    RowChanges
+        The counts and the size of the change.
+
+    """
+    return _changes(model_kind(before.model), before, after)
 
 
 def row_changes(before: ExplainableBoostingModel, after: ExplainableBoostingModel, data: Frame) -> RowChanges:
@@ -182,4 +231,4 @@ def row_changes(before: ExplainableBoostingModel, after: ExplainableBoostingMode
         raise InvalidInstanceError(msg)
     # interpret reads the columns of a frame by position, so select them in the order of the model
     rows = data.select(names).to_native()
-    return _changes(model_kind(before), before, after, rows)
+    return changes_between(ModelPredictions(before, rows), ModelPredictions(after, rows))
