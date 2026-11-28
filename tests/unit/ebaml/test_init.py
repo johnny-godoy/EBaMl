@@ -67,12 +67,16 @@ def test_import_loads_neither_the_sdk_nor_the_descriptors() -> None:
     assert result.stdout.split() == ["False", "False"]
 
 
-def test_import_loads_ortools_and_not_highspy() -> None:
+def test_import_loads_no_ortools_and_a_search_loads_ortools_and_never_highspy() -> None:
     # highspy and ortools each ship a HiGHS library, and a process that loads both fails with an undefined symbol.
-    # ebaml reaches HiGHS through the MathOpt API of ortools only.
-    code = "import sys, ebaml; print('ortools.math_opt.python.mathopt' in sys.modules, 'highspy' in sys.modules)"
+    # ebaml reaches HiGHS through the MathOpt API of ortools only, and imports ortools at the first MIP search.
+    code = (
+        "import sys, ebaml; print('ortools.math_opt.python.mathopt' in sys.modules);"
+        " from ebaml.local.covering_solvers import MipCover; MipCover().backend;"
+        " print('ortools.math_opt.python.mathopt' in sys.modules, 'highspy' in sys.modules)"
+    )
     result = run_fixed([sys.executable, "-c", code], check=True)
-    assert result.stdout.split() == ["True", "False"]
+    assert result.stdout.split() == ["False", "True", "False"]
 
 
 def test_import_does_not_load_skops() -> None:

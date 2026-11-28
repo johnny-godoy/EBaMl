@@ -20,6 +20,7 @@ To add an algorithm, write a class with the ``solve`` method of ``CoveringSolver
 ``MipBackend`` (``ebaml.local.covering_backend``).
 """
 
+import importlib
 import math
 from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
@@ -39,7 +40,6 @@ from ebaml.local.covering_problem import (
     make_weighted_cover,
     reduce_problem,
 )
-from ebaml.local.ortools_backend import OrToolsBackend
 
 # If the check in Python rejects a set of the solver, the search solves again with an ε this many times larger.
 _EPSILON_STEP = 100.0
@@ -178,7 +178,17 @@ _GREEDY_GAVE_UP = "The greedy found no set of changes. Use MipCover, which prove
 
 
 def _default_backend() -> MipBackend:
-    return OrToolsBackend()
+    """Make the default backend, and import OR-Tools only now.
+
+    Returns
+    -------
+    MipBackend
+        ``OrToolsBackend()``. OR-Tools takes about 0.1 s to import, and only a MIP search needs it, so ``import ebaml``
+        does not load it.
+
+    """
+    backend: MipBackend = importlib.import_module("ebaml.local.ortools_backend").OrToolsBackend()
+    return backend
 
 
 def _unproved_plan(problem: CoveringProblem, cover: Cover | None) -> Cover | None:
