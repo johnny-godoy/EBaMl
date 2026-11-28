@@ -76,17 +76,20 @@ jobs:
         run: |
           mkdir -p "$PERF"
           uv run python benchmark/run.py performance --output "$PERF/head.json" --no-progress
-      - name: Check out the base and generate its BAML SDK
+      # The base gets its own environment from its own uv.lock. Its baml_sdk comes from the toolchain that its baml.toml
+      # pins, and baml-bridge reads only an SDK of its own version, so the base cannot run on the packages of the head
+      # when a pull request changes the toolchain. The comparison then also measures a change of a dependency.
+      - name: Check out the base, generate its BAML SDK and install its environment
         if: github.event_name == 'pull_request' && steps.changes.outputs.run == 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           git worktree add /tmp/base "$BASE_SHA"
-          (cd /tmp/base && baml generate)
+          (cd /tmp/base && baml generate && uv sync --frozen)
       - name: Measure the base with the workloads of the head
         if: github.event_name == 'pull_request' && steps.changes.outputs.run == 'true'
         run: |
-          PYTHONPATH=/tmp/base/src uv run --no-sync python benchmark/run.py performance \
+          uv run --project /tmp/base --frozen --no-sync python benchmark/run.py performance \
             --output "$PERF/base.json" --no-progress
       - name: Compare the base with the head
         id: compare
