@@ -194,6 +194,14 @@ capabilities:
     keywords: [selection, bins, interval, category, missing]
     status: active
 
+  - id: model-predictions
+    responsibility: Keep the predictions of one model for one set of rows, so that each model predicts those rows once
+    owner: ebaml.edit
+    symbol: ebaml.edit.data_effect:ModelPredictions
+    consumers: [ebaml.edit]
+    keywords: [predictions, probabilities, rows, cache, effect]
+    status: active
+
   - id: edit-session
     responsibility: Apply, undo, redo, review and save the edits of one model, with a history
     owner: ebaml.edit
