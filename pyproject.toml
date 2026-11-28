@@ -170,7 +170,7 @@ select = ["ALL"]
 "tests/**/*.py" = ["undocumented-public-function", "magic-value-comparison", "assert", "private-member-access"]
 # reason: recurring pattern in the generator pipelines of ebaml.llm: a pipeline yields its steps to a driver and returns
 # its result through StopIteration, which the driver reads, so each pipeline both yields and returns a value.
-"src/ebaml/llm/{pipelines,retry}.py" = ["return-in-generator"]
+"src/ebaml/llm/{pipelines,graph_conversation,retry}.py" = ["return-in-generator"]
 # reason: recurring pattern in the tests of the generator pipelines: a test builds small pipelines that yield steps and
 # return a result, as the pipelines of ebaml.llm do.
 "tests/unit/ebaml/llm/*.py" = ["return-in-generator"]
@@ -311,13 +311,14 @@ type = "forbidden"
 source_modules = ["ebaml.llm"]
 forbidden_modules = ["baml_sdk", "baml_bridge"]
 # reason: the allowed imports of the BAML runtime: drivers.py holds the sync and the async driver, the one module that
-# calls baml_sdk, and provider_errors.py, pipelines.py and ebm_description.py need BamlError from baml_bridge to read
-# the errors of the provider and of a reply that max_tokens cut off. import-linter sees an external package only at its
+# calls baml_sdk, and provider_errors.py, pipelines.py, graph_conversation.py and ebm_description.py need BamlError from
+# baml_bridge to read the errors of the provider and of a reply that max_tokens cut off. import-linter sees an external package only at its
 # top level, so each entry names baml_bridge, not baml_bridge.errors.
 ignore_imports = [
     "ebaml.llm.drivers -> baml_sdk",
     "ebaml.llm.provider_errors -> baml_bridge",
     "ebaml.llm.pipelines -> baml_bridge",
+    "ebaml.llm.graph_conversation -> baml_bridge",
     "ebaml.llm.ebm_description -> baml_bridge",
 ]
 
