@@ -2,7 +2,9 @@
 
 from collections.abc import Sequence
 
+import attrs
 import numpy as np
+import numpy.typing as npt
 
 from ebaml.local.fact_features import Feature
 from ebaml.local.fact_types import CompletionStep, LocalOptions
@@ -43,16 +45,47 @@ def sample_completions(
     sampled_bins = {
         f.name: rng.choice(len(f.weights), size=options.n_samples, p=f.weights / f.weights.sum()) for f in features
     }
+    # the score of the bin of the instance and of each sampled bin, once for each margin; every step reads them
+    draws = [[_draw(f.against(bound.columns), sampled_bins[f.name]) for f in features] for bound in bounds]
     steps = []
     for k in range(min(options.max_steps, len(order)) + 1):
         known = {f.name for f in order[:k]}
         holds = np.ones(options.n_samples, dtype=bool)
-        for bound in bounds:
-            views = [f.against(bound.columns) for f in features]
-            total = sum(v.current if v.name in known else v.scores[sampled_bins[v.name]] for v in views)
+        for bound, margin_draws in zip(bounds, draws, strict=True):
+            # the same additions in the same order at each step, so the shares do not depend on the order of the steps
+            total = sum(draw.current if draw.name in known else draw.sampled for draw in margin_draws)
             holds &= (bound.intercept + total > 0) == (bound.sign == 1)
         steps.append(CompletionStep([f.name for f in order[:k]], float(np.mean(holds))))
     return steps
+
+
+@attrs.frozen
+class _Draw:
+    """The scores of one feature for one margin: the bin of the instance, and the sampled bins."""
+
+    name: str
+    current: float
+    sampled: npt.NDArray[np.float64]
+
+
+def _draw(view: Feature, bins: npt.NDArray[np.intp]) -> _Draw:
+    """Read the scores of a feature for one margin.
+
+    Parameters
+    ----------
+    view : Feature
+        The feature as the margin sees it.
+    bins : npt.NDArray[np.intp]
+        The sampled bins of the feature.
+
+    Returns
+    -------
+    _Draw
+        The score of the bin of the instance, and the score of each sampled bin.
+
+    """
+    scores = view.scores
+    return _Draw(view.name, float(scores[view.bin_index]), scores[bins])
 
 
 def _by_smallest_gain(gains: Sequence[Sequence[float]]) -> list[int]:
