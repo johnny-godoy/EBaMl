@@ -1,6 +1,7 @@
 """Tests for the effect of an edit on data: the metrics in three scopes and the profile of the affected rows."""
 
 import warnings
+from collections.abc import Callable
 
 import numpy as np
 import pytest
@@ -8,6 +9,7 @@ from sklearn import metrics
 
 from ebaml.core.ebm_classes import ExplainableBoostingClassifier, ExplainableBoostingRegressor
 from ebaml.core.exceptions import InvalidInstanceError
+from ebaml.edit.data_effect import row_changes
 from ebaml.edit.edit_effect import (
     AFFECTED_ROWS,
     ALL_ROWS,
@@ -316,3 +318,52 @@ def test_the_profile_of_a_multiclass_edit_compares_the_affected_rows_with_all_ro
     profile = affected_profile(session, as_frame(edit_data))
     assert profile.affected_rows == (edit_data["group"] == "x").sum()
     assert profile.edited_feature == "group"
+
+
+type _Predict = Callable[[ExplainableBoostingClassifier, PandasFrame], np.ndarray]
+
+
+def _counting(calls: list[tuple[str, int, int]], method: str) -> _Predict:
+    """Wrap a prediction method of the classifier so that it records the method, the model and the number of rows.
+
+    Returns
+    -------
+    _Predict
+        The wrapped method.
+
+    """
+    original: _Predict = getattr(ExplainableBoostingClassifier, method)
+
+    def counted(model: ExplainableBoostingClassifier, rows: PandasFrame) -> np.ndarray:
+        calls.append((method, id(model), len(rows)))
+        return original(model, rows)
+
+    return counted
+
+
+def test_each_model_predicts_every_row_once_for_each_method(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # edit_effect made 22 predictions, about half of them repeated, before the models shared their predictions
+    labels = _labels(edit_ebm, edit_data)
+    session = _session_with(edit_ebm, Shift("age", Bins(10, 20), 1.5), Shift("age", Bins(30, 40), -1.0))
+    calls: list[tuple[str, int, int]] = []
+    for method in ("predict", "predict_proba"):
+        monkeypatch.setattr(ExplainableBoostingClassifier, method, _counting(calls, method))
+    edit_effect(session, as_frame(edit_data), labels)
+    every_row = [(method, model) for method, model, row_count in calls if row_count == len(edit_data)]
+    assert len(every_row) == len(set(every_row)) == 6
+
+
+def test_the_counts_of_the_effect_equal_the_counts_of_row_changes(
+    edit_ebm: ExplainableBoostingClassifier,
+    edit_data: PandasFrame,
+) -> None:
+    session = _session_with(edit_ebm, Shift("age", Bins(10, 20), 1.5), Shift("age", Bins(30, 40), -1.0))
+    effect = edit_effect(session, as_frame(edit_data), _labels(edit_ebm, edit_data))
+    history = [row.id for row in session.history_table() if row.id != "original"]
+    original, last, current = session.model_at("original"), session.model_at(history[-2]), session.model
+    assert effect.changes_since_original == row_changes(original, current, as_frame(edit_data))
+    assert effect.changes_since_last == row_changes(last, current, as_frame(edit_data))
